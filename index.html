@@ -1,52 +1,140 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Atlas Terrenos</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#087f5b">
+  <meta name="description" content="Explora el mundo, descubre terrenos y consigue tu parcela en Atlas Terrenos.">
+  <title>Atlas Terrenos — Tu parcela en el mundo</title>
+
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+  >
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-<div id="map"></div>
+  <div id="map" aria-label="Mapa mundial de terrenos"></div>
 
-<header class="bar">
-  <h1>🌍 Atlas Terrenos</h1>
-  <span id="stats" class="stats"></span>
-  <button id="locate" title="Ir a mi ubicación">📍 Mi ubicación</button>
-  <button id="rank-btn" title="Ranking">🏆</button>
-</header>
+  <header class="bar">
+    <h1>🌍 Atlas Terrenos</h1>
 
-<div id="hint" class="hint">Acerca el zoom para ver y comprar terrenos</div>
+    <span id="stats" class="stats" aria-live="polite">
+      Cargando estadísticas…
+    </span>
 
-<aside id="panel" class="panel hidden">
-  <button id="close" class="close" aria-label="Cerrar">×</button>
-  <h2 id="p-title">Terreno</h2>
-  <p id="p-coords" class="muted"></p>
-  <div id="p-owned" class="hidden">
-    <p class="owner">Propiedad de <strong id="p-owner"></strong></p>
-    <p class="muted" id="p-since"></p>
-    <p class="muted">Este terreno ya no se puede comprar.</p>
+    <button
+      id="locate"
+      type="button"
+      title="Ir a mi ubicación"
+      aria-label="Ir a mi ubicación"
+    >
+      📍 Mi ubicación
+    </button>
+
+    <button
+      id="rank-btn"
+      type="button"
+      title="Ver ranking de propietarios"
+      aria-label="Ver ranking de propietarios"
+    >
+      🏆 Ranking
+    </button>
+  </header>
+
+  <div id="hint" class="hint">
+    🌎 Explora el mapa y acerca el zoom para descubrir terrenos.
   </div>
-  <div id="p-free" class="hidden">
-    <p>Este terreno está <strong>libre</strong>. Precio: <strong id="p-price"></strong></p>
-    <label for="name">Nombre que aparecerá en el terreno</label>
-    <input id="name" maxlength="30" placeholder="Tu nombre" autocomplete="nickname">
-    <div id="paypal-box"></div>
-    <button id="demo-pay" class="hidden primary">Simular pago (modo demo)</button>
-  </div>
-  <p id="msg" class="msg"></p>
-</aside>
 
-<div id="rank" class="modal hidden">
-  <div class="modal-card">
-    <button id="rank-close" class="close" aria-label="Cerrar">×</button>
-    <h2>🏆 Mayores propietarios</h2>
-    <ol id="rank-list"></ol>
-  </div>
-</div>
+  <aside
+    id="panel"
+    class="panel hidden"
+    aria-labelledby="p-title"
+  >
+    <button
+      id="close"
+      class="close"
+      type="button"
+      aria-label="Cerrar panel"
+    >×</button>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="app.js"></script>
+    <h2 id="p-title">Tu terreno</h2>
+    <p id="p-coords" class="muted"></p>
+
+    <div id="p-owned" class="hidden">
+      <p class="owner">
+        👤 Propiedad de <strong id="p-owner"></strong>
+      </p>
+
+      <p class="muted" id="p-since"></p>
+
+      <p class="muted">
+        🔒 Este terreno ya tiene propietario y no está disponible.
+      </p>
+    </div>
+
+    <div id="p-free" class="hidden">
+      <p>
+        🟢 Este terreno está libre.
+      </p>
+
+      <p>
+        Precio de la parcela:
+        <strong id="p-price">1 €</strong>
+      </p>
+
+      <label for="name">
+        Nombre que aparecerá en el terreno
+      </label>
+
+      <input
+        id="name"
+        type="text"
+        maxlength="30"
+        placeholder="Escribe tu nombre"
+        autocomplete="nickname"
+      >
+
+      <div id="paypal-box"></div>
+
+      <button
+        id="demo-pay"
+        class="hidden primary"
+        type="button"
+      >
+        Simular pago (modo demo)
+      </button>
+    </div>
+
+    <p id="msg" class="msg" aria-live="polite"></p>
+  </aside>
+
+  <div
+    id="rank"
+    class="modal hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="rank-title"
+  >
+    <div class="modal-card">
+      <button
+        id="rank-close"
+        class="close"
+        type="button"
+        aria-label="Cerrar ranking"
+      >×</button>
+
+      <h2 id="rank-title">🏆 Mayores propietarios</h2>
+      <p class="muted">
+        Descubre quién posee más terrenos en Atlas Terrenos.
+      </p>
+
+      <ol id="rank-list"></ol>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
