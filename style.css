@@ -1,0 +1,29 @@
+:root { --bg:#fff; --fg:#14213d; --muted:#667; --accent:#0b6e4f; --card:#ffffffee; --line:#d8dee9; }
+@media (prefers-color-scheme: dark) { :root { --bg:#10151c; --fg:#e8edf4; --muted:#9aa6b6; --accent:#3ddc97; --card:#151c26ee; --line:#2a3544; } }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; font: 15px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+#map { position: fixed; inset: 0; }
+.bar { position: fixed; top: 10px; left: 10px; right: 10px; z-index: 1000; display: flex; gap: 8px; align-items: center;
+  background: var(--card); backdrop-filter: blur(6px); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+.bar h1 { font-size: 17px; margin: 0; margin-right: auto; }
+.stats { color: var(--muted); font-size: 13px; }
+button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 8px; padding: 6px 10px; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); width: 100%; padding: 10px; font-weight: 600; }
+.hint { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 1000; background: var(--card); border: 1px solid var(--line);
+  padding: 6px 12px; border-radius: 999px; font-size: 13px; pointer-events: none; }
+.panel { position: fixed; z-index: 1100; right: 12px; bottom: 12px; width: min(360px, calc(100vw - 24px)); max-height: calc(100vh - 90px); overflow: auto;
+  background: var(--card); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+.panel h2 { margin: 0 0 2px; font-size: 18px; }
+.muted { color: var(--muted); font-size: 13px; margin: 2px 0 8px; }
+.owner { font-size: 17px; margin: 8px 0 2px; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+input { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); margin-bottom: 10px; }
+.msg { min-height: 1.2em; margin: 8px 0 0; font-size: 14px; }
+.msg.err { color: #d62828; } .msg.ok { color: var(--accent); font-weight: 600; }
+.close { position: absolute; top: 8px; right: 8px; border: 0; background: transparent; font-size: 22px; line-height: 1; padding: 2px 8px; }
+.hidden { display: none !important; }
+.modal { position: fixed; inset: 0; z-index: 2000; background: #0008; display: grid; place-items: center; padding: 16px; }
+.modal-card { position: relative; background: var(--bg); border-radius: 14px; padding: 20px 24px; width: min(380px, 100%); }
+.modal-card h2 { margin-top: 0; }
+.leaflet-tooltip.owner-tip { background: transparent; border: 0; box-shadow: none; color: #fff; font-weight: 700; font-size: 11px; text-shadow: 0 1px 2px #000; padding: 0; }
+.leaflet-tooltip.owner-tip::before { display: none; }

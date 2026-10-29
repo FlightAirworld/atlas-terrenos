@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas Terrenos</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="map"></div>
+
+<header class="bar">
+  <h1>🌍 Atlas Terrenos</h1>
+  <span id="stats" class="stats"></span>
+  <button id="locate" title="Ir a mi ubicación">📍 Mi ubicación</button>
+  <button id="rank-btn" title="Ranking">🏆</button>
+</header>
+
+<div id="hint" class="hint">Acerca el zoom para ver y comprar terrenos</div>
+
+<aside id="panel" class="panel hidden">
+  <button id="close" class="close" aria-label="Cerrar">×</button>
+  <h2 id="p-title">Terreno</h2>
+  <p id="p-coords" class="muted"></p>
+  <div id="p-owned" class="hidden">
+    <p class="owner">Propiedad de <strong id="p-owner"></strong></p>
+    <p class="muted" id="p-since"></p>
+    <p class="muted">Este terreno ya no se puede comprar.</p>
+  </div>
+  <div id="p-free" class="hidden">
+    <p>Este terreno está <strong>libre</strong>. Precio: <strong id="p-price"></strong></p>
+    <label for="name">Nombre que aparecerá en el terreno</label>
+    <input id="name" maxlength="30" placeholder="Tu nombre" autocomplete="nickname">
+    <div id="paypal-box"></div>
+    <button id="demo-pay" class="hidden primary">Simular pago (modo demo)</button>
+  </div>
+  <p id="msg" class="msg"></p>
+</aside>
+
+<div id="rank" class="modal hidden">
+  <div class="modal-card">
+    <button id="rank-close" class="close" aria-label="Cerrar">×</button>
+    <h2>🏆 Mayores propietarios</h2>
+    <ol id="rank-list"></ol>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
