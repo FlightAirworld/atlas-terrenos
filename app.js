@@ -27,31 +27,73 @@ async function api(url, opts) {
 }
 
 // ---------- Parcelas compradas en pantalla ----------
+
 function drawOwned(p) {
   if (drawn.has(p.id)) return;
+
   const col = colorFor(p.owner);
-  const rect = L.rectangle(boundsOf(p.x, p.y), { color: col, weight: 1, fillColor: col, fillOpacity: 0.45, interactive: true });
-  const tip = document.createElement('span'); tip.textContent = p.owner;   // textContent: sin inyección de HTML
-  rect.bindTooltip(tip, { permanent: map.getZoom() >= 17, direction: 'center', className: 'owner-tip' });
-  rect.on('click', e => { L.DomEvent.stopPropagation(e); selectAt(e.latlng); });
+  const bounds = boundsOf(p.x, p.y);
+
+  // Dibujar el terreno comprado
+  const rect = L.rectangle(bounds, {
+    color: col,
+    weight: 1,
+    fillColor: col,
+    fillOpacity: 0.30,
+    interactive: true
+  });
+
+  const tip = document.createElement('span');
+  tip.textContent = p.owner;
+
+  rect.bindTooltip(tip, {
+    permanent: map.getZoom() >= 17,
+    direction: 'center',
+    className: 'owner-tip'
+  });
+
+  rect.on('click', e => {
+    L.DomEvent.stopPropagation(e);
+    selectAt(e.latlng);
+  });
+
   rect.addTo(ownedLayer);
+
+  // Crear la casa en el centro exacto de la parcela
+  const south = bounds[0][0];
+  const west = bounds[0][1];
+  const north = bounds[1][0];
+  const east = bounds[1][1];
+
+  const centerLat = (south + north) / 2;
+  const centerLng = (west + east) / 2;
+
+  const houseIcon = L.divIcon({
+    className: 'house-marker',
+    html: '<span aria-hidden="true">🏠</span>',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
+  });
+
+  const house = L.marker([centerLat, centerLng], {
+    icon: houseIcon,
+    interactive: true,
+    keyboard: true,
+    title: 'Casa de ' + p.owner,
+    zIndexOffset: 1000
+  });
+
+  house.on('click', e => {
+    L.DomEvent.stopPropagation(e);
+    selectAt(e.latlng);
+  });
+
+  house.addTo(ownedLayer);
+
+  // Guardar la parcela para evitar duplicados
   drawn.set(p.id, rect);
 }
-let loadTimer;
-function scheduleLoad() { clearTimeout(loadTimer); loadTimer = setTimeout(loadParcels, 200); }
-async function loadParcels() {
-  const z = map.getZoom();
-  $('hint').classList.toggle('hidden', z >= MIN_ZOOM_PARCELS);
-  if (z < MIN_ZOOM_PARCELS) { ownedLayer.clearLayers(); drawn.clear(); return; }
-  const b = map.getBounds();
-  try {
-    const list = await api(`/api/parcels?south=${b.getSouth()}&west=${b.getWest()}&north=${b.getNorth()}&east=${b.getEast()}`);
-    // si cambian las etiquetas permanentes con el zoom, se redibuja todo
-    ownedLayer.clearLayers(); drawn.clear();
-    list.forEach(drawOwned);
-  } catch (e) { /* zona demasiado grande u offline: se ignora */ }
-}
-map.on('moveend', scheduleLoad);
+
 
 // ---------- Selección de parcela ----------
 async function selectAt(latlng) {
