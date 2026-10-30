@@ -111,7 +111,7 @@ map.on('click', e => selectAt(e.latlng));
 function showPanel(p) {
   $('panel').classList.remove('hidden');
   $('p-title').textContent = `Terreno ${p.id}`;
-  $('p-coords').textContent = `Lat ${p.south.toFixed(3)}° · Lng ${p.west.toFixed(3)}° · ~111 × 111 m`;
+  $('p-coords').textContent = `Lat ${p.south.toFixed(4)}° · Lng ${p.west.toFixed(4)}° · ${ancho} × ${alto} m`;
   setMsg('');
   const owned = !!p.owner;
   $('p-owned').classList.toggle('hidden', !owned);
