@@ -46,3 +46,6 @@ input { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; borde
   user-select: none;
 }
 
+
+/* PayPal más pequeño: botones más estrechos y centrados */
+#paypal-box { max-width: 220px; margin: 4px auto 0; }
