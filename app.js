@@ -5,7 +5,7 @@ const MIN_ZOOM_BUY = 16;       // para comprar hay que acercarse
 let cfg, map, ownedLayer, selectedRect, selected = null, paypalLoaded = null;
 const drawn = new Map();       // id -> rectángulo
 
-const map_ = L.map('map', { worldCopyJump: true, minZoom: 2 }).setView([36.1408, -5.3536], 17); // Gibraltar por defecto
+const map_ = L.map('map', { worldCopyJump: true, minZoom: 2 }).setView([41.55, 1.75], 9); // Gibraltar por defecto
 map = map_;
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
 ownedLayer = L.layerGroup().addTo(map);
