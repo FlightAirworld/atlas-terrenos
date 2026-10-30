@@ -94,6 +94,26 @@ function drawOwned(p) {
   drawn.set(p.id, rect);
 }
 
+async function loadParcels() {
+  try {
+    const b = map.getBounds();
+    const params = new URLSearchParams({
+      south: b.getSouth(),
+      west: b.getWest(),
+      north: b.getNorth(),
+      east: b.getEast()
+    });
+
+    const parcels = await api('/api/parcels?' + params.toString());
+
+    parcels.forEach(p => drawOwned(p));
+  } catch (e) {
+    console.error('Error cargando parcelas:', e);
+  }
+}
+
+map.on('moveend', loadParcels);
+
 
 // ---------- Selección de parcela ----------
 async function selectAt(latlng) {
