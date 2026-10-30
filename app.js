@@ -27,73 +27,53 @@ async function api(url, opts) {
 }
 
 // ---------- Parcelas compradas en pantalla ----------
+const HOUSES = ['img/casa-aerea.jpg', 'img/casa-frente.jpg'];
+function houseFor(id) {                      // cada parcela tiene siempre la misma casa
+  let h = 2166136261; for (const c of id) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;   // FNV-1a
+  return HOUSES[(h >>> 16) % HOUSES.length];
+}
+map.createPane('houses').style.zIndex = 395; // fotos por debajo de los bordes y de la selección
 
 function drawOwned(p) {
   if (drawn.has(p.id)) return;
-
   const col = colorFor(p.owner);
   const bounds = boundsOf(p.x, p.y);
+  const open = e => { L.DomEvent.stopPropagation(e); selectAt(e.latlng); };
 
-  // Dibujar el terreno comprado
-  const rect = L.rectangle(bounds, {
-    color: col,
-    weight: 1,
-    fillColor: col,
-    fillOpacity: 0.30,
-    interactive: true
+  // Foto de la casa ocupando toda la parcela
+  const img = L.imageOverlay(houseFor(p.id), bounds, { pane: 'houses', className: 'house-img', alt: 'Casa de ' + p.owner });
+  // Borde de color del dueño (también recibe los clics)
+  const rect = L.rectangle(bounds, { color: col, weight: 2, fillColor: col, fillOpacity: 0.08, interactive: true }).on('click', open);
+  // Nombre del dueño bajo la parcela
+  const pill = document.createElement('span');
+  pill.className = 'owner-pill';
+  pill.textContent = p.owner;                // textContent: sin HTML
+  const label = L.marker([bounds[0][0], (bounds[0][1] + bounds[1][1]) / 2], {
+    icon: L.divIcon({ className: 'owner-label', html: pill, iconSize: [0, 0] }),
+    interactive: false, keyboard: false
   });
 
-  const tip = document.createElement('span');
-  tip.textContent = p.owner;
-
-  rect.bindTooltip(tip, {
-    permanent: map.getZoom() >= 17,
-    direction: 'center',
-    className: 'owner-tip'
-  });
-
-  rect.on('click', e => {
-    L.DomEvent.stopPropagation(e);
-    selectAt(e.latlng);
-  });
-
-  rect.addTo(ownedLayer);
-
-  // Crear la casa en el centro exacto de la parcela
-  const south = bounds[0][0];
-  const west = bounds[0][1];
-  const north = bounds[1][0];
-  const east = bounds[1][1];
-
-  const centerLat = (south + north) / 2;
-  const centerLng = (west + east) / 2;
-
-  const houseIcon = L.divIcon({
-    className: 'house-marker',
-    html: '<span aria-hidden="true">🏠</span>',
-    iconSize: [32, 32],
-    iconAnchor: [16, 16]
-  });
-
-  const house = L.marker([centerLat, centerLng], {
-    icon: houseIcon,
-    interactive: true,
-    keyboard: true,
-    title: 'Casa de ' + p.owner,
-    zIndexOffset: 1000
-  });
-
-  house.on('click', e => {
-    L.DomEvent.stopPropagation(e);
-    selectAt(e.latlng);
-  });
-
-  house.addTo(ownedLayer);
-
-  // Guardar la parcela para evitar duplicados
-  drawn.set(p.id, rect);
+  img.addTo(ownedLayer); rect.addTo(ownedLayer); label.addTo(ownedLayer);
+  drawn.set(p.id, [img, rect, label]);
 }
 
+let loadSeq = 0;
+async function loadParcels() {
+  if (!cfg || map.getZoom() < MIN_ZOOM_PARCELS) return;
+  const b = map.getBounds(), seq = ++loadSeq;
+  const qs = new URLSearchParams({
+    south: Math.max(-90, b.getSouth()), north: Math.min(90, b.getNorth()),
+    west: Math.max(-180, b.getWest()), east: Math.min(180, b.getEast())
+  });
+  try {
+    const list = await api('/api/parcels?' + qs);
+    if (seq === loadSeq) list.forEach(drawOwned);
+  } catch {}
+}
+map.on('moveend', loadParcels);
+
+function syncLabels() { map.getContainer().classList.toggle('labels-off', map.getZoom() < 17); }
+map.on('zoomend', syncLabels); syncLabels();
 
 // ---------- Selección de parcela ----------
 async function selectAt(latlng) {
@@ -111,13 +91,15 @@ map.on('click', e => selectAt(e.latlng));
 function showPanel(p) {
   $('panel').classList.remove('hidden');
   $('p-title').textContent = `Terreno ${p.id}`;
-  $('p-coords').textContent = `Lat ${p.south.toFixed(3)}° · Lng ${p.west.toFixed(3)}° · ~111 × 111 m`;
+  const mLat = Math.round(cfg.size * 111320), mLng = Math.round(cfg.size * 111320 * Math.cos(p.south * Math.PI / 180));
+  $('p-coords').textContent = `Lat ${p.south.toFixed(3)}° · Lng ${p.west.toFixed(3)}° · ~${mLng} × ${mLat} m`;
   setMsg('');
   const owned = !!p.owner;
   $('p-owned').classList.toggle('hidden', !owned);
   $('p-free').classList.toggle('hidden', owned);
   if (owned) {
     $('p-owner').textContent = p.owner;
+    $('p-photo').src = houseFor(p.id);
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
   } else {
     $('p-price').textContent = new Intl.NumberFormat('es-ES', { style: 'currency', currency: cfg.currency }).format(cfg.price);
