@@ -109,21 +109,34 @@ async function selectAt(latlng) {
 map.on('click', e => selectAt(e.latlng));
 
 function showPanel(p) {
+
+function showPanel(p) {
   $('panel').classList.remove('hidden');
   $('p-title').textContent = `Terreno ${p.id}`;
-  $('p-coords').textContent = `Lat ${p.south.toFixed(4)}° · Lng ${p.west.toFixed(4)}° · ${ancho} × ${alto} m`;
+
+  const lat = p.south + cfg.size / 2;
+  const ancho = Math.round(111320 * cfg.size * Math.cos(lat * Math.PI / 180));
+  const alto = Math.round(110574 * cfg.size);
+
+  $('p-coords').textContent =
+    `Lat ${p.south.toFixed(4)}° · Lng ${p.west.toFixed(4)}° · ${ancho} × ${alto} m`;
+
   setMsg('');
   const owned = !!p.owner;
   $('p-owned').classList.toggle('hidden', !owned);
   $('p-free').classList.toggle('hidden', owned);
+
   if (owned) {
     $('p-owner').textContent = p.owner;
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
   } else {
-    $('p-price').textContent = new Intl.NumberFormat('es-ES', { style: 'currency', currency: cfg.currency }).format(cfg.price);
+    $('p-price').textContent = new Intl.NumberFormat('es-ES', {
+      style: 'currency',
+      currency: cfg.currency
+    }).format(cfg.price);
   }
 }
-$('close').onclick = () => { $('panel').classList.add('hidden'); if (selectedRect) selectedRect.remove(); selected = null; };
+
 
 // ---------- Compra ----------
 function nameOrThrow() {
