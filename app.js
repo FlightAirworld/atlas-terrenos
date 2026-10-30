@@ -5,7 +5,7 @@ const MIN_ZOOM_BUY = 16;       // para comprar hay que acercarse
 let cfg, map, ownedLayer, selectedRect, selected = null, paypalLoaded = null;
 const drawn = new Map();       // id -> rectángulo
 
-const map_ = L.map('map', { worldCopyJump: true, minZoom: 2 }).setView([41.55, 1.75], 9); // Gibraltar por defecto
+const map_ = L.map('map', { worldCopyJump: true, minZoom: 2 }).setView([36.1408, -5.3536], 17); // Gibraltar por defecto
 map = map_;
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
 ownedLayer = L.layerGroup().addTo(map);
@@ -70,9 +70,9 @@ function drawOwned(p) {
 
   const houseIcon = L.divIcon({
     className: 'house-marker',
-    html: '<img src="./images/casa.png" alt="Casa" style="width:40px;height:40px;object-fit:contain;">',,
-    iconSize: [40, 40],
-iconAnchor: [20, 20]
+    html: '<span aria-hidden="true">🏠</span>',
+    iconSize: [32, 32],
+    iconAnchor: [16, 16]
   });
 
   const house = L.marker([centerLat, centerLng], {
@@ -94,26 +94,6 @@ iconAnchor: [20, 20]
   drawn.set(p.id, rect);
 }
 
-async function loadParcels() {
-  try {
-    const b = map.getBounds();
-    const params = new URLSearchParams({
-      south: b.getSouth(),
-      west: b.getWest(),
-      north: b.getNorth(),
-      east: b.getEast()
-    });
-
-    const parcels = await api('/api/parcels?' + params.toString());
-
-    parcels.forEach(p => drawOwned(p));
-  } catch (e) {
-    console.error('Error cargando parcelas:', e);
-  }
-}
-
-map.on('moveend', loadParcels);
-
 
 // ---------- Selección de parcela ----------
 async function selectAt(latlng) {
@@ -128,34 +108,21 @@ async function selectAt(latlng) {
 }
 map.on('click', e => selectAt(e.latlng));
 
-
 function showPanel(p) {
   $('panel').classList.remove('hidden');
   $('p-title').textContent = `Terreno ${p.id}`;
-
-  const lat = p.south + cfg.size / 2;
-  const ancho = Math.round(111320 * cfg.size * Math.cos(lat * Math.PI / 180));
-  const alto = Math.round(110574 * cfg.size);
-
-  $('p-coords').textContent =
-    `Lat ${p.south.toFixed(4)}° · Lng ${p.west.toFixed(4)}° · ${ancho} × ${alto} m`;
-
+  $('p-coords').textContent = `Lat ${p.south.toFixed(3)}° · Lng ${p.west.toFixed(3)}° · ~111 × 111 m`;
   setMsg('');
   const owned = !!p.owner;
   $('p-owned').classList.toggle('hidden', !owned);
   $('p-free').classList.toggle('hidden', owned);
-
   if (owned) {
     $('p-owner').textContent = p.owner;
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
   } else {
-    $('p-price').textContent = new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: cfg.currency
-    }).format(cfg.price);
+    $('p-price').textContent = new Intl.NumberFormat('es-ES', { style: 'currency', currency: cfg.currency }).format(cfg.price);
   }
 }
-
 $('close').onclick = () => { $('panel').classList.add('hidden'); if (selectedRect) selectedRect.remove(); selected = null; };
 
 // ---------- Compra ----------
