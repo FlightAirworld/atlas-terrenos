@@ -19,7 +19,7 @@ const RESERVE_MINUTES = 10;                               // tiempo que se reser
 const DB_FILE = process.env.DB_FILE || path.join(__dirname, 'terrenos.db');
 
 // Rejilla del mundo: cada parcela es un cuadrado de 0.001° (~111 m de lado en latitud)
-const SIZE = 0.001;
+const SIZE = 0.0005;
 const MAX_X = Math.round(360 / SIZE);   // 360000 columnas
 const MAX_Y = Math.round(180 / SIZE);   // 180000 filas
 
