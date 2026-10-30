@@ -158,7 +158,7 @@ async function renderPaypal() {
   try {
     await loadPaypalSdk();
     paypal.Buttons({
-      style: { layout: 'vertical', shape: 'rect', label: 'pay' },
+      style: { layout: 'vertical', shape: 'rect', label: 'pay', height: 30 },
       createOrder: () => createOrder().catch(e => { fail(e); throw e; }),
       onApprove: data => captureOrder(data.orderID).catch(fail),
       onError: e => setMsg('Error con PayPal: ' + (e.message || e), 'err'),
