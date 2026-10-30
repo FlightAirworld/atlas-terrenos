@@ -32,17 +32,3 @@ input { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; borde
 .house-marker {
   background: transparent !important;
   border: none !important;
-}
-
-.house-marker span {
-  display: block;
-  width: 32px;
-  height: 32px;
-  font-size: 27px;
-  line-height: 32px;
-  text-align: center;
-  cursor: pointer;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
-  user-select: none;
-}
-
