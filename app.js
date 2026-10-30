@@ -70,9 +70,9 @@ function drawOwned(p) {
 
   const houseIcon = L.divIcon({
     className: 'house-marker',
-    html: '<span aria-hidden="true">🏠</span>',
-    iconSize: [32, 32],
-    iconAnchor: [16, 16]
+    html: '<img src="./images/casa.png" alt="Casa" style="width:40px;height:40px;object-fit:contain;">',,
+    iconSize: [40, 40],
+iconAnchor: [20, 20]
   });
 
   const house = L.marker([centerLat, centerLng], {
