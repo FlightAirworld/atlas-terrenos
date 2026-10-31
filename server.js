@@ -19,6 +19,7 @@ const CURRENCY = (process.env.CURRENCY || 'EUR').toUpperCase();
 const DEMO = !(PAYPAL_CLIENT_ID && PAYPAL_SECRET) || process.env.DEMO === '1';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const RESERVE_MINUTES = 10;                               // tiempo que se reserva una parcela mientras se paga
+const PACK_SIZE = Math.max(1, Number(process.env.PACK_SIZE || 50));   // terrenos por pack (el pack cuesta PRICE)
 const DATABASE_URL = process.env.DATABASE_URL || '';      // cadena de conexión de Supabase
 if (!DATABASE_URL) {
   console.error('Falta la variable DATABASE_URL (cadena de conexión de Supabase). Mira el README.');
@@ -319,6 +320,104 @@ async function captureOrder(orderId) {
   }
 }
 
+// ---------- Packs de terrenos (créditos) ----------
+const newPackCode = () => crypto.randomBytes(8).toString('hex').toUpperCase().match(/.{4}/g).join('-');
+const packCodeFrom = req => {
+  const m = (req.headers.authorization || '').match(/^Bearer (.+)$/);
+  return m ? m[1].trim().toUpperCase().slice(0, 40) : null;
+};
+
+async function getPack(req) {
+  const code = packCodeFrom(req);
+  const row = code && await one('SELECT code, credits FROM packs WHERE code = $1', [code]);
+  if (!row) throw new HttpError(403, 'Código no válido');
+  return row;
+}
+
+async function createPackOrder() {
+  const now = Date.now();
+  let orderId;
+  if (DEMO) {
+    orderId = 'DEMO-' + crypto.randomUUID();
+  } else {
+    const o = await paypal('POST', '/v2/checkout/orders', {
+      intent: 'CAPTURE',
+      purchase_units: [{
+        reference_id: 'PACK',
+        description: `Pack de ${PACK_SIZE} terrenos`,
+        amount: { currency_code: CURRENCY, value: PRICE },
+      }],
+    });
+    orderId = o.id;
+  }
+  await run('INSERT INTO pack_orders (order_id, status, created_at) VALUES ($1,$2,$3)', [orderId, 'CREATED', now]);
+  return { orderId, size: PACK_SIZE, price: PRICE, currency: CURRENCY };
+}
+
+async function capturePackOrder(orderId) {
+  const ord = await one('SELECT * FROM pack_orders WHERE order_id = $1', [orderId]);
+  if (!ord) throw new HttpError(404, 'Pedido desconocido');
+  if (ord.status === 'PAID') {
+    const p = await one('SELECT code, credits FROM packs WHERE code = $1', [ord.code]);
+    return { ok: true, code: p.code, credits: p.credits };
+  }
+  if (ord.status !== 'CREATED') throw new HttpError(409, 'Pedido no válido');
+
+  let captureId = null;
+  if (!DEMO) {
+    const cap = await paypal('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`);
+    const c = cap.purchase_units?.[0]?.payments?.captures?.[0];
+    if (cap.status !== 'COMPLETED' || !c || c.status !== 'COMPLETED') throw new HttpError(402, 'El pago no se ha completado');
+    if (c.amount.value !== Number(PRICE).toFixed(2) || c.amount.currency_code !== CURRENCY) throw new HttpError(402, 'Importe incorrecto');
+    captureId = c.id;
+  }
+
+  const code = newPackCode();
+  try {
+    await run('INSERT INTO packs (code, credits, created_at) VALUES ($1,$2,$3)', [code, PACK_SIZE, Date.now()]);
+    await run("UPDATE pack_orders SET status = 'PAID', code = $1 WHERE order_id = $2", [code, orderId]);
+  } catch (e) {
+    if (captureId) console.error('PAGO CAPTURADO PERO PACK NO GUARDADO, REVISAR', captureId, orderId, e.message);
+    throw e;
+  }
+  return { ok: true, code, credits: PACK_SIZE };
+}
+
+async function claimWithCredit(req, { lat, lng, owner, avatar }) {
+  const code = packCodeFrom(req);
+  const p = parcelFromLatLng(Number(lat), Number(lng));
+  if (!p) throw new HttpError(400, 'Coordenadas no válidas');
+  const name = cleanName(owner);
+  if (!name) throw new HttpError(400, 'Pon un nombre de 2 a 30 caracteres');
+
+  const now = Date.now();
+  await q.purgeOrders(now);
+  if (await q.parcelById(p.id)) throw new HttpError(409, 'Este terreno ya tiene dueño');
+  if (await q.activeOrderForParcel(p.id, now)) throw new HttpError(409, 'Este terreno está siendo comprado por otra persona. Prueba en unos minutos');
+
+  // Una sola transacción: restar el crédito y guardar la parcela, o ninguna de las dos cosas.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await client.query('UPDATE packs SET credits = credits - 1 WHERE code = $1 AND credits > 0 RETURNING credits', [code]);
+    if (!r.rows[0]) {
+      const exists = code && await one('SELECT 1 AS ok FROM packs WHERE code = $1', [code]);
+      throw new HttpError(exists ? 402 : 403, exists ? 'No te quedan terrenos en tu pack' : 'Código no válido');
+    }
+    await client.query(
+      'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar)]);
+    await client.query('COMMIT');
+    return { ok: true, parcel: p.id, owner: name, credits: r.rows[0].credits };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (isUniqueViolation(e)) throw new HttpError(409, 'Este terreno ya tiene dueño');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 async function route(req, res, url) {
   const { pathname: pn, searchParams: sp } = url;
   if (req.method === 'POST' && pn === '/api/admin/claim') {
@@ -333,7 +432,7 @@ if (req.method === 'GET' && pn === '/api/world-stats') {
   return getWorldStats(indicator);
 }
   if (req.method === 'GET' && pn === '/api/config')
-    return { demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PRICE, size: SIZE };
+    return { demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PRICE, size: SIZE, packSize: PACK_SIZE };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')));
@@ -352,6 +451,12 @@ if (req.method === 'GET' && pn === '/api/world-stats') {
 
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top() };
+
+  if (req.method === 'POST' && pn === '/api/packs/orders') return createPackOrder();
+  const pm = pn.match(/^\/api\/packs\/orders\/([^/]+)\/capture$/);
+  if (req.method === 'POST' && pm) return capturePackOrder(decodeURIComponent(pm[1]));
+  if (req.method === 'GET' && pn === '/api/pack') return { credits: (await getPack(req)).credits };
+  if (req.method === 'POST' && pn === '/api/claim') return claimWithCredit(req, await readJson(req));
 
   if (req.method === 'POST' && pn === '/api/orders') return createOrder(await readJson(req));
 
