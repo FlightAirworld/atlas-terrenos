@@ -27,7 +27,10 @@ async function api(url, opts) {
 }
 
 // ---------- Parcelas compradas en pantalla ----------
-const HOUSES = ['img/casa-aerea.jpg', 'img/casa-frente.jpg'];
+const HOUSES = [
+  'images/casa-aerea.png',
+  'images/casa-frente.png'
+];
 function houseFor(id) {                      // cada parcela tiene siempre la misma casa
   let h = 2166136261; for (const c of id) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;   // FNV-1a
   return HOUSES[(h >>> 16) % HOUSES.length];
