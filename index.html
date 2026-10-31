@@ -122,7 +122,10 @@
     <p id="p-coords" class="muted"></p>
 
     <div id="p-owned" class="hidden">
-      <img id="p-photo" class="p-photo" alt="Casa del propietario">
+      <div style="position:relative">
+        <img id="p-photo" class="p-photo" alt="Casa del propietario">
+        <span id="p-avatar" style="position:absolute;right:8px;bottom:8px;font-size:34px;background:#0009;border-radius:999px;padding:2px 8px"></span>
+      </div>
       <p class="owner">👤 Propiedad de <strong id="p-owner"></strong></p>
       <p class="muted" id="p-since"></p>
       <p class="muted">🔒 Este terreno ya tiene propietario.</p>
@@ -130,16 +133,28 @@
 
     <div id="p-free" class="hidden">
       <p>🟢 Este terreno está libre.</p>
-      <p>Precio: <strong id="p-price">1 €</strong></p>
       <label for="name">Nombre que aparecerá en el terreno</label>
       <input id="name" type="text" maxlength="30"
         placeholder="Escribe tu nombre" autocomplete="nickname">
-            <label>Tu avatar</label>
+      <label>Tu avatar</label>
       <div id="avatars" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
-      <div id="paypal-box"></div>
-      <button id="demo-pay" class="hidden primary" type="button">
-        Simular pago (modo demo)
-      </button>
+      <div id="credit-box" class="hidden">
+        <p>🎟️ Te quedan <strong id="credits-left">0</strong> terrenos</p>
+        <button id="use-credit" class="primary" type="button">Reclamar este terreno</button>
+        <p class="muted">🔑 Tu código: <strong id="my-code"></strong><br>Guárdalo: lo necesitas para recuperar tus terrenos si cambias de móvil o borras los datos del navegador.</p>
+      </div>
+      <div id="buy-box">
+        <p>🎁 Pack de <strong id="pack-size">50</strong> terrenos por <strong id="p-price">1 €</strong></p>
+        <div id="paypal-box"></div>
+        <button id="demo-pay" class="hidden primary" type="button">
+          Simular pago (modo demo)
+        </button>
+      </div>
+      <details style="margin-top:10px">
+        <summary class="muted">¿Ya tienes un código?</summary>
+        <input id="recover-code" type="text" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" style="margin-top:6px">
+        <button id="recover-btn" type="button">Recuperar mis terrenos</button>
+      </details>
     </div>
 
     <p id="msg" class="msg" aria-live="polite"></p>
