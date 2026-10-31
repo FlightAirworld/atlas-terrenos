@@ -39,6 +39,14 @@ const HOUSES = [
   'images/McDonald.png',
   'images/Burgerking.png',
   'images/Farmacia.png'
+  'images/colegio.png'
+  'images/parque.png'
+  'images/rascacielos.png'
+  'images/casa-1.png'
+  'images/casa-2.png'
+  'images/casa-3.png'
+  'images/casa-4.png'
+  'images/casa-5.png'
 ];
 
 function houseFor(id) {
