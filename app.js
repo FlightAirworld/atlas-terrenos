@@ -87,7 +87,90 @@ async function selectAt(latlng) {
   showPanel(p);
 }
 map.on('click', e => selectAt(e.latlng));
+// ---------- Administración: reclamar parcelas gratis ----------
+function setupAdminControls() {
+  if ($('admin-box')) return;
 
+  const box = document.createElement('div');
+  box.id = 'admin-box';
+  box.style.cssText = 'margin-top:16px;padding:12px;border:1px solid #d6a900;border-radius:12px;';
+
+  const title = document.createElement('strong');
+  title.textContent = '🔑 Administración';
+
+  const description = document.createElement('p');
+  description.textContent = 'Reclamar esta parcela gratis como administrador.';
+
+  const token = document.createElement('input');
+  token.id = 'admin-token';
+  token.type = 'password';
+  token.placeholder = 'Clave privada de administrador';
+  token.autocomplete = 'off';
+  token.style.cssText = 'width:100%;box-sizing:border-box;margin:8px 0;padding:10px;';
+
+  const button = document.createElement('button');
+  button.id = 'admin-claim';
+  button.type = 'button';
+  button.textContent = '🔑 Reclamar gratis';
+  button.style.cssText = 'width:100%;padding:12px;cursor:pointer;';
+
+  button.onclick = async () => {
+    if (!selected || selected.owner) return;
+
+    const secret = token.value.trim();
+    if (!secret) {
+      setMsg('Introduce tu clave de administrador', 'err');
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = 'Reclamando...';
+
+    try {
+      const response = await fetch('/api/admin/claim', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + secret
+        },
+        body: JSON.stringify({
+          lat: selected.south + cfg.size / 2,
+          lng: selected.west + cfg.size / 2,
+          owner: $('name').value.trim()
+        })
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'No se pudo reclamar');
+
+      selected.owner = result.owner;
+      selected.since = Date.now();
+
+      token.value = '';
+      setMsg('¡Parcela reclamada gratis! 🎉', 'ok');
+
+      showPanel(selected);
+      drawOwned({
+        id: selected.id,
+        x: selected.x,
+        y: selected.y,
+        owner: selected.owner
+      });
+
+      loadStats();
+      loadParcels();
+
+    } catch (error) {
+      setMsg(error.message, 'err');
+    } finally {
+      button.disabled = false;
+      button.textContent = '🔑 Reclamar gratis';
+    }
+  };
+
+  box.append(title, description, token, button);
+  $('p-free').appendChild(box);
+}
 function showPanel(p) {
   $('panel').classList.remove('hidden');
   $('p-title').textContent = `Terreno ${p.id}`;
@@ -174,7 +257,19 @@ $('locate').onclick = () => {
 // ---------- Inicio ----------
 (async () => {
   cfg = await api('/api/config');
-  if (cfg.demo) $('demo-pay').classList.remove('hidden'); else renderPaypal();
-  if (cfg.demo) { const h = document.createElement('p'); h.className = 'muted'; h.textContent = 'MODO DEMO: no se cobra dinero real.'; $('paypal-box').before(h); }
-  loadStats(); loadParcels();
+
+  setupAdminControls();
+
+  if (cfg.demo) $('demo-pay').classList.remove('hidden');
+  else renderPaypal();
+
+  if (cfg.demo) {
+    const h = document.createElement('p');
+    h.className = 'muted';
+    h.textContent = 'MODO DEMO: no se cobra dinero real.';
+    $('paypal-box').before(h);
+  }
+
+  loadStats();
+  loadParcels();
 })();
