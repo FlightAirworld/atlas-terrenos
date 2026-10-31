@@ -107,7 +107,104 @@ async function paypal(method, url, body) {
   if (!r.ok) { const e = new Error('PayPal: ' + (j.message || r.status)); e.details = j; throw e; }
   return j;
 }
+// ---------- WORLD STATISTICS LIVE ----------
+const WORLD_INDICATORS = {
+  population: {
+    code: 'SP.POP.TOTL',
+    label: 'Población',
+    unit: 'habitantes'
+  },
+  gdp: {
+    code: 'NY.GDP.PCAP.CD',
+    label: 'PIB por habitante',
+    unit: 'USD'
+  },
+  life: {
+    code: 'SP.DYN.LE00.IN',
+    label: 'Esperanza de vida',
+    unit: 'años'
+  },
+  area: {
+    code: 'AG.SRF.TOTL.K2',
+    label: 'Superficie',
+    unit: 'km²'
+  }
+};
 
+const worldCache = new Map();
+const WORLD_CACHE_MS = 6 * 60 * 60 * 1000;
+
+function countryFlag(code) {
+  if (!/^[A-Z]{2}$/.test(code || '')) return '🌍';
+  return String.fromCodePoint(
+    ...[...code].map(c => 127397 + c.charCodeAt(0))
+  );
+}
+
+async function getWorldStats(key) {
+  const indicator = WORLD_INDICATORS[key];
+
+  if (!indicator) {
+    throw new HttpError(400, 'Indicador no válido');
+  }
+
+  const cached = worldCache.get(key);
+
+  if (cached && Date.now() - cached.time < WORLD_CACHE_MS) {
+    return { ...cached.data, cached: true };
+  }
+
+  const api =
+    'https://api.worldbank.org/v2/country/all/indicator/' +
+    indicator.code +
+    '?format=json&per_page=400&mrnev=1';
+
+  const response = await fetch(api);
+
+  if (!response.ok) {
+    throw new HttpError(502, 'No se pudo consultar el Banco Mundial');
+  }
+
+  const payload = await response.json();
+  const records = payload?.[1];
+
+  if (!Array.isArray(records)) {
+    throw new HttpError(502, 'Respuesta de datos no válida');
+  }
+
+  const countries = records
+    .filter(row =>
+      row.value !== null &&
+      row.country?.id &&
+      row.countryiso3code &&
+      row.country?.value
+    )
+    .map(row => ({
+      name: row.country.value,
+      iso2: row.country.id,
+      iso3: row.countryiso3code,
+      flag: countryFlag(row.country.id),
+      value: row.value,
+      year: row.date
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  const data = {
+    indicator: key,
+    label: indicator.label,
+    unit: indicator.unit,
+    source: 'Banco Mundial',
+    updatedAt: new Date().toISOString(),
+    countries
+  };
+
+  worldCache.set(key, {
+    time: Date.now(),
+    data
+  });
+
+  return { ...data, cached: false };
+}
 // ---------- API ----------
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 
@@ -172,7 +269,10 @@ async function captureOrder(orderId) {
 
 async function route(req, res, url) {
   const { pathname: pn, searchParams: sp } = url;
-
+if (req.method === 'GET' && pn === '/api/world-stats') {
+  const indicator = sp.get('indicator') || 'population';
+  return getWorldStats(indicator);
+}
   if (req.method === 'GET' && pn === '/api/config')
     return { demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PRICE, size: SIZE };
 
