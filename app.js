@@ -332,6 +332,63 @@ $('use-credit').onclick = async () => {
   } finally { btn.disabled = false; }
 };
 
+// ---------- Regalo diario ----------
+let dailyState = null;
+const plural = (n, one, many) => n === 1 ? one : many;
+async function loadDaily() {
+  try {
+    const r = await fetch('/api/daily', { headers: packCode ? { Authorization: 'Bearer ' + packCode } : {} });
+    if (r.status === 403) { saveCode(null); credits = 0; updateCreditUi(); return loadDaily(); }
+    if (!r.ok) return;
+    dailyState = await r.json();
+  } catch { return; }
+  renderDaily();
+}
+function renderDaily() {
+  const d = dailyState;
+  if (!d) return;
+  $('daily-dot').classList.toggle('hidden', !d.canClaim);
+  const racha = `${d.streak} ${plural(d.streak, 'día', 'días')}`;
+  const premio = `+${d.next} ${plural(d.next, 'terreno', 'terrenos')}`;
+  $('daily-info').textContent = d.canClaim
+    ? `Racha actual: ${racha}. Hoy te llevas ${premio}.`
+    : `¡Hoy ya lo has cobrado! Vuelve mañana: ${premio}. Racha: ${racha}.`;
+  const box = $('daily-days');
+  box.replaceChildren();
+  d.rewards.forEach((n, i) => {
+    const done = i < d.dayInCycle, today = d.canClaim && i === d.dayInCycle;
+    const cell = document.createElement('div');
+    cell.style.cssText = 'text-align:center;padding:6px 2px;border-radius:8px;border:1px solid var(--line);font-size:12px;white-space:pre-line;'
+      + (done ? 'background:var(--accent);color:#fff;' : '') + (today ? 'outline:2px solid #ffb703;' : '');
+    cell.textContent = `Día ${i + 1}\n${done ? '✅' : '🎟️'}\n+${n}`;
+    box.appendChild(cell);
+  });
+  const btn = $('daily-claim');
+  btn.disabled = !d.canClaim;
+  btn.textContent = d.canClaim ? `🎁 Reclamar ${premio}` : 'Vuelve mañana';
+}
+function setDailyMsg(text, kind = '') { const m = $('daily-msg'); m.textContent = text; m.className = 'msg ' + kind; }
+$('daily-btn').onclick = () => { setDailyMsg(''); $('daily').classList.remove('hidden'); loadDaily(); };
+$('daily-close').onclick = () => $('daily').classList.add('hidden');
+$('daily-claim').onclick = async () => {
+  const btn = $('daily-claim');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/daily/claim', { method: 'POST', headers: packCode ? { Authorization: 'Bearer ' + packCode } : {} });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'No se pudo reclamar el regalo');
+    saveCode(j.code); credits = j.credits; updateCreditUi();
+    setDailyMsg(`🎉 +${j.reward} ${plural(j.reward, 'terreno', 'terrenos')}. Ahora tienes ${j.credits}.`, 'ok');
+    $('daily-code').textContent = j.newCode
+      ? `🔑 Tu código: ${j.code}. Guárdalo: lo necesitas para no perder tus terrenos si cambias de móvil o borras los datos del navegador.`
+      : '';
+    await loadDaily();
+  } catch (e) {
+    setDailyMsg(e.message, 'err');
+    loadDaily();
+  }
+};
+
 // ---------- Compra ----------
 function nameOrThrow() {
   const n = $('name').value.replace(/\s+/g, ' ').trim();
@@ -410,7 +467,7 @@ $('locate').onclick = () => {
     $('paypal-box').before(h);
   }
 
-  refreshCredits();
+  refreshCredits().then(loadDaily);
   loadStats();
   loadParcels();
 })();
