@@ -123,3 +123,6 @@ input { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; borde
     padding: 10px;
   }
 }
+#hint {
+  display: none !important;
+}
