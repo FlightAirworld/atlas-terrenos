@@ -27,20 +27,25 @@ async function api(url, opts) {
 }
 
 // ---------- Parcelas compradas en pantalla ----------
+// ---------- Parcelas compradas en pantalla ----------
 const HOUSES = [
-  'images/casa-aerea.png',
-  'images/casa-frente.png'
-  'images/policia.png'
-  'images/pisos.png'
-  'images/gasolinera.png'
-  'images/choza.png'
-  'images/Restaurante.png'
-  'images/McDonald.png'
-  'images/Burgerking.png'
-  'images/Farmacia.png'
+  'imágenes/casa-aerea.png',
+  'imágenes/casa-frente.png',
+  'imágenes/policia.png',
+  'imágenes/pisos.png',
+  'imágenes/gasolinera.png',
+  'imágenes/choza.png',
+  'imágenes/Restaurante.png',
+  'imágenes/McDonald.png',
+  'imágenes/Burgerking.png',
+  'imágenes/Farmacia.png'
 ];
-function houseFor(id) {                      // cada parcela tiene siempre la misma casa
-  let h = 2166136261; for (const c of id) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;   // FNV-1a
+
+function houseFor(id) {
+  let h = 2166136261;
+  for (const c of id) {
+    h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+  }
   return HOUSES[(h >>> 16) % HOUSES.length];
 }
 map.createPane('houses').style.zIndex = 395; // fotos por debajo de los bordes y de la selección
