@@ -70,7 +70,7 @@ function drawOwned(p) {
   // Nombre del dueño bajo la parcela
   const pill = document.createElement('span');
   pill.className = 'owner-pill';
-  pill.textContent = p.owner;                // textContent: sin HTML
+  pill.textContent = (p.avatar ? p.avatar + ' ' : '') + p.owner;   // textContent: sin HTML
   const label = L.marker([bounds[0][0], (bounds[0][1] + bounds[1][1]) / 2], {
     icon: L.divIcon({ className: 'owner-label', html: pill, iconSize: [0, 0] }),
     interactive: false, keyboard: false
@@ -159,7 +159,8 @@ function setupAdminControls() {
         body: JSON.stringify({
           lat: selected.south + cfg.size / 2,
           lng: selected.west + cfg.size / 2,
-          owner: $('name').value.trim()
+          owner: $('name').value.trim(),
+          avatar
         })
       });
 
@@ -167,6 +168,7 @@ function setupAdminControls() {
       if (!response.ok) throw new Error(result.error || 'No se pudo reclamar');
 
       selected.owner = result.owner;
+      selected.avatar = avatar;
       selected.since = Date.now();
 
       token.value = '';
@@ -177,7 +179,8 @@ function setupAdminControls() {
         id: selected.id,
         x: selected.x,
         y: selected.y,
-        owner: selected.owner
+        owner: selected.owner,
+        avatar: selected.avatar
       });
 
       loadStats();
@@ -204,7 +207,7 @@ function showPanel(p) {
   $('p-owned').classList.toggle('hidden', !owned);
   $('p-free').classList.toggle('hidden', owned);
   if (owned) {
-    $('p-owner').textContent = p.owner;
+    $('p-owner').textContent = (p.avatar ? p.avatar + ' ' : '') + p.owner;
     $('p-photo').src = houseFor(p.id);
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
   } else {
@@ -212,6 +215,22 @@ function showPanel(p) {
   }
 }
 $('close').onclick = () => { $('panel').classList.add('hidden'); if (selectedRect) selectedRect.remove(); selected = null; };
+
+// ---------- Avatar ----------
+const AVATARS = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀','👑','⚽','🌟'];
+let avatar = AVATARS[0];
+try { const s = localStorage.getItem('avatar'); if (AVATARS.includes(s)) avatar = s; } catch {}
+(function buildAvatarPicker() {
+  const box = $('avatars');
+  const mark = () => [...box.children].forEach(b => { b.style.outline = b.textContent === avatar ? '2px solid #ffb703' : ''; });
+  AVATARS.forEach(a => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = a; b.style.fontSize = '22px';
+    b.onclick = () => { avatar = a; try { localStorage.setItem('avatar', a); } catch {} mark(); };
+    box.appendChild(b);
+  });
+  mark();
+})();
 
 // ---------- Compra ----------
 function nameOrThrow() {
@@ -221,13 +240,13 @@ function nameOrThrow() {
 }
 async function createOrder() {
   const owner = nameOrThrow();
-  const o = await api('/api/orders', { method: 'POST', body: { lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner } });
+  const o = await api('/api/orders', { method: 'POST', body: { lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar } });
   return o.orderId;
 }
 async function captureOrder(orderId) {
   const r = await api(`/api/orders/${encodeURIComponent(orderId)}/capture`, { method: 'POST', body: {} });
   setMsg(`¡Listo! El terreno ${r.parcel} ahora es de ${r.owner} 🎉`, 'ok');
-  selected.owner = r.owner; selected.since = Date.now();
+  selected.owner = r.owner; selected.avatar = avatar; selected.since = Date.now();
   setTimeout(() => { showPanel(selected); loadParcels(); loadStats(); }, 1500);
 }
 function fail(e) { if (e.message !== 'nombre') setMsg(e.message, 'err'); }
