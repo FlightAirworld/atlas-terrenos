@@ -46,18 +46,22 @@ const isUniqueViolation = e => e && e.code === '23505';
 
 const q = {
   parcelById: id => one('SELECT * FROM parcels WHERE id = $1', [id]),
-  parcelsInBox: (x0, x1, y0, y1) => all('SELECT id, x, y, owner FROM parcels WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1]),
-  insertParcel: (id, x, y, owner, orderId, paid, currency, createdAt) =>
-    run('INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [id, x, y, owner, orderId, paid, currency, createdAt]),
+  parcelsInBox: (x0, x1, y0, y1) => all('SELECT id, x, y, owner, avatar FROM parcels WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1]),
+  insertParcel: (id, x, y, owner, orderId, paid, currency, createdAt, avatar) =>
+    run('INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [id, x, y, owner, orderId, paid, currency, createdAt, avatar]),
   activeOrderForParcel: (id, now) => one("SELECT order_id FROM orders WHERE parcel_id = $1 AND status = 'CREATED' AND expires_at > $2", [id, now]),
-  insertOrder: (orderId, parcelId, owner, status, expiresAt, createdAt) =>
-    run('INSERT INTO orders (order_id, parcel_id, owner, status, expires_at, created_at) VALUES ($1,$2,$3,$4,$5,$6)', [orderId, parcelId, owner, status, expiresAt, createdAt]),
+  insertOrder: (orderId, parcelId, owner, status, expiresAt, createdAt, avatar) =>
+    run('INSERT INTO orders (order_id, parcel_id, owner, status, expires_at, created_at, avatar) VALUES ($1,$2,$3,$4,$5,$6,$7)', [orderId, parcelId, owner, status, expiresAt, createdAt, avatar]),
   orderById: id => one('SELECT * FROM orders WHERE order_id = $1', [id]),
   setOrderStatus: (status, id) => run('UPDATE orders SET status = $1 WHERE order_id = $2', [status, id]),
   purgeOrders: now => run("DELETE FROM orders WHERE status = 'CREATED' AND expires_at <= $1", [now]),
   count: () => one('SELECT COUNT(*) AS n FROM parcels'),
   top: () => all('SELECT owner, COUNT(*) AS n FROM parcels GROUP BY owner ORDER BY n DESC, MIN(created_at) ASC LIMIT 10'),
 };
+// ---------- Avatares ----------
+const AVATARS = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀','👑','⚽','🌟'];
+const cleanAvatar = a => AVATARS.includes(a) ? a : AVATARS[0];
+
 // ---------- Seguridad de administrador ----------
 function isAdmin(req) {
   const auth = req.headers.authorization || '';
@@ -72,7 +76,7 @@ function isAdmin(req) {
     crypto.timingSafeEqual(supplied, expected);
 }
 
-async function adminClaimParcel({ lat, lng, owner }) {
+async function adminClaimParcel({ lat, lng, owner, avatar }) {
   const p = parcelFromLatLng(Number(lat), Number(lng));
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
 
@@ -92,7 +96,7 @@ async function adminClaimParcel({ lat, lng, owner }) {
   }
 
   try {
-    await q.insertParcel(p.id, p.x, p.y, name, null, '0.00', 'ADMIN', now);
+    await q.insertParcel(p.id, p.x, p.y, name, null, '0.00', 'ADMIN', now, cleanAvatar(avatar));
   } catch (e) {
     if (isUniqueViolation(e)) throw new HttpError(409, 'No se ha podido reclamar esta parcela');
     throw e;
@@ -251,7 +255,7 @@ async function getWorldStats(key) {
 // ---------- API ----------
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 
-async function createOrder({ lat, lng, owner }) {
+async function createOrder({ lat, lng, owner, avatar }) {
   const p = parcelFromLatLng(Number(lat), Number(lng));
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
   const name = cleanName(owner);
@@ -277,7 +281,7 @@ async function createOrder({ lat, lng, owner }) {
     orderId = o.id;
   }
   // Reserva (la restricción de unicidad real está en la tabla parcels)
-  await q.insertOrder(orderId, p.id, name, 'CREATED', now + RESERVE_MINUTES * 60000, now);
+  await q.insertOrder(orderId, p.id, name, 'CREATED', now + RESERVE_MINUTES * 60000, now, cleanAvatar(avatar));
   return { orderId, parcel: p.id, price: PRICE, currency: CURRENCY };
 }
 
@@ -299,7 +303,7 @@ async function captureOrder(orderId) {
   const p = ord.parcel_id.split(':').map(Number);
   try {
     // La clave primaria impide que dos personas se queden la misma parcela.
-    await q.insertParcel(ord.parcel_id, p[0], p[1], ord.owner, orderId, paidValue, paidCurrency, Date.now());
+    await q.insertParcel(ord.parcel_id, p[0], p[1], ord.owner, orderId, paidValue, paidCurrency, Date.now(), cleanAvatar(ord.avatar));
     await q.setOrderStatus('PAID', orderId);
     return { ok: true, parcel: ord.parcel_id, owner: ord.owner };
   } catch (e) {
@@ -335,7 +339,7 @@ if (req.method === 'GET' && pn === '/api/world-stats') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')));
     if (!p) throw new HttpError(400, 'Coordenadas no válidas');
     const row = await q.parcelById(p.id);
-    return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null };
+    return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null, avatar: row ? row.avatar : null };
   }
 
   if (req.method === 'GET' && pn === '/api/parcels') {
@@ -343,7 +347,7 @@ if (req.method === 'GET' && pn === '/api/world-stats') {
     if (![s, w, n, e].every(Number.isFinite) || n - s > 0.3 || e - w > 0.3) throw new HttpError(400, 'Zona demasiado grande');
     const x0 = Math.max(0, Math.floor((w + 180) / SIZE)), x1 = Math.min(MAX_X - 1, Math.floor((e + 180) / SIZE));
     const y0 = Math.max(0, Math.floor((s + 90) / SIZE)), y1 = Math.min(MAX_Y - 1, Math.floor((n + 90) / SIZE));
-    return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner }));
+    return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar }));
   }
 
   if (req.method === 'GET' && pn === '/api/stats')
