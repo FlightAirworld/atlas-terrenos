@@ -30,6 +30,14 @@ async function api(url, opts) {
 const HOUSES = [
   'images/casa-aerea.png',
   'images/casa-frente.png'
+  'images/policia.png'
+  'images/pisos.png'
+  'images/gasolinera.png'
+  'images/choza.png'
+  'images/Restaurante.png'
+  'images/McDonald.png'
+  'images/Burgerking.png'
+  'images/Farmacia.png'
 ];
 function houseFor(id) {                      // cada parcela tiene siempre la misma casa
   let h = 2166136261; for (const c of id) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;   // FNV-1a
