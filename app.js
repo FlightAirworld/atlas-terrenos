@@ -28,24 +28,24 @@ async function api(url, opts) {
 
 // ---------- Parcelas compradas en pantalla ----------
 const HOUSES = [
-  'images/casa-aerea.png',
-  'images/casa-frente.png',
-  'images/policia.png',
-  'images/pisos.png',
-  'images/gasolinera.png',
-  'images/choza.png',
-  'images/Restaurante.png',
-  'images/McDonald.png',
-  'images/Burgerking.png',
-  'images/Farmacia.png'
-  'images/colegio.png'
-  'images/parque.png'
-  'images/rascacielos.png'
-  'images/casa-1.png'
-  'images/casa-2.png'
-  'images/casa-3.png'
-  'images/casa-4.png'
-  'images/casa-5.png'
+    'images/casa-aerea.png',
+    'images/casa-frente.png',
+    'images/policia.png',
+    'images/pisos.png',
+    'images/gasolinera.png',
+    'images/choza.png',
+    'images/Restaurante.png',
+    'images/McDonald.png',
+    'images/Burgerking.png',
+    'images/Farmacia.png',
+    'images/colegio.png',
+    'images/parque.png',
+    'images/rascacielos.png',
+    'images/casa-1.png',
+    'images/casa-2.png',
+    'images/casa-3.png',
+    'images/casa-4.png',
+    'images/casa-5.png'
 ];
 
 function houseFor(id) {
