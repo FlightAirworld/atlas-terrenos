@@ -70,7 +70,7 @@ function drawOwned(p) {
   // Nombre del dueño bajo la parcela
   const pill = document.createElement('span');
   pill.className = 'owner-pill';
-  pill.textContent = (p.avatar ? p.avatar + ' ' : '') + p.owner;   // textContent: sin HTML
+  pill.textContent = labelOf(p);             // textContent: sin HTML
   const label = L.marker([bounds[0][0], (bounds[0][1] + bounds[1][1]) / 2], {
     icon: L.divIcon({ className: 'owner-label', html: pill, iconSize: [0, 0] }),
     interactive: false, keyboard: false
@@ -160,7 +160,8 @@ function setupAdminControls() {
           lat: selected.south + cfg.size / 2,
           lng: selected.west + cfg.size / 2,
           owner: $('name').value.trim(),
-          avatar
+          avatar,
+          country
         })
       });
 
@@ -169,6 +170,7 @@ function setupAdminControls() {
 
       selected.owner = result.owner;
       selected.avatar = avatar;
+      selected.country = country;
       selected.since = Date.now();
 
       token.value = '';
@@ -180,7 +182,8 @@ function setupAdminControls() {
         x: selected.x,
         y: selected.y,
         owner: selected.owner,
-        avatar: selected.avatar
+        avatar: selected.avatar,
+        country: selected.country
       });
 
       loadStats();
@@ -207,7 +210,7 @@ function showPanel(p) {
   $('p-owned').classList.toggle('hidden', !owned);
   $('p-free').classList.toggle('hidden', owned);
   if (owned) {
-    $('p-owner').textContent = (p.avatar ? p.avatar + ' ' : '') + p.owner;
+    $('p-owner').textContent = labelOf(p);
     $('p-photo').src = houseFor(p.id);
     $('p-avatar').textContent = p.avatar || '';
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
@@ -232,6 +235,35 @@ try { const s = localStorage.getItem('avatar'); if (AVATARS.includes(s)) avatar 
     box.appendChild(b);
   });
   mark();
+})();
+
+// ---------- País (bandera) ----------
+const COUNTRY_CODES = ('AD AE AF AG AI AL AM AO AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BW BY BZ '
+  + 'CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR '
+  + 'GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP '
+  + 'KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ '
+  + 'NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW '
+  + 'SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TG TH TJ TK TL TM TN TO TR TT TV TW TZ '
+  + 'UA UG US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW').split(' ');
+const flagOf = c => /^[A-Z]{2}$/.test(c || '') ? String.fromCodePoint(...[...c].map(ch => 127397 + ch.charCodeAt(0))) : '';
+const labelOf = p => [flagOf(p.country), p.avatar, p.owner].filter(Boolean).join(' ');
+let country = '';
+(function buildCountryPicker() {
+  const sel = $('country');
+  let names = null;
+  try { names = new Intl.DisplayNames(['es'], { type: 'region' }); } catch {}
+  const nameOf = c => { try { return (names && names.of(c)) || c; } catch { return c; } };
+  const none = document.createElement('option');
+  none.value = ''; none.textContent = '🌍 Sin especificar';
+  sel.appendChild(none);
+  COUNTRY_CODES.map(c => ({ c, n: nameOf(c) })).sort((a, b) => a.n.localeCompare(b.n, 'es'))
+    .forEach(({ c, n }) => { const o = document.createElement('option'); o.value = c; o.textContent = flagOf(c) + ' ' + n; sel.appendChild(o); });
+  let saved = null;
+  try { saved = localStorage.getItem('country'); } catch {}
+  if (saved === null) { const m = (navigator.language || '').match(/-([A-Za-z]{2})$/); saved = m ? m[1].toUpperCase() : ''; }
+  sel.value = COUNTRY_CODES.includes(saved) ? saved : '';
+  country = sel.value;
+  sel.onchange = () => { country = sel.value; try { localStorage.setItem('country', country); } catch {} };
 })();
 
 // ---------- Packs de terrenos (créditos) ----------
@@ -284,15 +316,15 @@ $('use-credit').onclick = async () => {
     const r = await fetch('/api/claim', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + packCode },
-      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar })
+      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar, country })
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'No se pudo reclamar');
     credits = j.credits; updateCreditUi();
-    selected.owner = j.owner; selected.avatar = avatar; selected.since = Date.now();
+    selected.owner = j.owner; selected.avatar = avatar; selected.country = country; selected.since = Date.now();
     showPanel(selected);
     setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉`, 'ok');
-    drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar });
+    drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country });
     loadStats(); loadParcels();
   } catch (e) {
     setMsg(e.message, 'err');
@@ -348,7 +380,7 @@ async function loadStats() {
     const s = await api('/api/stats');
     $('stats').textContent = `${s.sold} terrenos vendidos`;
     const ol = $('rank-list'); ol.replaceChildren();
-    s.top.forEach(t => { const li = document.createElement('li'); li.textContent = `${t.owner} — ${t.n}`; ol.appendChild(li); });
+    s.top.forEach(t => { const li = document.createElement('li'); li.textContent = `${flagOf(t.country) ? flagOf(t.country) + ' ' : ''}${t.owner} — ${t.n}`; ol.appendChild(li); });
     if (!s.top.length) ol.textContent = 'Aún no hay propietarios. ¡Sé el primero!';
   } catch {}
 }
