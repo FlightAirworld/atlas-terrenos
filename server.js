@@ -1,10 +1,12 @@
-// Atlas Terrenos — servidor sin dependencias (Node >= 22.5, usa node:sqlite)
+// Atlas Terrenos — servidor con base de datos en Supabase (Postgres)
 'use strict';
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { createClient } = require('@supabase/supabase-js');
+const { Pool, types } = require('pg');
+
+types.setTypeParser(20, Number);   // BIGINT (created_at, COUNT) -> número, no texto
 
 // ---------- Configuración ----------
 const PORT = Number(process.env.PORT || 3000);
@@ -17,7 +19,11 @@ const CURRENCY = (process.env.CURRENCY || 'EUR').toUpperCase();
 const DEMO = !(PAYPAL_CLIENT_ID && PAYPAL_SECRET) || process.env.DEMO === '1';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const RESERVE_MINUTES = 10;                               // tiempo que se reserva una parcela mientras se paga
-const DB_FILE = process.env.DB_FILE || path.join(__dirname, 'terrenos.db');
+const DATABASE_URL = process.env.DATABASE_URL || '';      // cadena de conexión de Supabase
+if (!DATABASE_URL) {
+  console.error('Falta la variable DATABASE_URL (cadena de conexión de Supabase). Mira el README.');
+  process.exit(1);
+}
 
 // Rejilla del mundo: cada parcela es un cuadrado de 0.001° (~111 m de lado en latitud)
 const SIZE = 0.0005;
@@ -25,42 +31,32 @@ const MAX_X = Math.round(360 / SIZE);   // 360000 columnas
 const MAX_Y = Math.round(180 / SIZE);   // 180000 filas
 
 // ---------- Base de datos ----------
-const db = new DatabaseSync(DB_FILE);
-db.exec(`
-  PRAGMA journal_mode = WAL;
-  CREATE TABLE IF NOT EXISTS parcels (
-    id TEXT PRIMARY KEY,            -- "x:y"  (clave única: una parcela solo se vende una vez)
-    x INTEGER NOT NULL,
-    y INTEGER NOT NULL,
-    owner TEXT NOT NULL,
-    order_id TEXT,
-    paid TEXT,
-    currency TEXT,
-    created_at INTEGER NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS idx_parcels_xy ON parcels (x, y);
-  CREATE TABLE IF NOT EXISTS orders (
-    order_id TEXT PRIMARY KEY,
-    parcel_id TEXT NOT NULL,
-    owner TEXT NOT NULL,
-    status TEXT NOT NULL,           -- CREATED | PAID | REFUNDED
-    expires_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS idx_orders_parcel ON orders (parcel_id, status);
-`);
+// Las tablas se crean una sola vez ejecutando schema.sql en el editor SQL de Supabase.
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  ssl: { rejectUnauthorized: false },   // Supabase exige SSL
+  max: 5,
+});
+pool.on('error', e => console.error('Error en el pool de Postgres:', e.message));
+
+const run = (text, params = []) => pool.query(text, params);
+const one = async (text, params) => (await run(text, params)).rows[0];
+const all = async (text, params) => (await run(text, params)).rows;
+const isUniqueViolation = e => e && e.code === '23505';
 
 const q = {
-  parcelById: db.prepare('SELECT * FROM parcels WHERE id = ?'),
-  parcelsInBox: db.prepare('SELECT id, x, y, owner FROM parcels WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ? LIMIT 3000'),
-  insertParcel: db.prepare('INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at) VALUES (?,?,?,?,?,?,?,?)'),
-  activeOrderForParcel: db.prepare("SELECT order_id FROM orders WHERE parcel_id = ? AND status = 'CREATED' AND expires_at > ?"),
-  insertOrder: db.prepare('INSERT INTO orders (order_id, parcel_id, owner, status, expires_at, created_at) VALUES (?,?,?,?,?,?)'),
-  orderById: db.prepare('SELECT * FROM orders WHERE order_id = ?'),
-  setOrderStatus: db.prepare('UPDATE orders SET status = ? WHERE order_id = ?'),
-  purgeOrders: db.prepare("DELETE FROM orders WHERE status = 'CREATED' AND expires_at <= ?"),
-  count: db.prepare('SELECT COUNT(*) AS n FROM parcels'),
-  top: db.prepare('SELECT owner, COUNT(*) AS n FROM parcels GROUP BY owner ORDER BY n DESC, MIN(created_at) ASC LIMIT 10'),
+  parcelById: id => one('SELECT * FROM parcels WHERE id = $1', [id]),
+  parcelsInBox: (x0, x1, y0, y1) => all('SELECT id, x, y, owner FROM parcels WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1]),
+  insertParcel: (id, x, y, owner, orderId, paid, currency, createdAt) =>
+    run('INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [id, x, y, owner, orderId, paid, currency, createdAt]),
+  activeOrderForParcel: (id, now) => one("SELECT order_id FROM orders WHERE parcel_id = $1 AND status = 'CREATED' AND expires_at > $2", [id, now]),
+  insertOrder: (orderId, parcelId, owner, status, expiresAt, createdAt) =>
+    run('INSERT INTO orders (order_id, parcel_id, owner, status, expires_at, created_at) VALUES ($1,$2,$3,$4,$5,$6)', [orderId, parcelId, owner, status, expiresAt, createdAt]),
+  orderById: id => one('SELECT * FROM orders WHERE order_id = $1', [id]),
+  setOrderStatus: (status, id) => run('UPDATE orders SET status = $1 WHERE order_id = $2', [status, id]),
+  purgeOrders: now => run("DELETE FROM orders WHERE status = 'CREATED' AND expires_at <= $1", [now]),
+  count: () => one('SELECT COUNT(*) AS n FROM parcels'),
+  top: () => all('SELECT owner, COUNT(*) AS n FROM parcels GROUP BY owner ORDER BY n DESC, MIN(created_at) ASC LIMIT 10'),
 };
 // ---------- Seguridad de administrador ----------
 function isAdmin(req) {
@@ -76,7 +72,7 @@ function isAdmin(req) {
     crypto.timingSafeEqual(supplied, expected);
 }
 
-function adminClaimParcel({ lat, lng, owner }) {
+async function adminClaimParcel({ lat, lng, owner }) {
   const p = parcelFromLatLng(Number(lat), Number(lng));
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
 
@@ -85,29 +81,21 @@ function adminClaimParcel({ lat, lng, owner }) {
 
   const now = Date.now();
 
-  q.purgeOrders.run(now);
+  await q.purgeOrders(now);
 
-  if (q.parcelById.get(p.id)) {
+  if (await q.parcelById(p.id)) {
     throw new HttpError(409, 'Esta parcela ya tiene propietario');
   }
 
-  if (q.activeOrderForParcel.get(p.id, now)) {
+  if (await q.activeOrderForParcel(p.id, now)) {
     throw new HttpError(409, 'Esta parcela está reservada por una compra');
   }
 
   try {
-    q.insertParcel.run(
-      p.id,
-      p.x,
-      p.y,
-      name,
-      null,
-      '0.00',
-      'ADMIN',
-      now
-    );
+    await q.insertParcel(p.id, p.x, p.y, name, null, '0.00', 'ADMIN', now);
   } catch (e) {
-    throw new HttpError(409, 'No se ha podido reclamar esta parcela');
+    if (isUniqueViolation(e)) throw new HttpError(409, 'No se ha podido reclamar esta parcela');
+    throw e;
   }
 
   return {
@@ -270,9 +258,9 @@ async function createOrder({ lat, lng, owner }) {
   if (!name) throw new HttpError(400, 'Pon un nombre de 2 a 30 caracteres');
 
   const now = Date.now();
-  q.purgeOrders.run(now);
-  if (q.parcelById.get(p.id)) throw new HttpError(409, 'Este terreno ya tiene dueño');
-  if (q.activeOrderForParcel.get(p.id, now)) throw new HttpError(409, 'Este terreno está siendo comprado por otra persona. Prueba en unos minutos');
+  await q.purgeOrders(now);
+  if (await q.parcelById(p.id)) throw new HttpError(409, 'Este terreno ya tiene dueño');
+  if (await q.activeOrderForParcel(p.id, now)) throw new HttpError(409, 'Este terreno está siendo comprado por otra persona. Prueba en unos minutos');
 
   let orderId;
   if (DEMO) {
@@ -289,12 +277,12 @@ async function createOrder({ lat, lng, owner }) {
     orderId = o.id;
   }
   // Reserva (la restricción de unicidad real está en la tabla parcels)
-  q.insertOrder.run(orderId, p.id, name, 'CREATED', now + RESERVE_MINUTES * 60000, now);
+  await q.insertOrder(orderId, p.id, name, 'CREATED', now + RESERVE_MINUTES * 60000, now);
   return { orderId, parcel: p.id, price: PRICE, currency: CURRENCY };
 }
 
 async function captureOrder(orderId) {
-  const ord = q.orderById.get(orderId);
+  const ord = await q.orderById(orderId);
   if (!ord) throw new HttpError(404, 'Pedido desconocido');
   if (ord.status === 'PAID') return { ok: true, parcel: ord.parcel_id, owner: ord.owner };
   if (ord.status !== 'CREATED') throw new HttpError(409, 'Pedido no válido');
@@ -311,13 +299,18 @@ async function captureOrder(orderId) {
   const p = ord.parcel_id.split(':').map(Number);
   try {
     // La clave primaria impide que dos personas se queden la misma parcela.
-    q.insertParcel.run(ord.parcel_id, p[0], p[1], ord.owner, orderId, paidValue, paidCurrency, Date.now());
-    q.setOrderStatus.run('PAID', orderId);
+    await q.insertParcel(ord.parcel_id, p[0], p[1], ord.owner, orderId, paidValue, paidCurrency, Date.now());
+    await q.setOrderStatus('PAID', orderId);
     return { ok: true, parcel: ord.parcel_id, owner: ord.owner };
   } catch (e) {
+    if (!isUniqueViolation(e)) {
+      // Error de base de datos (no de duplicado): el pago ya está capturado, hay que revisarlo a mano
+      if (captureId) console.error('PAGO CAPTURADO PERO NO GUARDADO, REVISAR', captureId, orderId, e.message);
+      throw e;
+    }
     // Caso extremo: se cobró pero la parcela ya era de otro → reembolso automático
     if (captureId) { try { await paypal('POST', `/v2/payments/captures/${captureId}/refund`, {}); } catch (_) { console.error('REEMBOLSO MANUAL NECESARIO', captureId); } }
-    q.setOrderStatus.run('REFUNDED', orderId);
+    await q.setOrderStatus('REFUNDED', orderId);
     throw new HttpError(409, 'El terreno ya fue vendido. Se ha reembolsado el pago');
   }
 }
@@ -341,7 +334,7 @@ if (req.method === 'GET' && pn === '/api/world-stats') {
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')));
     if (!p) throw new HttpError(400, 'Coordenadas no válidas');
-    const row = q.parcelById.get(p.id);
+    const row = await q.parcelById(p.id);
     return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null };
   }
 
@@ -350,11 +343,11 @@ if (req.method === 'GET' && pn === '/api/world-stats') {
     if (![s, w, n, e].every(Number.isFinite) || n - s > 0.3 || e - w > 0.3) throw new HttpError(400, 'Zona demasiado grande');
     const x0 = Math.max(0, Math.floor((w + 180) / SIZE)), x1 = Math.min(MAX_X - 1, Math.floor((e + 180) / SIZE));
     const y0 = Math.max(0, Math.floor((s + 90) / SIZE)), y1 = Math.min(MAX_Y - 1, Math.floor((n + 90) / SIZE));
-    return q.parcelsInBox.all(x0, x1, y0, y1).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner }));
+    return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner }));
   }
 
   if (req.method === 'GET' && pn === '/api/stats')
-    return { sold: q.count.get().n, top: q.top.all() };
+    return { sold: (await q.count()).n, top: await q.top() };
 
   if (req.method === 'POST' && pn === '/api/orders') return createOrder(await readJson(req));
 
