@@ -209,9 +209,11 @@ function showPanel(p) {
   if (owned) {
     $('p-owner').textContent = (p.avatar ? p.avatar + ' ' : '') + p.owner;
     $('p-photo').src = houseFor(p.id);
+    $('p-avatar').textContent = p.avatar || '';
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
   } else {
     $('p-price').textContent = new Intl.NumberFormat('es-ES', { style: 'currency', currency: cfg.currency }).format(cfg.price);
+    $('pack-size').textContent = cfg.packSize;
   }
 }
 $('close').onclick = () => { $('panel').classList.add('hidden'); if (selectedRect) selectedRect.remove(); selected = null; };
@@ -232,6 +234,72 @@ try { const s = localStorage.getItem('avatar'); if (AVATARS.includes(s)) avatar 
   mark();
 })();
 
+// ---------- Packs de terrenos (créditos) ----------
+let packCode = null, credits = 0;
+try { packCode = localStorage.getItem('packCode'); } catch {}
+function saveCode(c) {
+  packCode = c;
+  try { if (c) localStorage.setItem('packCode', c); else localStorage.removeItem('packCode'); } catch {}
+}
+function updateCreditUi() {
+  const has = !!packCode && credits > 0;
+  $('credit-box').classList.toggle('hidden', !has);
+  $('buy-box').classList.toggle('hidden', has);
+  $('credits-left').textContent = credits;
+  $('my-code').textContent = packCode || '';
+}
+async function fetchPack(code) {
+  const r = await fetch('/api/pack', { headers: { Authorization: 'Bearer ' + code } });
+  const j = await r.json().catch(() => ({}));
+  return { status: r.status, credits: j.credits };
+}
+async function refreshCredits() {
+  if (packCode) {
+    try {
+      const r = await fetchPack(packCode);
+      if (r.status === 403) { saveCode(null); credits = 0; }
+      else if (r.status === 200) credits = r.credits;
+    } catch {}
+  } else credits = 0;
+  updateCreditUi();
+}
+$('recover-btn').onclick = async () => {
+  const code = $('recover-code').value.trim().toUpperCase();
+  if (!code) return;
+  try {
+    const r = await fetchPack(code);
+    if (r.status !== 200) throw new Error('Código no válido');
+    saveCode(code); credits = r.credits; updateCreditUi();
+    $('recover-code').value = '';
+    setMsg(`Código recuperado: te quedan ${credits} terrenos`, 'ok');
+  } catch (e) { setMsg(e.message, 'err'); }
+};
+$('use-credit').onclick = async () => {
+  if (!selected || selected.owner) return;
+  let owner;
+  try { owner = nameOrThrow(); } catch (e) { return; }   // nameOrThrow ya muestra el aviso
+  const btn = $('use-credit');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + packCode },
+      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'No se pudo reclamar');
+    credits = j.credits; updateCreditUi();
+    selected.owner = j.owner; selected.avatar = avatar; selected.since = Date.now();
+    showPanel(selected);
+    setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉`, 'ok');
+    drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar });
+    loadStats(); loadParcels();
+  } catch (e) {
+    setMsg(e.message, 'err');
+    refreshCredits();
+  } finally { btn.disabled = false; }
+};
+
 // ---------- Compra ----------
 function nameOrThrow() {
   const n = $('name').value.replace(/\s+/g, ' ').trim();
@@ -239,15 +307,13 @@ function nameOrThrow() {
   return n;
 }
 async function createOrder() {
-  const owner = nameOrThrow();
-  const o = await api('/api/orders', { method: 'POST', body: { lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar } });
+  const o = await api('/api/packs/orders', { method: 'POST', body: {} });
   return o.orderId;
 }
 async function captureOrder(orderId) {
-  const r = await api(`/api/orders/${encodeURIComponent(orderId)}/capture`, { method: 'POST', body: {} });
-  setMsg(`¡Listo! El terreno ${r.parcel} ahora es de ${r.owner} 🎉`, 'ok');
-  selected.owner = r.owner; selected.avatar = avatar; selected.since = Date.now();
-  setTimeout(() => { showPanel(selected); loadParcels(); loadStats(); }, 1500);
+  const r = await api(`/api/packs/orders/${encodeURIComponent(orderId)}/capture`, { method: 'POST', body: {} });
+  saveCode(r.code); credits = r.credits; updateCreditUi();
+  setMsg(`¡Pack comprado! Tienes ${credits} terrenos. Guarda tu código 🔑`, 'ok');
 }
 function fail(e) { if (e.message !== 'nombre') setMsg(e.message, 'err'); }
 
@@ -312,6 +378,7 @@ $('locate').onclick = () => {
     $('paypal-box').before(h);
   }
 
+  refreshCredits();
   loadStats();
   loadParcels();
 })();
