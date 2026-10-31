@@ -419,6 +419,63 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country }) {
   }
 }
 
+// ---------- Regalo diario ----------
+const DAILY_TZ = process.env.DAILY_TZ || 'Europe/Madrid';       // el "día" cambia a medianoche de esta zona
+const DAILY_REWARDS = [1, 1, 2, 2, 3, 3, 5];                    // terrenos de cada día de la racha (se repite cada 7 días)
+const DAILY_SALT = process.env.DAILY_SALT || ADMIN_TOKEN || 'atlas-terrenos';
+const dayKey = () => new Date().toLocaleDateString('en-CA', { timeZone: DAILY_TZ });   // AAAA-MM-DD
+const yesterdayKey = () => { const d = new Date(dayKey() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
+const clientIp = req => req.headers['cf-connecting-ip'] || String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
+
+function dailyInfo(row) {
+  const today = dayKey();
+  const last = row ? row.last_daily : null;
+  const streak = row ? row.streak : 0;
+  let canClaim, effective, completed;
+  if (last === today) {
+    canClaim = false; effective = streak; completed = ((streak - 1) % 7) + 1;
+  } else {
+    canClaim = true; effective = last === yesterdayKey() ? streak : 0; completed = effective % 7;
+  }
+  const next = canClaim ? DAILY_REWARDS[completed] : DAILY_REWARDS[streak % 7];
+  return { canClaim, streak: effective, dayInCycle: completed, next, rewards: DAILY_REWARDS, newStreak: effective + 1 };
+}
+
+async function dailyGet(req) {
+  const code = packCodeFrom(req);
+  if (!code) return dailyInfo(null);
+  const row = await one('SELECT code, credits, last_daily, streak FROM packs WHERE code = $1', [code]);
+  if (!row) throw new HttpError(403, 'Código no válido');
+  return dailyInfo(row);
+}
+
+async function dailyClaim(req) {
+  const code = packCodeFrom(req);
+  const today = dayKey();
+
+  if (!code) {
+    // Primer regalo sin código: se crea un pack nuevo. Máximo uno por conexión y día.
+    const hash = crypto.createHash('sha256').update(clientIp(req) + DAILY_SALT).digest('hex');
+    await run('DELETE FROM daily_ip WHERE day < $1', [today]);
+    const ins = await run('INSERT INTO daily_ip (day, ip_hash) VALUES ($1,$2) ON CONFLICT DO NOTHING', [today, hash]);
+    if (ins.rowCount === 0) throw new HttpError(429, 'Ya se ha reclamado un regalo desde esta conexión hoy. Si ya tienes un código, introdúcelo para reclamar el tuyo.');
+    const reward = dailyInfo(null).next;
+    const newCode = newPackCode();
+    await run('INSERT INTO packs (code, credits, created_at, last_daily, streak) VALUES ($1,$2,$3,$4,$5)', [newCode, reward, Date.now(), today, 1]);
+    return { ok: true, code: newCode, credits: reward, reward, streak: 1, newCode: true };
+  }
+
+  const row = await one('SELECT code, credits, last_daily, streak FROM packs WHERE code = $1', [code]);
+  if (!row) throw new HttpError(403, 'Código no válido');
+  const info = dailyInfo(row);
+  if (!info.canClaim) throw new HttpError(409, 'Ya has reclamado el regalo de hoy');
+  const up = await one(
+    'UPDATE packs SET credits = credits + $1, last_daily = $2, streak = $3 WHERE code = $4 AND last_daily IS DISTINCT FROM $2 RETURNING credits, streak',
+    [info.next, today, info.newStreak, code]);
+  if (!up) throw new HttpError(409, 'Ya has reclamado el regalo de hoy');
+  return { ok: true, code, credits: up.credits, reward: info.next, streak: up.streak, newCode: false };
+}
+
 async function route(req, res, url) {
   const { pathname: pn, searchParams: sp } = url;
   if (req.method === 'POST' && pn === '/api/admin/claim') {
@@ -457,6 +514,8 @@ if (req.method === 'GET' && pn === '/api/world-stats') {
   const pm = pn.match(/^\/api\/packs\/orders\/([^/]+)\/capture$/);
   if (req.method === 'POST' && pm) return capturePackOrder(decodeURIComponent(pm[1]));
   if (req.method === 'GET' && pn === '/api/pack') return { credits: (await getPack(req)).credits };
+  if (req.method === 'GET' && pn === '/api/daily') return dailyGet(req);
+  if (req.method === 'POST' && pn === '/api/daily/claim') return dailyClaim(req);
   if (req.method === 'POST' && pn === '/api/claim') return claimWithCredit(req, await readJson(req));
 
   if (req.method === 'POST' && pn === '/api/orders') return createOrder(await readJson(req));
