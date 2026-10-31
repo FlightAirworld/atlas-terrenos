@@ -1,17 +1,92 @@
+
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#087f5b">
-  <meta name="description" content="Explora el mundo, descubre terrenos y consigue tu parcela en Atlas Terrenos.">
-  <title>Atlas Terrenos — Tu parcela en el mundo</title>
+  <meta name="description" content="Atlas Terrenos y estadísticas mundiales en directo.">
+  <title>Atlas Terrenos — World Statistics Live</title>
 
-  <link
-    rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
-  >
+  <link rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <link rel="stylesheet" href="style.css">
+
+  <style>
+    #world-btn {
+      background:#087f5b;color:white;border:0;
+      padding:10px 14px;border-radius:10px;
+      cursor:pointer;font-weight:bold;
+    }
+    #world-modal {
+      position:fixed;inset:0;z-index:3000;
+      background:rgba(0,0,0,.75);
+      display:flex;align-items:center;justify-content:center;
+      padding:12px;
+    }
+    #world-modal.hidden {display:none}
+    .world-card {
+      width:min(850px,100%);max-height:92vh;
+      overflow:auto;background:#101d2c;color:white;
+      border:1px solid #29435b;border-radius:18px;
+      padding:20px;position:relative;
+    }
+    .world-card h2 {color:#70d6ff;margin-top:0}
+    .world-close {
+      position:absolute;right:15px;top:12px;
+      background:#29435b;color:white;border:0;
+      border-radius:8px;padding:7px 12px;
+      font-size:22px;cursor:pointer;
+    }
+    .world-controls {
+      display:flex;gap:8px;flex-wrap:wrap;margin:15px 0;
+    }
+    .world-controls select,.world-controls input {
+      padding:11px;border-radius:8px;border:1px solid #456078;
+      background:#20364b;color:white;flex:1;min-width:130px;
+    }
+    .world-total {
+      background:#193e5a;padding:18px;
+      border-radius:12px;margin:15px 0;
+    }
+    .world-total strong {
+      display:block;font-size:27px;color:#70d6ff;
+      margin-top:8px;overflow-wrap:anywhere;
+    }
+    .world-chart {margin-top:20px}
+    .world-row {margin:13px 0}
+    .world-label {
+      display:flex;justify-content:space-between;
+      gap:10px;margin-bottom:5px;font-size:14px;
+    }
+    .world-track {
+      background:#293b4d;height:12px;
+      border-radius:20px;overflow:hidden;
+    }
+    .world-bar {
+      height:100%;background:linear-gradient(90deg,#087fba,#48d5c0);
+      border-radius:20px;width:0;
+      transition:width 1s ease;
+    }
+    .world-note {color:#aebfd0;font-size:12px;line-height:1.5}
+    .world-status {color:#75dcb0;font-size:13px}
+    .world-comparison {
+      display:grid;grid-template-columns:1fr 1fr;
+      gap:10px;margin-top:12px;
+    }
+    .world-country {
+      background:#20364b;padding:14px;border-radius:12px;
+      overflow-wrap:anywhere;
+    }
+    .world-country strong {font-size:19px}
+    .world-country p {font-size:13px;color:#c5d5e5}
+    #world-list {margin-top:15px}
+    @media(max-width:500px) {
+      .world-card {padding:15px}
+      .world-comparison {grid-template-columns:1fr 1fr}
+      .world-label {font-size:12px}
+    }
+  </style>
 </head>
 
 <body>
@@ -24,22 +99,16 @@
       Cargando estadísticas…
     </span>
 
-    <button
-      id="locate"
-      type="button"
-      title="Ir a mi ubicación"
-      aria-label="Ir a mi ubicación"
-    >
+    <button id="locate" type="button" title="Ir a mi ubicación">
       📍 Mi ubicación
     </button>
 
-    <button
-      id="rank-btn"
-      type="button"
-      title="Ver ranking de propietarios"
-      aria-label="Ver ranking de propietarios"
-    >
+    <button id="rank-btn" type="button">
       🏆 Ranking
+    </button>
+
+    <button id="world-btn" type="button">
+      🌍 Estadísticas LIVE
     </button>
   </header>
 
@@ -47,64 +116,26 @@
     🌎 Explora el mapa y acerca el zoom para descubrir terrenos.
   </div>
 
-  <aside
-    id="panel"
-    class="panel hidden"
-    aria-labelledby="p-title"
-  >
-    <button
-      id="close"
-      class="close"
-      type="button"
-      aria-label="Cerrar panel"
-    >×</button>
-
+  <aside id="panel" class="panel hidden" aria-labelledby="p-title">
+    <button id="close" class="close" type="button">×</button>
     <h2 id="p-title">Tu terreno</h2>
     <p id="p-coords" class="muted"></p>
 
-     <div id="p-owned" class="hidden">
+    <div id="p-owned" class="hidden">
       <img id="p-photo" class="p-photo" alt="Casa del propietario">
-
-      <p class="owner">
-        👤 Propiedad de <strong id="p-owner"></strong>
-      </p>
-
+      <p class="owner">👤 Propiedad de <strong id="p-owner"></strong></p>
       <p class="muted" id="p-since"></p>
-
-      <p class="muted">
-        🔒 Este terreno ya tiene propietario y no está disponible.
-      </p>
+      <p class="muted">🔒 Este terreno ya tiene propietario.</p>
     </div>
 
     <div id="p-free" class="hidden">
-      <p>
-        🟢 Este terreno está libre.
-      </p>
-
-      <p>
-        Precio de la parcela:
-        <strong id="p-price">1 €</strong>
-      </p>
-
-      <label for="name">
-        Nombre que aparecerá en el terreno
-      </label>
-
-      <input
-        id="name"
-        type="text"
-        maxlength="30"
-        placeholder="Escribe tu nombre"
-        autocomplete="nickname"
-      >
-
+      <p>🟢 Este terreno está libre.</p>
+      <p>Precio: <strong id="p-price">1 €</strong></p>
+      <label for="name">Nombre que aparecerá en el terreno</label>
+      <input id="name" type="text" maxlength="30"
+        placeholder="Escribe tu nombre" autocomplete="nickname">
       <div id="paypal-box"></div>
-
-      <button
-        id="demo-pay"
-        class="hidden primary"
-        type="button"
-      >
+      <button id="demo-pay" class="hidden primary" type="button">
         Simular pago (modo demo)
       </button>
     </div>
@@ -112,31 +143,325 @@
     <p id="msg" class="msg" aria-live="polite"></p>
   </aside>
 
-  <div
-    id="rank"
-    class="modal hidden"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="rank-title"
-  >
+  <div id="rank" class="modal hidden" role="dialog"
+    aria-modal="true" aria-labelledby="rank-title">
     <div class="modal-card">
-      <button
-        id="rank-close"
-        class="close"
-        type="button"
-        aria-label="Cerrar ranking"
-      >×</button>
-
+      <button id="rank-close" class="close" type="button">×</button>
       <h2 id="rank-title">🏆 Mayores propietarios</h2>
-      <p class="muted">
-        Descubre quién posee más terrenos en Atlas Terrenos.
+      <p class="muted">Descubre quién posee más terrenos.</p>
+      <ol id="rank-list"></ol>
+    </div>
+  </div>
+
+  <!-- ESTADÍSTICAS MUNDIALES -->
+  <div id="world-modal" class="hidden" role="dialog"
+    aria-modal="true" aria-labelledby="world-title">
+
+    <div class="world-card">
+      <button id="world-close" class="world-close"
+        type="button" aria-label="Cerrar">×</button>
+
+      <h2 id="world-title">🌍 WORLD STATISTICS LIVE</h2>
+      <p>Explora y compara los países del mundo.</p>
+
+      <div class="world-total">
+        👥 Países con datos disponibles
+        <strong id="world-count">Cargando...</strong>
+        <div id="world-updated" class="world-status">
+          Conectando con el Banco Mundial...
+        </div>
+      </div>
+
+      <div class="world-controls">
+        <select id="world-indicator" aria-label="Estadística">
+          <option value="population">👥 Población</option>
+          <option value="gdp">💰 PIB por habitante</option>
+          <option value="life">❤️ Esperanza de vida</option>
+          <option value="area">🗺️ Superficie</option>
+        </select>
+
+        <select id="world-order" aria-label="Orden">
+          <option value="desc">Mayor a menor</option>
+          <option value="asc">Menor a mayor</option>
+        </select>
+      </div>
+
+      <input id="world-search" type="search"
+        placeholder="🔎 Buscar país..."
+        style="width:100%;box-sizing:border-box;padding:12px;
+        border-radius:9px;background:#20364b;color:white;
+        border:1px solid #456078;">
+
+      <div class="world-chart">
+        <h3>🏆 Ranking mundial</h3>
+        <div id="world-list">Cargando datos...</div>
+      </div>
+
+      <hr style="border-color:#34495c;margin:25px 0">
+
+      <h3>⚖️ Comparador de países</h3>
+
+      <div class="world-controls">
+        <select id="world-country-a"></select>
+        <select id="world-country-b"></select>
+      </div>
+
+      <div id="world-comparison" class="world-comparison">
+      </div>
+
+      <p class="world-note">
+        Fuente: Banco Mundial.
+        Las estadísticas oficiales se publican con retraso y
+        corresponden al último año disponible, no a mediciones
+        segundo a segundo. El panel consulta la API periódicamente.
       </p>
 
-      <ol id="rank-list"></ol>
+      <button id="world-refresh" type="button"
+        style="padding:12px;border:0;border-radius:9px;
+        background:#087fba;color:white;font-weight:bold;cursor:pointer">
+        🔄 Actualizar datos
+      </button>
     </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="app.js"></script>
+
+  <!-- FUNCIONES DE ESTADÍSTICAS MUNDIALES -->
+  <script>
+  (() => {
+    const modal = document.getElementById('world-modal');
+    const list = document.getElementById('world-list');
+    const indicator = document.getElementById('world-indicator');
+    const order = document.getElementById('world-order');
+    const search = document.getElementById('world-search');
+    const countryA = document.getElementById('world-country-a');
+    const countryB = document.getElementById('world-country-b');
+
+    const labels = {
+      population: 'Población',
+      gdp: 'PIB por habitante',
+      life: 'Esperanza de vida',
+      area: 'Superficie'
+    };
+
+    let datasets = {};
+    let countries = [];
+    let lastUpdate = null;
+    let loading = false;
+
+    function format(value, key) {
+      if (key === 'population') {
+        return Math.round(value).toLocaleString('es-ES');
+      }
+      if (key === 'gdp') {
+        return '$' + Math.round(value).toLocaleString('es-ES');
+      }
+      if (key === 'life') return value.toFixed(1) + ' años';
+      return Math.round(value).toLocaleString('es-ES') + ' km²';
+    }
+
+    async function loadData(key, force = false) {
+      if (datasets[key] && !force) return datasets[key];
+
+      const response = await fetch(
+        '/api/world-stats?indicator=' + encodeURIComponent(key),
+        {cache: 'no-store'}
+      );
+
+      if (!response.ok) {
+        throw new Error('No se pudieron obtener los datos: ' + key);
+      }
+
+      const data = await response.json();
+      datasets[key] = data;
+      return data;
+    }
+
+    function populateCountries() {
+      const options = countries.map(c => {
+        const option = document.createElement('option');
+        option.value = c.iso3;
+        option.textContent = c.flag + ' ' + c.name;
+        return option;
+      });
+
+      for (const select of [countryA, countryB]) {
+        select.replaceChildren(...options.map(o => o.cloneNode(true)));
+      }
+
+      const spain = countries.find(c => c.iso2 === 'ES');
+      const france = countries.find(c => c.iso2 === 'FR');
+
+      if (spain) countryA.value = spain.iso3;
+      if (france) countryB.value = france.iso3;
+    }
+
+    function renderComparison() {
+      const key = indicator.value;
+      const rows = datasets[key]?.countries || [];
+
+      const a = rows.find(c => c.iso3 === countryA.value);
+      const b = rows.find(c => c.iso3 === countryB.value);
+      const box = document.getElementById('world-comparison');
+
+      box.replaceChildren();
+
+      [a, b].forEach(c => {
+        const card = document.createElement('div');
+        card.className = 'world-country';
+
+        if (!c) {
+          card.textContent = 'Sin datos disponibles';
+        } else {
+          const title = document.createElement('strong');
+          title.textContent = c.flag + ' ' + c.name;
+
+          const value = document.createElement('h2');
+          value.textContent = format(c.value, key);
+
+          const year = document.createElement('p');
+          year.textContent = 'Año de referencia: ' + c.year;
+
+          card.append(title, value, year);
+        }
+
+        box.appendChild(card);
+      });
+    }
+
+    function renderRanking() {
+      const key = indicator.value;
+      const data = datasets[key];
+
+      if (!data) return;
+
+      const term = search.value.trim().toLocaleLowerCase();
+      const ascending = order.value === 'asc';
+
+      const rows = data.countries
+        .filter(c => c.name.toLocaleLowerCase().includes(term))
+        .sort((a, b) => ascending
+          ? a.value - b.value
+          : b.value - a.value);
+
+      const maximum = Math.max(...rows.map(c => c.value), 1);
+      const fragment = document.createDocumentFragment();
+
+      rows.slice(0, 100).forEach((c, i) => {
+        const row = document.createElement('div');
+        row.className = 'world-row';
+
+        const label = document.createElement('div');
+        label.className = 'world-label';
+
+        const name = document.createElement('strong');
+        name.textContent = (i + 1) + '. ' + c.flag + ' ' + c.name;
+
+        const value = document.createElement('span');
+        value.textContent = format(c.value, key);
+
+        label.append(name, value);
+
+        const track = document.createElement('div');
+        track.className = 'world-track';
+
+        const bar = document.createElement('div');
+        bar.className = 'world-bar';
+        bar.style.width = '0%';
+
+        track.appendChild(bar);
+        row.append(label, track);
+        fragment.appendChild(row);
+
+        requestAnimationFrame(() => {
+          bar.style.width =
+            Math.max(0.5, c.value / maximum * 100) + '%';
+        });
+      });
+
+      list.replaceChildren(fragment);
+
+      if (!rows.length) {
+        list.textContent = 'No se encontraron países.';
+      }
+
+      document.getElementById('world-count').textContent =
+        data.countries.length + ' registros';
+
+      document.getElementById('world-updated').textContent =
+        'Última consulta: ' + new Date().toLocaleString('es-ES') +
+        ' · Referencia estadística: ' +
+        (data.countries[0]?.year || 'disponible');
+
+      renderComparison();
+    }
+
+    async function refresh(force = false) {
+      if (loading) return;
+
+      loading = true;
+      document.getElementById('world-updated').textContent =
+        'Actualizando estadísticas...';
+
+      try {
+        const key = indicator.value;
+        const data = await loadData(key, force);
+
+        countries = data.countries;
+
+        if (!countryA.options.length) populateCountries();
+
+        renderRanking();
+      } catch (error) {
+        list.textContent =
+          'Error de conexión. Comprueba que la API del servidor funciona.';
+        document.getElementById('world-updated').textContent =
+          error.message;
+      } finally {
+        loading = false;
+      }
+    }
+
+    document.getElementById('world-btn').addEventListener('click', () => {
+      modal.classList.remove('hidden');
+      refresh();
+    });
+
+    document.getElementById('world-close').addEventListener('click', () => {
+      modal.classList.add('hidden');
+    });
+
+    modal.addEventListener('click', e => {
+      if (e.target === modal) modal.classList.add('hidden');
+    });
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') modal.classList.add('hidden');
+    });
+
+    indicator.addEventListener('change', () => refresh());
+    order.addEventListener('change', renderRanking);
+    search.addEventListener('input', renderRanking);
+
+    countryA.addEventListener('change', renderComparison);
+    countryB.addEventListener('change', renderComparison);
+
+    document.getElementById('world-refresh').addEventListener(
+      'click', () => refresh(true)
+    );
+
+    // Comprobar periódicamente si hay nuevos datos.
+    // El servidor conserva la caché durante seis horas.
+    setInterval(() => {
+      if (!modal.classList.contains('hidden')) {
+        refresh(true);
+      } else {
+        datasets = {};
+      }
+    }, 6 * 60 * 60 * 1000);
+
+  })();
+  </script>
 </body>
 </html>
