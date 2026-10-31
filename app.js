@@ -27,7 +27,6 @@ async function api(url, opts) {
 }
 
 // ---------- Parcelas compradas en pantalla ----------
-// ---------- Parcelas compradas en pantalla ----------
 const HOUSES = [
   'images/casa-aerea.png',
   'images/casa-frente.png',
