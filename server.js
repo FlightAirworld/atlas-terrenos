@@ -324,6 +324,13 @@ async function captureOrder(orderId) {
 
 async function route(req, res, url) {
   const { pathname: pn, searchParams: sp } = url;
+  if (req.method === 'POST' && pn === '/api/admin/claim') {
+  if (!isAdmin(req)) {
+    throw new HttpError(403, 'Acceso exclusivo de administrador');
+  }
+
+  return adminClaimParcel(await readJson(req));
+  }
 if (req.method === 'GET' && pn === '/api/world-stats') {
   const indicator = sp.get('indicator') || 'population';
   return getWorldStats(indicator);
