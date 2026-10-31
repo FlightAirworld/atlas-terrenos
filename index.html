@@ -13,6 +13,18 @@
   <link rel="stylesheet" href="style.css">
 
   <style>
+    #daily-btn {
+      position:fixed;left:12px;bottom:24px;z-index:1000;
+      width:56px;height:56px;border-radius:50%;font-size:28px;padding:0;
+      border:1px solid var(--line);background:var(--card);
+      box-shadow:0 2px 8px rgba(0,0,0,.3);
+    }
+    #daily-dot {
+      position:absolute;top:2px;right:2px;width:14px;height:14px;
+      border-radius:50%;background:#e63946;border:2px solid #fff;
+      animation:dailypulse 1.4s infinite;
+    }
+    @keyframes dailypulse { 0%,100% {transform:scale(1)} 50% {transform:scale(1.25)} }
     #world-btn {
       background:#087f5b;color:white;border:0;
       padding:10px 14px;border-radius:10px;
@@ -161,6 +173,21 @@
 
     <p id="msg" class="msg" aria-live="polite"></p>
   </aside>
+
+  <button id="daily-btn" type="button" title="Regalo diario" aria-label="Regalo diario">🎁<span id="daily-dot" class="hidden"></span></button>
+
+  <div id="daily" class="modal hidden" role="dialog"
+    aria-modal="true" aria-labelledby="daily-title">
+    <div class="modal-card">
+      <button id="daily-close" class="close" type="button">×</button>
+      <h2 id="daily-title">🎁 Regalo diario</h2>
+      <p class="muted" id="daily-info">Cargando…</p>
+      <div id="daily-days" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:10px 0"></div>
+      <button id="daily-claim" class="primary" type="button" disabled>Reclamar regalo</button>
+      <p id="daily-msg" class="msg" aria-live="polite"></p>
+      <p class="muted" id="daily-code"></p>
+    </div>
+  </div>
 
   <div id="rank" class="modal hidden" role="dialog"
     aria-modal="true" aria-labelledby="rank-title">
