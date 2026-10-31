@@ -15,6 +15,7 @@ const PAYPAL_BASE = PAYPAL_ENV === 'live' ? 'https://api-m.paypal.com' : 'https:
 const PRICE = (process.env.PRICE || '1.00');              // precio por parcela
 const CURRENCY = (process.env.CURRENCY || 'EUR').toUpperCase();
 const DEMO = !(PAYPAL_CLIENT_ID && PAYPAL_SECRET) || process.env.DEMO === '1';
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const RESERVE_MINUTES = 10;                               // tiempo que se reserva una parcela mientras se paga
 const DB_FILE = process.env.DB_FILE || path.join(__dirname, 'terrenos.db');
 
@@ -61,7 +62,61 @@ const q = {
   count: db.prepare('SELECT COUNT(*) AS n FROM parcels'),
   top: db.prepare('SELECT owner, COUNT(*) AS n FROM parcels GROUP BY owner ORDER BY n DESC, MIN(created_at) ASC LIMIT 10'),
 };
+// ---------- Seguridad de administrador ----------
+function isAdmin(req) {
+  const auth = req.headers.authorization || '';
+  const match = auth.match(/^Bearer (.+)$/);
 
+  if (!ADMIN_TOKEN || !match) return false;
+
+  const supplied = Buffer.from(match[1]);
+  const expected = Buffer.from(ADMIN_TOKEN);
+
+  return supplied.length === expected.length &&
+    crypto.timingSafeEqual(supplied, expected);
+}
+
+function adminClaimParcel({ lat, lng, owner }) {
+  const p = parcelFromLatLng(Number(lat), Number(lng));
+  if (!p) throw new HttpError(400, 'Coordenadas no válidas');
+
+  const name = cleanName(owner);
+  if (!name) throw new HttpError(400, 'Nombre no válido');
+
+  const now = Date.now();
+
+  q.purgeOrders.run(now);
+
+  if (q.parcelById.get(p.id)) {
+    throw new HttpError(409, 'Esta parcela ya tiene propietario');
+  }
+
+  if (q.activeOrderForParcel.get(p.id, now)) {
+    throw new HttpError(409, 'Esta parcela está reservada por una compra');
+  }
+
+  try {
+    q.insertParcel.run(
+      p.id,
+      p.x,
+      p.y,
+      name,
+      null,
+      '0.00',
+      'ADMIN',
+      now
+    );
+  } catch (e) {
+    throw new HttpError(409, 'No se ha podido reclamar esta parcela');
+  }
+
+  return {
+    ok: true,
+    free: true,
+    parcel: p.id,
+    owner: name
+  };
+}
 // ---------- Utilidades de parcelas ----------
 function parcelFromLatLng(lat, lng) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat >= 90 || lng < -180 || lng >= 180) return null;
