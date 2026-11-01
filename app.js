@@ -114,11 +114,12 @@ map.on('click', e => selectAt(e.latlng));
 function setupAdminControls() {
   if ($('admin-box')) return;
 
-  const box = document.createElement('div');
+  const box = document.createElement('details');
   box.id = 'admin-box';
-  box.style.cssText = 'margin-top:16px;padding:12px;border:1px solid #d6a900;border-radius:12px;';
+  box.style.cssText = 'margin-top:10px;padding:8px 12px;border:1px solid #d6a900;border-radius:12px;';
 
-  const title = document.createElement('strong');
+  const title = document.createElement('summary');
+  title.style.cssText = 'cursor:pointer;font-weight:bold;';
   title.textContent = '🔑 Administración';
 
   const description = document.createElement('p');
