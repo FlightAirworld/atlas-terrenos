@@ -529,17 +529,42 @@ $('login-google').onclick = async () => {
   const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
   if (error) setLoginMsg(error.message, 'err');
 };
-$('login-email-btn').onclick = async () => {
+function mapAuthError(e) {
+  const m = (e && e.message) || '';
+  if (/Invalid login credentials/i.test(m)) return 'Email o contraseña incorrectos';
+  if (/Email not confirmed/i.test(m)) return 'Aún no has confirmado tu email. Revisa tu correo (y el spam).';
+  if (/already registered/i.test(m)) return 'Ese email ya tiene cuenta. Pulsa Entrar.';
+  if (/at least 6/i.test(m)) return 'La contraseña necesita al menos 6 caracteres';
+  if (/rate limit/i.test(m)) return 'Demasiados intentos. Espera unos minutos.';
+  return m || 'No se pudo completar';
+}
+function readCreds() {
+  const email = $('login-email').value.trim(), password = $('login-pass').value;
+  if (!/^\S+@\S+\.\S+$/.test(email)) { setLoginMsg('Escribe un email válido', 'err'); return null; }
+  if (password.length < 6) { setLoginMsg('La contraseña necesita al menos 6 caracteres', 'err'); return null; }
+  return { email, password };
+}
+$('login-signup-btn').onclick = async () => {
   if (!sb) return setLoginMsg('El login no está disponible ahora mismo', 'err');
-  const email = $('login-email').value.trim();
-  if (!/^\S+@\S+\.\S+$/.test(email)) return setLoginMsg('Escribe un email válido', 'err');
-  const btn = $('login-email-btn');
-  btn.disabled = true;
+  const c = readCreds(); if (!c) return;
+  const btn = $('login-signup-btn'); btn.disabled = true;
   try {
-    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+    const { data, error } = await sb.auth.signUp({ email: c.email, password: c.password, options: { emailRedirectTo: location.origin + location.pathname } });
     if (error) throw error;
-    setLoginMsg('📧 Te hemos enviado un enlace. Ábrelo para entrar (mira también el spam).', 'ok');
-  } catch (e) { setLoginMsg(e.message || 'No se pudo enviar el enlace', 'err'); }
+    if (data.user && data.user.identities && data.user.identities.length === 0) throw new Error('Ese email ya tiene cuenta. Pulsa Entrar.');
+    setLoginMsg('📧 Te hemos enviado un correo. Ábrelo y pulsa el enlace para confirmar tu cuenta (mira el spam).', 'ok');
+  } catch (e) { setLoginMsg(mapAuthError(e), 'err'); }
+  finally { btn.disabled = false; }
+};
+$('login-signin-btn').onclick = async () => {
+  if (!sb) return setLoginMsg('El login no está disponible ahora mismo', 'err');
+  const c = readCreds(); if (!c) return;
+  const btn = $('login-signin-btn'); btn.disabled = true;
+  try {
+    const { error } = await sb.auth.signInWithPassword(c);
+    if (error) throw error;
+    $('login-pass').value = '';
+  } catch (e) { setLoginMsg(mapAuthError(e), 'err'); }
   finally { btn.disabled = false; }
 };
 $('login-nick-btn').onclick = async () => {
