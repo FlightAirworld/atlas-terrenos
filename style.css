@@ -70,7 +70,7 @@ input { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; borde
     margin: 10px auto;
     padding: 10px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) repeat(2, 48px);
+    grid-template-columns: minmax(0, 1fr) repeat(3, 48px);
     align-items: center;
     gap: 6px;
     overflow: hidden;
@@ -109,6 +109,11 @@ input { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; borde
 
   #rank-btn::before {
     content: "🏆";
+    font-size: 23px;
+  }
+
+  #account-btn::before {
+    content: "👤";
     font-size: 23px;
   }
 
