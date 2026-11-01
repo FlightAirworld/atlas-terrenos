@@ -4,6 +4,7 @@ const MIN_ZOOM_PARCELS = 15;   // por debajo no se muestran parcelas
 const MIN_ZOOM_BUY = 16;       // para comprar hay que acercarse
 let cfg, map, ownedLayer, selectedRect, selected = null, paypalLoaded = null;
 let sb = null, authToken = null, authUser = null, linkedFor = null;   // sesión (Supabase Auth)
+let myNick = null;             // apodo fijo guardado en el servidor
 const drawn = new Map();       // id -> rectángulo
 
 const map_ = L.map('map', { worldCopyJump: true, minZoom: 2 }).setView([36.1408, -5.3536], 17); // Gibraltar por defecto
@@ -318,7 +319,7 @@ $('use-credit').onclick = async () => {
   try {
     const r = await fetch('/api/claim', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + packCode },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + packCode, ...authHeaders() },
       body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar, country })
     });
     const j = await r.json().catch(() => ({}));
@@ -456,15 +457,17 @@ $('locate').onclick = () => {
     { enableHighAccuracy: true, timeout: 10000 });
 };
 
-// ---------- Cuenta (login con Google o enlace por email) ----------
+// ---------- Cuenta (Google o email con contraseña) ----------
 const loginRequired = () => !!(cfg && cfg.auth && cfg.auth.required);
 const needLoginToBuy = () => loginRequired() && !authToken;
 const needLoginForDaily = () => loginRequired() && !authToken && !packCode;
 
-const nickOf = u => { const m = (u && u.user_metadata) || {}; return String(m.nickname || m.full_name || m.name || '').replace(/\s+/g, ' ').trim().slice(0, 30); };
+// El apodo vive en el servidor (tabla profiles) y no se puede cambiar una vez fijado
+const nickOf = () => myNick || '';
 function applyNick() {
-  const nm = $('name'), n = nickOf(authUser);
-  if (nm && n && !nm.value) nm.value = n;
+  const nm = $('name'), n = nickOf();
+  if (!nm) return;
+  if (n) { nm.value = n; nm.readOnly = true; } else nm.readOnly = false;
 }
 function setLoginMsg(text, kind = '') { const m = $('login-msg'); m.textContent = text; m.className = 'msg ' + kind; }
 function openLogin(reason) {
@@ -481,7 +484,12 @@ function updateAuthUi() {
   $('login-out').classList.toggle('hidden', logged);
   $('login-in').classList.toggle('hidden', !logged);
   $('login-email-shown').textContent = (authUser && authUser.email) || '';
-  if (logged && document.activeElement !== $('login-nick')) $('login-nick').value = nickOf(authUser);
+  if (logged && document.activeElement !== $('login-nick')) $('login-nick').value = nickOf();
+  const fixed = !!myNick;
+  $('login-nick').readOnly = fixed;
+  $('login-nick-btn').classList.toggle('hidden', fixed);
+  const lab = document.querySelector('label[for="login-nick"]');
+  if (lab) lab.textContent = fixed ? 'Tu apodo (fijo, no se puede cambiar)' : 'Elige tu apodo (no podrás cambiarlo después)';
   if (logged) applyNick();
   $('code-note').classList.toggle('hidden', logged);          // con cuenta ya no hace falta guardar el código
   const gate = needLoginToBuy();
@@ -496,12 +504,14 @@ async function linkAccountOnServer() {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'No se pudo vincular la cuenta');
     saveCode(j.code); credits = j.credits; updateCreditUi();
+    myNick = j.nickname || null;
+    updateAuthUi();
     applyNick();
     let asked = false;
     try { asked = !!sessionStorage.getItem('nickAsked'); } catch {}
-    if (!nickOf(authUser) && !asked) {            // primera vez sin apodo: lo pedimos una vez
+    if (!nickOf() && !asked) {                    // primera vez sin apodo: lo pedimos una vez
       try { sessionStorage.setItem('nickAsked', '1'); } catch {}
-      openLogin('Elige tu apodo: es el nombre que verá la gente en tus terrenos 👤');
+      openLogin('Elige tu apodo: es el nombre que verá la gente en tus terrenos y NO se podrá cambiar después 👤');
     } else {
       $('login').classList.add('hidden');
     }
@@ -514,7 +524,10 @@ async function onSession(session) {
   authUser = session ? session.user : null;
   if (!authToken) {
     linkedFor = null;
-    if (wasLogged) { saveCode(null); credits = 0; updateCreditUi(); loadDaily(); }   // al salir, este móvil olvida el código de la cuenta
+    if (wasLogged) {
+      saveCode(null); credits = 0; updateCreditUi(); loadDaily();   // al salir, este móvil olvida el código de la cuenta
+      myNick = null; $('name').value = ''; applyNick();
+    }
     updateAuthUi();
     return;
   }
@@ -529,6 +542,8 @@ $('login-google').onclick = async () => {
   const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
   if (error) setLoginMsg(error.message, 'err');
 };
+
+// Email + contraseña
 function mapAuthError(e) {
   const m = (e && e.message) || '';
   if (/Invalid login credentials/i.test(m)) return 'Email o contraseña incorrectos';
@@ -567,19 +582,21 @@ $('login-signin-btn').onclick = async () => {
   } catch (e) { setLoginMsg(mapAuthError(e), 'err'); }
   finally { btn.disabled = false; }
 };
+
+// Apodo fijo: se guarda una sola vez en el servidor
 $('login-nick-btn').onclick = async () => {
-  if (!sb) return;
+  if (myNick) return setLoginMsg('Tu apodo ya está fijado', 'err');
   const nick = $('login-nick').value.replace(/\s+/g, ' ').trim();
   if (nick.length < 2) return setLoginMsg('El apodo necesita al menos 2 letras', 'err');
+  if (!confirm(`Tu apodo será "${nick}" y no podrás cambiarlo nunca. ¿Confirmas?`)) return;
   const btn = $('login-nick-btn');
   btn.disabled = true;
   try {
-    const { data, error } = await sb.auth.updateUser({ data: { nickname: nick } });
-    if (error) throw error;
-    if (data && data.user) authUser = data.user;
-    $('name').value = nick;
-    setLoginMsg('✅ Apodo guardado', 'ok');
-  } catch (e) { setLoginMsg(e.message || 'No se pudo guardar el apodo', 'err'); }
+    const j = await api('/api/profile', { method: 'POST', body: { nickname: nick } });
+    myNick = j.nickname;
+    applyNick(); updateAuthUi();
+    setLoginMsg('✅ Apodo guardado para siempre', 'ok');
+  } catch (e) { setLoginMsg(e.message, 'err'); }
   finally { btn.disabled = false; }
 };
 $('login-logout').onclick = async () => {
