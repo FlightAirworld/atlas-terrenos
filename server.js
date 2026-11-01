@@ -316,7 +316,28 @@ async function linkAccount(req) {
     client.release();
   }
 }
+// ---------- Apodo fijo ----------
+const getProfile = userId => one('SELECT nickname FROM profiles WHERE user_id = $1', [userId]);
 
+async function profileGet(req) {
+  const user = await needUser(req);
+  const p = await getProfile(user.id);
+  return { nickname: p ? p.nickname : null };
+}
+async function profileSet(req, { nickname }) {
+  const user = await needUser(req);
+  const name = cleanName(nickname);
+  if (!name) throw new HttpError(400, 'El apodo debe tener de 2 a 30 caracteres');
+  if (await getProfile(user.id)) throw new HttpError(409, 'Tu apodo ya está fijado y no se puede cambiar');
+  try {
+    await run('INSERT INTO profiles (user_id, nickname, created_at) VALUES ($1,$2,$3)', [user.id, name, Date.now()]);
+  } catch (e) {
+    if (!isUniqueViolation(e)) throw e;
+    if (await getProfile(user.id)) throw new HttpError(409, 'Tu apodo ya está fijado y no se puede cambiar');
+    throw new HttpError(409, 'Ese apodo ya está en uso. Elige otro');
+  }
+  return { ok: true, nickname: name };
+}
 async function createPackOrder(req) {
   if (REQUIRE_LOGIN) await needUser(req);
   const now = Date.now();
