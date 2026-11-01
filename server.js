@@ -26,6 +26,12 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
+// ---------- Login (Supabase Auth) ----------
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');   // https://xxxx.supabase.co
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';               // clave pública "anon"
+const AUTH_ENABLED = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+const REQUIRE_LOGIN = AUTH_ENABLED && process.env.REQUIRE_LOGIN !== '0';     // comprar y cobrar el regalo exige cuenta
+
 // Rejilla del mundo: cada parcela es un cuadrado de 0.001° (~111 m de lado en latitud)
 const SIZE = 0.0005;
 const MAX_X = Math.round(360 / SIZE);   // 360000 columnas
@@ -237,7 +243,82 @@ async function getPack(req) {
   return row;
 }
 
-async function createPackOrder() {
+// ---------- Login: usuario a partir del token de Supabase ----------
+const authCache = new Map();   // token -> { user, exp }
+async function userFrom(req) {
+  const t = String(req.headers['x-auth-token'] || '').trim();
+  if (!AUTH_ENABLED || !t || t.length > 4096) return null;
+  const hit = authCache.get(t);
+  if (hit && hit.exp > Date.now()) return hit.user;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + t } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j || !j.id) return null;
+    const user = { id: j.id, email: j.email || null };
+    if (authCache.size > 500) authCache.clear();
+    authCache.set(t, { user, exp: Date.now() + 60_000 });
+    return user;
+  } catch { return null; }
+}
+async function needUser(req) {
+  const u = await userFrom(req);
+  if (!u) throw new HttpError(401, 'Inicia sesión para continuar');
+  return u;
+}
+
+// Pack de la cuenta (se crea vacío la primera vez)
+async function ensureUserPack(user, create = true) {
+  const find = () => one('SELECT code, credits, last_daily, streak FROM packs WHERE user_id = $1', [user.id]);
+  const row = await find();
+  if (row || !create) return row;
+  try {
+    await run('INSERT INTO packs (code, credits, created_at, user_id) VALUES ($1,0,$2,$3)', [newPackCode(), Date.now(), user.id]);
+  } catch (e) { if (!isUniqueViolation(e)) throw e; }
+  return find();
+}
+
+// Al iniciar sesión: ata a la cuenta el código de este dispositivo (o junta sus terrenos con los de la cuenta)
+async function linkAccount(req) {
+  const user = await needUser(req);
+  const local = packCodeFrom(req);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let mine = (await client.query('SELECT code, credits FROM packs WHERE user_id = $1 FOR UPDATE', [user.id])).rows[0];
+    let old = null;
+    if (local && (!mine || mine.code !== local)) {
+      old = (await client.query('SELECT code, credits, user_id FROM packs WHERE code = $1 FOR UPDATE', [local])).rows[0] || null;
+      if (old && old.user_id) old = null;          // ya es de otra cuenta: no se toca
+    }
+    if (!mine && old) {
+      await client.query('UPDATE packs SET user_id = $1 WHERE code = $2', [user.id, old.code]);
+      mine = { code: old.code, credits: old.credits };
+    } else {
+      if (!mine) {
+        const code = newPackCode();
+        await client.query('INSERT INTO packs (code, credits, created_at, user_id) VALUES ($1,0,$2,$3)', [code, Date.now(), user.id]);
+        mine = { code, credits: 0 };
+      }
+      if (old && old.credits > 0) {
+        await client.query('UPDATE packs SET credits = 0 WHERE code = $1', [old.code]);
+        const up = await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING credits', [old.credits, mine.code]);
+        mine.credits = up.rows[0].credits;
+      }
+    }
+    await client.query('COMMIT');
+    return { ok: true, code: mine.code, credits: mine.credits, email: user.email };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (isUniqueViolation(e)) throw new HttpError(409, 'Inténtalo de nuevo');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+async function createPackOrder(req) {
+  if (REQUIRE_LOGIN) await needUser(req);
   const now = Date.now();
   let orderId;
   if (DEMO) {
@@ -257,7 +338,7 @@ async function createPackOrder() {
   return { orderId, size: PACK_SIZE, price: PRICE, currency: CURRENCY };
 }
 
-async function capturePackOrder(orderId) {
+async function capturePackOrder(req, orderId) {
   const ord = await one('SELECT * FROM pack_orders WHERE order_id = $1', [orderId]);
   if (!ord) throw new HttpError(404, 'Pedido desconocido');
   if (ord.status === 'PAID') {
@@ -266,6 +347,7 @@ async function capturePackOrder(orderId) {
   }
   if (ord.status !== 'CREATED') throw new HttpError(409, 'Pedido no válido');
 
+  const user = REQUIRE_LOGIN ? await needUser(req) : await userFrom(req);   // antes de cobrar nada
   let captureId = null;
   if (!DEMO) {
     const cap = await paypal('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`);
@@ -275,15 +357,24 @@ async function capturePackOrder(orderId) {
     captureId = c.id;
   }
 
-  const code = newPackCode();
+  let code, credits;
   try {
-    await run('INSERT INTO packs (code, credits, created_at) VALUES ($1,$2,$3)', [code, PACK_SIZE, Date.now()]);
+    if (user) {
+      // Con cuenta: los terrenos se suman al pack de la cuenta
+      const row = await ensureUserPack(user);
+      const up = await one('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING code, credits', [PACK_SIZE, row.code]);
+      code = up.code; credits = up.credits;
+    } else {
+      code = newPackCode();
+      await run('INSERT INTO packs (code, credits, created_at) VALUES ($1,$2,$3)', [code, PACK_SIZE, Date.now()]);
+      credits = PACK_SIZE;
+    }
     await run("UPDATE pack_orders SET status = 'PAID', code = $1 WHERE order_id = $2", [code, orderId]);
   } catch (e) {
     if (captureId) console.error('PAGO CAPTURADO PERO PACK NO GUARDADO, REVISAR', captureId, orderId, e.message);
     throw e;
   }
-  return { ok: true, code, credits: PACK_SIZE };
+  return { ok: true, code, credits };
 }
 
 async function claimWithCredit(req, { lat, lng, owner, avatar, country }) {
@@ -345,15 +436,24 @@ function dailyInfo(row) {
 
 async function dailyGet(req) {
   const code = packCodeFrom(req);
-  if (!code) return dailyInfo(null);
+  if (!code) {
+    const user = await userFrom(req);
+    return dailyInfo(user ? await ensureUserPack(user, false) : null);
+  }
   const row = await one('SELECT code, credits, last_daily, streak FROM packs WHERE code = $1', [code]);
   if (!row) throw new HttpError(403, 'Código no válido');
   return dailyInfo(row);
 }
 
 async function dailyClaim(req) {
-  const code = packCodeFrom(req);
+  let code = packCodeFrom(req);
   const today = dayKey();
+
+  if (!code) {
+    const user = await userFrom(req);
+    if (user) code = (await ensureUserPack(user)).code;
+    else if (REQUIRE_LOGIN) throw new HttpError(401, 'Inicia sesión para reclamar tu regalo diario');
+  }
 
   if (!code) {
     // Primer regalo sin código: se crea un pack nuevo. Máximo uno por conexión y día.
@@ -388,7 +488,8 @@ async function route(req, res, url) {
   return adminClaimParcel(await readJson(req));
   }
   if (req.method === 'GET' && pn === '/api/config')
-    return { demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PRICE, size: SIZE, packSize: PACK_SIZE };
+    return { demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PRICE, size: SIZE, packSize: PACK_SIZE,
+      auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')));
@@ -408,13 +509,14 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top() };
 
-  if (req.method === 'POST' && pn === '/api/packs/orders') return createPackOrder();
+  if (req.method === 'POST' && pn === '/api/packs/orders') return createPackOrder(req);
   const pm = pn.match(/^\/api\/packs\/orders\/([^/]+)\/capture$/);
-  if (req.method === 'POST' && pm) return capturePackOrder(decodeURIComponent(pm[1]));
+  if (req.method === 'POST' && pm) return capturePackOrder(req, decodeURIComponent(pm[1]));
   if (req.method === 'GET' && pn === '/api/pack') return { credits: (await getPack(req)).credits };
   if (req.method === 'GET' && pn === '/api/daily') return dailyGet(req);
   if (req.method === 'POST' && pn === '/api/daily/claim') return dailyClaim(req);
   if (req.method === 'POST' && pn === '/api/claim') return claimWithCredit(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/auth/link') return linkAccount(req);
 
   if (req.method === 'POST' && pn === '/api/orders') return createOrder(await readJson(req));
 
