@@ -45,6 +45,8 @@
     <button id="rank-btn" type="button">
       🏆 Ranking
     </button>
+
+    <button id="account-btn" type="button" class="hidden">👤 Entrar</button>
   </header>
 
   <div id="hint" class="hint">
@@ -78,9 +80,10 @@
       <div id="credit-box" class="hidden">
         <p>🎟️ Te quedan <strong id="credits-left">0</strong> terrenos</p>
         <button id="use-credit" class="primary" type="button">Reclamar este terreno</button>
-        <p class="muted">🔑 Tu código: <strong id="my-code"></strong><br>Guárdalo: lo necesitas para recuperar tus terrenos si cambias de móvil o borras los datos del navegador.</p>
+        <p id="code-note" class="muted">🔑 Tu código: <strong id="my-code"></strong><br>Guárdalo: lo necesitas para recuperar tus terrenos si cambias de móvil o borras los datos del navegador.</p>
       </div>
       <div id="buy-box">
+        <button id="buy-login" class="hidden primary" type="button" style="margin-bottom:8px">👤 Entra para comprar</button>
         <p>🎁 Pack de <strong id="pack-size">50</strong> terrenos por <strong id="p-price">1 €</strong></p>
         <div id="paypal-box"></div>
         <button id="demo-pay" class="hidden primary" type="button">
@@ -123,7 +126,32 @@
   </div>
 
 
+  <div id="login" class="modal hidden" role="dialog"
+    aria-modal="true" aria-labelledby="login-title">
+    <div class="modal-card">
+      <button id="login-close" class="close" type="button">×</button>
+      <h2 id="login-title">👤 Tu cuenta</h2>
+
+      <div id="login-out">
+        <p class="muted">Entra para guardar tus terrenos para siempre, recuperarlos en cualquier móvil y reclamar tu regalo diario.</p>
+        <button id="login-google" class="primary" type="button">Entrar con Google</button>
+        <p class="muted" style="text-align:center">— o con tu email —</p>
+        <input id="login-email" type="email" placeholder="tu@email.com" autocomplete="email">
+        <button id="login-email-btn" type="button" style="width:100%;padding:10px">📧 Enviarme un enlace</button>
+      </div>
+
+      <div id="login-in" class="hidden">
+        <p>Has entrado como <strong id="login-email-shown"></strong></p>
+        <p class="muted">Tus terrenos y tu racha del regalo diario están guardados en tu cuenta.</p>
+        <button id="login-logout" type="button" style="width:100%;padding:10px">Cerrar sesión</button>
+      </div>
+
+      <p id="login-msg" class="msg" aria-live="polite"></p>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
 
 </body>
