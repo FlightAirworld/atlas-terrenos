@@ -121,3 +121,25 @@ input { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; borde
 #hint {
   display: none !important;
 }
+
+/* ===== PANEL DE TERRENO COMPACTO EN MÓVIL ===== */
+@media (max-width: 600px) {
+  .panel {
+    left: 8px; right: 8px; bottom: 8px;
+    width: auto;
+    max-height: 48vh;
+    padding: 10px 12px;
+    overscroll-behavior: contain;
+  }
+  .panel h2 { font-size: 16px; padding-right: 28px; }
+  .panel p { margin: 4px 0; }
+  .panel .muted { font-size: 12px; margin: 0 0 4px; }
+  .panel label { margin: 6px 0 2px; font-size: 12px; }
+  .panel input, .panel select { padding: 7px 9px; margin-bottom: 6px; font-size: 14px; }
+  #avatars { flex-wrap: nowrap !important; overflow-x: auto; gap: 4px !important; margin-bottom: 6px !important; padding-bottom: 2px; }
+  #avatars button { flex: 0 0 auto; font-size: 20px !important; padding: 2px 6px; }
+  #country { padding: 7px 9px !important; margin-bottom: 6px !important; }
+  .p-photo { height: 80px; }
+  #paypal-box { margin-top: 2px; }
+  button.primary { padding: 8px; }
+}
