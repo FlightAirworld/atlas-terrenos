@@ -63,6 +63,7 @@ const q = {
   setOrderStatus: (status, id) => run('UPDATE orders SET status = $1 WHERE order_id = $2', [status, id]),
   purgeOrders: now => run("DELETE FROM orders WHERE status = 'CREATED' AND expires_at <= $1", [now]),
   count: () => one('SELECT COUNT(*) AS n FROM parcels'),
+  topCountries: () => all('SELECT country, COUNT(*) AS n FROM parcels WHERE country IS NOT NULL GROUP BY country ORDER BY n DESC LIMIT 10'),
   top: () => all('SELECT owner, COUNT(*) AS n, (ARRAY_AGG(country ORDER BY created_at DESC) FILTER (WHERE country IS NOT NULL))[1] AS country FROM parcels GROUP BY owner ORDER BY n DESC, MIN(created_at) ASC LIMIT 10'),
 };
 // ---------- Avatares ----------
@@ -425,8 +426,8 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country }) {
       throw new HttpError(exists ? 402 : 403, exists ? 'No te quedan terrenos en tu pack' : 'Código no válido');
     }
     await client.query(
-      'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
-      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), cleanCountry(country)]);
+      'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), cleanCountry(country), user ? user.id : null]);
     await client.query('COMMIT');
     return { ok: true, parcel: p.id, owner: name, credits: r.rows[0].credits };
   } catch (e) {
@@ -504,6 +505,60 @@ async function dailyClaim(req) {
   return { ok: true, code, credits: up.credits, reward: info.next, streak: up.streak, newCode: false };
 }
 
+// ---------- Mis terrenos y producción de créditos ----------
+const PROD_RATE = Math.max(0, Number(process.env.PROD_RATE || 0.02));          // créditos por terreno y hora
+const PROD_CAP_HOURS = Math.max(1, Number(process.env.PROD_CAP_HOURS || 24));  // horas máximas que se acumulan sin recoger
+const HOUR_MS = 3600000;
+
+// Suma, por cada terreno de la cuenta, el tiempo producido desde la última recogida (o desde que se reclamó), con tope.
+async function prodCompute(db, userId, lastCollect, carry, now) {
+  const r = (await db.query(
+    'SELECT COUNT(*) AS n, COALESCE(SUM(LEAST(GREATEST($2::bigint - GREATEST(created_at, $3::bigint), 0), $4::bigint)), 0) AS ms FROM parcels WHERE user_id = $1',
+    [userId, now, lastCollect || 0, Math.round(PROD_CAP_HOURS * HOUR_MS)])).rows[0];
+  const n = Number(r.n);
+  const total = (Number(carry) || 0) + (Number(r.ms) / HOUR_MS) * PROD_RATE;
+  return { parcels: n, perHour: n * PROD_RATE, total, ready: Math.floor(total + 1e-9) };
+}
+
+async function myParcels(req) {
+  const user = await needUser(req);
+  const rows = await all('SELECT id, x, y, avatar, country, created_at FROM parcels WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200', [user.id]);
+  const total = (await one('SELECT COUNT(*) AS n FROM parcels WHERE user_id = $1', [user.id])).n;
+  return { total, parcels: rows.map(r => ({ id: r.id, x: r.x, y: r.y, avatar: r.avatar, country: r.country, since: r.created_at })) };
+}
+
+async function productionGet(req) {
+  const user = await needUser(req);
+  const pack = await ensureUserPack(user);
+  const p = await one('SELECT last_collect, prod_carry FROM packs WHERE code = $1', [pack.code]);
+  const st = await prodCompute(pool, user.id, p && p.last_collect, p && p.prod_carry, Date.now());
+  return { parcels: st.parcels, perHour: Math.round(st.perHour * 100) / 100, ready: st.ready, capHours: PROD_CAP_HOURS, rate: PROD_RATE };
+}
+
+async function productionCollect(req) {
+  const user = await needUser(req);
+  const pack = await ensureUserPack(user);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const p = (await client.query('SELECT code, credits, last_collect, prod_carry FROM packs WHERE code = $1 FOR UPDATE', [pack.code])).rows[0];
+    const now = Date.now();
+    const st = await prodCompute(client, user.id, p.last_collect, p.prod_carry, now);
+    const amount = Math.floor(st.total + 1e-9);
+    if (amount < 1) throw new HttpError(409, 'Todavía no hay créditos listos. Vuelve más tarde');
+    const up = await client.query(
+      'UPDATE packs SET credits = credits + $1, last_collect = $2, prod_carry = $3 WHERE code = $4 RETURNING credits',
+      [amount, now, Math.max(0, st.total - amount), p.code]);
+    await client.query('COMMIT');
+    return { ok: true, collected: amount, credits: up.rows[0].credits };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 async function route(req, res, url) {
   const { pathname: pn, searchParams: sp } = url;
   if (req.method === 'POST' && pn === '/api/admin/claim') {
@@ -533,7 +588,7 @@ async function route(req, res, url) {
   }
 
   if (req.method === 'GET' && pn === '/api/stats')
-    return { sold: (await q.count()).n, top: await q.top() };
+    return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };
 
   if (req.method === 'POST' && pn === '/api/packs/orders') return createPackOrder(req);
   const pm = pn.match(/^\/api\/packs\/orders\/([^/]+)\/capture$/);
@@ -545,6 +600,9 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/auth/link') return linkAccount(req);
   if (req.method === 'GET' && pn === '/api/profile') return profileGet(req);
   if (req.method === 'POST' && pn === '/api/profile') return profileSet(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/my-parcels') return myParcels(req);
+  if (req.method === 'GET' && pn === '/api/production') return productionGet(req);
+  if (req.method === 'POST' && pn === '/api/production/collect') return productionCollect(req);
 
   if (req.method === 'POST' && pn === '/api/orders') return createOrder(await readJson(req));
 

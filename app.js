@@ -355,7 +355,7 @@ function renderDaily() {
   const racha = `${d.streak} ${plural(d.streak, 'día', 'días')}`;
   const premio = `+${d.next} ${plural(d.next, 'terreno', 'terrenos')}`;
   $('daily-info').textContent = d.canClaim
-    ? `Racha actual: ${racha}. Hoy te llevas ${premio}.`
+    ? (d.streak > 0 ? `🔥 Racha actual: ${racha}. ¡No la pierdas! Hoy te llevas ${premio}.` : `Hoy te llevas ${premio}.`)
     : `¡Hoy ya lo has cobrado! Vuelve mañana: ${premio}. Racha: ${racha}.`;
   const box = $('daily-days');
   box.replaceChildren();
@@ -438,6 +438,8 @@ $('demo-pay').onclick = async () => {
 };
 
 // ---------- Estadísticas, ranking, ubicación ----------
+const regionNames = (() => { try { return new Intl.DisplayNames(['es'], { type: 'region' }); } catch { return null; } })();
+const countryName = c => { try { return (regionNames && regionNames.of(c)) || c; } catch { return c; } };
 async function loadStats() {
   try {
     const s = await api('/api/stats');
@@ -445,6 +447,9 @@ async function loadStats() {
     const ol = $('rank-list'); ol.replaceChildren();
     s.top.forEach(t => { const li = document.createElement('li'); li.textContent = `${flagOf(t.country) ? flagOf(t.country) + ' ' : ''}${t.owner} — ${t.n}`; ol.appendChild(li); });
     if (!s.top.length) ol.textContent = 'Aún no hay propietarios. ¡Sé el primero!';
+    const oc = $('rank-countries'); oc.replaceChildren();
+    (s.countries || []).forEach(c => { const li = document.createElement('li'); li.textContent = `${flagOf(c.country)} ${countryName(c.country)} — ${c.n}`; oc.appendChild(li); });
+    if (!(s.countries || []).length) oc.textContent = 'Aún no hay países. Elige el tuyo al reclamar un terreno.';
   } catch {}
 }
 $('rank-btn').onclick = () => { loadStats(); $('rank').classList.remove('hidden'); };
@@ -480,6 +485,7 @@ function updateAuthUi() {
   $('account-btn').classList.toggle('hidden', !on);
   if (!on) return;
   const logged = !!authToken;
+  $('mine-btn').classList.toggle('hidden', !logged);
   $('account-btn').textContent = logged ? '👤 Mi cuenta' : '👤 Entrar';
   $('login-out').classList.toggle('hidden', logged);
   $('login-in').classList.toggle('hidden', !logged);
@@ -605,6 +611,101 @@ $('login-logout').onclick = async () => {
   $('login').classList.add('hidden');
 };
 
+// ---------- Compartir terreno ----------
+$('share-btn').onclick = async () => {
+  if (!selected) return;
+  const url = `${location.origin}${location.pathname}?t=${selected.id}`;
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Redecora El Mundo', text: 'Mira este terreno en Redecora El Mundo', url }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(url); setMsg('🔗 Enlace copiado', 'ok'); }
+  catch { setMsg(url); }
+};
+function openSharedParcel() {
+  const m = location.search.match(/[?&]t=(\d{1,6}):(\d{1,6})/);
+  if (!m) return;
+  const x = Number(m[1]), y = Number(m[2]);
+  if (x >= Math.round(360 / cfg.size) || y >= Math.round(180 / cfg.size)) return;
+  const b = boundsOf(x, y);
+  const ll = L.latLng((b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2);
+  map.setView(ll, 18);
+  selectAt(ll);
+}
+
+// ---------- Buscador de lugares (OpenStreetMap / Nominatim) ----------
+function setSearchMsg(text, kind = '') { const m = $('search-msg'); m.textContent = text; m.className = 'msg ' + kind; }
+async function doSearch() {
+  const q = $('search-q').value.trim();
+  if (q.length < 3) return setSearchMsg('Escribe al menos 3 letras', 'err');
+  const list = $('search-results'); list.replaceChildren();
+  setSearchMsg('Buscando…');
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=es&q=' + encodeURIComponent(q));
+    if (!r.ok) throw new Error('El buscador no responde ahora mismo');
+    const res = await r.json();
+    if (!res.length) return setSearchMsg('No he encontrado ese lugar', 'err');
+    setSearchMsg('');
+    res.forEach(p => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.style.cssText = 'display:block;width:100%;text-align:left;margin:6px 0;padding:10px';
+      b.textContent = p.display_name;
+      b.onclick = () => { $('search').classList.add('hidden'); map.flyTo([Number(p.lat), Number(p.lon)], 17); };
+      list.appendChild(b);
+    });
+  } catch (e) { setSearchMsg(e.message || 'Error al buscar', 'err'); }
+}
+$('search-btn').onclick = () => { $('search').classList.remove('hidden'); setTimeout(() => $('search-q').focus(), 50); };
+$('search-close').onclick = () => $('search').classList.add('hidden');
+$('search-go').onclick = doSearch;
+$('search-q').onkeydown = e => { if (e.key === 'Enter') doSearch(); };
+
+// ---------- Mis terrenos y producción de créditos ----------
+function setMineMsg(text, kind = '') { const m = $('mine-msg'); m.textContent = text; m.className = 'msg ' + kind; }
+function renderMine(prod, mine) {
+  const n = prod.parcels;
+  $('mine-prod').textContent = n
+    ? `⏱️ Tienes ${n} ${plural(n, 'terreno', 'terrenos')}: producen ${prod.perHour.toLocaleString('es-ES', { maximumFractionDigits: 2 })} créditos por hora. Se acumulan hasta ${prod.capHours} h, ¡recógelos antes de que se llene!`
+    : 'Aún no tienes terrenos con producción. Reclama uno y empezará a producir créditos.';
+  const btn = $('mine-collect');
+  btn.disabled = prod.ready < 1;
+  btn.textContent = prod.ready >= 1 ? `🎟️ Recoger ${prod.ready} ${plural(prod.ready, 'crédito', 'créditos')}` : 'Aún no hay créditos listos';
+  $('mine-count').textContent = mine.total > mine.parcels.length ? `Mostrando los ${mine.parcels.length} más recientes de ${mine.total}.` : (mine.total ? `${mine.total} ${plural(mine.total, 'terreno', 'terrenos')} en total.` : '');
+  const box = $('mine-list'); box.replaceChildren();
+  mine.parcels.forEach(p => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.style.cssText = 'display:block;width:100%;text-align:left;margin:6px 0;padding:10px';
+    b.textContent = `${flagOf(p.country)} ${p.avatar || ''} Terreno ${p.id} · ${new Date(p.since).toLocaleDateString('es-ES')}`.trim();
+    b.onclick = () => {
+      $('mine').classList.add('hidden');
+      const bb = boundsOf(p.x, p.y);
+      const ll = L.latLng((bb[0][0] + bb[1][0]) / 2, (bb[0][1] + bb[1][1]) / 2);
+      map.flyTo(ll, 18);
+      map.once('moveend', () => selectAt(ll));
+    };
+    box.appendChild(b);
+  });
+}
+async function loadMine() {
+  try {
+    const [prod, mine] = await Promise.all([api('/api/production', { method: 'GET' }), api('/api/my-parcels', { method: 'GET' })]);
+    renderMine(prod, mine);
+  } catch (e) { setMineMsg(e.message, 'err'); }
+}
+$('mine-btn').onclick = () => { setMineMsg(''); $('mine').classList.remove('hidden'); loadMine(); };
+$('mine-close').onclick = () => $('mine').classList.add('hidden');
+$('mine-collect').onclick = async () => {
+  const btn = $('mine-collect');
+  btn.disabled = true;
+  try {
+    const j = await api('/api/production/collect', { method: 'POST', body: {} });
+    credits = j.credits; updateCreditUi();
+    setMineMsg(`🎉 +${j.collected} ${plural(j.collected, 'crédito', 'créditos')}. Ahora tienes ${j.credits}.`, 'ok');
+  } catch (e) { setMineMsg(e.message, 'err'); }
+  loadMine();
+};
+
 // ---------- Inicio ----------
 (async () => {
   cfg = await api('/api/config');
@@ -630,4 +731,5 @@ $('login-logout').onclick = async () => {
   refreshCredits().then(loadDaily);
   loadStats();
   loadParcels();
+  openSharedParcel();
 })();

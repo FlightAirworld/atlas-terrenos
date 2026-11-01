@@ -4,7 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#087f5b">
-  <meta name="description" content="Redecora El Mundo.">
+  <meta name="description" content="Reclama terrenos virtuales en el mapa del mundo y ponles tu nombre.">
+  <meta property="og:title" content="Redecora El Mundo">
+  <meta property="og:description" content="Reclama terrenos virtuales en el mapa del mundo y ponles tu nombre.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://atlas-terrenos.onrender.com/">
+  <meta property="og:image" content="https://atlas-terrenos.onrender.com/images/casa-aerea.png">
+  <meta name="twitter:card" content="summary">
   <title>Redecora El Mundo</title>
 
   <link rel="stylesheet"
@@ -23,6 +29,13 @@
       border-radius:50%;background:#e63946;border:2px solid #fff;
       animation:dailypulse 1.4s infinite;
     }
+    #mine-btn {
+      position:fixed;left:12px;bottom:90px;z-index:1000;
+      width:56px;height:56px;border-radius:50%;font-size:26px;padding:0;
+      border:1px solid var(--line);background:var(--card);
+      box-shadow:0 2px 8px rgba(0,0,0,.3);
+    }
+    #mine-btn.hidden { display:none !important; }
     @keyframes dailypulse { 0%,100% {transform:scale(1)} 50% {transform:scale(1.25)} }
 
     /* Vídeo de introducción */
@@ -76,6 +89,8 @@
       📍 Mi ubicación
     </button>
 
+    <button id="search-btn" type="button" title="Buscar un lugar">🔍</button>
+
     <button id="rank-btn" type="button">
       🏆 Ranking
     </button>
@@ -91,6 +106,7 @@
     <button id="close" class="close" type="button">×</button>
     <h2 id="p-title">Tu terreno</h2>
     <p id="p-coords" class="muted"></p>
+    <button id="share-btn" type="button" style="margin:4px 0 8px">🔗 Compartir este terreno</button>
 
     <div id="p-owned" class="hidden">
       <div style="position:relative">
@@ -156,6 +172,8 @@
       <h2 id="rank-title">🏆 Mayores propietarios</h2>
       <p class="muted">Descubre quién posee más terrenos.</p>
       <ol id="rank-list"></ol>
+      <h3 style="margin:16px 0 4px">🌍 Por países</h3>
+      <ol id="rank-countries"></ol>
     </div>
   </div>
 
@@ -191,6 +209,32 @@
       </div>
 
       <p id="login-msg" class="msg" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <button id="mine-btn" class="hidden" type="button" title="Mis terrenos" aria-label="Mis terrenos">🏠</button>
+
+  <div id="mine" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mine-title">
+    <div class="modal-card">
+      <button id="mine-close" class="close" type="button">×</button>
+      <h2 id="mine-title">🏠 Mis terrenos</h2>
+      <p id="mine-prod" class="muted">Cargando…</p>
+      <button id="mine-collect" class="primary" type="button" disabled>Recoger créditos</button>
+      <p id="mine-msg" class="msg" aria-live="polite"></p>
+      <p id="mine-count" class="muted"></p>
+      <div id="mine-list" style="max-height:40vh;overflow:auto"></div>
+    </div>
+  </div>
+
+  <div id="search" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="search-title">
+    <div class="modal-card">
+      <button id="search-close" class="close" type="button">×</button>
+      <h2 id="search-title">🔍 Buscar un lugar</h2>
+      <input id="search-q" type="text" placeholder="Ciudad, calle, monumento…" autocomplete="off">
+      <button id="search-go" class="primary" type="button" style="margin-top:8px">Buscar</button>
+      <p id="search-msg" class="msg" aria-live="polite"></p>
+      <div id="search-results"></div>
+      <p class="muted" style="font-size:12px">Búsqueda con datos de © OpenStreetMap.</p>
     </div>
   </div>
 
