@@ -1,4 +1,4 @@
-// Atlas Terrenos — servidor con base de datos en Supabase (Postgres)
+// Redecora El Mundo — servidor con base de datos en Supabase (Postgres)
 'use strict';
 const http = require('node:http');
 const fs = require('node:fs');
@@ -583,5 +583,5 @@ http.createServer(async (req, res) => {
     send(status, JSON.stringify({ error: status === 500 ? 'Error interno' : e.message }));
   }
 }).listen(PORT, () => {
-  console.log(`Atlas Terrenos en http://localhost:${PORT}  [${DEMO ? 'MODO DEMO (sin PayPal real)' : 'PayPal ' + PAYPAL_ENV}]  precio ${PRICE} ${CURRENCY}`);
+  console.log(`Redecora El Mundo en http://localhost:${PORT}  [${DEMO ? 'MODO DEMO (sin PayPal real)' : 'PayPal ' + PAYPAL_ENV}]  precio ${PRICE} ${CURRENCY}`);
 });
