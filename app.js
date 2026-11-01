@@ -114,6 +114,15 @@ async function selectAt(latlng) {
 }
 map.on('click', e => selectAt(e.latlng));
 // ---------- Administración: reclamar parcelas gratis ----------
+// El cuadro solo aparece si abres el juego con #admin al final de la dirección (se recuerda en ese dispositivo).
+// La seguridad real está en el servidor: sin la clave correcta no se puede hacer nada.
+function adminViewEnabled() {
+  try {
+    if (location.hash === '#admin') localStorage.setItem('adminView', '1');
+    if (location.hash === '#noadmin') localStorage.removeItem('adminView');
+    return localStorage.getItem('adminView') === '1';
+  } catch { return location.hash === '#admin'; }
+}
 function setupAdminControls() {
   if ($('admin-box')) return;
 
@@ -201,7 +210,29 @@ function setupAdminControls() {
     }
   };
 
-  box.append(title, description, token, button);
+  const statsBtn = document.createElement('button');
+  statsBtn.type = 'button';
+  statsBtn.textContent = '📊 Ver estadísticas';
+  statsBtn.style.cssText = 'width:100%;padding:12px;margin-top:8px;cursor:pointer;';
+  const statsOut = document.createElement('pre');
+  statsOut.style.cssText = 'white-space:pre-wrap;font-size:13px;margin:8px 0 0;';
+  statsBtn.onclick = async () => {
+    const secret = token.value.trim();
+    if (!secret) { setMsg('Introduce tu clave de administrador', 'err'); return; }
+    statsBtn.disabled = true;
+    try {
+      const r = await fetch('/api/admin/stats', { headers: { Authorization: 'Bearer ' + secret } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'No se pudo cargar');
+      const lines = [`Terrenos: ${j.parcels} · Cuentas: ${j.accounts}`, 'Visitantes únicos por día:'];
+      (j.visitors || []).forEach(v => lines.push(`  ${v.day}: ${v.n}`));
+      if (!(j.visitors || []).length) lines.push('  (aún sin datos)');
+      statsOut.textContent = lines.join('\n');
+    } catch (e) { setMsg(e.message, 'err'); }
+    finally { statsBtn.disabled = false; }
+  };
+
+  box.append(title, description, token, button, statsBtn, statsOut);
   $('p-free').appendChild(box);
 }
 function showPanel(p) {
@@ -710,7 +741,7 @@ $('mine-collect').onclick = async () => {
 (async () => {
   cfg = await api('/api/config');
 
-  setupAdminControls();
+  if (adminViewEnabled()) setupAdminControls();
 
   if (cfg.demo) $('demo-pay').classList.remove('hidden');
   else renderPaypal();
@@ -729,6 +760,12 @@ $('mine-collect').onclick = async () => {
   updateAuthUi();
 
   refreshCredits().then(loadDaily);
+  try {
+    if (!sessionStorage.getItem('visited')) {
+      sessionStorage.setItem('visited', '1');
+      fetch('/api/visit', { method: 'POST' }).catch(() => {});
+    }
+  } catch {}
   loadStats();
   loadParcels();
   openSharedParcel();

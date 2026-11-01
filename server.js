@@ -505,6 +505,53 @@ async function dailyClaim(req) {
   return { ok: true, code, credits: up.credits, reward: info.next, streak: up.streak, newCode: false };
 }
 
+// ---------- Seguridad: límite de peticiones, clave de administrador, visitas ----------
+const rateBuckets = new Map();   // clave -> { count, reset }
+function rateHit(key, windowMs) {
+  const now = Date.now();
+  let b = rateBuckets.get(key);
+  if (!b || b.reset <= now) { b = { count: 0, reset: now + windowMs }; rateBuckets.set(key, b); }
+  b.count++;
+  return b.count;
+}
+function ratePeek(key) {
+  const b = rateBuckets.get(key);
+  return b && b.reset > Date.now() ? b.count : 0;
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, b] of rateBuckets) if (b.reset <= now) rateBuckets.delete(k);
+  if (rateBuckets.size > 50000) rateBuckets.clear();   // por si alguien intenta llenar la memoria
+}, 60_000).unref();
+
+// Más de 5 claves de administrador incorrectas en 15 minutos desde la misma conexión: se bloquea.
+function requireAdmin(req) {
+  const ip = clientIp(req);
+  if (ratePeek('adminfail:' + ip) >= 5) throw new HttpError(429, 'Demasiados intentos. Espera unos minutos');
+  if (!isAdmin(req)) {
+    rateHit('adminfail:' + ip, 15 * 60_000);
+    throw new HttpError(403, 'Acceso exclusivo de administrador');
+  }
+}
+
+// Contador de visitas únicas por día, anónimo (solo se guarda una huella no reversible de la conexión)
+async function registerVisit(req) {
+  const hash = crypto.createHash('sha256').update('visit:' + clientIp(req) + DAILY_SALT).digest('hex');
+  await run('INSERT INTO visits (day, ip_hash) VALUES ($1,$2) ON CONFLICT DO NOTHING', [dayKey(), hash]);
+  if (Math.random() < 0.02) {   // de vez en cuando se borran las huellas antiguas (más de 60 días)
+    const cutoff = new Date(Date.now() - 60 * 86400000).toLocaleDateString('en-CA', { timeZone: DAILY_TZ });
+    await run('DELETE FROM visits WHERE day < $1', [cutoff]);
+  }
+  return { ok: true };
+}
+async function adminStats(req) {
+  requireAdmin(req);
+  const visitors = await all('SELECT day, COUNT(*) AS n FROM visits GROUP BY day ORDER BY day DESC LIMIT 14');
+  const accounts = (await one('SELECT COUNT(*) AS n FROM packs WHERE user_id IS NOT NULL')).n;
+  const parcels = (await q.count()).n;
+  return { visitors, accounts, parcels };
+}
+
 // ---------- Mis terrenos y producción de créditos ----------
 const PROD_RATE = Math.max(0, Number(process.env.PROD_RATE || 0.02));          // créditos por terreno y hora
 const PROD_CAP_HOURS = Math.max(1, Number(process.env.PROD_CAP_HOURS || 24));  // horas máximas que se acumulan sin recoger
@@ -561,13 +608,17 @@ async function productionCollect(req) {
 
 async function route(req, res, url) {
   const { pathname: pn, searchParams: sp } = url;
-  if (req.method === 'POST' && pn === '/api/admin/claim') {
-  if (!isAdmin(req)) {
-    throw new HttpError(403, 'Acceso exclusivo de administrador');
-  }
+  // Límite de peticiones por conexión: 240 por minuto en total y 40 por minuto las que modifican datos
+  const ip = clientIp(req);
+  if (rateHit('api:' + ip, 60_000) > 240) throw new HttpError(429, 'Demasiadas peticiones. Espera un momento');
+  if (req.method !== 'GET' && rateHit('post:' + ip, 60_000) > 40) throw new HttpError(429, 'Demasiadas peticiones. Espera un momento');
 
-  return adminClaimParcel(await readJson(req));
+  if (req.method === 'POST' && pn === '/api/admin/claim') {
+    requireAdmin(req);
+    return adminClaimParcel(await readJson(req));
   }
+  if (req.method === 'GET' && pn === '/api/admin/stats') return adminStats(req);
+  if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
     return { demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PRICE, size: SIZE, packSize: PACK_SIZE,
       auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
@@ -626,7 +677,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  const send = (status, body, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff' }); res.end(body); };
+  const send = (status, body, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000' }); res.end(body); };
   try {
     if (url.pathname.startsWith('/api/')) {
       const out = await route(req, res, url);
