@@ -461,6 +461,11 @@ const loginRequired = () => !!(cfg && cfg.auth && cfg.auth.required);
 const needLoginToBuy = () => loginRequired() && !authToken;
 const needLoginForDaily = () => loginRequired() && !authToken && !packCode;
 
+const nickOf = u => { const m = (u && u.user_metadata) || {}; return String(m.nickname || m.full_name || m.name || '').replace(/\s+/g, ' ').trim().slice(0, 30); };
+function applyNick() {
+  const nm = $('name'), n = nickOf(authUser);
+  if (nm && n && !nm.value) nm.value = n;
+}
 function setLoginMsg(text, kind = '') { const m = $('login-msg'); m.textContent = text; m.className = 'msg ' + kind; }
 function openLogin(reason) {
   setLoginMsg(reason || '');
@@ -476,6 +481,8 @@ function updateAuthUi() {
   $('login-out').classList.toggle('hidden', logged);
   $('login-in').classList.toggle('hidden', !logged);
   $('login-email-shown').textContent = (authUser && authUser.email) || '';
+  if (logged && document.activeElement !== $('login-nick')) $('login-nick').value = nickOf(authUser);
+  if (logged) applyNick();
   $('code-note').classList.toggle('hidden', logged);          // con cuenta ya no hace falta guardar el código
   const gate = needLoginToBuy();
   $('buy-login').classList.toggle('hidden', !gate);
@@ -489,10 +496,15 @@ async function linkAccountOnServer() {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'No se pudo vincular la cuenta');
     saveCode(j.code); credits = j.credits; updateCreditUi();
-    const meta = (authUser && authUser.user_metadata) || {};
-    const nm = $('name');
-    if (nm && !nm.value) nm.value = String(meta.full_name || meta.name || '').slice(0, 30);
-    $('login').classList.add('hidden');
+    applyNick();
+    let asked = false;
+    try { asked = !!sessionStorage.getItem('nickAsked'); } catch {}
+    if (!nickOf(authUser) && !asked) {            // primera vez sin apodo: lo pedimos una vez
+      try { sessionStorage.setItem('nickAsked', '1'); } catch {}
+      openLogin('Elige tu apodo: es el nombre que verá la gente en tus terrenos 👤');
+    } else {
+      $('login').classList.add('hidden');
+    }
     loadDaily();
   } catch (e) { linkedFor = null; setLoginMsg(e.message, 'err'); }
 }
@@ -528,6 +540,21 @@ $('login-email-btn').onclick = async () => {
     if (error) throw error;
     setLoginMsg('📧 Te hemos enviado un enlace. Ábrelo para entrar (mira también el spam).', 'ok');
   } catch (e) { setLoginMsg(e.message || 'No se pudo enviar el enlace', 'err'); }
+  finally { btn.disabled = false; }
+};
+$('login-nick-btn').onclick = async () => {
+  if (!sb) return;
+  const nick = $('login-nick').value.replace(/\s+/g, ' ').trim();
+  if (nick.length < 2) return setLoginMsg('El apodo necesita al menos 2 letras', 'err');
+  const btn = $('login-nick-btn');
+  btn.disabled = true;
+  try {
+    const { data, error } = await sb.auth.updateUser({ data: { nickname: nick } });
+    if (error) throw error;
+    if (data && data.user) authUser = data.user;
+    $('name').value = nick;
+    setLoginMsg('✅ Apodo guardado', 'ok');
+  } catch (e) { setLoginMsg(e.message || 'No se pudo guardar el apodo', 'err'); }
   finally { btn.disabled = false; }
 };
 $('login-logout').onclick = async () => {
