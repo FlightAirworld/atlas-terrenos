@@ -278,6 +278,29 @@ async function ensureUserPack(user, create = true) {
   return find();
 }
 
+// ---------- Apodo fijo (se elige una sola vez y no se puede cambiar) ----------
+const getProfile = userId => one('SELECT nickname FROM profiles WHERE user_id = $1', [userId]);
+
+async function profileGet(req) {
+  const user = await needUser(req);
+  const p = await getProfile(user.id);
+  return { nickname: p ? p.nickname : null };
+}
+async function profileSet(req, { nickname }) {
+  const user = await needUser(req);
+  const name = cleanName(nickname);
+  if (!name) throw new HttpError(400, 'El apodo debe tener de 2 a 30 caracteres');
+  if (await getProfile(user.id)) throw new HttpError(409, 'Tu apodo ya está fijado y no se puede cambiar');
+  try {
+    await run('INSERT INTO profiles (user_id, nickname, created_at) VALUES ($1,$2,$3)', [user.id, name, Date.now()]);
+  } catch (e) {
+    if (!isUniqueViolation(e)) throw e;
+    if (await getProfile(user.id)) throw new HttpError(409, 'Tu apodo ya está fijado y no se puede cambiar');
+    throw new HttpError(409, 'Ese apodo ya está en uso. Elige otro');
+  }
+  return { ok: true, nickname: name };
+}
+
 // Al iniciar sesión: ata a la cuenta el código de este dispositivo (o junta sus terrenos con los de la cuenta)
 async function linkAccount(req) {
   const user = await needUser(req);
@@ -307,7 +330,8 @@ async function linkAccount(req) {
       }
     }
     await client.query('COMMIT');
-    return { ok: true, code: mine.code, credits: mine.credits, email: user.email };
+    const prof = await getProfile(user.id);
+    return { ok: true, code: mine.code, credits: mine.credits, email: user.email, nickname: prof ? prof.nickname : null };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Inténtalo de nuevo');
@@ -316,28 +340,7 @@ async function linkAccount(req) {
     client.release();
   }
 }
-// ---------- Apodo fijo ----------
-const getProfile = userId => one('SELECT nickname FROM profiles WHERE user_id = $1', [userId]);
 
-async function profileGet(req) {
-  const user = await needUser(req);
-  const p = await getProfile(user.id);
-  return { nickname: p ? p.nickname : null };
-}
-async function profileSet(req, { nickname }) {
-  const user = await needUser(req);
-  const name = cleanName(nickname);
-  if (!name) throw new HttpError(400, 'El apodo debe tener de 2 a 30 caracteres');
-  if (await getProfile(user.id)) throw new HttpError(409, 'Tu apodo ya está fijado y no se puede cambiar');
-  try {
-    await run('INSERT INTO profiles (user_id, nickname, created_at) VALUES ($1,$2,$3)', [user.id, name, Date.now()]);
-  } catch (e) {
-    if (!isUniqueViolation(e)) throw e;
-    if (await getProfile(user.id)) throw new HttpError(409, 'Tu apodo ya está fijado y no se puede cambiar');
-    throw new HttpError(409, 'Ese apodo ya está en uso. Elige otro');
-  }
-  return { ok: true, nickname: name };
-}
 async function createPackOrder(req) {
   if (REQUIRE_LOGIN) await needUser(req);
   const now = Date.now();
@@ -402,7 +405,9 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country }) {
   const code = packCodeFrom(req);
   const p = parcelFromLatLng(Number(lat), Number(lng));
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
-  const name = cleanName(owner);
+  const user = await userFrom(req);
+  const prof = user && await getProfile(user.id);
+  const name = prof ? prof.nickname : cleanName(owner);   // con cuenta, siempre sale el apodo fijo
   if (!name) throw new HttpError(400, 'Pon un nombre de 2 a 30 caracteres');
 
   const now = Date.now();
@@ -538,6 +543,8 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/daily/claim') return dailyClaim(req);
   if (req.method === 'POST' && pn === '/api/claim') return claimWithCredit(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/auth/link') return linkAccount(req);
+  if (req.method === 'GET' && pn === '/api/profile') return profileGet(req);
+  if (req.method === 'POST' && pn === '/api/profile') return profileSet(req, await readJson(req));
 
   if (req.method === 'POST' && pn === '/api/orders') return createOrder(await readJson(req));
 
