@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 const MIN_ZOOM_PARCELS = 15;   // por debajo no se muestran parcelas
 const MIN_ZOOM_BUY = 16;       // para comprar hay que acercarse
 let cfg, map, ownedLayer, selectedRect, selected = null, paypalLoaded = null;
+let sb = null, authToken = null, authUser = null, linkedFor = null;   // sesión (Supabase Auth)
 const drawn = new Map();       // id -> rectángulo
 
 const map_ = L.map('map', { worldCopyJump: true, minZoom: 2 }).setView([36.1408, -5.3536], 17); // Gibraltar por defecto
@@ -18,9 +19,10 @@ function boundsOf(x, y) {
   const s = cfg.size, west = x * s - 180, south = y * s - 90;
   return [[south, west], [south + s, west + s]];
 }
+function authHeaders() { return authToken ? { 'X-Auth-Token': authToken } : {}; }
 function setMsg(text, kind = '') { const m = $('msg'); m.textContent = text; m.className = 'msg ' + kind; }
 async function api(url, opts) {
-  const r = await fetch(url, opts && { ...opts, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(opts.body) });
+  const r = await fetch(url, opts && { ...opts, headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(opts.body) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || 'Error ' + r.status);
   return j;
@@ -338,7 +340,7 @@ let dailyState = null;
 const plural = (n, one, many) => n === 1 ? one : many;
 async function loadDaily() {
   try {
-    const r = await fetch('/api/daily', { headers: packCode ? { Authorization: 'Bearer ' + packCode } : {} });
+    const r = await fetch('/api/daily', { headers: { ...(packCode ? { Authorization: 'Bearer ' + packCode } : {}), ...authHeaders() } });
     if (r.status === 403) { saveCode(null); credits = 0; updateCreditUi(); return loadDaily(); }
     if (!r.ok) return;
     dailyState = await r.json();
@@ -367,15 +369,17 @@ function renderDaily() {
   const btn = $('daily-claim');
   btn.disabled = !d.canClaim;
   btn.textContent = d.canClaim ? `🎁 Reclamar ${premio}` : 'Vuelve mañana';
+  if (d.canClaim && needLoginForDaily()) btn.textContent = `👤 Entra para reclamar ${premio}`;
 }
 function setDailyMsg(text, kind = '') { const m = $('daily-msg'); m.textContent = text; m.className = 'msg ' + kind; }
 $('daily-btn').onclick = () => { setDailyMsg(''); $('daily').classList.remove('hidden'); loadDaily(); };
 $('daily-close').onclick = () => $('daily').classList.add('hidden');
 $('daily-claim').onclick = async () => {
+  if (needLoginForDaily()) { $('daily').classList.add('hidden'); openLogin('Entra para reclamar tu regalo diario 🎁'); return; }
   const btn = $('daily-claim');
   btn.disabled = true;
   try {
-    const r = await fetch('/api/daily/claim', { method: 'POST', headers: packCode ? { Authorization: 'Bearer ' + packCode } : {} });
+    const r = await fetch('/api/daily/claim', { method: 'POST', headers: { ...(packCode ? { Authorization: 'Bearer ' + packCode } : {}), ...authHeaders() } });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'No se pudo reclamar el regalo');
     saveCode(j.code); credits = j.credits; updateCreditUi();
@@ -452,6 +456,86 @@ $('locate').onclick = () => {
     { enableHighAccuracy: true, timeout: 10000 });
 };
 
+// ---------- Cuenta (login con Google o enlace por email) ----------
+const loginRequired = () => !!(cfg && cfg.auth && cfg.auth.required);
+const needLoginToBuy = () => loginRequired() && !authToken;
+const needLoginForDaily = () => loginRequired() && !authToken && !packCode;
+
+function setLoginMsg(text, kind = '') { const m = $('login-msg'); m.textContent = text; m.className = 'msg ' + kind; }
+function openLogin(reason) {
+  setLoginMsg(reason || '');
+  updateAuthUi();
+  $('login').classList.remove('hidden');
+}
+function updateAuthUi() {
+  const on = !!(cfg && cfg.auth && cfg.auth.enabled);
+  $('account-btn').classList.toggle('hidden', !on);
+  if (!on) return;
+  const logged = !!authToken;
+  $('account-btn').textContent = logged ? '👤 Mi cuenta' : '👤 Entrar';
+  $('login-out').classList.toggle('hidden', logged);
+  $('login-in').classList.toggle('hidden', !logged);
+  $('login-email-shown').textContent = (authUser && authUser.email) || '';
+  $('code-note').classList.toggle('hidden', logged);          // con cuenta ya no hace falta guardar el código
+  const gate = needLoginToBuy();
+  $('buy-login').classList.toggle('hidden', !gate);
+  $('paypal-box').classList.toggle('hidden', gate);
+  if (cfg.demo) $('demo-pay').classList.toggle('hidden', gate);
+  if (dailyState) renderDaily();
+}
+async function linkAccountOnServer() {
+  try {
+    const r = await fetch('/api/auth/link', { method: 'POST', headers: { ...(packCode ? { Authorization: 'Bearer ' + packCode } : {}), ...authHeaders() } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'No se pudo vincular la cuenta');
+    saveCode(j.code); credits = j.credits; updateCreditUi();
+    const meta = (authUser && authUser.user_metadata) || {};
+    const nm = $('name');
+    if (nm && !nm.value) nm.value = String(meta.full_name || meta.name || '').slice(0, 30);
+    $('login').classList.add('hidden');
+    loadDaily();
+  } catch (e) { linkedFor = null; setLoginMsg(e.message, 'err'); }
+}
+async function onSession(session) {
+  const wasLogged = !!authToken;
+  authToken = session ? session.access_token : null;
+  authUser = session ? session.user : null;
+  if (!authToken) {
+    linkedFor = null;
+    if (wasLogged) { saveCode(null); credits = 0; updateCreditUi(); loadDaily(); }   // al salir, este móvil olvida el código de la cuenta
+    updateAuthUi();
+    return;
+  }
+  updateAuthUi();
+  if (authUser && authUser.id !== linkedFor) { linkedFor = authUser.id; await linkAccountOnServer(); }
+}
+$('account-btn').onclick = () => openLogin();
+$('login-close').onclick = () => $('login').classList.add('hidden');
+$('buy-login').onclick = () => openLogin('Entra para comprar tu pack 🎁');
+$('login-google').onclick = async () => {
+  if (!sb) return setLoginMsg('El login no está disponible ahora mismo', 'err');
+  const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
+  if (error) setLoginMsg(error.message, 'err');
+};
+$('login-email-btn').onclick = async () => {
+  if (!sb) return setLoginMsg('El login no está disponible ahora mismo', 'err');
+  const email = $('login-email').value.trim();
+  if (!/^\S+@\S+\.\S+$/.test(email)) return setLoginMsg('Escribe un email válido', 'err');
+  const btn = $('login-email-btn');
+  btn.disabled = true;
+  try {
+    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+    if (error) throw error;
+    setLoginMsg('📧 Te hemos enviado un enlace. Ábrelo para entrar (mira también el spam).', 'ok');
+  } catch (e) { setLoginMsg(e.message || 'No se pudo enviar el enlace', 'err'); }
+  finally { btn.disabled = false; }
+};
+$('login-logout').onclick = async () => {
+  try { if (sb) await sb.auth.signOut(); } catch {}
+  await onSession(null);
+  $('login').classList.add('hidden');
+};
+
 // ---------- Inicio ----------
 (async () => {
   cfg = await api('/api/config');
@@ -467,6 +551,12 @@ $('locate').onclick = () => {
     h.textContent = 'MODO DEMO: no se cobra dinero real.';
     $('paypal-box').before(h);
   }
+
+  if (cfg.auth && cfg.auth.enabled && window.supabase) {
+    sb = window.supabase.createClient(cfg.auth.url, cfg.auth.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    sb.auth.onAuthStateChange((_event, session) => { setTimeout(() => onSession(session), 0); });   // setTimeout: no usar Supabase dentro del callback
+  }
+  updateAuthUi();
 
   refreshCredits().then(loadDaily);
   loadStats();
