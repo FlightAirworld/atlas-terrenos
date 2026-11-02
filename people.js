@@ -2,7 +2,7 @@
 // Gente caminando por el mapa de vez en cuando (figuras SVG ancladas a coordenadas del mapa).
 (function () {
   if (typeof map === 'undefined' || !map) return;
-  const KEY = 'peopleOn', MIN_ZOOM = 16, REF_Z = 17, MAX = 4;
+  const KEY = 'peopleOn', MIN_ZOOM = 16, REF_Z = 17, MAX = 12;
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const btn = document.getElementById('people-btn');
   let on = true;
@@ -12,7 +12,10 @@
   st.textContent = `
     .pw { background: transparent !important; border: 0 !important; pointer-events: none !important; }
     .pw-in { width: 20px; height: 30px; animation: pwbob .36s ease-in-out infinite alternate; transition: opacity .3s; }
+    .pw-in svg { overflow: visible; }
     .pw-in.flip svg { transform: scaleX(-1); }
+    .pw-in .umb { display: none; }
+    .pw-in.rain .umb { display: inline; }
     @keyframes pwbob { from { transform: translateY(0); } to { transform: translateY(-1.6px); } }
     @media (prefers-reduced-motion: reduce) { .pw-in { animation: none; } }`;
   document.head.appendChild(st);
@@ -41,9 +44,11 @@
       <rect x="4.5" y="7.5" width="7" height="9.5" rx="3" fill="${shirt}"/>
       ${limb(8, 9, 16, skin, 2.2, 24, 9, true)}${limb(8, 9, 16, skin, 2.2, 24, 9, false)}
       <circle cx="8" cy="4" r="3.3" fill="${skin}"/>
-      ${umb ? `<path d="M-3 1.5Q8 -11 19 1.5Z" fill="${pick(['#e63946', '#1d3557', '#2a9d8f', '#6a4c93'])}"/><line x1="8" y1="1.5" x2="8" y2="9" stroke="#444" stroke-width=".8"/>` : ''}
+      <g class="umb"${umb ? ' style="display:inline"' : ''}><path d="M-3 1.5Q8 -11 19 1.5Z" fill="${pick(['#e63946', '#1d3557', '#2a9d8f', '#6a4c93', '#f4a261', '#ffb703'])}"/><line x1="8" y1="1.5" x2="8" y2="9" stroke="#444" stroke-width=".8"/></g>
     </svg>`;
   }
+
+  window.personSVG = personSVG;   // lo reutilizan los pasajeros de los taxis (vehicles.js)
 
   const walkers = [];
   let zooming = false;
@@ -59,15 +64,14 @@
     else if (side === 2) { a = [along(size.x), 0]; b = [along(size.x), size.y]; }
     else { a = [along(size.x), size.y]; b = [along(size.x), 0]; }
     const p0 = map.project(map.containerPointToLatLng(a), REF_Z), p1 = map.project(map.containerPointToLatLng(b), REF_Z);
-    const rainy = window.weatherIntensity && window.weatherIntensity() > 0.4;
     const icon = L.divIcon({
       className: 'pw', iconSize: [20, 30], iconAnchor: [10, 28],
-      html: `<div class="pw-in" style="opacity:0">${personSVG(pick(SHIRTS), pick(SKINS), pick(PANTS), rainy)}</div>`
+      html: `<div class="pw-in" style="opacity:0">${personSVG(pick(SHIRTS), pick(SKINS), pick(PANTS), false)}</div>`
     });
     const mk = L.marker(map.unproject(p0, REF_Z), { icon, pane: 'people', interactive: false, keyboard: false }).addTo(map);
     walkers.push({
       mk, x: p0.x, y: p0.y, h: Math.atan2(p1.y - p0.y, p1.x - p0.x), age: 0, life: rnd(30, 55),
-      v: rnd(12, 18), turn: rnd(-0.25, 0.25), el: null, flip: null
+      v: rnd(12, 18), turn: rnd(-0.25, 0.25), el: null, flip: null, rain: false
     });
   }
   function remove(i) { map.removeLayer(walkers[i].mk); walkers.splice(i, 1); }
@@ -76,18 +80,19 @@
   map.on('zoomstart', () => { zooming = true; });
   map.on('zoomend', () => { zooming = false; if (map.getZoom() < MIN_ZOOM) clearAll(); });
 
-  let last = performance.now(), nextSpawn = rnd(4, 10), running = false;
+  let last = performance.now(), nextSpawn = rnd(1, 3), running = false;
   function frame(t) {
     if (!running) return;
     const dt = Math.min((t - last) / 1000, 0.1); last = t;
     if (!document.hidden && !zooming) {
       const z = map.getZoom(), scale = Math.pow(2, z - REF_Z);
-      // aparece alguien de vez en cuando (menos si hay tormenta fuerte)
+      // aparece gente a menudo (algo menos si hay tormenta fuerte)
       nextSpawn -= dt;
       const storm = window.weatherIntensity ? window.weatherIntensity() : 0;
+      const raining = storm > 0.25;                             // con lluvia, todos salen con paraguas
       if (nextSpawn <= 0) {
-        if (z >= MIN_ZOOM && walkers.length < (storm > 0.6 ? 2 : MAX)) spawn();
-        nextSpawn = rnd(8, 22) * (storm > 0.6 ? 1.6 : 1);
+        if (z >= MIN_ZOOM && walkers.length < (storm > 0.6 ? 8 : MAX)) spawn();
+        nextSpawn = rnd(1.5, 5) * (storm > 0.6 ? 1.4 : 1);
       }
       const view = map.getBounds().pad(0.4);
       for (let i = walkers.length - 1; i >= 0; i--) {
@@ -103,6 +108,7 @@
         if (!w.el) { const e = w.mk.getElement(); w.el = e && e.firstChild; }
         if (w.el) {
           w.el.style.opacity = Math.max(0, Math.min(1, w.age / 1.5, (w.life - w.age) / 1.5));
+          if (raining !== w.rain) { w.rain = raining; w.el.classList.toggle('rain', raining); }   // saca/guarda el paraguas
           const f = Math.cos(w.h) < 0;
           if (f !== w.flip) { w.flip = f; w.el.classList.toggle('flip', f); }
         }
