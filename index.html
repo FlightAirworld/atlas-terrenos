@@ -85,6 +85,16 @@
       box-shadow:0 2px 10px rgba(0,0,0,.5);
     }
     #intro-sound.hidden { display:none !important; }
+    #welcome {
+      position:fixed;left:50%;bottom:130px;transform:translateX(-50%);z-index:1200;
+      width:min(92vw,380px);box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+      padding:12px 14px;border-radius:16px;background:rgba(11,61,46,.94);color:#fff;
+      font-size:15px;box-shadow:0 4px 18px rgba(0,0,0,.45);
+    }
+    #welcome.hidden { display:none !important; }
+    #welcome span { flex:1 1 100%; font-weight:600; }
+    #welcome button { padding:9px 14px;border-radius:999px;border:0;font-size:14px;font-weight:bold;cursor:pointer;background:#ffb703;color:#222; }
+    #welcome #welcome-x { background:transparent;color:#fff;border:1px solid #fff8;margin-left:auto; }
     #intro-skip {
       position:absolute;top:12px;right:12px;z-index:2;
       padding:8px 14px;border-radius:999px;border:1px solid #fff8;
@@ -259,6 +269,12 @@
     </div>
   </div>
 
+  <div id="welcome" class="hidden" role="status">
+    <span>👆 Toca una parcela del mapa y hazla tuya</span>
+    <button id="welcome-loc" type="button">📍 Ir a mi ubicación</button>
+    <button id="welcome-x" type="button">Explorar</button>
+  </div>
+
   <div id="intro" class="hidden" role="dialog" aria-modal="true" aria-label="Vídeo de introducción">
     <button id="intro-skip" type="button">Saltar ✕</button>
     <div id="intro-box">
@@ -292,7 +308,7 @@
   var el = document.getElementById('intro');
   var start = document.getElementById('intro-start');
   var box = document.getElementById('intro-box');
-  var player = null, apiRequested = false, startMuted = true;
+  var player = null, apiRequested = false, startMuted = true, firstTime = false;
   var soundBtn = document.getElementById('intro-sound');
 
   function seen() { try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; } }
@@ -307,12 +323,25 @@
     fresh.id = 'intro-player';
     box.appendChild(fresh);
   }
+  var welcome = document.getElementById('welcome'), welcomeTimer = null;
+  function hideWelcome() { welcome.classList.add('hidden'); clearTimeout(welcomeTimer); }
+  function showWelcome() {
+    welcome.classList.remove('hidden');
+    welcomeTimer = setTimeout(hideWelcome, 15000);
+    var m = document.getElementById('map');
+    if (m) m.addEventListener('pointerdown', hideWelcome, { once: true });
+  }
   function finish() {
     markSeen();
     el.classList.add('hidden');
     soundBtn.classList.add('hidden');
     resetPlayer();
     start.classList.remove('hidden');
+    if (firstTime) {                         // solo la primera vez: vuelo del globo + mensaje de bienvenida
+      firstTime = false;
+      if (window.introFlight) window.introFlight();
+      showWelcome();
+    }
   }
   function createPlayer() {
     player = new YT.Player('intro-player', {
@@ -343,7 +372,14 @@
     playVideo();                      // arranca solo
   }
 
-  document.getElementById('intro-play').onclick = playVideo;
+  // El botón es un gesto del usuario: el vídeo puede arrancar ya con sonido
+  document.getElementById('intro-play').onclick = function () { startMuted = false; playVideo(); };
+  document.getElementById('welcome-x').onclick = hideWelcome;
+  document.getElementById('welcome-loc').onclick = function () {
+    hideWelcome();
+    var b = document.getElementById('locate'); if (b) b.click();
+  };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !el.classList.contains('hidden')) finish(); });
   document.getElementById('intro-skip').onclick = finish;
   document.getElementById('intro-again').onclick = function (e) { e.preventDefault(); show(true); };
   soundBtn.onclick = function () {
@@ -351,7 +387,8 @@
     soundBtn.classList.add('hidden');
   };
 
-  if (!seen()) show(false);
+  // Primera vez: se muestra la pantalla "Empezar" (sin autoarrancar el vídeo en silencio)
+  if (!seen()) { firstTime = true; el.classList.remove('hidden'); }
 })();
 </script>
 </body>
