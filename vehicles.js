@@ -1,12 +1,16 @@
 'use strict';
 // Tráfico por el mapa:
+//  - Coches, camiones y autobuses circulan todo el rato por las calles reales, por su carril, y frenan si hay otro delante.
 //  - Policía cada 5 min, bomberos cada 12 min y ambulancia cada 17 min, con luces y sirena (sintetizada, sin archivos).
-//  - Los coches siguen las calles reales (OpenStreetMap vía OpenFreeMap); si no hay calles, cruzan en línea recta.
+//  - Los coches siguen las calles reales (OpenStreetMap vía OpenFreeMap); si no hay calles, los taxis y las emergencias cruzan en línea recta.
 //  - Taxis que recogen o dejan gente; la luz verde del techo se enciende cuando está libre o parado en la acera.
-// Para probar sin esperar, en la consola: spawnVehicle('police' | 'fire' | 'ambulance' | 'taxi')
+// Para probar sin esperar, en la consola: spawnVehicle('car' | 'truck' | 'bus' | 'police' | 'fire' | 'ambulance' | 'taxi')
 (function () {
   if (typeof map === 'undefined' || !map) return;
-  const KEY = 'vehiclesOn', MIN_ZOOM = 16, REF_Z = 17, MAX_TAXIS = 2;
+  const KEY = 'vehiclesOn', MIN_ZOOM = 16, REF_Z = 17, MAX_TAXIS = 3;
+  const SMALL = Math.min(innerWidth, innerHeight) < 600;
+  const MAX_TRAFFIC = SMALL ? 9 : 15;                       // coches, camiones y autobuses a la vez
+  const MIX = [['car', 0.6], ['truck', 0.22], ['bus', 0.18]];  // reparto del tráfico
   const PERIOD = { police: 5 * 60e3, fire: 12 * 60e3, ambulance: 17 * 60e3 };
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const btn = document.getElementById('vehicles-btn');
@@ -44,6 +48,12 @@
   const glow = (cls, x, y, anim, size) =>
     `<div class="vh-glow ${cls} ${anim || ''}" style="left:${x}px;top:${y}px${size ? `;width:${size}px;height:${size}px;margin:${-size / 2}px 0 0 ${-size / 2}px` : ''}"></div>`;
   const headlights = (L, W) => `<rect x="${L - 2}" y="2.5" width="2" height="3" rx="1" fill="#ffe9a0"/><rect x="${L - 2}" y="${W - 5.5}" width="2" height="3" rx="1" fill="#ffe9a0"/>`;
+  const taillights = W => `<rect x="0" y="2.5" width="1.8" height="3" rx=".9" fill="#d62839"/><rect x="0" y="${W - 5.5}" width="1.8" height="3" rx=".9" fill="#d62839"/>`;
+
+  const CAR_COLORS = ['#e63946', '#457b9d', '#f4a261', '#2a9d8f', '#9b5de5', '#ffb703', '#e9ecef', '#3b4148', '#1d3557', '#b8bec6', '#6a994e', '#8d5524', '#ff7b9c'];
+  const TRAILERS = ['#f4f6f8', '#2f6db5', '#e0a030', '#5f9e6e', '#c8102e', '#cfd4da'];
+  const CABS = ['#c8102e', '#1d3557', '#2a9d8f', '#f4a261', '#3b4148', '#457b9d'];
+  const BUSES = ['#d62839', '#1d6fb8', '#2a9d8f', '#f5b800', '#7b4fc9', '#f4f6f8'];
 
   const KINDS = {
     police: {
@@ -106,6 +116,52 @@
           <rect x="12" y="4" width="18" height="12" rx="2" fill="#eceff1"/>
           <rect class="tl" x="19" y="7" width="6" height="6" rx="1.2" stroke="#333" stroke-width=".6"/>
           ${headlights(44, 20)}
+        </svg>`
+    },
+
+    // ----- Tráfico normal (coches, camiones, autobuses) -----
+    car: {
+      L: 38, W: 18, v: 68, siren: false, traffic: true, pane: 'vehicles',
+      look: () => pick(CAR_COLORS),
+      html: c => `
+        <svg width="38" height="18" viewBox="0 0 38 18">
+          <rect x="1.5" y="2.5" width="37" height="16" rx="5" fill="rgba(0,0,0,.28)"/>
+          <rect x=".5" y=".5" width="37" height="17" rx="5" fill="${c}" stroke="rgba(0,0,0,.5)"/>
+          <path d="M26 3L31 4.8V13.2L26 15Z" fill="#26364f"/><path d="M10 3.5L7 5V13L10 14.5Z" fill="#26364f"/>
+          <rect x="10" y="3.5" width="16" height="11" rx="2" fill="rgba(255,255,255,.28)" stroke="rgba(0,0,0,.25)" stroke-width=".6"/>
+          ${headlights(38, 18)}${taillights(18)}
+        </svg>`
+    },
+    truck: {
+      L: 78, W: 24, v: 54, siren: false, traffic: true, pane: 'vehicles',
+      look: () => ({ t: pick(TRAILERS), c: pick(CABS) }),
+      html: k => {
+        let ribs = ''; for (let x = 7; x < 52; x += 6) ribs += `M${x} 3V21`;
+        return `
+        <svg width="78" height="24" viewBox="0 0 78 24">
+          <rect x="1.5" y="2.5" width="77" height="22" rx="4" fill="rgba(0,0,0,.28)"/>
+          <rect x=".5" y=".8" width="54" height="22.4" rx="2.5" fill="${k.t}" stroke="rgba(0,0,0,.45)"/>
+          <path d="${ribs}" stroke="rgba(0,0,0,.14)" stroke-width="1" fill="none"/>
+          <rect x="54" y="8" width="5" height="8" fill="#2a2a2a"/>
+          <rect x="57.5" y="1.5" width="20" height="21" rx="4.5" fill="${k.c}" stroke="rgba(0,0,0,.5)"/>
+          <rect x="59" y="3.5" width="9" height="17" rx="2" fill="rgba(255,255,255,.25)"/>
+          <path d="M69 4L74.5 6V18L69 20Z" fill="#26364f"/>
+          ${headlights(78, 24)}${taillights(24)}
+        </svg>`;
+      }
+    },
+    bus: {
+      L: 86, W: 24, v: 48, siren: false, traffic: true, pane: 'vehicles',
+      look: () => pick(BUSES),
+      html: c => `
+        <svg width="86" height="24" viewBox="0 0 86 24">
+          <rect x="1.5" y="2.5" width="85" height="22" rx="5" fill="rgba(0,0,0,.28)"/>
+          <rect x=".5" y=".5" width="85" height="23" rx="5" fill="${c}" stroke="rgba(0,0,0,.5)"/>
+          <rect x="3" y="2.5" width="70" height="19" rx="3" fill="rgba(255,255,255,.3)"/>
+          <rect x="9" y="7" width="14" height="10" rx="2" fill="rgba(0,0,0,.14)"/><rect x="30" y="7" width="14" height="10" rx="2" fill="rgba(0,0,0,.14)"/><rect x="51" y="7" width="14" height="10" rx="2" fill="rgba(0,0,0,.14)"/>
+          <rect x="73.5" y="2.5" width="3" height="19" rx="1" fill="rgba(0,0,0,.25)"/>
+          <path d="M76.5 3L83.5 5V19L76.5 21Z" fill="#26364f"/>
+          ${headlights(86, 24)}${taillights(24)}
         </svg>`
     }
   };
@@ -201,8 +257,14 @@
     v.x = a.x + (b.x - a.x) * t; v.y = a.y + (b.y - a.y) * t;
     v.dx = (b.x - a.x) / len; v.dy = (b.y - a.y) / len;
   }
-  // Busca un trayecto por las calles visibles: entra por fuera de la pantalla y sigue calles conectadas
-  function roadRoute() {
+
+  // Grafo de calles de lo que se ve ahora mismo. Se guarda un par de segundos (y se descarta en cuanto el mapa se mueve)
+  // porque coches y peatones lo piden muchas veces y consultar las teselas vectoriales no es gratis.
+  let graph = null, graphT = 0;
+  map.on('move', () => { graph = null; });
+  function roadGraph() {
+    const now = performance.now();
+    if (graph && now - graphT < 2500) return graph;
     if (!map.queryRoads) return null;
     const raw = map.queryRoads();
     if (!raw.length) return null;
@@ -210,7 +272,7 @@
     raw.forEach(c => {
       if (c.length < 2) return;
       const pts = c.map(ll => map.project({ lat: ll[1], lng: ll[0] }, REF_Z));
-      const ln = { pts };
+      const ln = { pts, ll: c, sc: null };
       lines.push(ln);
       [[pts[0], 0], [pts[pts.length - 1], 1]].forEach(([p, e]) => {
         const k = Math.round(p.x / SNAP) + ',' + Math.round(p.y / SNAP);
@@ -218,22 +280,42 @@
         ends.get(k).push({ ln, end: e });
       });
     });
+    if (!lines.length) return null;
+    graph = { lines, ends }; graphT = now;
+    return graph;
+  }
+  // Puntos de la calle en pantalla (se calculan una vez por grafo)
+  const screenOf = ln => ln.sc || (ln.sc = ln.ll.map(ll => { const p = map.gl.project(ll); return { x: p.x, y: p.y }; }));
+
+  // Busca un trayecto por las calles visibles siguiendo calles conectadas.
+  //  - por defecto (coches): entra por fuera de la pantalla y la cruza.
+  //  - opt.inside (peatones): empieza en algún punto de la pantalla; devuelve en `starts` las distancias de salida válidas.
+  //  - opt.len = largo deseado en px de pantalla; opt.minLen = largo mínimo aceptable.
+  function roadRoute(opt) {
+    opt = opt || {};
+    const g = roadGraph();
+    if (!g) return null;
     const near = p => {
       const out = [], cx = Math.round(p.x / SNAP), cy = Math.round(p.y / SNAP);
-      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const a = ends.get((cx + i) + ',' + (cy + j)); if (a) out.push(...a); }
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const a = g.ends.get((cx + i) + ',' + (cy + j)); if (a) out.push(...a); }
       return out;
     };
     const size = map.getSize(), scale = Math.pow(2, map.getZoom() - REF_Z);
     const scr = p => map.latLngToContainerPoint(map.unproject(p, REF_Z));
     const inside = c => c.x >= 0 && c.y >= 0 && c.x <= size.x && c.y <= size.y;
-    const outside = [];
-    lines.forEach(ln => [0, 1].forEach(e => {
-      const c = scr(e ? ln.pts[ln.pts.length - 1] : ln.pts[0]);
-      if (c.x < -10 || c.y < -10 || c.x > size.x + 10 || c.y > size.y + 10) outside.push({ ln, e });
-    }));
-    const target = Math.hypot(size.x, size.y) * 1.4 / scale;
-    for (let t = 0; t < 12 && outside.length; t++) {
-      const s0 = pick(outside);
+    const cand = [];
+    g.lines.forEach(ln => {
+      const sc = screenOf(ln);
+      if (opt.inside) { if (sc.some(inside)) cand.push({ ln, e: Math.random() < 0.5 ? 0 : 1 }); }
+      else [0, 1].forEach(e => {
+        const c = e ? sc[sc.length - 1] : sc[0];
+        if (c.x < -10 || c.y < -10 || c.x > size.x + 10 || c.y > size.y + 10) cand.push({ ln, e });
+      });
+    });
+    if (!cand.length) return null;
+    const target = (opt.len || Math.hypot(size.x, size.y) * 1.4) / scale, minLen = opt.minLen || 250;
+    for (let t = 0; t < 12; t++) {
+      const s0 = pick(cand);
       const pts = (s0.e ? s0.ln.pts.slice().reverse() : s0.ln.pts.slice());
       const used = new Set([s0.ln]);
       let total = makePath(pts).total;
@@ -254,29 +336,48 @@
         total = makePath(pts).total;
       }
       const P = makePath(pts);
+      if (P.total * scale < minLen) continue;
       const cs = pts.map(scr);
-      if (P.total * scale < 250 || !cs.some(inside)) continue;
+      if (!cs.some(inside)) continue;
       // El taxi parará en el punto del trayecto más cercano al centro de la pantalla
       let focus = null, best = 1e9;
       cs.forEach((c, i) => { const d = Math.hypot(c.x - size.x / 2, c.y - size.y / 2); if (inside(c) && d < best && P.cum[i] > 40 / scale) { best = d; focus = P.cum[i]; } });
-      return { path: P, focus };
+      let starts = null;
+      if (opt.inside) {                                    // puntos del trayecto que ahora están en pantalla (con trecho por delante)
+        starts = [];
+        for (let i = 0; i + 1 < pts.length; i++) {
+          const seg = P.cum[i + 1] - P.cum[i], n = Math.max(1, Math.round(seg * scale / 20));
+          for (let k = 0; k < n; k++) {
+            const f = k / n, s = P.cum[i] + seg * f;
+            if ((P.total - s) * scale < 100) continue;
+            if (inside(scr({ x: pts[i].x + (pts[i + 1].x - pts[i].x) * f, y: pts[i].y + (pts[i + 1].y - pts[i].y) * f }))) starts.push(s);
+          }
+        }
+        if (!starts.length) continue;
+      }
+      return { path: P, focus, starts };
     }
     return null;
   }
-  function pathRoute(Lc) {
+  window.roadRoute = roadRoute;     // lo usa también people.js (peatones por las aceras)
+
+  function pathRoute(Lc, roadsOnly) {
     const rr = roadRoute();
     if (rr) return rr;
-    const r = route(Lc);     // sin calles cerca (mar, campo…): línea recta como antes
+    if (roadsOnly) return null;   // el tráfico normal solo circula por calles; el taxi y las emergencias, si no hay, cruzan recto
+    const r = route(Lc);          // sin calles cerca (mar, campo…): línea recta como antes
     return { path: makePath([r.p0, { x: r.p0.x + r.dx * r.total, y: r.p0.y + r.dy * r.total }]), focus: null };
   }
   //#roads-end
 
-  function spawn(kind) {
+  function spawn(kind, roadsOnly) {
     const K = KINDS[kind]; if (!K) return null;
-    const r = pathRoute(K.L), P = r.path, p0 = P.pts[0], d0 = { dx: (P.pts[1].x - p0.x) / (P.cum[1] || 1), dy: (P.pts[1].y - p0.y) / (P.cum[1] || 1) };
+    const r = pathRoute(K.L, roadsOnly); if (!r) return null;
+    const P = r.path, p0 = P.pts[0], d0 = { dx: (P.pts[1].x - p0.x) / (P.cum[1] || 1), dy: (P.pts[1].y - p0.y) / (P.cum[1] || 1) };
+    const look = K.look ? K.look() : null;
     const icon = L.divIcon({
       className: 'vh', iconSize: [K.L, K.W], iconAnchor: [K.L / 2, K.W / 2],
-      html: `<div class="vh-in"><div class="vh-rot">${K.html()}</div></div>`
+      html: `<div class="vh-in"><div class="vh-rot">${K.html(look)}</div></div>`
     });
     const mk = L.marker(map.unproject(p0, REF_Z), { icon, pane: K.pane, interactive: false, keyboard: false }).addTo(map);
     const el = mk.getElement();
@@ -285,13 +386,16 @@
     if (rot) rot.style.transform = `rotate(${h}rad)`;
     const v = {
       kind, K, mk, wrap: el && el.querySelector('.vh-in'), rot, x: p0.x, y: p0.y, dx: d0.dx, dy: d0.dy, h,
-      path: P, seg: 0, s: 0, total: P.total, speed: K.siren ? K.v : 0, age: 0, state: 'drive', t: 0, sirenObj: null
+      path: P, seg: 0, s: 0, total: P.total, speed: K.siren ? K.v : 0, age: 0, state: 'drive', t: 0, sirenObj: null,
+      vmax: K.v, lane: 0     // lane = separación (px de pantalla) del centro de la calle: cada uno va por su carril, a la derecha
     };
     if (K.siren) { v.sirenObj = makeSiren(); }
+    if (K.traffic) { v.vmax = K.v * rnd(0.85, 1.1); v.speed = v.vmax * 0.8; v.lane = K.W * 0.5 + 2; }
     if (kind === 'taxi') {
       v.scenario = Math.random() < 0.5 ? 'pickup' : 'dropoff';
       v.sStop = r.focus != null ? r.focus : P.total * rnd(0.4, 0.6);
       v.speed = K.v;
+      v.lane = K.W * 0.5 + 2;
       setFree(v, v.scenario === 'pickup');
     }
     vehicles.push(v);
@@ -306,6 +410,31 @@
   function clearAll() {
     while (vehicles.length) removeVehicle(0);
     while (pax.length) removePax(0);
+  }
+  const trafficCount = () => { let n = 0; for (const v of vehicles) if (v.K.traffic) n++; return n; };
+  function pickTraffic() {
+    let r = Math.random();
+    for (const [k, p] of MIX) { if (r < p) return k; r -= p; }
+    return 'car';
+  }
+
+  // Frenar si hay alguien justo delante (mismo sentido, mismo carril). Devuelve la velocidad máxima permitida.
+  function followLimit(v, scale) {
+    const ch = Math.cos(v.h), sh = Math.sin(v.h);
+    let best = null, bf = 1e9;
+    for (const u of vehicles) {
+      if (u === v) continue;
+      const ux = (u.x - v.x) * scale, uy = (u.y - v.y) * scale;
+      const f = ux * ch + uy * sh;
+      const bump = (v.K.L + u.K.L) / 2;
+      if (f <= 0 || f > bump + 36 || f >= bf) continue;
+      if (Math.abs(-ux * sh + uy * ch) > (v.K.W + u.K.W) / 2) continue;   // en otro carril
+      if (Math.cos(u.h - v.h) < 0.5) continue;                            // va en otro sentido o cruza
+      best = { u, free: f - bump }; bf = f;
+    }
+    if (!best) return Infinity;
+    if (best.free < 8) return 0;
+    return Math.min(best.u.speed * 0.95, (best.free - 8) * 2.5);
   }
 
   // Pasajero de taxi (reutiliza la figura de people.js)
@@ -336,7 +465,7 @@
   // ---------- Bucle ----------
   const lastSpawn = { t: 0 };
   const nextAt = { police: Date.now() + PERIOD.police, fire: Date.now() + PERIOD.fire, ambulance: Date.now() + PERIOD.ambulance };
-  let nextTaxi = rnd(5, 10), last = performance.now(), running = false;
+  let nextTaxi = rnd(5, 10), nextTraffic = rnd(0.5, 1.5), last = performance.now(), running = false;
   const approach = (cur, target, step) => cur < target ? Math.min(target, cur + step) : Math.max(target, cur - step);
 
   function frame(t) {
@@ -347,7 +476,7 @@
       const raining = (window.weatherIntensity ? window.weatherIntensity() : 0) > 0.25;
       const size = map.getSize(), cx = size.x / 2, cy = size.y / 2, half = Math.hypot(cx, cy);
 
-      if (map.setRoads) map.setRoads(z >= MIN_ZOOM);   // carga las calles solo cuando hacen falta
+      if (map.setRoads) map.setRoads(z >= MIN_ZOOM, 'v');   // carga las calles solo cuando hacen falta
       // Emergencias periódicas (si el zoom es bajo, esperan a que te acerques)
       if (z >= MIN_ZOOM && now - lastSpawn.t > 10000) {
         for (const k of ['police', 'fire', 'ambulance']) {
@@ -358,7 +487,15 @@
       nextTaxi -= dt;
       if (nextTaxi <= 0) {
         if (z >= MIN_ZOOM && vehicles.filter(v => v.kind === 'taxi').length < MAX_TAXIS) spawn('taxi');
-        nextTaxi = rnd(25, 55);
+        nextTaxi = rnd(18, 40);
+      }
+      // Tráfico normal: al principio llegan rápido hasta llenar la calle, luego se mantiene el flujo
+      nextTraffic -= dt;
+      if (nextTraffic <= 0) {
+        const n = trafficCount();
+        let ok = true;
+        if (z >= MIN_ZOOM && n < (raining ? Math.round(MAX_TRAFFIC * 0.7) : MAX_TRAFFIC)) ok = !!spawn(pickTraffic(), true);
+        nextTraffic = !ok ? 1 : (n < MAX_TRAFFIC * 0.5 ? rnd(0.4, 0.9) : rnd(1.2, 2.6));
       }
 
       for (let i = vehicles.length - 1; i >= 0; i--) {
@@ -367,7 +504,7 @@
         if (v.kind === 'taxi') {
           if (v.state === 'drive') {
             const rem = Math.max(0, (v.sStop - v.s) * scale);           // px de pantalla hasta la parada
-            const target = Math.min(v.K.v, Math.sqrt(2 * 60 * rem) + 4);
+            const target = Math.min(v.K.v, Math.sqrt(2 * 60 * rem) + 4, followLimit(v, scale));
             v.speed = approach(v.speed, target, (target > v.speed ? 50 : 180) * dt);
             if (rem <= 1.5) { v.speed = 0; v.state = 'stop'; v.t = 0; v.s = v.sStop; v.step = 0; }
           } else if (v.state === 'stop') {
@@ -386,6 +523,9 @@
           } else {
             v.speed = approach(v.speed, v.K.v, 70 * dt);
           }
+        } else if (v.K.traffic) {
+          const target = Math.min(v.vmax, followLimit(v, scale));
+          v.speed = approach(v.speed, target, (target > v.speed ? 40 : 170) * dt);
         } else {
           // Sirena: más fuerte cuanto más cerca del centro de la pantalla
           const pt = map.latLngToContainerPoint(v.mk.getLatLng());
@@ -403,6 +543,8 @@
         const dh = angDiff(Math.atan2(v.dy, v.dx), v.h), maxT = 6 * dt;
         v.h += Math.max(-maxT, Math.min(maxT, dh));
         if (v.rot) v.rot.style.transform = `rotate(${v.h}rad)`;
+        // por su carril: a la derecha del sentido de la marcha (la derecha de (cos h, sin h) en pantalla es (-sin h, cos h))
+        if (v.lane) { const o = v.lane / scale; v.x -= Math.sin(v.h) * o; v.y += Math.cos(v.h) * o; }
         // aparece y desaparece suavemente (por si el trayecto termina dentro de la pantalla)
         if (v.wrap) v.wrap.style.opacity = Math.min(1, v.s * scale / 40, (v.total - v.s) * scale / 40).toFixed(2);
         v.mk.setLatLng(map.unproject(L.point(v.x, v.y), REF_Z));
@@ -440,14 +582,14 @@
   });
 
   function apply() {
-    if (btn) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.style.opacity = on ? '1' : '.55'; btn.title = on ? 'Coches y taxis: activados' : 'Coches y taxis: desactivados'; }
+    if (btn) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.style.opacity = on ? '1' : '.55'; btn.title = on ? 'Coches, camiones y autobuses: activados' : 'Coches, camiones y autobuses: desactivados'; }
     if (on && !running) { running = true; last = performance.now(); requestAnimationFrame(frame); }
-    if (!on) { running = false; clearAll(); if (map.setRoads) map.setRoads(false); }
+    if (!on) { running = false; clearAll(); if (map.setRoads) map.setRoads(false, 'v'); }
   }
   if (btn) btn.onclick = function () {
     on = !on;
     try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) {}
-    if (on) { initAudio(); nextTaxi = 1; }
+    if (on) { initAudio(); nextTaxi = 1; nextTraffic = 0.3; }
     apply();
   };
   window.spawnVehicle = kind => { if (on && KINDS[kind]) { initAudio(); return !!spawn(kind); } return false; };

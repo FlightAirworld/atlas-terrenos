@@ -51,6 +51,7 @@
   function createCompatMap(gl) {
     const panes = {};
     let roadsOn = false;
+    const roadUsers = new Set();
     const worldPx = z => 256 * Math.pow(2, z);
     const api = {
       gl,
@@ -88,11 +89,14 @@
         return api.unproject({ x: c.x + dx * Math.cos(b) - dy * Math.sin(b), y: c.y + dx * Math.sin(b) + dy * Math.cos(b) }, z);
       },
       latLngToContainerPoint(ll) { const p = gl.project(toLngLat(ll)); return { x: p.x, y: p.y }; },
-      // Calles reales (teselas vectoriales de OpenFreeMap). La capa está apagada hasta que los coches la piden.
-      setRoads(on) {
+      // Calles reales (teselas vectoriales de OpenFreeMap). La capa está apagada hasta que alguien la pide
+      // (coches 'v' o peatones 'p'); se mantiene encendida mientras la pida al menos uno.
+      setRoads(on, who = 'v') {
         try {
-          if (on === roadsOn || !gl.getLayer('roads-q')) return;
-          roadsOn = on; gl.setLayoutProperty('roads-q', 'visibility', on ? 'visible' : 'none');
+          if (on) roadUsers.add(who); else roadUsers.delete(who);
+          const want = roadUsers.size > 0;
+          if (want === roadsOn || !gl.getLayer('roads-q')) return;
+          roadsOn = want; gl.setLayoutProperty('roads-q', 'visibility', want ? 'visible' : 'none');
         } catch (e) {}
       },
       queryRoads() {

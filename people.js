@@ -1,8 +1,12 @@
 'use strict';
-// Gente caminando por el mapa de vez en cuando (figuras SVG ancladas a coordenadas del mapa).
+// Gente caminando por las aceras: siguen las calles reales (las mismas que usan los coches, ver vehicles.js)
+// y van por un lado de la calzada, en los dos sentidos. Salen muchos más que antes.
 (function () {
   if (typeof map === 'undefined' || !map) return;
-  const KEY = 'peopleOn', MIN_ZOOM = 16, REF_Z = 17, MAX = 12;
+  const KEY = 'peopleOn', MIN_ZOOM = 16, REF_Z = 17;
+  const SMALL = Math.min(innerWidth, innerHeight) < 600;
+  const MAX = SMALL ? 22 : 36;                  // peatones a la vez
+  const SIDEWALK = 27, SIDEWALK_M = 7;         // distancia al centro de la calle: mínimo en px de pantalla / en px de mundo (crece con el zoom)
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const btn = document.getElementById('people-btn');
   let on = true;
@@ -25,6 +29,8 @@
 
   const rnd = (a, b) => a + Math.random() * (b - a);
   const pick = a => a[Math.floor(Math.random() * a.length)];
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
   const SHIRTS = ['#e63946', '#457b9d', '#f4a261', '#2a9d8f', '#9b5de5', '#ffb703', '#06d6a0', '#ef476f'];
   const SKINS = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac'];
   const PANTS = ['#2b2d42', '#3a3a3a', '#1d3557', '#5c4033'];
@@ -53,26 +59,38 @@
   const walkers = [];
   let zooming = false;
 
+  // Coloca al peatón sobre su trayecto (centro de la calle) según la distancia recorrida w.s
+  function place(w) {
+    const P = w.path;
+    while (w.seg < P.pts.length - 2 && P.cum[w.seg + 1] <= w.s) w.seg++;
+    const a = P.pts[w.seg], b = P.pts[w.seg + 1], len = (P.cum[w.seg + 1] - P.cum[w.seg]) || 1;
+    const t = clamp((w.s - P.cum[w.seg]) / len, 0, 1);
+    w.cx = a.x + (b.x - a.x) * t; w.cy = a.y + (b.y - a.y) * t;
+    w.th = Math.atan2(b.y - a.y, b.x - a.x);
+  }
+  // Lo separa del centro de la calle hacia la acera (derecha o izquierda del sentido de la marcha)
+  function sidewalk(w, scale) {
+    const o = (Math.max(SIDEWALK, SIDEWALK_M * scale) + w.off) / scale * w.side;
+    w.x = w.cx - Math.sin(w.h) * o; w.y = w.cy + Math.cos(w.h) * o;
+  }
+
   function spawn() {
-    const size = map.getSize(), z = map.getZoom();
-    // entra por un borde de la pantalla y cruza hacia el lado contrario
-    const side = Math.floor(Math.random() * 4);
-    const along = (len) => rnd(0.1, 0.9) * len;
-    let a, b;
-    if (side === 0) { a = [0, along(size.y)]; b = [size.x, along(size.y)]; }
-    else if (side === 1) { a = [size.x, along(size.y)]; b = [0, along(size.y)]; }
-    else if (side === 2) { a = [along(size.x), 0]; b = [along(size.x), size.y]; }
-    else { a = [along(size.x), size.y]; b = [along(size.x), 0]; }
-    const p0 = map.project(map.containerPointToLatLng(a), REF_Z), p1 = map.project(map.containerPointToLatLng(b), REF_Z);
+    // Sin calles cerca (mar, campo…) no hay aceras: no sale nadie
+    const rr = window.roadRoute && window.roadRoute({ inside: true, len: 700, minLen: 140 });
+    if (!rr || !rr.starts || !rr.starts.length) return false;
+    const P = rr.path, scale = Math.pow(2, map.getZoom() - REF_Z);
     const icon = L.divIcon({
       className: 'pw', iconSize: [20, 30], iconAnchor: [10, 28],
       html: `<div class="pw-in" style="opacity:0">${personSVG(pick(SHIRTS), pick(SKINS), pick(PANTS), false)}</div>`
     });
-    const mk = L.marker(map.unproject(p0, REF_Z), { icon, pane: 'people', interactive: false, keyboard: false }).addTo(map);
-    walkers.push({
-      mk, x: p0.x, y: p0.y, h: Math.atan2(p1.y - p0.y, p1.x - p0.x), age: 0, life: rnd(30, 55),
-      v: rnd(12, 18), turn: rnd(-0.25, 0.25), el: null, flip: null, rain: false
-    });
+    const w = {
+      mk: null, path: P, seg: 0, s: pick(rr.starts), side: Math.random() < 0.5 ? 1 : -1, off: rnd(0, 8),
+      v: rnd(14, 22), h: 0, x: 0, y: 0, cx: 0, cy: 0, th: 0, age: 0, life: rnd(35, 70), el: null, flip: null, rain: false
+    };
+    place(w); w.h = w.th; sidewalk(w, scale);
+    w.mk = L.marker(map.unproject(L.point(w.x, w.y), REF_Z), { icon, pane: 'people', interactive: false, keyboard: false }).addTo(map);
+    walkers.push(w);
+    return true;
   }
   function remove(i) { map.removeLayer(walkers[i].mk); walkers.splice(i, 1); }
   function clearAll() { while (walkers.length) remove(0); }
@@ -80,34 +98,39 @@
   map.on('zoomstart', () => { zooming = true; });
   map.on('zoomend', () => { zooming = false; if (map.getZoom() < MIN_ZOOM) clearAll(); });
 
-  let last = performance.now(), nextSpawn = rnd(1, 3), running = false;
+  let last = performance.now(), nextSpawn = rnd(0.5, 1.5), running = false;
   function frame(t) {
     if (!running) return;
     const dt = Math.min((t - last) / 1000, 0.1); last = t;
     if (!document.hidden && !zooming) {
       const z = map.getZoom(), scale = Math.pow(2, z - REF_Z);
-      // aparece gente a menudo (algo menos si hay tormenta fuerte)
+      if (map.setRoads) map.setRoads(z >= MIN_ZOOM, 'p');      // las aceras salen de las calles reales
+      // Sale gente a menudo (algo menos si hay tormenta fuerte); al principio llegan rápido hasta llenar las aceras
       nextSpawn -= dt;
       const storm = window.weatherIntensity ? window.weatherIntensity() : 0;
       const raining = storm > 0.25;                             // con lluvia, todos salen con paraguas
       if (nextSpawn <= 0) {
-        if (z >= MIN_ZOOM && walkers.length < (storm > 0.6 ? 8 : MAX)) spawn();
-        nextSpawn = rnd(1.5, 5) * (storm > 0.6 ? 1.4 : 1);
+        const cap = storm > 0.6 ? Math.round(MAX * 0.65) : MAX;
+        let ok = true;
+        if (z >= MIN_ZOOM && walkers.length < cap) ok = spawn();
+        nextSpawn = !ok ? 1 : (walkers.length < MAX * 0.4 ? rnd(0.25, 0.6) : rnd(0.4, 1.1)) * (storm > 0.6 ? 1.5 : 1);
       }
       const view = map.getBounds().pad(0.4);
       for (let i = walkers.length - 1; i >= 0; i--) {
         const w = walkers[i];
         w.age += dt;
-        w.h += w.turn * dt + rnd(-0.4, 0.4) * dt;                 // pequeño paseo errático
-        w.turn += rnd(-0.3, 0.3) * dt;
-        const step = w.v * dt / scale;                            // velocidad constante en pantalla
-        w.x += Math.cos(w.h) * step; w.y += Math.sin(w.h) * step;
+        w.s += w.v * dt / scale;                                // velocidad constante en pantalla
+        if (w.s >= w.path.total || w.age > w.life) { remove(i); continue; }
+        place(w);
+        w.h += clamp(angDiff(w.th, w.h), -5 * dt, 5 * dt);      // gira suave en las esquinas
+        sidewalk(w, scale);
         const ll = map.unproject(L.point(w.x, w.y), REF_Z);
-        if (w.age > w.life || (w.age > 3 && !view.contains(ll))) { remove(i); continue; }
+        if (w.age > 3 && !view.contains(ll)) { remove(i); continue; }
         w.mk.setLatLng(ll);
         if (!w.el) { const e = w.mk.getElement(); w.el = e && e.firstChild; }
         if (w.el) {
-          w.el.style.opacity = Math.max(0, Math.min(1, w.age / 1.5, (w.life - w.age) / 1.5));
+          const toEnd = (w.path.total - w.s) * scale / 40;
+          w.el.style.opacity = Math.max(0, Math.min(1, w.age / 1.2, toEnd, (w.life - w.age) / 1.5));
           if (raining !== w.rain) { w.rain = raining; w.el.classList.toggle('rain', raining); }   // saca/guarda el paraguas
           const f = Math.cos(w.h) < 0;
           if (f !== w.flip) { w.flip = f; w.el.classList.toggle('flip', f); }
@@ -119,12 +142,12 @@
   function apply() {
     if (btn) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.style.opacity = on ? '1' : '.55'; btn.title = on ? 'Gente caminando: activada' : 'Gente caminando: desactivada'; }
     if (on && !running) { running = true; last = performance.now(); requestAnimationFrame(frame); }
-    if (!on) { running = false; clearAll(); }
+    if (!on) { running = false; clearAll(); if (map.setRoads) map.setRoads(false, 'p'); }
   }
   if (btn) btn.onclick = function () {
     on = !on;
     try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) {}
-    if (on) nextSpawn = 1;       // al activarlo sale alguien enseguida
+    if (on) nextSpawn = 0.3;       // al activarlo sale alguien enseguida
     apply();
   };
   apply();
