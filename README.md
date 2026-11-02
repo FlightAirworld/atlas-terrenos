@@ -52,3 +52,10 @@ Otras variables: `DATABASE_URL` (obligatoria), `ADMIN_TOKEN`, `PRICE` (por defec
 - Añade límite de peticiones y moderación de nombres si es público.
 - Deja claro que son objetos virtuales sin valor legal sobre el suelo real y revisa
   las condiciones de PayPal para vender bienes digitales.
+
+## Elegir casa
+
+Cada terreno tiene una columna `house` (ruta de la imagen). Si está vacía se usa la casa "al azar" de siempre.
+El dueño con cuenta puede cambiarla desde el panel del terreno (`POST /api/parcel/house`). Cuesta 1 crédito (variable `HOUSE_COST`; pon 0 para que sea gratis). Elegir la casa al reclamar es gratis.
+El servidor añade la columna solo al arrancar (`migration-house.sql` es el mismo comando por si prefieres ejecutarlo a mano).
+Para añadir casas nuevas, ponlas al FINAL de `HOUSES` en `app.js` y en `server.js` (así no cambian las casas al azar ya existentes).

@@ -62,9 +62,9 @@ const isUniqueViolation = e => e && e.code === '23505';
 
 const q = {
   parcelById: id => one('SELECT * FROM parcels WHERE id = $1', [id]),
-  parcelsInBox: (x0, x1, y0, y1) => all('SELECT id, x, y, owner, avatar, country FROM parcels WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1]),
-  insertParcel: (id, x, y, owner, orderId, paid, currency, createdAt, avatar, country) =>
-    run('INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [id, x, y, owner, orderId, paid, currency, createdAt, avatar, country]),
+  parcelsInBox: (x0, x1, y0, y1) => all('SELECT id, x, y, owner, avatar, country, house FROM parcels WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1]),
+  insertParcel: (id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house) =>
+    run('INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, house) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', [id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house]),
   activeOrderForParcel: (id, now) => one("SELECT order_id FROM orders WHERE parcel_id = $1 AND status = 'CREATED' AND expires_at > $2", [id, now]),
   insertOrder: (orderId, parcelId, owner, status, expiresAt, createdAt, avatar) =>
     run('INSERT INTO orders (order_id, parcel_id, owner, status, expires_at, created_at, avatar) VALUES ($1,$2,$3,$4,$5,$6,$7)', [orderId, parcelId, owner, status, expiresAt, createdAt, avatar]),
@@ -78,6 +78,14 @@ const q = {
 // ---------- Avatares ----------
 const AVATARS = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀','👑','⚽','🌟'];
 const cleanAvatar = a => AVATARS.includes(a) ? a : AVATARS[0];
+// Casas que se pueden elegir (deben coincidir con HOUSES de app.js; para añadir más, ponlas al FINAL de ambas listas)
+const HOUSES = [
+  'images/casa-aerea.png','images/casa-frente.png','images/policia.png','images/pisos.png','images/gasolinera.png',
+  'images/choza.png','images/Restaurante.png','images/McDonald.png','images/Burgerking.png','images/Farmacia.png',
+  'images/colegio.png','images/parque.png','images/rascacielos.png','images/casa-1.png','images/casa-2.png',
+  'images/casa-3.png','images/casa-4.png','images/casa-5.png'
+];
+const cleanHouse = h => HOUSES.includes(h) ? h : null;   // null = al azar (como hasta ahora)
 const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
 
 // ---------- Seguridad de administrador ----------
@@ -94,7 +102,7 @@ function isAdmin(req) {
     crypto.timingSafeEqual(supplied, expected);
 }
 
-async function adminClaimParcel({ lat, lng, owner, avatar, country }) {
+async function adminClaimParcel({ lat, lng, owner, avatar, country, house }) {
   const p = parcelFromLatLng(Number(lat), Number(lng));
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
 
@@ -114,7 +122,7 @@ async function adminClaimParcel({ lat, lng, owner, avatar, country }) {
   }
 
   try {
-    await q.insertParcel(p.id, p.x, p.y, name, null, '0.00', 'ADMIN', now, cleanAvatar(avatar), cleanCountry(country));
+    await q.insertParcel(p.id, p.x, p.y, name, null, '0.00', 'ADMIN', now, cleanAvatar(avatar), cleanCountry(country), cleanHouse(house));
   } catch (e) {
     if (isUniqueViolation(e)) throw new HttpError(409, 'No se ha podido reclamar esta parcela');
     throw e;
@@ -127,57 +135,6 @@ async function adminClaimParcel({ lat, lng, owner, avatar, country }) {
     owner: name
   };
 }
-// ---------- Radio de compra: hay que estar físicamente cerca ----------
-const BUY_RADIUS_M = Number(process.env.BUY_RADIUS_M) || 500;
-const MAX_GPS_ACCURACY_M = Number(process.env.MAX_GPS_ACCURACY_M) || 5000;   // solo se rechaza la ubicación por IP pura (>5 km de error)
-function distMeters(lat1, lng1, lat2, lng2) {
-  const R = 6371000, rad = Math.PI / 180;
-  const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-const fmtDist = m => m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
-function assertNearby(p, userLat, userLng, accuracy) {
-  const la = Number(userLat), ln = Number(userLng);
-  if (userLat == null || userLng == null || !Number.isFinite(la) || !Number.isFinite(ln) || Math.abs(la) > 90 || Math.abs(ln) > 180)
-    throw new HttpError(400, 'Activa tu ubicación para reclamar terrenos');
-  if (Number.isFinite(Number(accuracy)) && Number(accuracy) > MAX_GPS_ACCURACY_M)
-    throw new HttpError(400, `Tu ubicación no es lo bastante precisa (±${Math.round(Number(accuracy))} m). Activa el GPS, espera unos segundos e inténtalo de nuevo`);
-  const d = distMeters(la, ln, p.south + SIZE / 2, p.west + SIZE / 2);
-  if (d > BUY_RADIUS_M)
-    throw new HttpError(403, `Este terreno está a ${fmtDist(d)}. Solo puedes reclamar a menos de ${fmtDist(BUY_RADIUS_M)} de tu posición`);
-}
-
-
-// ---------- Anti-teletransporte: velocidad imposible entre dos reclamos ----------
-const MAX_SPEED_KMH = Number(process.env.MAX_SPEED_KMH) || 1000;   // ~avión comercial
-const FREE_JUMP_M = 200;                                           // saltos pequeños (ruido del GPS) siempre valen
-let lastPosReady = null;
-function ensureLastPos() {
-  if (!lastPosReady) lastPosReady = run('CREATE TABLE IF NOT EXISTS last_claim_pos (key text PRIMARY KEY, lat double precision, lng double precision, at bigint)')
-    .catch(e => { lastPosReady = null; throw e; });
-  return lastPosReady;
-}
-async function checkTeleport(key, la, ln, now) {
-  if (!key) return;
-  await ensureLastPos();
-  const prev = await one('SELECT lat, lng, at FROM last_claim_pos WHERE key = $1', [key]);
-  if (!prev) return;
-  const d = distMeters(prev.lat, prev.lng, la, ln);
-  if (d <= FREE_JUMP_M) return;
-  const hours = Math.max((now - Number(prev.at)) / 3.6e6, 1 / 3600);
-  const kmh = d / 1000 / hours;
-  if (kmh > MAX_SPEED_KMH)
-    throw new HttpError(429, `Tu ubicación ha saltado ${(d / 1000).toFixed(0)} km demasiado rápido. Espera un poco o desactiva apps de GPS falso`);
-}
-async function saveLastPos(key, la, ln, now) {
-  if (!key) return;
-  try {
-    await ensureLastPos();
-    await run('INSERT INTO last_claim_pos (key, lat, lng, at) VALUES ($1,$2,$3,$4) ON CONFLICT (key) DO UPDATE SET lat = EXCLUDED.lat, lng = EXCLUDED.lng, at = EXCLUDED.at', [key, la, ln, now]);
-  } catch (e) { console.error('No se pudo guardar la última posición:', e.message); }
-}
-
 // ---------- Utilidades de parcelas ----------
 function parcelFromLatLng(lat, lng) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat >= 90 || lng < -180 || lng >= 180) return null;
@@ -399,14 +356,11 @@ async function capturePackOrder(req, orderId) {
   return { ok: true, code, credits };
 }
 
-async function claimWithCredit(req, { lat, lng, owner, avatar, country, userLat, userLng, accuracy }) {
+async function claimWithCredit(req, { lat, lng, owner, avatar, country, house }) {
   const code = packCodeFrom(req);
   const p = parcelFromLatLng(Number(lat), Number(lng));
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
-  assertNearby(p, userLat, userLng, accuracy);   // validación real: la del navegador se puede saltar
   const user = await userFrom(req);
-  const posKey = user ? 'u:' + user.id : (code ? 'c:' + code : null);
-  await checkTeleport(posKey, Number(userLat), Number(userLng), Date.now());
   const prof = user && await getProfile(user.id);
   const name = prof ? prof.nickname : cleanName(owner);   // con cuenta, siempre sale el apodo fijo
   if (!name) throw new HttpError(400, 'Pon un nombre de 2 a 30 caracteres');
@@ -430,14 +384,44 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, userLat,
       if (owned >= MAX_PARCELS_PER_ACCOUNT) throw new HttpError(409, `Has alcanzado el máximo de ${MAX_PARCELS_PER_ACCOUNT} terrenos por cuenta`);
     }
     await client.query(
-      'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
-      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), cleanCountry(country), user ? user.id : null]);
+      'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id, house) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
+      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), cleanCountry(country), user ? user.id : null, cleanHouse(house)]);
     await client.query('COMMIT');
-    saveLastPos(posKey, Number(userLat), Number(userLng), now);   // solo se recuerda si el reclamo salió bien
     return { ok: true, parcel: p.id, owner: name, credits: r.rows[0].credits };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Este terreno ya tiene dueño');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// Cambiar la casa de un terreno propio (solo el dueño con cuenta). Cuesta HOUSE_COST créditos.
+const HOUSE_COST = Math.max(0, Math.floor(Number(process.env.HOUSE_COST ?? 1)));
+async function setHouse(req, { id, house }) {
+  const user = await needUser(req);
+  const h = cleanHouse(house);
+  if (!h) throw new HttpError(400, 'Casa no válida');
+  const pack = await ensureUserPack(user);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const par = (await client.query('SELECT house FROM parcels WHERE id = $1 AND user_id = $2 FOR UPDATE', [String(id), user.id])).rows[0];
+    if (!par) throw new HttpError(403, 'Este terreno no es tuyo');
+    let credits;
+    if (par.house === h) {   // ya tiene esa casa: no se cobra nada
+      credits = (await client.query('SELECT credits FROM packs WHERE code = $1', [pack.code])).rows[0].credits;
+    } else {
+      const r = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [HOUSE_COST, pack.code]);
+      if (!r.rows[0]) throw new HttpError(402, `Cambiar la casa cuesta ${HOUSE_COST} ${HOUSE_COST === 1 ? 'crédito' : 'créditos'} y no te quedan`);
+      credits = r.rows[0].credits;
+      await client.query('UPDATE parcels SET house = $1 WHERE id = $2', [h, String(id)]);
+    }
+    await client.query('COMMIT');
+    return { ok: true, house: h, credits };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
     throw e;
   } finally {
     client.release();
@@ -636,13 +620,15 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
     return { demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PRICE, size: SIZE, packSize: PACK_SIZE,
-      maxParcels: MAX_PARCELS_PER_ACCOUNT, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
+      maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')));
     if (!p) throw new HttpError(400, 'Coordenadas no válidas');
     const row = await q.parcelById(p.id);
-    return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null, avatar: row ? row.avatar : null, country: row ? row.country : null };
+    const user = row && row.user_id ? await userFrom(req) : null;
+    return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null, avatar: row ? row.avatar : null, country: row ? row.country : null,
+      house: row ? row.house : null, mine: !!(user && row && row.user_id === user.id) };
   }
 
   if (req.method === 'GET' && pn === '/api/parcels') {
@@ -650,7 +636,7 @@ async function route(req, res, url) {
     if (![s, w, n, e].every(Number.isFinite) || n - s > 0.3 || e - w > 0.3) throw new HttpError(400, 'Zona demasiado grande');
     const x0 = Math.max(0, Math.floor((w + 180) / SIZE)), x1 = Math.min(MAX_X - 1, Math.floor((e + 180) / SIZE));
     const y0 = Math.max(0, Math.floor((s + 90) / SIZE)), y1 = Math.min(MAX_Y - 1, Math.floor((n + 90) / SIZE));
-    return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country }));
+    return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country, house: r.house }));
   }
 
   if (req.method === 'GET' && pn === '/api/stats')
@@ -662,6 +648,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/pack') return { credits: (await getPack(req)).credits };
   if (req.method === 'GET' && pn === '/api/daily') return dailyGet(req);
   if (req.method === 'POST' && pn === '/api/daily/claim') return dailyClaim(req);
+  if (req.method === 'POST' && pn === '/api/parcel/house') return setHouse(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/claim') return claimWithCredit(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/auth/link') return linkAccount(req);
   if (req.method === 'GET' && pn === '/api/profile') return profileGet(req);
@@ -685,10 +672,14 @@ function readJson(req) {
 const PUBLIC = __dirname;
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 
+// Migración automática (inofensiva si la columna ya existe)
+const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').catch(e => console.error('No se pudo añadir la columna house:', e.message));
+
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const send = (status, body, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000' }); res.end(body); };
   try {
+    await ready;
     if (url.pathname.startsWith('/api/')) {
       const out = await route(req, res, url);
       return send(200, JSON.stringify(out));

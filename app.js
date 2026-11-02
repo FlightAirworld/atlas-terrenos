@@ -7,11 +7,6 @@ let sb = null, authToken = null, authUser = null, linkedFor = null;   // sesión
 let myNick = null;             // apodo fijo guardado en el servidor
 const drawn = new Map();       // id -> rectángulo
 
-// ---------- Ubicación del jugador y radio de compra ----------
-const BUY_RADIUS_M = 500;      // solo se puede reclamar dentro de este radio (el servidor lo vuelve a comprobar)
-let myPos = null, myAcc = null, meMarker = null, rangeCircle = null;
-let autoCentered = /[?&]t=/.test(location.search);   // si abren un enlace compartido, no lo pisamos
-
 const map_ = L.map('map', { worldCopyJump: true, minZoom: 2 }).setView([36.1408, -5.3536], 17); // Gibraltar por defecto
 map = map_;
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
@@ -56,7 +51,8 @@ const HOUSES = [
     'images/casa-5.png'
 ];
 
-function houseFor(id) {
+function houseFor(id, house) {
+  if (house && HOUSES.includes(house)) return house;   // la que eligió el dueño
   let h = 2166136261;
   for (const c of id) {
     h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
@@ -66,13 +62,18 @@ function houseFor(id) {
 map.createPane('houses').style.zIndex = 395; // fotos por debajo de los bordes y de la selección
 
 function drawOwned(p) {
-  if (drawn.has(p.id)) return;
+  const ex = drawn.get(p.id);
+  if (ex) {   // ya dibujada: solo actualiza la foto si el dueño cambió la casa
+    const url = houseFor(p.id, p.house), el = ex[0].getElement();
+    if (el && el.getAttribute('src') !== url) ex[0].setUrl(url);
+    return;
+  }
   const col = colorFor(p.owner);
   const bounds = boundsOf(p.x, p.y);
   const open = e => { L.DomEvent.stopPropagation(e); selectAt(e.latlng); };
 
   // Foto de la casa ocupando toda la parcela
-  const img = L.imageOverlay(houseFor(p.id), bounds, { pane: 'houses', className: 'house-img', alt: 'Casa de ' + p.owner });
+  const img = L.imageOverlay(houseFor(p.id, p.house), bounds, { pane: 'houses', className: 'house-img', alt: 'Casa de ' + p.owner });
   // Borde de color del dueño (también recibe los clics)
   const rect = L.rectangle(bounds, { color: col, weight: 2, fillColor: col, fillOpacity: 0.08, interactive: true }).on('click', open);
   // Nombre del dueño bajo la parcela
@@ -106,52 +107,12 @@ map.on('moveend', loadParcels);
 function syncLabels() { map.getContainer().classList.toggle('labels-off', map.getZoom() < 17); }
 map.on('zoomend', syncLabels); syncLabels();
 
-
-function distM(a, b) {          // distancia en metros (haversine)
-  const R = 6371000, rad = Math.PI / 180;
-  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-const parcelCenter = p => L.latLng(p.south + cfg.size / 2, p.west + cfg.size / 2);
-const distToParcel = p => myPos ? distM(myPos, parcelCenter(p)) : Infinity;
-const fmtDist = m => m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
-const inRange = p => distToParcel(p) <= BUY_RADIUS_M;
-
-function onPos(pos) {
-  const { latitude, longitude, accuracy } = pos.coords;
-  myPos = L.latLng(latitude, longitude);
-  myAcc = accuracy;
-  if (!meMarker) {
-    rangeCircle = L.circle(myPos, { radius: BUY_RADIUS_M, className: 'buy-range', interactive: false }).addTo(map);
-    meMarker = L.circleMarker(myPos, { radius: 8, color: '#fff', weight: 3, fillColor: '#1d72f3', fillOpacity: 1, interactive: false }).addTo(map);
-  } else {
-    rangeCircle.setLatLng(myPos);
-    meMarker.setLatLng(myPos);
-  }
-  if (!autoCentered && cfg) { autoCentered = true; map.setView(myPos, 17); }   // al entrar: directo a tu ubicación
-  if (selected) showPanel(selected);                                          // refresca si ya puedes/no puedes comprar
-}
-function onPosError(err) {
-  myPos = null;
-  if (rangeCircle) { rangeCircle.remove(); meMarker.remove(); rangeCircle = meMarker = null; }
-  if (selected) showPanel(selected);
-  const msg = err && err.code === 1
-    ? 'Sin permiso de ubicación: puedes mirar el mapa, pero para reclamar terrenos tienes que activarla 📍'
-    : 'No se pudo obtener tu ubicación 📍';
-  if (!autoCentered) setMsg(msg, 'err');
-}
-function startTracking() {
-  if (!navigator.geolocation) return onPosError({ code: 0 });
-  navigator.geolocation.watchPosition(onPos, onPosError, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
-}
-
 // ---------- Selección de parcela ----------
 async function selectAt(latlng) {
   if (map.getZoom() < MIN_ZOOM_BUY) { map.flyTo(latlng, MIN_ZOOM_BUY + 1); return; }
   const lng = ((latlng.lng + 180) % 360 + 360) % 360 - 180;     // normaliza al dar la vuelta al mundo
   let p;
-  try { p = await api(`/api/parcel?lat=${latlng.lat}&lng=${lng}`); } catch (e) { return; }
+  try { p = await api(`/api/parcel?lat=${latlng.lat}&lng=${lng}`, { method: 'GET' }); } catch (e) { return; }
   selected = p;
   if (selectedRect) selectedRect.remove();
   selectedRect = L.rectangle(boundsOf(p.x, p.y), { color: '#ffb703', weight: 3, fill: false, interactive: false }).addTo(map);
@@ -219,7 +180,8 @@ function setupAdminControls() {
           lng: selected.west + cfg.size / 2,
           owner: $('name').value.trim(),
           avatar,
-          country
+          country,
+          house: chosenHouse
         })
       });
 
@@ -227,6 +189,7 @@ function setupAdminControls() {
       if (!response.ok) throw new Error(result.error || 'No se pudo reclamar');
 
       selected.owner = result.owner;
+      selected.house = chosenHouse; selected.mine = false;
       selected.avatar = avatar;
       selected.country = country;
       selected.since = Date.now();
@@ -241,7 +204,8 @@ function setupAdminControls() {
         y: selected.y,
         owner: selected.owner,
         avatar: selected.avatar,
-        country: selected.country
+        country: selected.country,
+        house: selected.house
       });
 
       loadStats();
@@ -292,19 +256,12 @@ function showPanel(p) {
   if (owned) {
     $('p-owner').textContent = [flagOf(p.country), p.owner].filter(Boolean).join(' ');
     $('p-owner-icon').textContent = p.avatar || '👤';
-    $('p-photo').src = houseFor(p.id);
+    $('p-photo').src = houseFor(p.id, p.house);
+    $('house-edit').classList.toggle('hidden', !p.mine);
+    if (p.mine) markHouse($('house-pick-edit'), p.house);
     $('p-avatar').textContent = p.avatar || '';
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
   } else {
-    const ok = inRange(p), d = distToParcel(p);
-    const coarse = ok && myAcc > 300;   // dentro del radio pero con ubicación aproximada
-    $('range-warn').classList.toggle('hidden', ok && !coarse);
-    $('range-warn').textContent = !myPos
-      ? '📍 Activa tu ubicación para poder reclamar terrenos.'
-      : coarse
-        ? `📡 Tu ubicación es aproximada (±${Math.round(myAcc)} m). Activa «Ubicación precisa» en los ajustes del navegador/móvil para más exactitud.`
-        : `🚶 Está a ${fmtDist(d)} de ti. Solo puedes reclamar terrenos a menos de ${fmtDist(BUY_RADIUS_M)}: acércate físicamente.`;
-    $('use-credit').disabled = !ok;
     $('p-price').textContent = new Intl.NumberFormat('es-ES', { style: 'currency', currency: cfg.currency }).format(cfg.price);
     $('pack-size').textContent = cfg.packSize;
   }
@@ -325,6 +282,51 @@ try { const s = localStorage.getItem('avatar'); if (AVATARS.includes(s)) avatar 
     box.appendChild(b);
   });
   mark();
+})();
+
+// ---------- Elegir casa ----------
+let chosenHouse = null;   // casa elegida para el terreno que vas a reclamar (null = al azar)
+const houseName = h => h.replace(/^images\//, '').replace(/\.png$/i, '').replace(/[-_]/g, ' ');
+function buildHousePicker(box, onPick, withRandom) {
+  box.replaceChildren();
+  const add = (value, content, label) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.house = value || ''; b.title = label; b.setAttribute('aria-label', label);
+    b.style.cssText = 'flex:0 0 auto;width:52px;height:52px;padding:2px;border-radius:10px;font-size:22px';
+    b.append(content); b.onclick = () => onPick(value); box.appendChild(b);
+  };
+  if (withRandom) add(null, '🎲', 'Al azar');
+  HOUSES.forEach(h => {
+    const i = document.createElement('img');
+    i.src = h; i.alt = ''; i.loading = 'lazy';
+    i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;display:block';
+    add(h, i, houseName(h));
+  });
+}
+function markHouse(box, current) {
+  [...box.children].forEach(b => { b.style.outline = (b.dataset.house || '') === (current || '') ? '3px solid #ffb703' : ''; });
+}
+(function setupHousePickers() {
+  const freeBox = $('house-pick-free'), editBox = $('house-pick-edit');
+  buildHousePicker(freeBox, h => { chosenHouse = h; markHouse(freeBox, h); }, true);
+  markHouse(freeBox, null);
+  buildHousePicker(editBox, async h => {
+    if (!selected || !selected.mine || h === selected.house) return;
+    const cost = cfg.houseCost ?? 1;
+    if (cost > 0) {
+      if (credits < cost) return setMsg(`Cambiar la casa cuesta ${cost} ${plural(cost, 'crédito', 'créditos')} y no te quedan`, 'err');
+      if (!confirm(`Cambiar la casa cuesta ${cost} ${plural(cost, 'crédito', 'créditos')}. ¿Continuar?`)) return;
+    }
+    try {
+      const j = await api('/api/parcel/house', { method: 'POST', body: { id: selected.id, house: h } });
+      credits = j.credits; updateCreditUi();
+      selected.house = j.house;
+      markHouse(editBox, j.house);
+      $('p-photo').src = houseFor(selected.id, j.house);
+      drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: j.house });
+      setMsg(`🏠 ¡Casa cambiada! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
+    } catch (e) { setMsg(e.message, 'err'); }
+  }, false);
 })();
 
 // ---------- País (bandera) ----------
@@ -399,7 +401,6 @@ $('recover-btn').onclick = async () => {
 };
 $('use-credit').onclick = async () => {
   if (!selected || selected.owner) return;
-  if (!inRange(selected)) { setMsg(`Solo puedes reclamar a menos de ${fmtDist(BUY_RADIUS_M)} de tu posición real`, 'err'); return; }
   let owner;
   try { owner = nameOrThrow(); } catch (e) { return; }   // nameOrThrow ya muestra el aviso
   const btn = $('use-credit');
@@ -408,16 +409,16 @@ $('use-credit').onclick = async () => {
     const r = await fetch('/api/claim', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + packCode, ...authHeaders() },
-      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar, country,
-        userLat: myPos && myPos.lat, userLng: myPos && myPos.lng, accuracy: myAcc })
+      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar, country, house: chosenHouse })
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'No se pudo reclamar');
     credits = j.credits; updateCreditUi();
     selected.owner = j.owner; selected.avatar = avatar; selected.country = country; selected.since = Date.now();
+    selected.house = chosenHouse; selected.mine = !!authToken;
     showPanel(selected);
     setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉`, 'ok');
-    drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country });
+    drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house });
     loadStats(); loadParcels();
   } catch (e) {
     setMsg(e.message, 'err');
@@ -545,9 +546,8 @@ $('rank-btn').onclick = () => { loadStats(); $('rank').classList.remove('hidden'
 $('rank-close').onclick = () => $('rank').classList.add('hidden');
 $('locate').onclick = () => {
   if (!navigator.geolocation) return alert('Tu navegador no permite geolocalización');
-  if (myPos) { map.flyTo(myPos, 18); return; }
   navigator.geolocation.getCurrentPosition(
-    pos => { onPos(pos); map.flyTo(myPos, 18); },
+    pos => { const ll = L.latLng(pos.coords.latitude, pos.coords.longitude); map.flyTo(ll, 18); map.once('moveend', () => selectAt(ll)); },
     () => alert('No se pudo obtener tu ubicación. Revisa los permisos del navegador.'),
     { enableHighAccuracy: true, timeout: 10000 });
 };
@@ -834,7 +834,6 @@ $('mine-collect').onclick = async () => {
   loadStats();
   loadParcels();
   openSharedParcel();
-  startTracking();   // pide permiso y centra el mapa en tu ubicación
 })();
 
 
