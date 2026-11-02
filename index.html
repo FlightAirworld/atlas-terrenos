@@ -18,8 +18,7 @@
   <meta name="twitter:card" content="summary">
   <title>Redecora El Mundo</title>
 
-  <link rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.23.0/dist/maplibre-gl.css">
   <link rel="stylesheet" href="style.css">
 
   <style>
@@ -256,7 +255,7 @@
       <button id="search-go" class="primary" type="button" style="margin-top:8px">Buscar</button>
       <p id="search-msg" class="msg" aria-live="polite"></p>
       <div id="search-results"></div>
-      <p class="muted" style="font-size:12px">Búsqueda con datos de © OpenStreetMap.</p>
+      <p class="muted" style="font-size:12px">Búsqueda con datos de © OpenStreetMap. Mapa: © Esri, Maxar, Earthstar Geographics.</p>
     </div>
   </div>
 
@@ -272,7 +271,8 @@
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://unpkg.com/maplibre-gl@5.23.0/dist/maplibre-gl.js"></script>
+  <script src="mapshim.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="sounds.js"></script>
   <script src="app.js"></script>

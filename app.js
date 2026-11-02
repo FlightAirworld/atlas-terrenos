@@ -2,19 +2,63 @@
 const $ = id => document.getElementById(id);
 const MIN_ZOOM_PARCELS = 15;   // por debajo no se muestran parcelas
 const MIN_ZOOM_BUY = 16;       // para comprar hay que acercarse
-let cfg, map, ownedLayer, selectedRect, selected = null, paypalLoaded = null;
+let cfg, map, gl, selected = null, paypalLoaded = null;
 let sb = null, authToken = null, authUser = null, linkedFor = null;   // sesión (Supabase Auth)
 let myNick = null;             // apodo fijo guardado en el servidor
-const drawn = new Map();       // id -> rectángulo
+const drawn = new Map();       // id -> { srcId, url, label }
 
-const map_ = L.map('map', { worldCopyJump: true, minZoom: 2 }).setView([36.1408, -5.3536], 17); // Gibraltar por defecto
-map = map_;
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-ownedLayer = L.layerGroup().addTo(map);
+// ---------- Mapa 3D (MapLibre GL): globo + satélite + relieve ----------
+const FLAT_NEAR = 14;          // (zoom MapLibre) a partir de aquí el globo se ve plano
+const MAP_STYLE = {
+  version: 8,
+  projection: { type: 'globe' },
+  sky: { 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0] },
+  sources: {
+    sat: {
+      type: 'raster', tileSize: 256, maxzoom: 19,
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+      attribution: 'Imágenes © Esri, Maxar, Earthstar Geographics'
+    },
+    labels: {
+      type: 'raster', tileSize: 256, maxzoom: 19,
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}']
+    },
+    dem: {
+      type: 'raster-dem', tileSize: 256, maxzoom: 15, encoding: 'terrarium',
+      tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+      attribution: 'Relieve: Mapzen / AWS Terrain Tiles'
+    }
+  },
+  layers: [
+    { id: 'sat', type: 'raster', source: 'sat' },
+    { id: 'labels', type: 'raster', source: 'labels', paint: { 'raster-opacity': 0.9 } }
+  ],
+  terrain: { source: 'dem', exaggeration: 1 }
+};
+try {
+  gl = new maplibregl.Map({
+    container: 'map', style: MAP_STYLE,
+    center: [-5.3536, 36.1408], zoom: 16, pitch: 55, bearing: 0,   // Gibraltar por defecto
+    minZoom: 1, maxZoom: 19.5, maxPitch: 75,
+    canvasContextAttributes: { antialias: true }
+  });
+} catch (e) {
+  $('map').textContent = 'Tu dispositivo no puede mostrar el mapa 3D (WebGL no disponible).';
+  throw e;
+}
+map = createCompatMap(gl);     // API tipo Leaflet usada por el resto del juego (ver mapshim.js)
+gl.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
+gl.addControl(new maplibregl.GlobeControl(), 'bottom-right');
+gl.addControl(new maplibregl.TerrainControl({ source: 'dem', exaggeration: 1 }), 'bottom-right');
+
+let glReady = false;
+const pendingParcels = new Map();
+const ownedFeatures = new Map();      // id -> Feature GeoJSON (volumen de la parcela)
+let ownedDirty = false;
 
 function colorFor(name) {
   let h = 0; for (const c of name) h = (h * 31 + c.codePointAt(0)) >>> 0;
-  return `hsl(${h % 360} 70% 42%)`;
+  return `hsl(${h % 360}, 70%, 42%)`;
 }
 function boundsOf(x, y) {
   const s = cfg.size, west = x * s - 180, south = y * s - 90;
@@ -59,34 +103,103 @@ function houseFor(id, house) {
   }
   return HOUSES[(h >>> 16) % HOUSES.length];
 }
-map.createPane('houses').style.zIndex = 395; // fotos por debajo de los bordes y de la selección
+// Altura aproximada (en metros) de cada tipo de edificio: da volumen 3D a las parcelas
+const HOUSE_HEIGHT = {
+  'casa-aerea': 9, 'casa-frente': 9, 'policia': 12, 'pisos': 30, 'gasolinera': 6, 'choza': 4,
+  'restaurante': 8, 'mcdonald': 9, 'burgerking': 9, 'farmacia': 9, 'colegio': 15, 'parque': 0.6,
+  'rascacielos': 120, 'casa-1': 8, 'casa-2': 10, 'casa-3': 12, 'casa-4': 9, 'casa-5': 11
+};
+function heightOf(url) {
+  const k = String(url).split('/').pop().replace(/\.[a-z]+$/i, '').toLowerCase();
+  return HOUSE_HEIGHT[k] ?? 9;
+}
+function ringOf(x, y) {
+  const [[s, w], [n, e]] = boundsOf(x, y);
+  return [[w, s], [e, s], [e, n], [w, n], [w, s]];
+}
+function flushOwned() {
+  if (!glReady || ownedDirty) return;
+  ownedDirty = true;
+  requestAnimationFrame(() => {
+    ownedDirty = false;
+    const src = gl.getSource('owned');
+    if (src) src.setData({ type: 'FeatureCollection', features: [...ownedFeatures.values()] });
+  });
+}
 
 function drawOwned(p) {
+  if (!glReady) { pendingParcels.set(p.id, p); return; }
+  const url = houseFor(p.id, p.house);
   const ex = drawn.get(p.id);
-  if (ex) {   // ya dibujada: solo actualiza la foto si el dueño cambió la casa
-    const url = houseFor(p.id, p.house), el = ex[0].getElement();
-    if (el && el.getAttribute('src') !== url) ex[0].setUrl(url);
+  if (ex) {   // ya dibujada: solo actualiza foto y altura si el dueño cambió la casa
+    if (ex.url !== url) {
+      ex.url = url;
+      const src = gl.getSource(ex.srcId); if (src) src.updateImage({ url });
+      const f = ownedFeatures.get(p.id); if (f) { f.properties.h = heightOf(url); flushOwned(); }
+    }
     return;
   }
   const col = colorFor(p.owner);
-  const bounds = boundsOf(p.x, p.y);
-  const open = e => { L.DomEvent.stopPropagation(e); selectAt(e.latlng); };
+  const [[s, w], [n, e]] = boundsOf(p.x, p.y);
+  const srcId = 'img-' + p.id;
 
-  // Foto de la casa ocupando toda la parcela
-  const img = L.imageOverlay(houseFor(p.id, p.house), bounds, { pane: 'houses', className: 'house-img', alt: 'Casa de ' + p.owner });
-  // Borde de color del dueño (también recibe los clics)
-  const rect = L.rectangle(bounds, { color: col, weight: 2, fillColor: col, fillOpacity: 0.08, interactive: true }).on('click', open);
+  // Foto de la casa pegada al suelo (sigue el relieve), por debajo del volumen 3D
+  gl.addSource(srcId, { type: 'image', url, coordinates: [[w, n], [e, n], [e, s], [w, s]] });
+  gl.addLayer({ id: srcId, type: 'raster', source: srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
+
+  // Volumen 3D de la parcela (color del dueño, semitransparente para ver la foto)
+  ownedFeatures.set(p.id, {
+    type: 'Feature', id: p.x * 1000003 + p.y,
+    properties: { pid: p.id, color: col, h: heightOf(url), clat: (s + n) / 2, clng: (w + e) / 2 },
+    geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] }
+  });
+
   // Nombre del dueño bajo la parcela
   const pill = document.createElement('span');
   pill.className = 'owner-pill';
   pill.textContent = labelOf(p);             // textContent: sin HTML
-  const label = L.marker([bounds[0][0], (bounds[0][1] + bounds[1][1]) / 2], {
+  const label = L.marker([s, (w + e) / 2], {
     icon: L.divIcon({ className: 'owner-label', html: pill, iconSize: [0, 0] }),
     interactive: false, keyboard: false
-  });
+  }).addTo(map);
 
-  img.addTo(ownedLayer); rect.addTo(ownedLayer); label.addTo(ownedLayer);
-  drawn.set(p.id, [img, rect, label]);
+  drawn.set(p.id, { srcId, url, label });
+  flushOwned();
+}
+
+// Capas del mapa que dependen de que el estilo esté cargado
+gl.on('load', () => {
+  gl.addSource('owned', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  gl.addLayer({
+    id: 'owned-3d', type: 'fill-extrusion', source: 'owned',
+    paint: {
+      'fill-extrusion-color': ['get', 'color'],
+      'fill-extrusion-height': ['get', 'h'],
+      'fill-extrusion-base': 0,
+      'fill-extrusion-opacity': 0.6,
+      'fill-extrusion-vertical-gradient': true
+    }
+  });
+  gl.addLayer({
+    id: 'owned-line', type: 'line', source: 'owned',
+    paint: { 'line-color': ['get', 'color'], 'line-width': 2 }
+  });
+  gl.addSource('sel', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  gl.addLayer({
+    id: 'sel-plate', type: 'fill-extrusion', source: 'sel',
+    paint: { 'fill-extrusion-color': '#ffb703', 'fill-extrusion-height': 1.5, 'fill-extrusion-base': 0, 'fill-extrusion-opacity': 0.55 }
+  });
+  gl.addLayer({ id: 'sel-line', type: 'line', source: 'sel', paint: { 'line-color': '#ffb703', 'line-width': 3.5 } });
+  glReady = true;
+  pendingParcels.forEach(drawOwned); pendingParcels.clear();
+  loadParcels();
+});
+
+function setSelected(p) {
+  const src = gl.getSource('sel'); if (!src) return;
+  src.setData(p
+    ? { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] } }] }
+    : { type: 'FeatureCollection', features: [] });
 }
 
 let loadSeq = 0;
@@ -114,12 +227,15 @@ async function selectAt(latlng) {
   let p;
   try { p = await api(`/api/parcel?lat=${latlng.lat}&lng=${lng}`, { method: 'GET' }); } catch (e) { return; }
   selected = p;
-  if (selectedRect) selectedRect.remove();
-  selectedRect = L.rectangle(boundsOf(p.x, p.y), { color: '#ffb703', weight: 3, fill: false, interactive: false }).addTo(map);
+  setSelected(p);
   showPanel(p);
   sfx('select');
 }
-map.on('click', e => selectAt(e.latlng));
+map.on('click', e => {
+  // Si se pulsa un edificio 3D, se elige su parcela (no el suelo que queda detrás)
+  const hit = glReady ? gl.queryRenderedFeatures(e.point, { layers: ['owned-3d'] })[0] : null;
+  selectAt(hit ? { lat: hit.properties.clat, lng: hit.properties.clng } : e.latlng);
+});
 // ---------- Administración: reclamar parcelas gratis ----------
 // El cuadro solo aparece si abres el juego con #admin al final de la dirección (se recuerda en ese dispositivo).
 // La seguridad real está en el servidor: sin la clave correcta no se puede hacer nada.
@@ -267,7 +383,7 @@ function showPanel(p) {
     $('pack-size').textContent = cfg.packSize;
   }
 }
-$('close').onclick = () => { $('panel').classList.add('hidden'); if (selectedRect) selectedRect.remove(); selected = null; };
+$('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; };
 
 // ---------- Avatar ----------
 const AVATARS = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀','👑','⚽','🌟'];
