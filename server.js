@@ -183,6 +183,7 @@ async function createOrder({ lat, lng, owner, avatar }) {
   } else {
     const o = await paypal('POST', '/v2/checkout/orders', {
       intent: 'CAPTURE',
+      payment_source: { paypal: { experience_context: { shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', landing_page: 'GUEST_CHECKOUT' } } },
       purchase_units: [{
         reference_id: p.id,
         description: `Terreno ${p.id} (${p.south.toFixed(3)}, ${p.west.toFixed(3)})`,
@@ -351,6 +352,7 @@ async function createPackOrder(req) {
   } else {
     const o = await paypal('POST', '/v2/checkout/orders', {
       intent: 'CAPTURE',
+      payment_source: { paypal: { experience_context: { shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', landing_page: 'GUEST_CHECKOUT' } } },
       purchase_units: [{
         reference_id: 'PACK',
         description: `Pack de ${PACK_SIZE} terrenos`,
