@@ -1,0 +1,17 @@
+{
+  "name": "Redecora El Mundo",
+  "short_name": "Redecora",
+  "description": "Reclama y decora terrenos virtuales en el mapa del mundo.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#087f5b",
+  "theme_color": "#087f5b",
+  "lang": "es",
+  "icons": [
+    {"src": "/images/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/images/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/images/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
