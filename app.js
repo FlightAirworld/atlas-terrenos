@@ -143,7 +143,7 @@ function onPosError(err) {
 }
 function startTracking() {
   if (!navigator.geolocation) return onPosError({ code: 0 });
-  navigator.geolocation.watchPosition(onPos, onPosError, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+  navigator.geolocation.watchPosition(onPos, onPosError, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
 }
 
 // ---------- Selección de parcela ----------
@@ -297,10 +297,13 @@ function showPanel(p) {
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
   } else {
     const ok = inRange(p), d = distToParcel(p);
-    $('range-warn').classList.toggle('hidden', ok);
+    const coarse = ok && myAcc > 300;   // dentro del radio pero con ubicación aproximada
+    $('range-warn').classList.toggle('hidden', ok && !coarse);
     $('range-warn').textContent = !myPos
       ? '📍 Activa tu ubicación para poder reclamar terrenos.'
-      : `🚶 Está a ${fmtDist(d)} de ti. Solo puedes reclamar terrenos a menos de ${fmtDist(BUY_RADIUS_M)}: acércate físicamente.`;
+      : coarse
+        ? `📡 Tu ubicación es aproximada (±${Math.round(myAcc)} m). Activa «Ubicación precisa» en los ajustes del navegador/móvil para más exactitud.`
+        : `🚶 Está a ${fmtDist(d)} de ti. Solo puedes reclamar terrenos a menos de ${fmtDist(BUY_RADIUS_M)}: acércate físicamente.`;
     $('use-credit').disabled = !ok;
     $('p-price').textContent = new Intl.NumberFormat('es-ES', { style: 'currency', currency: cfg.currency }).format(cfg.price);
     $('pack-size').textContent = cfg.packSize;
