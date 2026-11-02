@@ -16,10 +16,19 @@ const PAYPAL_ENV = (process.env.PAYPAL_ENV || 'sandbox').toLowerCase(); // sandb
 const PAYPAL_BASE = PAYPAL_ENV === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
 const PRICE = (process.env.PRICE || '1.00');              // precio por parcela
 const CURRENCY = (process.env.CURRENCY || 'EUR').toUpperCase();
-const DEMO = !(PAYPAL_CLIENT_ID && PAYPAL_SECRET) || process.env.DEMO === '1';
+const HAS_PAYPAL = !!(PAYPAL_CLIENT_ID && PAYPAL_SECRET);
+const IS_PROD = process.env.NODE_ENV === 'production' || !!process.env.RENDER;   // Render define RENDER=true
+const DEMO = process.env.DEMO === '1' || !HAS_PAYPAL;
+if (DEMO && IS_PROD && process.env.DEMO !== '1') {
+  // Sin esto, un fallo de configuración regalaría packs sin cobrar.
+  console.error('Faltan PAYPAL_CLIENT_ID / PAYPAL_SECRET en producción. Configúralos, o pon DEMO=1 si de verdad quieres el modo demo.');
+  process.exit(1);
+}
+if (DEMO && IS_PROD) console.warn('AVISO: modo DEMO activo en producción. No se cobra dinero real.');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const RESERVE_MINUTES = 10;                               // tiempo que se reserva una parcela mientras se paga
 const PACK_SIZE = Math.max(1, Number(process.env.PACK_SIZE || 50));   // terrenos por pack (el pack cuesta PRICE)
+const MAX_PARCELS_PER_ACCOUNT = Math.max(1, Number(process.env.MAX_PARCELS_PER_ACCOUNT || 500));   // tope de terrenos por cuenta
 const DATABASE_URL = process.env.DATABASE_URL || '';      // cadena de conexión de Supabase
 if (!DATABASE_URL) {
   console.error('Falta la variable DATABASE_URL (cadena de conexión de Supabase). Mira el README.');
@@ -165,71 +174,6 @@ async function paypal(method, url, body) {
 }
 // ---------- API ----------
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
-
-async function createOrder({ lat, lng, owner, avatar }) {
-  const p = parcelFromLatLng(Number(lat), Number(lng));
-  if (!p) throw new HttpError(400, 'Coordenadas no válidas');
-  const name = cleanName(owner);
-  if (!name) throw new HttpError(400, 'Pon un nombre de 2 a 30 caracteres');
-
-  const now = Date.now();
-  await q.purgeOrders(now);
-  if (await q.parcelById(p.id)) throw new HttpError(409, 'Este terreno ya tiene dueño');
-  if (await q.activeOrderForParcel(p.id, now)) throw new HttpError(409, 'Este terreno está siendo comprado por otra persona. Prueba en unos minutos');
-
-  let orderId;
-  if (DEMO) {
-    orderId = 'DEMO-' + crypto.randomUUID();
-  } else {
-    const o = await paypal('POST', '/v2/checkout/orders', {
-      intent: 'CAPTURE',
-      payment_source: { paypal: { experience_context: { shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', landing_page: 'GUEST_CHECKOUT' } } },
-      purchase_units: [{
-        reference_id: p.id,
-        description: `Terreno ${p.id} (${p.south.toFixed(3)}, ${p.west.toFixed(3)})`,
-        amount: { currency_code: CURRENCY, value: PRICE },
-      }],
-    });
-    orderId = o.id;
-  }
-  // Reserva (la restricción de unicidad real está en la tabla parcels)
-  await q.insertOrder(orderId, p.id, name, 'CREATED', now + RESERVE_MINUTES * 60000, now, cleanAvatar(avatar));
-  return { orderId, parcel: p.id, price: PRICE, currency: CURRENCY };
-}
-
-async function captureOrder(orderId) {
-  const ord = await q.orderById(orderId);
-  if (!ord) throw new HttpError(404, 'Pedido desconocido');
-  if (ord.status === 'PAID') return { ok: true, parcel: ord.parcel_id, owner: ord.owner };
-  if (ord.status !== 'CREATED') throw new HttpError(409, 'Pedido no válido');
-
-  let paidValue = PRICE, paidCurrency = CURRENCY, captureId = null;
-  if (!DEMO) {
-    const cap = await paypal('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`);
-    const c = cap.purchase_units?.[0]?.payments?.captures?.[0];
-    if (cap.status !== 'COMPLETED' || !c || c.status !== 'COMPLETED') throw new HttpError(402, 'El pago no se ha completado');
-    if (c.amount.value !== Number(PRICE).toFixed(2) || c.amount.currency_code !== CURRENCY) throw new HttpError(402, 'Importe incorrecto');
-    paidValue = c.amount.value; paidCurrency = c.amount.currency_code; captureId = c.id;
-  }
-
-  const p = ord.parcel_id.split(':').map(Number);
-  try {
-    // La clave primaria impide que dos personas se queden la misma parcela.
-    await q.insertParcel(ord.parcel_id, p[0], p[1], ord.owner, orderId, paidValue, paidCurrency, Date.now(), cleanAvatar(ord.avatar), null);
-    await q.setOrderStatus('PAID', orderId);
-    return { ok: true, parcel: ord.parcel_id, owner: ord.owner };
-  } catch (e) {
-    if (!isUniqueViolation(e)) {
-      // Error de base de datos (no de duplicado): el pago ya está capturado, hay que revisarlo a mano
-      if (captureId) console.error('PAGO CAPTURADO PERO NO GUARDADO, REVISAR', captureId, orderId, e.message);
-      throw e;
-    }
-    // Caso extremo: se cobró pero la parcela ya era de otro → reembolso automático
-    if (captureId) { try { await paypal('POST', `/v2/payments/captures/${captureId}/refund`, {}); } catch (_) { console.error('REEMBOLSO MANUAL NECESARIO', captureId); } }
-    await q.setOrderStatus('REFUNDED', orderId);
-    throw new HttpError(409, 'El terreno ya fue vendido. Se ha reembolsado el pago');
-  }
-}
 
 // ---------- Packs de terrenos (créditos) ----------
 const newPackCode = () => crypto.randomBytes(8).toString('hex').toUpperCase().match(/.{4}/g).join('-');
@@ -427,6 +371,10 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country }) {
       const exists = code && await one('SELECT 1 AS ok FROM packs WHERE code = $1', [code]);
       throw new HttpError(exists ? 402 : 403, exists ? 'No te quedan terrenos en tu pack' : 'Código no válido');
     }
+    if (user) {   // la fila del pack ya está bloqueada: dos reclamaciones a la vez no pueden pasarse del tope
+      const owned = Number((await client.query('SELECT COUNT(*) AS n FROM parcels WHERE user_id = $1', [user.id])).rows[0].n);
+      if (owned >= MAX_PARCELS_PER_ACCOUNT) throw new HttpError(409, `Has alcanzado el máximo de ${MAX_PARCELS_PER_ACCOUNT} terrenos por cuenta`);
+    }
     await client.query(
       'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
       [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), cleanCountry(country), user ? user.id : null]);
@@ -447,7 +395,17 @@ const DAILY_REWARDS = [1, 1, 2, 2, 3, 3, 5];                    // terrenos de c
 const DAILY_SALT = process.env.DAILY_SALT || ADMIN_TOKEN || 'atlas-terrenos';
 const dayKey = () => new Date().toLocaleDateString('en-CA', { timeZone: DAILY_TZ });   // AAAA-MM-DD
 const yesterdayKey = () => { const d = new Date(dayKey() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
-const clientIp = req => req.headers['cf-connecting-ip'] || String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
+// Detrás de un proxy, la IP fiable es la que AÑADE el proxy (la última de x-forwarded-for), no la primera, que la puede escribir el cliente.
+// TRUST_PROXY_HOPS = nº de proxies de confianza delante del servidor (1 por defecto; pon 0 en local sin proxy).
+const TRUST_PROXY_HOPS = Math.max(0, Number(process.env.TRUST_PROXY_HOPS ?? 1));
+const clientIp = req => {
+  if (TRUST_PROXY_HOPS > 0) {
+    const parts = String(req.headers['x-forwarded-for'] || '').split(',').map(x => x.trim()).filter(Boolean);
+    const ip = parts[parts.length - TRUST_PROXY_HOPS];
+    if (ip) return ip;
+  }
+  return req.socket.remoteAddress || '';
+};
 
 function dailyInfo(row) {
   const today = dayKey();
@@ -623,7 +581,7 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
     return { demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PRICE, size: SIZE, packSize: PACK_SIZE,
-      auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
+      maxParcels: MAX_PARCELS_PER_ACCOUNT, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')));
@@ -656,11 +614,6 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/my-parcels') return myParcels(req);
   if (req.method === 'GET' && pn === '/api/production') return productionGet(req);
   if (req.method === 'POST' && pn === '/api/production/collect') return productionCollect(req);
-
-  if (req.method === 'POST' && pn === '/api/orders') return createOrder(await readJson(req));
-
-  const m = pn.match(/^\/api\/orders\/([^/]+)\/capture$/);
-  if (req.method === 'POST' && m) return captureOrder(decodeURIComponent(m[1]));
 
   throw new HttpError(404, 'No encontrado');
 }
