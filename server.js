@@ -581,7 +581,7 @@ async function productionGet(req) {
   const pack = await ensureUserPack(user);
   const p = await one('SELECT last_collect, prod_carry FROM packs WHERE code = $1', [pack.code]);
   const st = await prodCompute(pool, user.id, p && p.last_collect, p && p.prod_carry, Date.now());
-  return { parcels: st.parcels, perHour: Math.round(st.perHour * 1e6) / 1e6, ready: st.ready, capHours: PROD_CAP_HOURS, rate: PROD_RATE };
+  return { parcels: st.parcels, perHour: Math.round(st.perHour * 10000) / 10000, ready: st.ready, capHours: PROD_CAP_HOURS, rate: PROD_RATE };
 }
 
 async function productionCollect(req) {

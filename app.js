@@ -700,7 +700,7 @@ function setMineMsg(text, kind = '') { const m = $('mine-msg'); m.textContent = 
 function renderMine(prod, mine) {
   const n = prod.parcels;
   $('mine-prod').textContent = n
-    ? `⏱️ Tienes ${n} ${plural(n, 'terreno', 'terrenos')}: producen ${(prod.perHour * 24).toLocaleString('es-ES', { maximumFractionDigits: 3 })} créditos al día. Se acumulan hasta ${prod.capHours} h, ¡recógelos antes de que se llene!`
+    ? `⏱️ Tienes ${n} ${plural(n, 'terreno', 'terrenos')}: producen ${prod.perHour.toLocaleString('es-ES', { maximumFractionDigits: 4 })} créditos por hora. Se acumulan hasta ${prod.capHours} h, ¡recógelos antes de que se llene!`
     : 'Aún no tienes terrenos con producción. Reclama uno y empezará a producir créditos.';
   const btn = $('mine-collect');
   btn.disabled = prod.ready < 1;
