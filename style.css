@@ -149,13 +149,13 @@ input { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; borde
   button.primary { padding: 8px; }
 }
 
-/* Círculo parpadeante: zona donde puedes reclamar terrenos (5 km) */
+/* Anillo rojo parpadeante: zona donde puedes reclamar terrenos (500 m), sin relleno */
 path.buy-range {
-  stroke: #1d72f3; stroke-width: 3; fill: #1d72f3;
-  animation: buyblink 1.6s ease-in-out infinite;
+  stroke: #e63946; stroke-width: 3; fill: none; fill-opacity: 0;
+  animation: buyblink 1.2s ease-in-out infinite;
 }
 @keyframes buyblink {
-  0%, 100% { stroke-opacity: 1;    fill-opacity: 0.16; }
-  50%      { stroke-opacity: 0.25; fill-opacity: 0.04; }
+  0%, 100% { stroke-opacity: 1; }
+  50%      { stroke-opacity: 0.2; }
 }
-@media (prefers-reduced-motion: reduce) { path.buy-range { animation: none; fill-opacity: 0.1; } }
+@media (prefers-reduced-motion: reduce) { path.buy-range { animation: none; } }
