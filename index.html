@@ -36,6 +36,12 @@
       box-shadow:0 2px 8px rgba(0,0,0,.3);
     }
     #mine-btn.hidden { display:none !important; }
+    /* Barra superior compacta: una sola fila con botones de solo icono */
+    header.bar { display:flex !important; flex-wrap:nowrap !important; align-items:center !important; gap:5px !important; padding:6px 8px !important; }
+    header.bar h1 { font-size:13px !important; line-height:1.2 !important; margin:0 !important; flex:1 1 auto !important; min-width:0 !important; white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important; }
+    header.bar .stats { flex:0 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:12px; }
+    header.bar button { flex:0 0 auto !important; width:36px !important; height:36px !important; min-width:0 !important; padding:0 !important; margin:0 !important; font-size:20px !important; line-height:1 !important; display:inline-flex !important; align-items:center !important; justify-content:center !important; border-radius:10px !important; }
+    header.bar button.hidden { display:none !important; }
     @keyframes dailypulse { 0%,100% {transform:scale(1)} 50% {transform:scale(1.25)} }
 
     /* Vídeo de introducción */
@@ -85,17 +91,15 @@
       Cargando estadísticas…
     </span>
 
-    <button id="locate" type="button" title="Ir a mi ubicación">
-      📍 Mi ubicación
+    <button id="locate" type="button" title="Ir a mi ubicación" aria-label="Ir a mi ubicación">📍</button>
+
+    <button id="account-btn" type="button" class="hidden" title="Entrar" aria-label="Entrar">👤</button>
+
+    <button id="search-btn" type="button" title="Buscar un lugar" aria-label="Buscar un lugar">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
     </button>
 
-    <button id="search-btn" type="button" title="Buscar un lugar">🔍</button>
-
-    <button id="rank-btn" type="button">
-      🏆 Ranking
-    </button>
-
-    <button id="account-btn" type="button" class="hidden">👤 Entrar</button>
+    <button id="rank-btn" type="button" title="Ranking" aria-label="Ranking">🏆</button>
   </header>
 
   <div id="hint" class="hint">
@@ -229,7 +233,7 @@
   <div id="search" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="search-title">
     <div class="modal-card">
       <button id="search-close" class="close" type="button">×</button>
-      <h2 id="search-title">🔍 Buscar un lugar</h2>
+      <h2 id="search-title">Buscar un lugar</h2>
       <input id="search-q" type="text" placeholder="Ciudad, calle, monumento…" autocomplete="off">
       <button id="search-go" class="primary" type="button" style="margin-top:8px">Buscar</button>
       <p id="search-msg" class="msg" aria-live="polite"></p>

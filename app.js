@@ -517,7 +517,9 @@ function updateAuthUi() {
   if (!on) return;
   const logged = !!authToken;
   $('mine-btn').classList.toggle('hidden', !logged);
-  $('account-btn').textContent = logged ? '👤 Mi cuenta' : '👤 Entrar';
+  $('account-btn').textContent = '👤';
+  $('account-btn').title = logged ? 'Mi cuenta' : 'Entrar';
+  $('account-btn').setAttribute('aria-label', logged ? 'Mi cuenta' : 'Entrar');
   $('login-out').classList.toggle('hidden', logged);
   $('login-in').classList.toggle('hidden', !logged);
   $('login-email-shown').textContent = (authUser && authUser.email) || '';
