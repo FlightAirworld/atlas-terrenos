@@ -3,7 +3,7 @@
 // Modos: 2 = música + efectos, 1 = solo efectos, 0 = silencio. Se recuerda en el dispositivo.
 (function () {
   const KEY = 'soundMode';
-  let mode = 2;
+  let mode = 1;   // por defecto solo efectos (sin música); sin botón 🔊 en la página no se puede cambiar
   try { const s = localStorage.getItem(KEY); if (s !== null) mode = Math.min(2, Math.max(0, Number(s) || 0)); } catch (e) {}
 
   let ctx = null, master, sfxBus, musicBus, delay, started = false, timer = null, nextTime = 0, step = 0;
