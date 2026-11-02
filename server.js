@@ -387,7 +387,9 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house })
       'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id, house) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
       [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), cleanCountry(country), user ? user.id : null, cleanHouse(house)]);
     await client.query('COMMIT');
-    return { ok: true, parcel: p.id, owner: name, credits: r.rows[0].credits };
+    let bonus = 0;   // invitación: premio al invitado y a quien le invitó (si no hay invitación, no pasa nada)
+    if (user) { try { const rr = await rewardReferral(user.id, code); if (rr) bonus = rr.inviteeBonus; } catch (e) { console.error('Invitación:', e.message); } }
+    return { ok: true, parcel: p.id, owner: name, credits: r.rows[0].credits + bonus, referralBonus: bonus };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Este terreno ya tiene dueño');
@@ -710,6 +712,82 @@ function onlineStream(req, res, url) {
   res.on('error', leave);
 }
 
+// ---------- Invita y gana ----------
+// Cada cuenta tiene un código de invitación (enlace /?ref=CODIGO). Cuando un jugador NUEVO entra con ese enlace,
+// crea su cuenta y reclama su primer terreno, el que invita gana créditos y el invitado recibe un regalo de bienvenida.
+// Antiabuso: solo cuentan jugadores sin terrenos, una invitación por cuenta, tope por invitador (total y en 24 h)
+// y no se premia al invitador si el invitado entró desde la misma conexión de red que él.
+const REF_INVITER_REWARD = Math.max(0, Math.floor(Number(process.env.REF_INVITER_REWARD ?? 2)));   // créditos para quien invita
+const REF_INVITEE_REWARD = Math.max(0, Math.floor(Number(process.env.REF_INVITEE_REWARD ?? 1)));   // créditos de bienvenida
+const REF_MAX_REWARDED = Math.max(1, Number(process.env.REF_MAX_REWARDED || 50));                  // invitaciones premiadas por cuenta
+const REF_DAILY_MAX = Math.max(1, Number(process.env.REF_DAILY_MAX || 5));                         // y por cada 24 h
+const REF_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // sin 0/O/1/I para que no se confundan
+const newRefCode = () => Array.from(crypto.randomBytes(7), b => REF_ALPHABET[b % 32]).join('');
+const refIpHash = req => crypto.createHash('sha256').update('ref:' + clientIp(req) + DAILY_SALT).digest('hex');
+
+async function refCodeFor(userId, ipHash) {
+  let row = await one('SELECT code FROM ref_codes WHERE user_id = $1', [userId]);
+  for (let i = 0; i < 5 && !row; i++) {
+    try { await run('INSERT INTO ref_codes (code, user_id, created_at, last_ip) VALUES ($1,$2,$3,$4)', [newRefCode(), userId, Date.now(), ipHash]); }
+    catch (e) { if (!isUniqueViolation(e)) throw e; }
+    row = await one('SELECT code FROM ref_codes WHERE user_id = $1', [userId]);
+  }
+  if (!row) throw new HttpError(500, 'No se pudo crear tu enlace de invitación');
+  if (ipHash) await run('UPDATE ref_codes SET last_ip = $1 WHERE user_id = $2', [ipHash, userId]);
+  return row.code;
+}
+
+async function refGet(req) {
+  const user = await needUser(req);
+  const code = await refCodeFor(user.id, refIpHash(req));
+  const s = await one(
+    `SELECT COUNT(*) FILTER (WHERE rewarded_at IS NOT NULL) AS done,
+            COUNT(*) FILTER (WHERE rewarded_at IS NULL) AS pending,
+            COALESCE(SUM(inviter_credits), 0) AS earned
+       FROM referrals WHERE inviter_id = $1`, [user.id]);
+  return { code, done: Number(s.done), pending: Number(s.pending), earned: Number(s.earned),
+    inviterReward: REF_INVITER_REWARD, inviteeReward: REF_INVITEE_REWARD, max: REF_MAX_REWARDED };
+}
+
+// El invitado, ya con cuenta, apunta de quién viene (una sola vez y solo si aún no tiene terrenos)
+async function refAttach(req, { code }) {
+  const user = await needUser(req);
+  const c = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  if (c.length < 5) throw new HttpError(400, 'Enlace de invitación no válido');
+  const inv = await one('SELECT user_id FROM ref_codes WHERE code = $1', [c]);
+  if (!inv) throw new HttpError(404, 'Enlace de invitación no válido');
+  if (inv.user_id === user.id) throw new HttpError(400, 'No puedes invitarte a ti mismo');
+  if (await one('SELECT 1 AS ok FROM referrals WHERE invitee_id = $1', [user.id])) throw new HttpError(409, 'Ya usaste una invitación');
+  const owned = Number((await one('SELECT COUNT(*) AS n FROM parcels WHERE user_id = $1', [user.id])).n);
+  if (owned > 0) throw new HttpError(409, 'Las invitaciones son solo para jugadores nuevos');
+  try {
+    await run('INSERT INTO referrals (invitee_id, inviter_id, created_at, ip_hash) VALUES ($1,$2,$3,$4)', [user.id, inv.user_id, Date.now(), refIpHash(req)]);
+  } catch (e) {
+    if (isUniqueViolation(e)) throw new HttpError(409, 'Ya usaste una invitación');
+    throw e;
+  }
+  return { ok: true, bonus: REF_INVITEE_REWARD };
+}
+
+// Se llama tras el primer terreno reclamado: paga a los dos (una sola vez por invitado)
+async function rewardReferral(userId, claimPackCode) {
+  const ref = await one('UPDATE referrals SET rewarded_at = $1 WHERE invitee_id = $2 AND rewarded_at IS NULL RETURNING inviter_id, ip_hash', [Date.now(), userId]);
+  if (!ref) return null;
+  let gives = REF_INVITER_REWARD;
+  const paid = await one('SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE rewarded_at > $2) AS recent FROM referrals WHERE inviter_id = $1 AND inviter_credits > 0',
+    [ref.inviter_id, Date.now() - 86_400_000]);
+  if (Number(paid.total) >= REF_MAX_REWARDED || Number(paid.recent) >= REF_DAILY_MAX) gives = 0;
+  const owner = await one('SELECT last_ip FROM ref_codes WHERE user_id = $1', [ref.inviter_id]);
+  if (owner && owner.last_ip && ref.ip_hash && owner.last_ip === ref.ip_hash) gives = 0;   // misma conexión: parece una cuenta propia
+  if (gives > 0) {
+    await ensureUserPack({ id: ref.inviter_id });
+    await run('UPDATE packs SET credits = credits + $1 WHERE user_id = $2', [gives, ref.inviter_id]);
+    await run('UPDATE referrals SET inviter_credits = $1 WHERE invitee_id = $2', [gives, userId]);
+  }
+  if (REF_INVITEE_REWARD > 0) await run('UPDATE packs SET credits = credits + $1 WHERE code = $2', [REF_INVITEE_REWARD, claimPackCode]);
+  return { inviteeBonus: REF_INVITEE_REWARD };
+}
+
 async function route(req, res, url) {
   const { pathname: pn, searchParams: sp } = url;
   // Límite de peticiones por conexión: 240 por minuto en total y 40 por minuto las que modifican datos
@@ -745,6 +823,8 @@ async function route(req, res, url) {
   }
 
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineClients.size };
+  if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
+  if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };
 
@@ -781,7 +861,12 @@ const PUBLIC = __dirname;
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 
 // Migración automática (inofensiva si la columna ya existe)
-const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').catch(e => console.error('No se pudo añadir la columna house:', e.message));
+const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').catch(e => console.error('No se pudo añadir la columna house:', e.message))
+  .then(async () => {   // tablas de "Invita y gana" (no hacen nada si ya existen)
+    await run('CREATE TABLE IF NOT EXISTS ref_codes (code TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, created_at BIGINT NOT NULL, last_ip TEXT)');
+    await run('CREATE TABLE IF NOT EXISTS referrals (invitee_id TEXT PRIMARY KEY, inviter_id TEXT NOT NULL, created_at BIGINT NOT NULL, ip_hash TEXT, rewarded_at BIGINT, inviter_credits INT NOT NULL DEFAULT 0)');
+    await run('CREATE INDEX IF NOT EXISTS referrals_inviter ON referrals (inviter_id)');
+  }).catch(e => console.error('No se pudieron crear las tablas de invitaciones:', e.message));
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');

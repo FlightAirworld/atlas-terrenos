@@ -193,3 +193,13 @@ path.buy-range {
 #online-tip:empty { display: none; }
 @keyframes onlinepulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(46,204,113,.6); } 70% { box-shadow: 0 0 0 7px rgba(46,204,113,0); } }
 @media (prefers-reduced-motion: reduce) { #online-btn i { animation: none; } #online-tip { transition: none; } }
+
+/* Invita y gana: botón flotante a la izquierda (encima del de jugadores en línea) */
+#invite-btn { position: fixed; left: 12px; bottom: 222px; z-index: 1000; width: 56px; height: 56px; border-radius: 50%; padding: 0; font-size: 28px; line-height: 1;
+  display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); background: var(--card);
+  box-shadow: 0 2px 8px rgba(0,0,0,.3); touch-action: manipulation; }
+#toast { position: fixed; left: 50%; top: 70px; z-index: 3000; width: min(92vw, 380px); transform: translate(-50%, -12px); padding: 12px 16px; border-radius: 14px;
+  background: rgba(11,61,46,.96); color: #fff; font-size: 15px; font-weight: 600; text-align: center; box-shadow: 0 4px 18px rgba(0,0,0,.45);
+  opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; }
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: reduce) { #toast { transition: none; } }

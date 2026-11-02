@@ -110,6 +110,7 @@
     <i></i><b id="online-n">–</b><small>en línea</small>
   </button>
   <div id="online-tip" role="status" aria-live="polite"></div>
+  <button id="invite-btn" class="hidden" type="button" title="Invita y gana" aria-label="Invita y gana">🎁</button>
 
   <span id="stats" class="stats" style="display:none" aria-live="polite"></span>
 
@@ -275,6 +276,19 @@
     </div>
   </div>
 
+  <div id="invite" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="invite-title">
+    <div class="modal-card">
+      <button id="invite-close" class="close" type="button" aria-label="Cerrar">×</button>
+      <h2 id="invite-title">🎁 Invita y gana</h2>
+      <p id="invite-lead" class="muted"></p>
+      <input id="invite-link" type="text" readonly aria-label="Tu enlace de invitación">
+      <button id="invite-share" class="primary" type="button">📤 Compartir mi enlace</button>
+      <button id="invite-copy" type="button" style="width:100%;margin-top:8px">🔗 Copiar enlace</button>
+      <p id="invite-stats" class="muted" style="white-space:pre-line;margin-top:12px"></p>
+      <p id="invite-msg" class="msg" aria-live="polite"></p>
+    </div>
+  </div>
+
   <div id="install-help" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="install-title">
     <div class="modal-card">
       <button id="install-close" class="close" type="button" aria-label="Cerrar">×</button>
@@ -317,6 +331,7 @@
   <script src="vehicles.js"></script>
   <script src="online.js"></script>
   <script src="install.js"></script>
+  <script src="invite.js"></script>
 <footer style="text-align:center; font-size:13px; padding:12px;">
   <a href="/privacidad.html">Política de Privacidad</a> ·
   <a href="/terminos.html">Condiciones del Servicio</a> ·
