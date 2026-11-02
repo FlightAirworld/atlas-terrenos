@@ -52,6 +52,8 @@
     #map-controls button.hidden { display:none !important; }
     #credit-pill { position:fixed; top:12px; left:60px; z-index:1000; height:40px !important; padding:0 14px !important; border-radius:999px !important; font-size:16px !important; font-weight:700; gap:6px; }
     #map-controls button::before, #map-controls button::after, #credit-pill::before, #credit-pill::after { content:none !important; display:none !important; }
+    @keyframes avatarbounce { 0%,100% {transform:translateY(0) rotate(0)} 25% {transform:translateY(-5px) rotate(-8deg)} 50% {transform:translateY(0) rotate(0)} 75% {transform:translateY(-3px) rotate(8deg)} }
+    @media (prefers-reduced-motion: reduce) { #p-avatar {animation:none!important} }
     @keyframes dailypulse { 0%,100% {transform:scale(1)} 50% {transform:scale(1.25)} }
 
     /* Vídeo de introducción */
@@ -120,9 +122,9 @@
     <div id="p-owned" class="hidden">
       <div style="position:relative">
         <img id="p-photo" class="p-photo" alt="Casa del propietario">
-        <span id="p-avatar" style="position:absolute;right:8px;bottom:8px;font-size:34px;background:#0009;border-radius:999px;padding:2px 8px"></span>
+        <span id="p-avatar" style="position:absolute;right:8px;bottom:8px;font-size:34px;background:#0009;border-radius:999px;padding:2px 8px;animation:avatarbounce 1.6s ease-in-out infinite"></span>
       </div>
-      <p class="owner">👤 Propiedad de <strong id="p-owner"></strong></p>
+      <p class="owner"><span id="p-owner-icon">👤</span> Propiedad de <strong id="p-owner"></strong></p>
       <p class="muted" id="p-since"></p>
       <p class="muted">🔒 Este terreno ya tiene propietario.</p>
     </div>

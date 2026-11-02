@@ -245,7 +245,8 @@ function showPanel(p) {
   $('p-owned').classList.toggle('hidden', !owned);
   $('p-free').classList.toggle('hidden', owned);
   if (owned) {
-    $('p-owner').textContent = labelOf(p);
+    $('p-owner').textContent = [flagOf(p.country), p.owner].filter(Boolean).join(' ');
+    $('p-owner-icon').textContent = p.avatar || '👤';
     $('p-photo').src = houseFor(p.id);
     $('p-avatar').textContent = p.avatar || '';
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
