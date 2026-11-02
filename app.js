@@ -117,6 +117,7 @@ async function selectAt(latlng) {
   if (selectedRect) selectedRect.remove();
   selectedRect = L.rectangle(boundsOf(p.x, p.y), { color: '#ffb703', weight: 3, fill: false, interactive: false }).addTo(map);
   showPanel(p);
+  sfx('select');
 }
 map.on('click', e => selectAt(e.latlng));
 // ---------- Administración: reclamar parcelas gratis ----------
@@ -324,6 +325,7 @@ function markHouse(box, current) {
       markHouse(editBox, j.house);
       $('p-photo').src = houseFor(selected.id, j.house);
       drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: j.house });
+      sfx('claim');
       setMsg(`🏠 ¡Casa cambiada! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
     } catch (e) { setMsg(e.message, 'err'); }
   }, false);
@@ -417,11 +419,11 @@ $('use-credit').onclick = async () => {
     selected.owner = j.owner; selected.avatar = avatar; selected.country = country; selected.since = Date.now();
     selected.house = chosenHouse; selected.mine = !!authToken;
     showPanel(selected);
-    setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉`, 'ok');
+    setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉`, 'ok'); sfx('claim');
     drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house });
     loadStats(); loadParcels(); loadProduction();
   } catch (e) {
-    setMsg(e.message, 'err');
+    setMsg(e.message, 'err'); sfx('error');
     refreshCredits();
   } finally { btn.disabled = false; }
 };
@@ -474,6 +476,7 @@ $('daily-claim').onclick = async () => {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'No se pudo reclamar el regalo');
     saveCode(j.code); credits = j.credits; updateCreditUi();
+    sfx('gift');
     setDailyMsg(`🎉 +${j.reward} ${plural(j.reward, 'terreno', 'terrenos')}. Ahora tienes ${j.credits}.`, 'ok');
     $('daily-code').textContent = j.newCode
       ? `🔑 Tu código: ${j.code}. Guárdalo: lo necesitas para no perder tus terrenos si cambias de móvil o borras los datos del navegador.`
@@ -498,7 +501,7 @@ async function createOrder() {
 async function captureOrder(orderId) {
   const r = await api(`/api/packs/orders/${encodeURIComponent(orderId)}/capture`, { method: 'POST', body: {} });
   saveCode(r.code); credits = r.credits; updateCreditUi();
-  setMsg(`¡Pack comprado! Tienes ${credits} terrenos. Guarda tu código 🔑`, 'ok');
+  setMsg(`¡Pack comprado! Tienes ${credits} terrenos. Guarda tu código 🔑`, 'ok'); sfx('claim');
 }
 function fail(e) { if (e.message !== 'nombre') setMsg(e.message, 'err'); }
 
@@ -833,6 +836,7 @@ $('mine-collect').onclick = async () => {
   try {
     const j = await api('/api/production/collect', { method: 'POST', body: {} });
     credits = j.credits; updateCreditUi();
+    sfx('coin');
     setMineMsg(`🎉 +${j.collected} ${plural(j.collected, 'crédito', 'créditos')}. Ahora tienes ${j.credits}.`, 'ok');
   } catch (e) { setMineMsg(e.message, 'err'); }
   delete btn.dataset.busy;

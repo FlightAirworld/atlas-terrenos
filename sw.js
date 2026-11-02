@@ -1,5 +1,5 @@
-const CACHE = 'redecora-v1';
-const SHELL = ['/', '/style.css', '/app.js', '/images/icon-192.png'];
+const CACHE = 'redecora-v2';
+const SHELL = ['/', '/style.css', '/app.js', '/sounds.js', '/images/icon-192.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
   self.skipWaiting();
