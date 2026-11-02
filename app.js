@@ -50,9 +50,25 @@ gl.addControl(new maplibregl.TerrainControl({ source: 'dem', exaggeration: 1 }),
 let glReady = false;
 // Entrada cinematográfica: del espacio a Gibraltar (inclinado, para ver el 3D)
 let flightRequested = false;
+const HOME = [-5.3536, 36.1408];   // Gibraltar: destino si no hay ubicación
 function introFlight() {
   if (!glReady) { flightRequested = true; return; }
-  gl.flyTo({ center: [-5.3536, 36.1408], zoom: 16, pitch: 45, bearing: -15, duration: 7000, essential: true });
+  const fly = (center, zoom) => gl.flyTo({ center, zoom, pitch: 45, bearing: -15, duration: 7000, essential: true });
+  let done = false;
+  const toHome = () => { if (done) return; done = true; fly(HOME, 16); };
+  if (!navigator.geolocation) return toHome();
+  // Pide la ubicación (el navegador pregunta al jugador); si no llega pronto o se niega, vamos a Gibraltar
+  const timer = setTimeout(toHome, 10000);
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      clearTimeout(timer);
+      if (done) return;                       // ya se fue a Gibraltar: no le movemos el mapa de golpe
+      done = true;
+      fly([pos.coords.longitude, pos.coords.latitude], 16.5);
+      const b = $('welcome-loc'); if (b) b.style.display = 'none';   // el aviso ya no necesita "Ir a mi ubicación"
+    },
+    () => { clearTimeout(timer); toHome(); },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
 }
 window.introFlight = introFlight;
 function introAlreadySeen() { try { return localStorage.getItem('introSeen2') === '1'; } catch (e) { return false; } }
