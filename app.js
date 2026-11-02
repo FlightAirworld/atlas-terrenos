@@ -309,7 +309,7 @@ function mountDetail(ex, imgUrl, blob) {
   const pill = document.createElement('span');
   pill.className = 'owner-pill';
   pill.textContent = labelOf(ex.p);          // textContent: sin HTML
-  ex.label = L.marker([s, (w + e) / 2], {
+  ex.label = L.marker([(s + n) / 2, (w + e) / 2], {   // en el centro de la parcela, dentro de la casa
     icon: L.divIcon({ className: 'owner-label', html: pill, iconSize: [0, 0] }),
     interactive: false, keyboard: false
   }).addTo(map);
@@ -418,8 +418,12 @@ async function loadParcels() {
 }
 map.on('moveend', loadParcels);
 
-function syncLabels() { map.getContainer().classList.toggle('labels-off', map.getZoom() < 17); }
-map.on('zoomend', syncLabels); syncLabels();
+function syncLabels() {
+  map.getContainer().classList.toggle('labels-off', map.getZoom() < 17);
+  // Ancho de una parcela en píxeles: el nombre se escala para caber dentro de la casa (ver .owner-pill en style.css)
+  if (cfg) map.getContainer().style.setProperty('--ppx', (cfg.size * 512 * Math.pow(2, gl.getZoom()) / 360).toFixed(1));
+}
+map.on('zoomend', syncLabels); gl.on('zoom', syncLabels); syncLabels();
 
 // ---------- Selección de parcela ----------
 async function selectAt(latlng) {
