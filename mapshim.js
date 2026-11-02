@@ -50,6 +50,7 @@
   // ---------- Mapa con la API de Leaflet que usa el juego ----------
   function createCompatMap(gl) {
     const panes = {};
+    let roadsOn = false;
     const worldPx = z => 256 * Math.pow(2, z);
     const api = {
       gl,
@@ -87,6 +88,25 @@
         return api.unproject({ x: c.x + dx * Math.cos(b) - dy * Math.sin(b), y: c.y + dx * Math.sin(b) + dy * Math.cos(b) }, z);
       },
       latLngToContainerPoint(ll) { const p = gl.project(toLngLat(ll)); return { x: p.x, y: p.y }; },
+      // Calles reales (teselas vectoriales de OpenFreeMap). La capa está apagada hasta que los coches la piden.
+      setRoads(on) {
+        try {
+          if (on === roadsOn || !gl.getLayer('roads-q')) return;
+          roadsOn = on; gl.setLayoutProperty('roads-q', 'visibility', on ? 'visible' : 'none');
+        } catch (e) {}
+      },
+      queryRoads() {
+        try {
+          if (!roadsOn || !gl.getLayer('roads-q')) return [];
+          const out = [];
+          gl.queryRenderedFeatures({ layers: ['roads-q'] }).forEach(f => {
+            const g = f.geometry;
+            if (g.type === 'LineString') out.push(g.coordinates);
+            else if (g.type === 'MultiLineString') g.coordinates.forEach(c => out.push(c));
+          });
+          return out;
+        } catch (e) { return []; }
+      },
       getBounds() {
         // Con inclinación el rectángulo visible puede ser enorme: lo limitamos alrededor del centro
         const b = gl.getBounds(), c = gl.getCenter(), cap = 0.04;

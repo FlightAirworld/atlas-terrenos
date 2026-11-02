@@ -19,6 +19,7 @@ const MAP_STYLE = {
       tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
       attribution: 'Imágenes © Esri, Maxar, Earthstar Geographics'
     },
+    roads: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },   // solo para que los coches sigan las calles
     dem: {
       type: 'raster-dem', tileSize: 256, maxzoom: 15, encoding: 'terrarium',
       tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
@@ -26,7 +27,14 @@ const MAP_STYLE = {
     }
   },
   layers: [
-    { id: 'sat', type: 'raster', source: 'sat' }
+    { id: 'sat', type: 'raster', source: 'sat' },
+    // Capa invisible: solo sirve para consultar la geometría de las calles (coches). Apagada hasta que se necesita.
+    {
+      id: 'roads-q', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 15,
+      layout: { visibility: 'none' },
+      filter: ['all', ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor']]], ['!=', ['get', 'brunnel'], 'tunnel']],
+      paint: { 'line-opacity': 0.01, 'line-width': 3 }
+    }
   ]
   // El relieve (source 'dem') queda apagado: se activa con el botón de montaña del mapa
 };

@@ -1,6 +1,7 @@
 'use strict';
 // Tráfico por el mapa:
 //  - Policía cada 5 min, bomberos cada 12 min y ambulancia cada 17 min, con luces y sirena (sintetizada, sin archivos).
+//  - Los coches siguen las calles reales (OpenStreetMap vía OpenFreeMap); si no hay calles, cruzan en línea recta.
 //  - Taxis que recogen o dejan gente; la luz verde del techo se enciende cuando está libre o parado en la acera.
 // Para probar sin esperar, en la consola: spawnVehicle('police' | 'fire' | 'ambulance' | 'taxi')
 (function () {
@@ -182,26 +183,114 @@
     return { p0, total, dx: (p1.x - p0.x) / total, dy: (p1.y - p0.y) / total };
   }
 
+  //#roads-begin
+  // ---------- Trayectos por calles reales ----------
+  const SNAP = 3;                                   // px de mundo (REF_Z) para unir los extremos de dos calles
+  const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+  function makePath(pts) {
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+    return { pts, cum, total: cum[cum.length - 1] };
+  }
+  // Coloca el coche sobre su trayecto según la distancia recorrida v.s
+  function advance(v) {
+    const P = v.path;
+    while (v.seg < P.pts.length - 2 && P.cum[v.seg + 1] <= v.s) v.seg++;
+    const a = P.pts[v.seg], b = P.pts[v.seg + 1], len = (P.cum[v.seg + 1] - P.cum[v.seg]) || 1;
+    const t = Math.min(1, Math.max(0, (v.s - P.cum[v.seg]) / len));
+    v.x = a.x + (b.x - a.x) * t; v.y = a.y + (b.y - a.y) * t;
+    v.dx = (b.x - a.x) / len; v.dy = (b.y - a.y) / len;
+  }
+  // Busca un trayecto por las calles visibles: entra por fuera de la pantalla y sigue calles conectadas
+  function roadRoute() {
+    if (!map.queryRoads) return null;
+    const raw = map.queryRoads();
+    if (!raw.length) return null;
+    const lines = [], ends = new Map();
+    raw.forEach(c => {
+      if (c.length < 2) return;
+      const pts = c.map(ll => map.project({ lat: ll[1], lng: ll[0] }, REF_Z));
+      const ln = { pts };
+      lines.push(ln);
+      [[pts[0], 0], [pts[pts.length - 1], 1]].forEach(([p, e]) => {
+        const k = Math.round(p.x / SNAP) + ',' + Math.round(p.y / SNAP);
+        if (!ends.has(k)) ends.set(k, []);
+        ends.get(k).push({ ln, end: e });
+      });
+    });
+    const near = p => {
+      const out = [], cx = Math.round(p.x / SNAP), cy = Math.round(p.y / SNAP);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const a = ends.get((cx + i) + ',' + (cy + j)); if (a) out.push(...a); }
+      return out;
+    };
+    const size = map.getSize(), scale = Math.pow(2, map.getZoom() - REF_Z);
+    const scr = p => map.latLngToContainerPoint(map.unproject(p, REF_Z));
+    const inside = c => c.x >= 0 && c.y >= 0 && c.x <= size.x && c.y <= size.y;
+    const outside = [];
+    lines.forEach(ln => [0, 1].forEach(e => {
+      const c = scr(e ? ln.pts[ln.pts.length - 1] : ln.pts[0]);
+      if (c.x < -10 || c.y < -10 || c.x > size.x + 10 || c.y > size.y + 10) outside.push({ ln, e });
+    }));
+    const target = Math.hypot(size.x, size.y) * 1.4 / scale;
+    for (let t = 0; t < 12 && outside.length; t++) {
+      const s0 = pick(outside);
+      const pts = (s0.e ? s0.ln.pts.slice().reverse() : s0.ln.pts.slice());
+      const used = new Set([s0.ln]);
+      let total = makePath(pts).total;
+      for (let hop = 0; hop < 12 && total < target; hop++) {
+        const a = pts[pts.length - 1], b = pts[pts.length - 2], hin = Math.atan2(a.y - b.y, a.x - b.x);
+        const opts = [];
+        near(a).forEach(o => {
+          if (used.has(o.ln)) return;
+          const q = o.end ? o.ln.pts.slice().reverse() : o.ln.pts;
+          const turn = Math.abs(angDiff(Math.atan2(q[1].y - q[0].y, q[1].x - q[0].x), hin));
+          if (turn < 2.0) opts.push({ o, q, turn });      // sin cambios de sentido bruscos
+        });
+        if (!opts.length) break;
+        opts.sort((x, y) => x.turn - y.turn);
+        const ch = Math.random() < 0.75 ? opts[0] : pick(opts);   // casi siempre sigue recto; a veces gira en la esquina
+        used.add(ch.o.ln);
+        for (let i = 1; i < ch.q.length; i++) pts.push(ch.q[i]);
+        total = makePath(pts).total;
+      }
+      const P = makePath(pts);
+      const cs = pts.map(scr);
+      if (P.total * scale < 250 || !cs.some(inside)) continue;
+      // El taxi parará en el punto del trayecto más cercano al centro de la pantalla
+      let focus = null, best = 1e9;
+      cs.forEach((c, i) => { const d = Math.hypot(c.x - size.x / 2, c.y - size.y / 2); if (inside(c) && d < best && P.cum[i] > 40 / scale) { best = d; focus = P.cum[i]; } });
+      return { path: P, focus };
+    }
+    return null;
+  }
+  function pathRoute(Lc) {
+    const rr = roadRoute();
+    if (rr) return rr;
+    const r = route(Lc);     // sin calles cerca (mar, campo…): línea recta como antes
+    return { path: makePath([r.p0, { x: r.p0.x + r.dx * r.total, y: r.p0.y + r.dy * r.total }]), focus: null };
+  }
+  //#roads-end
+
   function spawn(kind) {
     const K = KINDS[kind]; if (!K) return null;
-    const r = route(K.L);
+    const r = pathRoute(K.L), P = r.path, p0 = P.pts[0], d0 = { dx: (P.pts[1].x - p0.x) / (P.cum[1] || 1), dy: (P.pts[1].y - p0.y) / (P.cum[1] || 1) };
     const icon = L.divIcon({
       className: 'vh', iconSize: [K.L, K.W], iconAnchor: [K.L / 2, K.W / 2],
       html: `<div class="vh-in"><div class="vh-rot">${K.html()}</div></div>`
     });
-    const mk = L.marker(map.unproject(r.p0, REF_Z), { icon, pane: K.pane, interactive: false, keyboard: false }).addTo(map);
+    const mk = L.marker(map.unproject(p0, REF_Z), { icon, pane: K.pane, interactive: false, keyboard: false }).addTo(map);
     const el = mk.getElement();
     const rot = el && el.querySelector('.vh-rot');
-    const h = Math.atan2(r.dy, r.dx);
+    const h = Math.atan2(d0.dy, d0.dx);
     if (rot) rot.style.transform = `rotate(${h}rad)`;
     const v = {
-      kind, K, mk, wrap: el && el.querySelector('.vh-in'), x: r.p0.x, y: r.p0.y, dx: r.dx, dy: r.dy, h,
-      s: 0, total: r.total, speed: K.siren ? K.v : 0, age: 0, state: 'drive', t: 0, sirenObj: null
+      kind, K, mk, wrap: el && el.querySelector('.vh-in'), rot, x: p0.x, y: p0.y, dx: d0.dx, dy: d0.dy, h,
+      path: P, seg: 0, s: 0, total: P.total, speed: K.siren ? K.v : 0, age: 0, state: 'drive', t: 0, sirenObj: null
     };
     if (K.siren) { v.sirenObj = makeSiren(); }
     if (kind === 'taxi') {
       v.scenario = Math.random() < 0.5 ? 'pickup' : 'dropoff';
-      v.sStop = r.total * rnd(0.4, 0.6);
+      v.sStop = r.focus != null ? r.focus : P.total * rnd(0.4, 0.6);
       v.speed = K.v;
       setFree(v, v.scenario === 'pickup');
     }
@@ -258,6 +347,7 @@
       const raining = (window.weatherIntensity ? window.weatherIntensity() : 0) > 0.25;
       const size = map.getSize(), cx = size.x / 2, cy = size.y / 2, half = Math.hypot(cx, cy);
 
+      if (map.setRoads) map.setRoads(z >= MIN_ZOOM);   // carga las calles solo cuando hacen falta
       // Emergencias periódicas (si el zoom es bajo, esperan a que te acerques)
       if (z >= MIN_ZOOM && now - lastSpawn.t > 10000) {
         for (const k of ['police', 'fire', 'ambulance']) {
@@ -306,8 +396,15 @@
           updateSiren(v, ac ? vol : 0, clamp((pt.x - cx) / cx, -1, 1) * 0.8);
         }
         const step = v.speed * dt / scale;
-        v.x += v.dx * step; v.y += v.dy * step; v.s += step;
+        v.s += step;
         if (v.s >= v.total || v.age > 120) { removeVehicle(i); continue; }
+        advance(v);
+        // gira suavemente en las curvas y esquinas
+        const dh = angDiff(Math.atan2(v.dy, v.dx), v.h), maxT = 6 * dt;
+        v.h += Math.max(-maxT, Math.min(maxT, dh));
+        if (v.rot) v.rot.style.transform = `rotate(${v.h}rad)`;
+        // aparece y desaparece suavemente (por si el trayecto termina dentro de la pantalla)
+        if (v.wrap) v.wrap.style.opacity = Math.min(1, v.s * scale / 40, (v.total - v.s) * scale / 40).toFixed(2);
         v.mk.setLatLng(map.unproject(L.point(v.x, v.y), REF_Z));
       }
 
@@ -345,7 +442,7 @@
   function apply() {
     if (btn) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.style.opacity = on ? '1' : '.55'; btn.title = on ? 'Coches y taxis: activados' : 'Coches y taxis: desactivados'; }
     if (on && !running) { running = true; last = performance.now(); requestAnimationFrame(frame); }
-    if (!on) { running = false; clearAll(); }
+    if (!on) { running = false; clearAll(); if (map.setRoads) map.setRoads(false); }
   }
   if (btn) btn.onclick = function () {
     on = !on;
