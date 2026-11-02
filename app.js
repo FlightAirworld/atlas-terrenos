@@ -419,7 +419,7 @@ $('use-credit').onclick = async () => {
     showPanel(selected);
     setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉`, 'ok');
     drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house });
-    loadStats(); loadParcels();
+    loadStats(); loadParcels(); loadProduction();
   } catch (e) {
     setMsg(e.message, 'err');
     refreshCredits();
@@ -613,7 +613,7 @@ async function linkAccountOnServer() {
     } else {
       $('login').classList.add('hidden');
     }
-    loadDaily();
+    loadDaily(); loadProduction();
   } catch (e) { linkedFor = null; setLoginMsg(e.message, 'err'); }
 }
 async function onSession(session) {
@@ -624,7 +624,7 @@ async function onSession(session) {
     linkedFor = null;
     if (wasLogged) {
       saveCode(null); credits = 0; updateCreditUi(); loadDaily();   // al salir, este móvil olvida el código de la cuenta
-      myNick = null; $('name').value = ''; applyNick();
+      myNick = null; $('name').value = ''; applyNick(); prodState = null; renderLive();
     }
     updateAuthUi();
     return;
@@ -753,15 +753,51 @@ $('search-go').onclick = doSearch;
 $('search-q').onkeydown = e => { if (e.key === 'Enter') doSearch(); };
 
 // ---------- Mis terrenos y producción de créditos ----------
+// Contador en vivo: el servidor da el total acumulado y la velocidad; el navegador lo va sumando cada segundo
+// (se detiene solo cuando los terrenos llegan al tope de horas) y se re-sincroniza con el servidor cada minuto.
+let prodState = null, resyncPending = false;
+function setProd(prod) {
+  prodState = { total: prod.total || 0, rate: prod.activeRate || 0, nextCapMs: prod.nextCapMs, parcels: prod.parcels, t0: performance.now() };
+}
+function liveTotal() {
+  if (!prodState) return 0;
+  let ms = performance.now() - prodState.t0;
+  if (prodState.nextCapMs != null && ms > prodState.nextCapMs) {   // un terreno llegó al tope: pedir datos nuevos al servidor
+    ms = prodState.nextCapMs;
+    if (!resyncPending) { resyncPending = true; setTimeout(() => { resyncPending = false; loadProduction(); }, 500); }
+  }
+  return prodState.total + prodState.rate * ms / HOUR_MS;
+}
+const HOUR_MS = 3600000;
+function renderLive() {
+  const pill = $('credit-live'), show = !!(authToken && prodState && prodState.parcels);
+  const v = show ? liveTotal() : 0;
+  pill.textContent = show ? `+${v.toFixed(4)}` : '';
+  pill.title = show ? 'Créditos que están produciendo tus terrenos (aún sin recoger)' : '';
+  const live = $('mine-live');
+  if (live) live.textContent = show ? `⏳ Acumulado: ${v.toFixed(4)} créditos` : '';
+  const btn = $('mine-collect');
+  if (btn && !btn.dataset.busy) {
+    const ready = Math.floor(v + 1e-9);
+    btn.disabled = !show || ready < 1;
+    btn.textContent = ready >= 1 ? `🎟️ Recoger ${ready} ${plural(ready, 'crédito', 'créditos')}` : 'Aún no hay créditos listos';
+  }
+}
+async function loadProduction() {
+  if (!authToken) return;
+  try { setProd(await api('/api/production', { method: 'GET' })); renderLive(); } catch {}
+}
+setInterval(renderLive, 1000);
+setInterval(() => { if (authToken && !document.hidden) loadProduction(); }, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadProduction(); });
+
 function setMineMsg(text, kind = '') { const m = $('mine-msg'); m.textContent = text; m.className = 'msg ' + kind; }
 function renderMine(prod, mine) {
   const n = prod.parcels;
   $('mine-prod').textContent = n
     ? `⏱️ Tienes ${n} ${plural(n, 'terreno', 'terrenos')}: producen ${prod.perHour.toLocaleString('es-ES', { maximumFractionDigits: 4 })} créditos por hora. Se acumulan hasta ${prod.capHours} h, ¡recógelos antes de que se llene!`
     : 'Aún no tienes terrenos con producción. Reclama uno y empezará a producir créditos.';
-  const btn = $('mine-collect');
-  btn.disabled = prod.ready < 1;
-  btn.textContent = prod.ready >= 1 ? `🎟️ Recoger ${prod.ready} ${plural(prod.ready, 'crédito', 'créditos')}` : 'Aún no hay créditos listos';
+  setProd(prod); renderLive();
   $('mine-count').textContent = mine.total > mine.parcels.length ? `Mostrando los ${mine.parcels.length} más recientes de ${mine.total}.` : (mine.total ? `${mine.total} ${plural(mine.total, 'terreno', 'terrenos')} en total.` : '');
   const box = $('mine-list'); box.replaceChildren();
   mine.parcels.forEach(p => {
@@ -793,12 +829,13 @@ $('credit-pill').onclick = () => {
 };
 $('mine-collect').onclick = async () => {
   const btn = $('mine-collect');
-  btn.disabled = true;
+  btn.disabled = true; btn.dataset.busy = '1';
   try {
     const j = await api('/api/production/collect', { method: 'POST', body: {} });
     credits = j.credits; updateCreditUi();
     setMineMsg(`🎉 +${j.collected} ${plural(j.collected, 'crédito', 'créditos')}. Ahora tienes ${j.credits}.`, 'ok');
   } catch (e) { setMineMsg(e.message, 'err'); }
+  delete btn.dataset.busy;
   loadMine();
 };
 

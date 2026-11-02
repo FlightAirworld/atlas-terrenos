@@ -559,11 +559,16 @@ const HOUR_MS = 3600000;
 // Suma, por cada terreno de la cuenta, el tiempo producido desde la última recogida (o desde que se reclamó), con tope.
 async function prodCompute(db, userId, lastCollect, carry, now) {
   const r = (await db.query(
-    'SELECT COUNT(*) AS n, COALESCE(SUM(LEAST(GREATEST($2::bigint - GREATEST(created_at, $3::bigint), 0), $4::bigint)), 0) AS ms FROM parcels WHERE user_id = $1',
+    `SELECT COUNT(*) AS n,
+            COALESCE(SUM(LEAST(e, $4::bigint)), 0) AS ms,
+            COUNT(*) FILTER (WHERE e < $4::bigint) AS active,
+            MIN($4::bigint - e) FILTER (WHERE e < $4::bigint) AS next_cap
+       FROM (SELECT GREATEST($2::bigint - GREATEST(created_at, $3::bigint), 0) AS e FROM parcels WHERE user_id = $1) s`,
     [userId, now, lastCollect || 0, Math.round(PROD_CAP_HOURS * HOUR_MS)])).rows[0];
   const n = Number(r.n);
   const total = (Number(carry) || 0) + (Number(r.ms) / HOUR_MS) * PROD_RATE;
-  return { parcels: n, perHour: n * PROD_RATE, total, ready: Math.floor(total + 1e-9) };
+  // active = terrenos que aún no han llegado al tope y siguen produciendo; next_cap = ms hasta que el primero llegue al tope
+  return { parcels: n, perHour: n * PROD_RATE, total, ready: Math.floor(total + 1e-9), active: Number(r.active), nextCap: r.next_cap == null ? null : Number(r.next_cap) };
 }
 
 async function myParcels(req) {
@@ -578,7 +583,8 @@ async function productionGet(req) {
   const pack = await ensureUserPack(user);
   const p = await one('SELECT last_collect, prod_carry FROM packs WHERE code = $1', [pack.code]);
   const st = await prodCompute(pool, user.id, p && p.last_collect, p && p.prod_carry, Date.now());
-  return { parcels: st.parcels, perHour: Math.round(st.perHour * 10000) / 10000, ready: st.ready, capHours: PROD_CAP_HOURS, rate: PROD_RATE };
+  return { parcels: st.parcels, perHour: Math.round(st.perHour * 10000) / 10000, ready: st.ready, capHours: PROD_CAP_HOURS, rate: PROD_RATE,
+    total: Math.round(st.total * 1e6) / 1e6, activeRate: st.active * PROD_RATE, nextCapMs: st.nextCap };
 }
 
 async function productionCollect(req) {
