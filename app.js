@@ -8,7 +8,7 @@ let myNick = null;             // apodo fijo guardado en el servidor
 const drawn = new Map();       // id -> rectángulo
 
 // ---------- Ubicación del jugador y radio de compra ----------
-const BUY_RADIUS_M = 5000;     // solo se puede reclamar dentro de este radio (el servidor lo vuelve a comprobar)
+const BUY_RADIUS_M = 500;      // solo se puede reclamar dentro de este radio (el servidor lo vuelve a comprobar)
 let myPos = null, myAcc = null, meMarker = null, rangeCircle = null;
 let autoCentered = /[?&]t=/.test(location.search);   // si abren un enlace compartido, no lo pisamos
 
@@ -115,6 +115,7 @@ function distM(a, b) {          // distancia en metros (haversine)
 }
 const parcelCenter = p => L.latLng(p.south + cfg.size / 2, p.west + cfg.size / 2);
 const distToParcel = p => myPos ? distM(myPos, parcelCenter(p)) : Infinity;
+const fmtDist = m => m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
 const inRange = p => distToParcel(p) <= BUY_RADIUS_M;
 
 function onPos(pos) {
@@ -299,7 +300,7 @@ function showPanel(p) {
     $('range-warn').classList.toggle('hidden', ok);
     $('range-warn').textContent = !myPos
       ? '📍 Activa tu ubicación para poder reclamar terrenos.'
-      : `🚶 Está a ${(d / 1000).toFixed(1)} km de ti. Solo puedes reclamar terrenos a menos de ${BUY_RADIUS_M / 1000} km: acércate físicamente.`;
+      : `🚶 Está a ${fmtDist(d)} de ti. Solo puedes reclamar terrenos a menos de ${fmtDist(BUY_RADIUS_M)}: acércate físicamente.`;
     $('use-credit').disabled = !ok;
     $('p-price').textContent = new Intl.NumberFormat('es-ES', { style: 'currency', currency: cfg.currency }).format(cfg.price);
     $('pack-size').textContent = cfg.packSize;
@@ -395,7 +396,7 @@ $('recover-btn').onclick = async () => {
 };
 $('use-credit').onclick = async () => {
   if (!selected || selected.owner) return;
-  if (!inRange(selected)) { setMsg(`Solo puedes reclamar a menos de ${BUY_RADIUS_M / 1000} km de tu posición real`, 'err'); return; }
+  if (!inRange(selected)) { setMsg(`Solo puedes reclamar a menos de ${fmtDist(BUY_RADIUS_M)} de tu posición real`, 'err'); return; }
   let owner;
   try { owner = nameOrThrow(); } catch (e) { return; }   // nameOrThrow ya muestra el aviso
   const btn = $('use-credit');

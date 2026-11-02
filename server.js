@@ -128,14 +128,15 @@ async function adminClaimParcel({ lat, lng, owner, avatar, country }) {
   };
 }
 // ---------- Radio de compra: hay que estar físicamente cerca ----------
-const BUY_RADIUS_M = Number(process.env.BUY_RADIUS_M) || 5000;
-const MAX_GPS_ACCURACY_M = 2000;   // ubicaciones por IP/wifi muy imprecisas se rechazan
+const BUY_RADIUS_M = Number(process.env.BUY_RADIUS_M) || 500;
+const MAX_GPS_ACCURACY_M = 150;    // ubicaciones por IP/wifi muy imprecisas se rechazan
 function distMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000, rad = Math.PI / 180;
   const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
+const fmtDist = m => m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
 function assertNearby(p, userLat, userLng, accuracy) {
   const la = Number(userLat), ln = Number(userLng);
   if (userLat == null || userLng == null || !Number.isFinite(la) || !Number.isFinite(ln) || Math.abs(la) > 90 || Math.abs(ln) > 180)
@@ -144,13 +145,13 @@ function assertNearby(p, userLat, userLng, accuracy) {
     throw new HttpError(400, 'Tu ubicación no es lo bastante precisa. Activa el GPS e inténtalo de nuevo');
   const d = distMeters(la, ln, p.south + SIZE / 2, p.west + SIZE / 2);
   if (d > BUY_RADIUS_M)
-    throw new HttpError(403, `Este terreno está a ${(d / 1000).toFixed(1)} km. Solo puedes reclamar a menos de ${BUY_RADIUS_M / 1000} km de tu posición`);
+    throw new HttpError(403, `Este terreno está a ${fmtDist(d)}. Solo puedes reclamar a menos de ${fmtDist(BUY_RADIUS_M)} de tu posición`);
 }
 
 
 // ---------- Anti-teletransporte: velocidad imposible entre dos reclamos ----------
 const MAX_SPEED_KMH = Number(process.env.MAX_SPEED_KMH) || 1000;   // ~avión comercial
-const FREE_JUMP_M = 1000;                                          // saltos pequeños (ruido del GPS) siempre valen
+const FREE_JUMP_M = 200;                                           // saltos pequeños (ruido del GPS) siempre valen
 let lastPosReady = null;
 function ensureLastPos() {
   if (!lastPosReady) lastPosReady = run('CREATE TABLE IF NOT EXISTS last_claim_pos (key text PRIMARY KEY, lat double precision, lng double precision, at bigint)')
