@@ -123,6 +123,7 @@
     <button id="vehicles-btn" type="button" title="Coches y taxis: activados" aria-label="Activar o desactivar los coches y taxis" aria-pressed="true">🚓</button>
     <button id="weather-btn" type="button" title="Tormentas: activadas" aria-label="Activar o desactivar las tormentas" aria-pressed="true">🌧️</button>
     <button id="account-btn" type="button" class="hidden" title="Entrar" aria-label="Entrar">👤</button>
+    <button id="install-btn" type="button" class="hidden" title="Instalar la app" aria-label="Instalar la app">📲</button>
   </div>
 
   <button id="credit-pill" type="button" title="Mis terrenos y créditos" aria-label="Mis créditos">🌎 🎟️ <span id="credit-count">0</span> <small id="credit-live" style="font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums"></small></button>
@@ -274,6 +275,19 @@
     </div>
   </div>
 
+  <div id="install-help" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="install-title">
+    <div class="modal-card">
+      <button id="install-close" class="close" type="button" aria-label="Cerrar">×</button>
+      <h2 id="install-title">📲 Instalar la app</h2>
+      <p>En iPhone o iPad:</p>
+      <ol>
+        <li>Toca el botón <b>Compartir</b> (el cuadrado con la flecha hacia arriba) de Safari.</li>
+        <li>Elige <b>«Añadir a pantalla de inicio»</b>.</li>
+        <li>Pulsa <b>Añadir</b>. ¡Listo! Se abrirá a pantalla completa, como una app.</li>
+      </ol>
+    </div>
+  </div>
+
   <div id="welcome" class="hidden" role="status">
     <span>👆 Toca una parcela del mapa y hazla tuya</span>
     <button id="welcome-loc" type="button">📍 Ir a mi ubicación</button>
@@ -302,6 +316,7 @@
   <script src="people.js"></script>
   <script src="vehicles.js"></script>
   <script src="online.js"></script>
+  <script src="install.js"></script>
 <footer style="text-align:center; font-size:13px; padding:12px;">
   <a href="/privacidad.html">Política de Privacidad</a> ·
   <a href="/terminos.html">Condiciones del Servicio</a> ·
