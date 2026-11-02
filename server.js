@@ -555,7 +555,7 @@ async function adminStats(req) {
 }
 
 // ---------- Mis terrenos y producción de créditos ----------
-const PROD_RATE = Math.max(0, Number(process.env.PROD_RATE || 0.02));          // créditos por terreno y hora
+const PROD_RATE = Math.max(0, Number(process.env.PROD_RATE || 0.002));          // créditos por terreno y hora
 const PROD_CAP_HOURS = Math.max(1, Number(process.env.PROD_CAP_HOURS || 24));  // horas máximas que se acumulan sin recoger
 const HOUR_MS = 3600000;
 
@@ -581,7 +581,7 @@ async function productionGet(req) {
   const pack = await ensureUserPack(user);
   const p = await one('SELECT last_collect, prod_carry FROM packs WHERE code = $1', [pack.code]);
   const st = await prodCompute(pool, user.id, p && p.last_collect, p && p.prod_carry, Date.now());
-  return { parcels: st.parcels, perHour: Math.round(st.perHour * 100) / 100, ready: st.ready, capHours: PROD_CAP_HOURS, rate: PROD_RATE };
+  return { parcels: st.parcels, perHour: Math.round(st.perHour * 1e6) / 1e6, ready: st.ready, capHours: PROD_CAP_HOURS, rate: PROD_RATE };
 }
 
 async function productionCollect(req) {
