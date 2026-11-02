@@ -213,5 +213,6 @@
   };
   // Ahorra batería con la pestaña oculta
   document.addEventListener('visibilitychange', () => { if (document.hidden) { running = false; } else if (on) { running = false; start(); } });
+  window.weatherIntensity = () => (on ? intensity : 0);
   apply();
 })();
