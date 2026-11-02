@@ -147,6 +147,36 @@ function assertNearby(p, userLat, userLng, accuracy) {
     throw new HttpError(403, `Este terreno está a ${(d / 1000).toFixed(1)} km. Solo puedes reclamar a menos de ${BUY_RADIUS_M / 1000} km de tu posición`);
 }
 
+
+// ---------- Anti-teletransporte: velocidad imposible entre dos reclamos ----------
+const MAX_SPEED_KMH = Number(process.env.MAX_SPEED_KMH) || 1000;   // ~avión comercial
+const FREE_JUMP_M = 1000;                                          // saltos pequeños (ruido del GPS) siempre valen
+let lastPosReady = null;
+function ensureLastPos() {
+  if (!lastPosReady) lastPosReady = run('CREATE TABLE IF NOT EXISTS last_claim_pos (key text PRIMARY KEY, lat double precision, lng double precision, at bigint)')
+    .catch(e => { lastPosReady = null; throw e; });
+  return lastPosReady;
+}
+async function checkTeleport(key, la, ln, now) {
+  if (!key) return;
+  await ensureLastPos();
+  const prev = await one('SELECT lat, lng, at FROM last_claim_pos WHERE key = $1', [key]);
+  if (!prev) return;
+  const d = distMeters(prev.lat, prev.lng, la, ln);
+  if (d <= FREE_JUMP_M) return;
+  const hours = Math.max((now - Number(prev.at)) / 3.6e6, 1 / 3600);
+  const kmh = d / 1000 / hours;
+  if (kmh > MAX_SPEED_KMH)
+    throw new HttpError(429, `Tu ubicación ha saltado ${(d / 1000).toFixed(0)} km demasiado rápido. Espera un poco o desactiva apps de GPS falso`);
+}
+async function saveLastPos(key, la, ln, now) {
+  if (!key) return;
+  try {
+    await ensureLastPos();
+    await run('INSERT INTO last_claim_pos (key, lat, lng, at) VALUES ($1,$2,$3,$4) ON CONFLICT (key) DO UPDATE SET lat = EXCLUDED.lat, lng = EXCLUDED.lng, at = EXCLUDED.at', [key, la, ln, now]);
+  } catch (e) { console.error('No se pudo guardar la última posición:', e.message); }
+}
+
 // ---------- Utilidades de parcelas ----------
 function parcelFromLatLng(lat, lng) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat >= 90 || lng < -180 || lng >= 180) return null;
@@ -374,6 +404,8 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, userLat,
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
   assertNearby(p, userLat, userLng, accuracy);   // validación real: la del navegador se puede saltar
   const user = await userFrom(req);
+  const posKey = user ? 'u:' + user.id : (code ? 'c:' + code : null);
+  await checkTeleport(posKey, Number(userLat), Number(userLng), Date.now());
   const prof = user && await getProfile(user.id);
   const name = prof ? prof.nickname : cleanName(owner);   // con cuenta, siempre sale el apodo fijo
   if (!name) throw new HttpError(400, 'Pon un nombre de 2 a 30 caracteres');
@@ -400,6 +432,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, userLat,
       'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
       [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), cleanCountry(country), user ? user.id : null]);
     await client.query('COMMIT');
+    saveLastPos(posKey, Number(userLat), Number(userLng), now);   // solo se recuerda si el reclamo salió bien
     return { ok: true, parcel: p.id, owner: name, credits: r.rows[0].credits };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
