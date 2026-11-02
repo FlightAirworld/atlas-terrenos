@@ -129,7 +129,7 @@ async function adminClaimParcel({ lat, lng, owner, avatar, country }) {
 }
 // ---------- Radio de compra: hay que estar físicamente cerca ----------
 const BUY_RADIUS_M = Number(process.env.BUY_RADIUS_M) || 500;
-const MAX_GPS_ACCURACY_M = 150;    // ubicaciones por IP/wifi muy imprecisas se rechazan
+const MAX_GPS_ACCURACY_M = Number(process.env.MAX_GPS_ACCURACY_M) || 1000;   // ubicaciones por IP/wifi muy imprecisas se rechazan
 function distMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000, rad = Math.PI / 180;
   const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
@@ -142,7 +142,7 @@ function assertNearby(p, userLat, userLng, accuracy) {
   if (userLat == null || userLng == null || !Number.isFinite(la) || !Number.isFinite(ln) || Math.abs(la) > 90 || Math.abs(ln) > 180)
     throw new HttpError(400, 'Activa tu ubicación para reclamar terrenos');
   if (Number.isFinite(Number(accuracy)) && Number(accuracy) > MAX_GPS_ACCURACY_M)
-    throw new HttpError(400, 'Tu ubicación no es lo bastante precisa. Activa el GPS e inténtalo de nuevo');
+    throw new HttpError(400, `Tu ubicación no es lo bastante precisa (±${Math.round(Number(accuracy))} m). Activa el GPS, espera unos segundos e inténtalo de nuevo`);
   const d = distMeters(la, ln, p.south + SIZE / 2, p.west + SIZE / 2);
   if (d > BUY_RADIUS_M)
     throw new HttpError(403, `Este terreno está a ${fmtDist(d)}. Solo puedes reclamar a menos de ${fmtDist(BUY_RADIUS_M)} de tu posición`);
