@@ -42,6 +42,8 @@
     header.bar .stats { flex:0 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:12px; }
     header.bar button { flex:0 0 auto !important; width:36px !important; height:36px !important; min-width:0 !important; padding:0 !important; margin:0 !important; font-size:20px !important; line-height:1 !important; display:inline-flex !important; align-items:center !important; justify-content:center !important; border-radius:10px !important; }
     header.bar button.hidden { display:none !important; }
+    /* Algunos estilos antiguos dibujan el icono con ::before; así no se duplica */
+    header.bar button::before, header.bar button::after { content:none !important; display:none !important; }
     @keyframes dailypulse { 0%,100% {transform:scale(1)} 50% {transform:scale(1.25)} }
 
     /* Vídeo de introducción */
