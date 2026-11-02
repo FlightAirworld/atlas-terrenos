@@ -156,10 +156,155 @@ function flushOwned() {
 // El volumen 3D (una sola capa para todas) se mantiene siempre.
 const MAX_DETAIL = 40;
 let detailQueued = false;
+// ---------- Casas recortadas por las calles ----------
+// Las calles reales (teselas de OpenFreeMap) se restan de cada parcela: la casa queda cortada por la carretera.
+// - Volumen 3D: se sustituye el polígono de la parcela por "parcela - calles" (turf).
+// - Foto: se borra la franja de la calle en un canvas y se usa ese resultado como imagen de la parcela.
+// Solo se calcula para parcelas que se ven enteras y cerca del centro (ahí las teselas tienen todo su detalle).
+const ROAD_WIDTH = { motorway: 16, trunk: 14, primary: 12, secondary: 10, tertiary: 9, minor: 7 };   // ancho total, en metros
+const roadCut = new Map();       // id -> { road: Feature|null (zona de calle), rest: Feature|null (parcela sin calle) }
+const CUT_MAX_D = 0.004;         // grados (~400 m) alrededor del centro
+const CUT_PER_PASS = 6;          // parcelas por pasada (turf pesa un poco)
+let cutQueued = false;
+
+function queueCuts() {
+  if (!glReady || cutQueued) return;
+  cutQueued = true;
+  setTimeout(() => { cutQueued = false; try { runCuts(); } catch (e) {} }, 200);
+}
+window.queueCuts = queueCuts;     // index.html la llama cuando termina de cargar turf
+gl.on('moveend', queueCuts);
+gl.on('idle', queueCuts);
+
+function runCuts() {
+  if (!glReady || !cfg || typeof turf === 'undefined') return;     // sin turf: las casas se ven enteras, como antes
+  const on = map.getZoom() >= 16 && drawn.size > 0;
+  if (map.setRoads) map.setRoads(on, 'h');                          // enciende la capa de calles solo mientras hace falta
+  if (!on || !gl.areTilesLoaded()) return;                          // 'idle' volverá a llamar cuando haya teselas
+  const c = gl.getCenter();
+  const todo = [...drawn.values()].filter(ex => !roadCut.has(ex.p.id)).map(ex => {
+    const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y);
+    ex.cd = Math.hypot((s + n) / 2 - c.lat, (w + e) / 2 - c.lng); return ex;
+  }).filter(ex => ex.cd < CUT_MAX_D).sort((x, y) => x.cd - y.cd);
+  let done = 0;
+  for (const ex of todo) {
+    if (done >= CUT_PER_PASS) { queueCuts(); break; }
+    const r = roadAreaFor(ex.p);
+    if (r === undefined) continue;                                  // todavía no se ve entera
+    done++;
+    roadCut.set(ex.p.id, r);
+    if (r.road) applyCut(ex, r);
+  }
+}
+
+function lineParts(coords, box) {
+  let r; try { r = turf.bboxClip(turf.lineString(coords), box); } catch (e) { return []; }
+  const g = r.geometry;
+  return (g.type === 'LineString' ? [g.coordinates] : g.coordinates).filter(l => l.length >= 2);
+}
+
+// Devuelve { road, rest } para la parcela, o undefined si aún no se puede calcular
+function roadAreaFor(p) {
+  const [[s, w], [n, e]] = boundsOf(p.x, p.y);
+  const pts = [[w, s], [e, s], [e, n], [w, n]].map(q => gl.project(q));
+  const cv = gl.getCanvas(), W = cv.clientWidth, H = cv.clientHeight;
+  const xs = pts.map(q => q.x), ys = pts.map(q => q.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  if (!(x0 >= 0 && y0 >= 0 && x1 <= W && y1 <= H)) return undefined;
+  const feats = gl.queryRenderedFeatures([[x0, y0], [x1, y1]], { layers: ['roads-q'] });
+  const none = { road: null, rest: null };
+  if (!feats.length) return none;
+  const pad = cfg.size * 0.3, box = [w - pad, s - pad, e + pad, n + pad];
+  let area = null;
+  for (const f of feats) {
+    const g = f.geometry; if (!g) continue;
+    const lines = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+    const half = (ROAD_WIDTH[f.properties && f.properties.class] || 7) / 2;
+    for (const l of lines) for (const part of lineParts(l, box)) {
+      try {
+        const bf = turf.buffer(turf.lineString(part), half, { units: 'meters', steps: 2 });
+        if (bf) area = area ? turf.union(area, bf) : bf;
+      } catch (err) {}
+    }
+  }
+  if (!area) return none;
+  try {
+    const parcel = turf.polygon([ringOf(p.x, p.y)]);
+    const rest = turf.difference(parcel, area);
+    if (!rest) return none;                                          // la calle cubriría todo: se deja la casa entera
+    if (turf.area(rest) / turf.area(parcel) > 0.995) return none;    // la calle no toca realmente la parcela
+    return { road: area, rest };
+  } catch (err) { return none; }
+}
+
+function applyCut(ex, cut) {
+  const f = ownedFeatures.get(ex.p.id);
+  if (f && cut.rest) { f.geometry = cut.rest.geometry; flushOwned(); }   // volumen 3D (y borde) con la forma recortada
+  refreshPhoto(ex);                                                      // foto con la calle borrada
+}
+
+function loadImg(url) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+}
+// Foto de la casa con la zona de calle transparente → URL de blob
+async function clippedPhoto(url, p, road) {
+  const img = await loadImg(url);
+  const W = Math.min(img.naturalWidth || 256, 512), H = Math.min(img.naturalHeight || 256, 512);
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.drawImage(img, 0, 0, W, H);
+  ctx.globalCompositeOperation = 'destination-out';
+  const [[s, w], [n, e]] = boundsOf(p.x, p.y);
+  const polys = road.geometry.type === 'Polygon' ? [road.geometry.coordinates] : road.geometry.coordinates;
+  ctx.beginPath();
+  for (const poly of polys) for (const ring of poly) {
+    ring.forEach(([lng, lat], i) => {
+      const x = (lng - w) / (e - w) * W, y = (n - lat) / (n - s) * H;   // la imagen va de (oeste, norte) a (este, sur)
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    });
+    ctx.closePath();
+  }
+  ctx.fill('evenodd');
+  const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+  if (!blob) throw new Error('canvas');
+  return URL.createObjectURL(blob);
+}
+function freeBlob(ex) {
+  if (!ex.blob) return;
+  const b = ex.blob; ex.blob = null;
+  setTimeout(() => URL.revokeObjectURL(b), 3000);
+}
+// Pone en la parcela la foto que toca: recortada si tiene calle, la normal si no
+async function refreshPhoto(ex) {
+  if (!ex.hasDetail) return;
+  const tok = ex.tok = (ex.tok || 0) + 1, url = ex.url, cut = roadCut.get(ex.p.id);
+  let u = url, blob = null;
+  if (cut && cut.road) { try { blob = await clippedPhoto(url, ex.p, cut.road); u = blob; } catch (e) {} }
+  const src = ex.hasDetail && tok === ex.tok && url === ex.url && gl.getSource(ex.srcId);
+  if (!src) { if (blob) URL.revokeObjectURL(blob); return; }
+  freeBlob(ex); ex.blob = blob;
+  src.updateImage({ url: u });
+}
+
 function addDetail(ex) {
-  if (ex.hasDetail) return;
+  ex.want = true;
+  if (ex.hasDetail || ex.adding) return;
+  const cut = roadCut.get(ex.p.id);
+  if (!(cut && cut.road)) return mountDetail(ex, ex.url, null);
+  // Con calle: primero se prepara la foto recortada y luego se monta (así no parpadea la casa entera)
+  ex.adding = true;
+  const used = ex.url;
+  clippedPhoto(used, ex.p, cut.road).catch(() => null).then(u => {
+    ex.adding = false;
+    if (!ex.want || ex.hasDetail) { if (u) URL.revokeObjectURL(u); return; }
+    if (used !== ex.url) { if (u) URL.revokeObjectURL(u); return addDetail(ex); }   // cambió la casa mientras tanto
+    mountDetail(ex, u || ex.url, u);
+  });
+}
+function mountDetail(ex, imgUrl, blob) {
   const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y);
-  gl.addSource(ex.srcId, { type: 'image', url: ex.url, coordinates: [[w, n], [e, n], [e, s], [w, s]] });
+  ex.blob = blob;
+  gl.addSource(ex.srcId, { type: 'image', url: imgUrl, coordinates: [[w, n], [e, n], [e, s], [w, s]] });
   gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
   const pill = document.createElement('span');
   pill.className = 'owner-pill';
@@ -171,10 +316,13 @@ function addDetail(ex) {
   ex.hasDetail = true;
 }
 function dropDetail(ex) {
+  ex.want = false;
   if (!ex.hasDetail) return;
+  ex.tok = (ex.tok || 0) + 1;
   if (ex.label) { ex.label.remove(); ex.label = null; }
   if (gl.getLayer(ex.srcId)) gl.removeLayer(ex.srcId);
   if (gl.getSource(ex.srcId)) gl.removeSource(ex.srcId);
+  freeBlob(ex);
   ex.hasDetail = false;
 }
 function updateDetail() {
@@ -199,7 +347,7 @@ function drawOwned(p) {
   if (ex) {   // ya dibujada: solo actualiza foto y altura si el dueño cambió la casa
     if (ex.url !== url) {
       ex.url = url;
-      const src = ex.hasDetail && gl.getSource(ex.srcId); if (src) src.updateImage({ url });
+      refreshPhoto(ex);
       const f = ownedFeatures.get(p.id); if (f) { f.properties.h = heightOf(url); flushOwned(); }
     }
     return;
@@ -215,6 +363,7 @@ function drawOwned(p) {
   drawn.set(p.id, { p, srcId: 'img-' + p.id, url, label: null, hasDetail: false });
   flushOwned();
   updateDetail();
+  queueCuts();
 }
 
 // Capas del mapa que dependen de que el estilo esté cargado
