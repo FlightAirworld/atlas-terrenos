@@ -127,6 +127,26 @@ async function adminClaimParcel({ lat, lng, owner, avatar, country }) {
     owner: name
   };
 }
+// ---------- Radio de compra: hay que estar físicamente cerca ----------
+const BUY_RADIUS_M = Number(process.env.BUY_RADIUS_M) || 5000;
+const MAX_GPS_ACCURACY_M = 2000;   // ubicaciones por IP/wifi muy imprecisas se rechazan
+function distMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000, rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function assertNearby(p, userLat, userLng, accuracy) {
+  const la = Number(userLat), ln = Number(userLng);
+  if (userLat == null || userLng == null || !Number.isFinite(la) || !Number.isFinite(ln) || Math.abs(la) > 90 || Math.abs(ln) > 180)
+    throw new HttpError(400, 'Activa tu ubicación para reclamar terrenos');
+  if (Number.isFinite(Number(accuracy)) && Number(accuracy) > MAX_GPS_ACCURACY_M)
+    throw new HttpError(400, 'Tu ubicación no es lo bastante precisa. Activa el GPS e inténtalo de nuevo');
+  const d = distMeters(la, ln, p.south + SIZE / 2, p.west + SIZE / 2);
+  if (d > BUY_RADIUS_M)
+    throw new HttpError(403, `Este terreno está a ${(d / 1000).toFixed(1)} km. Solo puedes reclamar a menos de ${BUY_RADIUS_M / 1000} km de tu posición`);
+}
+
 // ---------- Utilidades de parcelas ----------
 function parcelFromLatLng(lat, lng) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat >= 90 || lng < -180 || lng >= 180) return null;
@@ -348,10 +368,11 @@ async function capturePackOrder(req, orderId) {
   return { ok: true, code, credits };
 }
 
-async function claimWithCredit(req, { lat, lng, owner, avatar, country }) {
+async function claimWithCredit(req, { lat, lng, owner, avatar, country, userLat, userLng, accuracy }) {
   const code = packCodeFrom(req);
   const p = parcelFromLatLng(Number(lat), Number(lng));
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
+  assertNearby(p, userLat, userLng, accuracy);   // validación real: la del navegador se puede saltar
   const user = await userFrom(req);
   const prof = user && await getProfile(user.id);
   const name = prof ? prof.nickname : cleanName(owner);   // con cuenta, siempre sale el apodo fijo

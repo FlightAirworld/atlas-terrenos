@@ -7,6 +7,11 @@ let sb = null, authToken = null, authUser = null, linkedFor = null;   // sesión
 let myNick = null;             // apodo fijo guardado en el servidor
 const drawn = new Map();       // id -> rectángulo
 
+// ---------- Ubicación del jugador y radio de compra ----------
+const BUY_RADIUS_M = 5000;     // solo se puede reclamar dentro de este radio (el servidor lo vuelve a comprobar)
+let myPos = null, myAcc = null, meMarker = null, rangeCircle = null;
+let autoCentered = /[?&]t=/.test(location.search);   // si abren un enlace compartido, no lo pisamos
+
 const map_ = L.map('map', { worldCopyJump: true, minZoom: 2 }).setView([36.1408, -5.3536], 17); // Gibraltar por defecto
 map = map_;
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
@@ -100,6 +105,45 @@ map.on('moveend', loadParcels);
 
 function syncLabels() { map.getContainer().classList.toggle('labels-off', map.getZoom() < 17); }
 map.on('zoomend', syncLabels); syncLabels();
+
+
+function distM(a, b) {          // distancia en metros (haversine)
+  const R = 6371000, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const parcelCenter = p => L.latLng(p.south + cfg.size / 2, p.west + cfg.size / 2);
+const distToParcel = p => myPos ? distM(myPos, parcelCenter(p)) : Infinity;
+const inRange = p => distToParcel(p) <= BUY_RADIUS_M;
+
+function onPos(pos) {
+  const { latitude, longitude, accuracy } = pos.coords;
+  myPos = L.latLng(latitude, longitude);
+  myAcc = accuracy;
+  if (!meMarker) {
+    rangeCircle = L.circle(myPos, { radius: BUY_RADIUS_M, className: 'buy-range', interactive: false }).addTo(map);
+    meMarker = L.circleMarker(myPos, { radius: 8, color: '#fff', weight: 3, fillColor: '#1d72f3', fillOpacity: 1, interactive: false }).addTo(map);
+  } else {
+    rangeCircle.setLatLng(myPos);
+    meMarker.setLatLng(myPos);
+  }
+  if (!autoCentered && cfg) { autoCentered = true; map.setView(myPos, 17); }   // al entrar: directo a tu ubicación
+  if (selected) showPanel(selected);                                          // refresca si ya puedes/no puedes comprar
+}
+function onPosError(err) {
+  myPos = null;
+  if (rangeCircle) { rangeCircle.remove(); meMarker.remove(); rangeCircle = meMarker = null; }
+  if (selected) showPanel(selected);
+  const msg = err && err.code === 1
+    ? 'Sin permiso de ubicación: puedes mirar el mapa, pero para reclamar terrenos tienes que activarla 📍'
+    : 'No se pudo obtener tu ubicación 📍';
+  if (!autoCentered) setMsg(msg, 'err');
+}
+function startTracking() {
+  if (!navigator.geolocation) return onPosError({ code: 0 });
+  navigator.geolocation.watchPosition(onPos, onPosError, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+}
 
 // ---------- Selección de parcela ----------
 async function selectAt(latlng) {
@@ -251,6 +295,12 @@ function showPanel(p) {
     $('p-avatar').textContent = p.avatar || '';
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
   } else {
+    const ok = inRange(p), d = distToParcel(p);
+    $('range-warn').classList.toggle('hidden', ok);
+    $('range-warn').textContent = !myPos
+      ? '📍 Activa tu ubicación para poder reclamar terrenos.'
+      : `🚶 Está a ${(d / 1000).toFixed(1)} km de ti. Solo puedes reclamar terrenos a menos de ${BUY_RADIUS_M / 1000} km: acércate físicamente.`;
+    $('use-credit').disabled = !ok;
     $('p-price').textContent = new Intl.NumberFormat('es-ES', { style: 'currency', currency: cfg.currency }).format(cfg.price);
     $('pack-size').textContent = cfg.packSize;
   }
@@ -345,6 +395,7 @@ $('recover-btn').onclick = async () => {
 };
 $('use-credit').onclick = async () => {
   if (!selected || selected.owner) return;
+  if (!inRange(selected)) { setMsg(`Solo puedes reclamar a menos de ${BUY_RADIUS_M / 1000} km de tu posición real`, 'err'); return; }
   let owner;
   try { owner = nameOrThrow(); } catch (e) { return; }   // nameOrThrow ya muestra el aviso
   const btn = $('use-credit');
@@ -353,7 +404,8 @@ $('use-credit').onclick = async () => {
     const r = await fetch('/api/claim', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + packCode, ...authHeaders() },
-      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar, country })
+      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar, country,
+        userLat: myPos && myPos.lat, userLng: myPos && myPos.lng, accuracy: myAcc })
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'No se pudo reclamar');
@@ -489,8 +541,9 @@ $('rank-btn').onclick = () => { loadStats(); $('rank').classList.remove('hidden'
 $('rank-close').onclick = () => $('rank').classList.add('hidden');
 $('locate').onclick = () => {
   if (!navigator.geolocation) return alert('Tu navegador no permite geolocalización');
+  if (myPos) { map.flyTo(myPos, 18); return; }
   navigator.geolocation.getCurrentPosition(
-    pos => { const ll = L.latLng(pos.coords.latitude, pos.coords.longitude); map.flyTo(ll, 18); map.once('moveend', () => selectAt(ll)); },
+    pos => { onPos(pos); map.flyTo(myPos, 18); },
     () => alert('No se pudo obtener tu ubicación. Revisa los permisos del navegador.'),
     { enableHighAccuracy: true, timeout: 10000 });
 };
@@ -777,6 +830,7 @@ $('mine-collect').onclick = async () => {
   loadStats();
   loadParcels();
   openSharedParcel();
+  startTracking();   // pide permiso y centra el mapa en tu ubicación
 })();
 
 
