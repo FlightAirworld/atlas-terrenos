@@ -314,6 +314,7 @@ function updateCreditUi() {
   $('buy-box').classList.toggle('hidden', has);
   $('credits-left').textContent = credits;
   $('my-code').textContent = packCode || '';
+  const cc = $('credit-count'); if (cc) cc.textContent = credits;
 }
 async function fetchPack(code) {
   const r = await fetch('/api/pack', { headers: { Authorization: 'Bearer ' + code } });
@@ -728,6 +729,10 @@ async function loadMine() {
 }
 $('mine-btn').onclick = () => { setMineMsg(''); $('mine').classList.remove('hidden'); loadMine(); };
 $('mine-close').onclick = () => $('mine').classList.add('hidden');
+$('credit-pill').onclick = () => {
+  if (authToken) { setMineMsg(''); $('mine').classList.remove('hidden'); loadMine(); }
+  else if (cfg && cfg.auth && cfg.auth.enabled) openLogin('Entra para guardar tus terrenos y créditos 🎟️');
+};
 $('mine-collect').onclick = async () => {
   const btn = $('mine-collect');
   btn.disabled = true;

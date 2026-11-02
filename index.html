@@ -36,14 +36,17 @@
       box-shadow:0 2px 8px rgba(0,0,0,.3);
     }
     #mine-btn.hidden { display:none !important; }
-    /* Barra superior compacta: una sola fila con botones de solo icono */
-    header.bar { display:flex !important; flex-wrap:nowrap !important; align-items:center !important; gap:5px !important; padding:6px 8px !important; }
-    header.bar h1 { font-size:13px !important; line-height:1.2 !important; margin:0 !important; flex:1 1 auto !important; min-width:0 !important; white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important; }
-    header.bar .stats { flex:0 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:12px; }
-    header.bar button { flex:0 0 auto !important; width:36px !important; height:36px !important; min-width:0 !important; padding:0 !important; margin:0 !important; font-size:20px !important; line-height:1 !important; display:inline-flex !important; align-items:center !important; justify-content:center !important; border-radius:10px !important; }
-    header.bar button.hidden { display:none !important; }
-    /* Algunos estilos antiguos dibujan el icono con ::before; así no se duplica */
-    header.bar button::before, header.bar button::after { content:none !important; display:none !important; }
+    /* Controles flotantes sobre el mapa (sin barra superior) */
+    #map-controls { position:fixed; top:12px; right:12px; z-index:1000; display:flex; flex-direction:column; gap:10px; }
+    #map-controls button, #credit-pill {
+      border:1px solid var(--line); background:var(--card); color:var(--fg);
+      box-shadow:0 2px 8px rgba(0,0,0,.3); margin:0 !important; cursor:pointer; line-height:1 !important;
+      display:inline-flex !important; align-items:center; justify-content:center;
+    }
+    #map-controls button { width:50px !important; height:50px !important; min-width:0 !important; padding:0 !important; border-radius:50% !important; font-size:23px !important; }
+    #map-controls button.hidden { display:none !important; }
+    #credit-pill { position:fixed; top:12px; left:60px; z-index:1000; height:40px !important; padding:0 14px !important; border-radius:999px !important; font-size:16px !important; font-weight:700; gap:6px; }
+    #map-controls button::before, #map-controls button::after, #credit-pill::before, #credit-pill::after { content:none !important; display:none !important; }
     @keyframes dailypulse { 0%,100% {transform:scale(1)} 50% {transform:scale(1.25)} }
 
     /* Vídeo de introducción */
@@ -86,23 +89,18 @@
 <body>
   <div id="map" aria-label="Mapa mundial de terrenos"></div>
 
-  <header class="bar">
-    <h1>🌎 Redecora El Mundo</h1>
+  <span id="stats" class="stats" style="display:none" aria-live="polite"></span>
 
-    <span id="stats" class="stats" aria-live="polite">
-      Cargando estadísticas…
-    </span>
-
+  <div id="map-controls">
     <button id="locate" type="button" title="Ir a mi ubicación" aria-label="Ir a mi ubicación">📍</button>
-
-    <button id="account-btn" type="button" class="hidden" title="Entrar" aria-label="Entrar">👤</button>
-
     <button id="search-btn" type="button" title="Buscar un lugar" aria-label="Buscar un lugar">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
     </button>
-
     <button id="rank-btn" type="button" title="Ranking" aria-label="Ranking">🏆</button>
-  </header>
+    <button id="account-btn" type="button" class="hidden" title="Entrar" aria-label="Entrar">👤</button>
+  </div>
+
+  <button id="credit-pill" type="button" title="Mis terrenos y créditos" aria-label="Mis créditos">🌎 🎟️ <span id="credit-count">0</span></button>
 
   <div id="hint" class="hint">
     🌎 Explora el mapa y acerca el zoom para descubrir terrenos.
