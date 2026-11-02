@@ -19,10 +19,6 @@ const MAP_STYLE = {
       tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
       attribution: 'Imágenes © Esri, Maxar, Earthstar Geographics'
     },
-    labels: {
-      type: 'raster', tileSize: 256, maxzoom: 19,
-      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}']
-    },
     dem: {
       type: 'raster-dem', tileSize: 256, maxzoom: 15, encoding: 'terrarium',
       tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
@@ -30,17 +26,17 @@ const MAP_STYLE = {
     }
   },
   layers: [
-    { id: 'sat', type: 'raster', source: 'sat' },
-    { id: 'labels', type: 'raster', source: 'labels', paint: { 'raster-opacity': 0.9 } }
-  ],
-  terrain: { source: 'dem', exaggeration: 1 }
+    { id: 'sat', type: 'raster', source: 'sat' }
+  ]
+  // El relieve (source 'dem') queda apagado: se activa con el botón de montaña del mapa
 };
 try {
   gl = new maplibregl.Map({
     container: 'map', style: MAP_STYLE,
-    center: [-5.3536, 36.1408], zoom: 16, pitch: 55, bearing: 0,   // Gibraltar por defecto
-    minZoom: 1, maxZoom: 19.5, maxPitch: 75,
-    canvasContextAttributes: { antialias: true }
+    center: [-5.3536, 36.1408], zoom: 1.6, pitch: 0, bearing: 0,    // empieza visto desde el espacio
+    minZoom: 1, maxZoom: 19.5, maxPitch: 60,
+    pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),          // menos píxeles = más fluidez en móvil
+    fadeDuration: 0
   });
 } catch (e) {
   $('map').textContent = 'Tu dispositivo no puede mostrar el mapa 3D (WebGL no disponible).';
@@ -49,9 +45,17 @@ try {
 map = createCompatMap(gl);     // API tipo Leaflet usada por el resto del juego (ver mapshim.js)
 gl.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
 gl.addControl(new maplibregl.GlobeControl(), 'bottom-right');
-gl.addControl(new maplibregl.TerrainControl({ source: 'dem', exaggeration: 1 }), 'bottom-right');
+gl.addControl(new maplibregl.TerrainControl({ source: 'dem', exaggeration: 1 }), 'bottom-right');   // relieve: opcional
 
 let glReady = false;
+// Entrada cinematográfica: del espacio a Gibraltar (inclinado, para ver el 3D)
+let flightRequested = false;
+function introFlight() {
+  if (!glReady) { flightRequested = true; return; }
+  gl.flyTo({ center: [-5.3536, 36.1408], zoom: 16, pitch: 45, bearing: -15, duration: 7000, essential: true });
+}
+window.introFlight = introFlight;
+function introAlreadySeen() { try { return localStorage.getItem('introSeen2') === '1'; } catch (e) { return false; } }
 const pendingParcels = new Map();
 const ownedFeatures = new Map();      // id -> Feature GeoJSON (volumen de la parcela)
 let ownedDirty = false;
@@ -127,6 +131,46 @@ function flushOwned() {
   });
 }
 
+// Para ir fluido, la foto del suelo y la etiqueta con el nombre solo existen en las parcelas más cercanas al centro.
+// El volumen 3D (una sola capa para todas) se mantiene siempre.
+const MAX_DETAIL = 40;
+let detailQueued = false;
+function addDetail(ex) {
+  if (ex.hasDetail) return;
+  const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y);
+  gl.addSource(ex.srcId, { type: 'image', url: ex.url, coordinates: [[w, n], [e, n], [e, s], [w, s]] });
+  gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
+  const pill = document.createElement('span');
+  pill.className = 'owner-pill';
+  pill.textContent = labelOf(ex.p);          // textContent: sin HTML
+  ex.label = L.marker([s, (w + e) / 2], {
+    icon: L.divIcon({ className: 'owner-label', html: pill, iconSize: [0, 0] }),
+    interactive: false, keyboard: false
+  }).addTo(map);
+  ex.hasDetail = true;
+}
+function dropDetail(ex) {
+  if (!ex.hasDetail) return;
+  if (ex.label) { ex.label.remove(); ex.label = null; }
+  if (gl.getLayer(ex.srcId)) gl.removeLayer(ex.srcId);
+  if (gl.getSource(ex.srcId)) gl.removeSource(ex.srcId);
+  ex.hasDetail = false;
+}
+function updateDetail() {
+  if (!glReady || detailQueued) return;
+  detailQueued = true;
+  requestAnimationFrame(() => {
+    detailQueued = false;
+    const all = [...drawn.values()];
+    if (map.getZoom() < 16) { all.forEach(dropDetail); return; }
+    const c = gl.getCenter();
+    all.forEach(ex => { const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y); ex.d = Math.hypot((s + n) / 2 - c.lat, (w + e) / 2 - c.lng); });
+    all.sort((a, b) => a.d - b.d);
+    all.forEach((ex, i) => i < MAX_DETAIL ? addDetail(ex) : dropDetail(ex));
+  });
+}
+gl.on('moveend', updateDetail);
+
 function drawOwned(p) {
   if (!glReady) { pendingParcels.set(p.id, p); return; }
   const url = houseFor(p.id, p.house);
@@ -134,37 +178,22 @@ function drawOwned(p) {
   if (ex) {   // ya dibujada: solo actualiza foto y altura si el dueño cambió la casa
     if (ex.url !== url) {
       ex.url = url;
-      const src = gl.getSource(ex.srcId); if (src) src.updateImage({ url });
+      const src = ex.hasDetail && gl.getSource(ex.srcId); if (src) src.updateImage({ url });
       const f = ownedFeatures.get(p.id); if (f) { f.properties.h = heightOf(url); flushOwned(); }
     }
     return;
   }
   const col = colorFor(p.owner);
   const [[s, w], [n, e]] = boundsOf(p.x, p.y);
-  const srcId = 'img-' + p.id;
-
-  // Foto de la casa pegada al suelo (sigue el relieve), por debajo del volumen 3D
-  gl.addSource(srcId, { type: 'image', url, coordinates: [[w, n], [e, n], [e, s], [w, s]] });
-  gl.addLayer({ id: srcId, type: 'raster', source: srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
-
-  // Volumen 3D de la parcela (color del dueño, semitransparente para ver la foto)
+  // Volumen 3D de la parcela (neutro, para no teñir la foto; el color del dueño va en el borde)
   ownedFeatures.set(p.id, {
     type: 'Feature', id: p.x * 1000003 + p.y,
     properties: { pid: p.id, color: col, h: heightOf(url), clat: (s + n) / 2, clng: (w + e) / 2 },
     geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] }
   });
-
-  // Nombre del dueño bajo la parcela
-  const pill = document.createElement('span');
-  pill.className = 'owner-pill';
-  pill.textContent = labelOf(p);             // textContent: sin HTML
-  const label = L.marker([s, (w + e) / 2], {
-    icon: L.divIcon({ className: 'owner-label', html: pill, iconSize: [0, 0] }),
-    interactive: false, keyboard: false
-  }).addTo(map);
-
-  drawn.set(p.id, { srcId, url, label });
+  drawn.set(p.id, { p, srcId: 'img-' + p.id, url, label: null, hasDetail: false });
   flushOwned();
+  updateDetail();
 }
 
 // Capas del mapa que dependen de que el estilo esté cargado
@@ -173,11 +202,11 @@ gl.on('load', () => {
   gl.addLayer({
     id: 'owned-3d', type: 'fill-extrusion', source: 'owned',
     paint: {
-      'fill-extrusion-color': ['get', 'color'],
+      'fill-extrusion-color': '#f1ede4',
       'fill-extrusion-height': ['get', 'h'],
       'fill-extrusion-base': 0,
-      'fill-extrusion-opacity': 0.6,
-      'fill-extrusion-vertical-gradient': true
+      'fill-extrusion-opacity': 0.35,
+      'fill-extrusion-vertical-gradient': false
     }
   });
   gl.addLayer({
@@ -193,6 +222,8 @@ gl.on('load', () => {
   glReady = true;
   pendingParcels.forEach(drawOwned); pendingParcels.clear();
   loadParcels();
+  // Quien ya vio la introducción entra volando directamente; el nuevo espera a que acabe el vídeo
+  if (flightRequested || introAlreadySeen()) introFlight();
 });
 
 function setSelected(p) {
