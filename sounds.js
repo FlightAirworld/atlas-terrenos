@@ -47,6 +47,7 @@
     claim:  t => { [60, 64, 67, 72, 76].forEach((n, i) => tone(sfxBus, 'triangle', hz(n + 12), t + i * 0.09, 0.4, 0.55)); tone(sfxBus, 'sine', hz(91), t + 0.5, 0.7, 0.35); },
     coin:   t => { tone(sfxBus, 'square', hz(83), t, 0.08, 0.25); tone(sfxBus, 'square', hz(88), t + 0.08, 0.35, 0.25); },
     gift:   t => { [72, 76, 79, 84, 88, 91].forEach((n, i) => tone(sfxBus, 'sine', hz(n), t + i * 0.11, 0.5, 0.5)); },
+    pop:    t => tone(sfxBus, 'sine', 350, t, 0.16, 0.5, { slideTo: 900 }),
     error:  t => { tone(sfxBus, 'sawtooth', 220, t, 0.25, 0.3, { slideTo: 110 }); }
   };
 

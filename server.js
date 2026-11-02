@@ -611,6 +611,48 @@ async function productionCollect(req) {
   }
 }
 
+// ---------- Muñeco que pasea: da una fracción de crédito al tocarlo ----------
+// La fracción se suma a prod_carry (el acumulado decimal de producción), que se recoge junto con lo producido por los terrenos.
+// El servidor decide cuándo puede salir un muñeco y valida el toque, así que no se puede abusar llamando a la API a mano.
+const WALKER_REWARD = Math.max(0, Number(process.env.WALKER_REWARD || 0.002));
+const WALKER_GAP_MS = Math.max(10_000, Number(process.env.WALKER_GAP_MS || 90_000));   // mínimo entre muñecos de un mismo usuario
+const WALKER_DAILY_MAX = Math.max(0, Number(process.env.WALKER_DAILY_MAX || 40));      // toques premiados por día y usuario
+const WALKER_TTL_MS = 20_000;                                                          // lo que tarda en cruzar la pantalla (con margen)
+const walkerState = new Map();   // userId -> { id, born, lastSpawn, day, count }  (en memoria)
+
+function walkerOf(userId, now) {
+  const day = new Date(now).toISOString().slice(0, 10);
+  let s = walkerState.get(userId);
+  if (!s) { if (walkerState.size > 20000) walkerState.clear(); s = { id: null, born: 0, lastSpawn: 0, day, count: 0 }; walkerState.set(userId, s); }
+  if (s.day !== day) { s.day = day; s.count = 0; }
+  return s;
+}
+
+async function walkerSpawn(req) {
+  const user = await needUser(req);
+  const now = Date.now(), s = walkerOf(user.id, now);
+  if (!WALKER_REWARD || s.count >= WALKER_DAILY_MAX) return { spawn: false, waitMs: 3_600_000 };
+  const wait = s.lastSpawn + WALKER_GAP_MS - now;
+  if (wait > 0) return { spawn: false, waitMs: wait };
+  s.id = crypto.randomBytes(8).toString('hex'); s.born = now; s.lastSpawn = now;
+  return { spawn: true, id: s.id, reward: WALKER_REWARD };
+}
+
+async function walkerTap(req, body) {
+  const user = await needUser(req);
+  const now = Date.now(), s = walkerOf(user.id, now);
+  const id = body && body.id;
+  if (!s.id || typeof id !== 'string' || id !== s.id) throw new HttpError(409, 'El muñeco ya se fue');
+  const age = now - s.born;
+  s.id = null;   // un solo uso
+  if (age < 600 || age > WALKER_TTL_MS + 5000) throw new HttpError(409, 'El muñeco ya se fue');
+  if (s.count >= WALKER_DAILY_MAX) throw new HttpError(429, 'Hoy ya has atrapado a todos los muñecos. ¡Vuelve mañana!');
+  s.count++;
+  const pack = await ensureUserPack(user);
+  await one('UPDATE packs SET prod_carry = COALESCE(prod_carry, 0) + $1 WHERE code = $2 RETURNING code', [WALKER_REWARD, pack.code]);
+  return { ok: true, reward: WALKER_REWARD, left: WALKER_DAILY_MAX - s.count };
+}
+
 async function route(req, res, url) {
   const { pathname: pn, searchParams: sp } = url;
   // Límite de peticiones por conexión: 240 por minuto en total y 40 por minuto las que modifican datos
@@ -662,6 +704,8 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/my-parcels') return myParcels(req);
   if (req.method === 'GET' && pn === '/api/production') return productionGet(req);
   if (req.method === 'POST' && pn === '/api/production/collect') return productionCollect(req);
+  if (req.method === 'POST' && pn === '/api/walker/spawn') return walkerSpawn(req);
+  if (req.method === 'POST' && pn === '/api/walker/tap') return walkerTap(req, await readJson(req));
 
   throw new HttpError(404, 'No encontrado');
 }

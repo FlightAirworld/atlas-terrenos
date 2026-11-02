@@ -159,3 +159,17 @@ path.buy-range {
   50%      { stroke-opacity: 0.2; }
 }
 @media (prefers-reduced-motion: reduce) { path.buy-range { animation: none; } }
+
+/* Muñeco que pasea (da créditos al tocarlo) */
+#walker {
+  position: fixed; z-index: 900; width: 64px; height: 64px; padding: 0 !important;
+  border: 0 !important; background: transparent !important; font-size: 46px; line-height: 1;
+  cursor: pointer; filter: drop-shadow(0 3px 3px rgba(0,0,0,.45)); touch-action: manipulation;
+}
+#walker span { display: block; animation: walkerbob .45s ease-in-out infinite; }
+@keyframes walkerbob { 0%,100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-7px) rotate(6deg); } }
+.walker-float {
+  position: fixed; z-index: 1001; pointer-events: none; font-weight: 800; font-size: 20px; color: #fff;
+  text-shadow: 0 1px 3px #000, 0 0 8px #000; animation: walkerfloat 1.5s ease-out forwards;
+}
+@keyframes walkerfloat { 0% { opacity: 1; transform: translateY(0) scale(1.1); } 100% { opacity: 0; transform: translateY(-60px) scale(1); } }

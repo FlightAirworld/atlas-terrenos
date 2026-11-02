@@ -843,6 +843,77 @@ $('mine-collect').onclick = async () => {
   loadMine();
 };
 
+// ---------- Muñeco que pasea: tócalo y gana una fracción de crédito ----------
+// El servidor decide cuándo puede salir (límite entre muñecos y por día); aquí solo se dibuja y se avisa del toque.
+const WALKERS = ['🚶', '🚶‍♀️', '🏃', '🧙', '🤠', '🦸', '🧑‍🚀', '🧟'];
+let walkerBusy = false, walkerTimer = null;
+const randBetween = (a, b) => a + Math.random() * (b - a);
+function scheduleWalker(ms) { clearTimeout(walkerTimer); walkerTimer = setTimeout(trySpawnWalker, ms); }
+function walkerUiBusy() {
+  return document.hidden || !!document.querySelector('.modal:not(.hidden)') || !$('intro').classList.contains('hidden');
+}
+async function trySpawnWalker() {
+  if (walkerBusy) return;
+  if (!authToken) return scheduleWalker(20000);           // solo con cuenta: así el premio se guarda
+  if (walkerUiBusy()) return scheduleWalker(10000);
+  let r;
+  try { r = await api('/api/walker/spawn', { method: 'POST', body: {} }); } catch { return scheduleWalker(60000); }
+  if (!r.spawn) return scheduleWalker((r.waitMs || 60000) + randBetween(5000, 60000));
+  showWalker(r);
+}
+function floatText(rect, text) {
+  const f = document.createElement('div');
+  f.className = 'walker-float';
+  f.textContent = text;
+  f.style.left = Math.max(8, Math.min(innerWidth - 120, rect.left)) + 'px';
+  f.style.top = Math.max(8, rect.top - 10) + 'px';
+  document.body.appendChild(f);
+  setTimeout(() => f.remove(), 1600);
+}
+function showWalker(r) {
+  walkerBusy = true;
+  const b = document.createElement('button');
+  b.type = 'button'; b.id = 'walker'; b.dataset.nosound = '1';
+  b.setAttribute('aria-label', 'Toca al muñeco para ganar créditos');
+  const sp = document.createElement('span');
+  sp.textContent = WALKERS[Math.floor(Math.random() * WALKERS.length)];
+  b.appendChild(sp);
+  const fromLeft = Math.random() < 0.5, dur = randBetween(8000, 12000), off = 70;
+  b.style.top = Math.round(randBetween(0.22, 0.7) * innerHeight) + 'px';
+  b.style.left = (fromLeft ? -off : innerWidth + 10) + 'px';
+  b.style.transform = fromLeft ? 'scaleX(-1)' : 'none';
+  document.body.appendChild(b);
+  sfx('pop');
+  let done = false, tm = null;
+  const end = () => {
+    if (done) return; done = true; clearTimeout(tm); b.remove(); walkerBusy = false;
+    scheduleWalker(randBetween(90000, 240000));
+  };
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    b.style.transition = `left ${dur}ms linear`;
+    b.style.left = (fromLeft ? innerWidth + 10 : -off) + 'px';
+  }));
+  tm = setTimeout(end, dur + 300);
+  b.onclick = async () => {
+    if (done || b.disabled) return;
+    b.disabled = true;
+    const rect = b.getBoundingClientRect();
+    b.style.transition = 'none'; b.style.left = rect.left + 'px';     // se queda quieto mientras se confirma
+    try {
+      const j = await api('/api/walker/tap', { method: 'POST', body: { id: r.id } });
+      floatText(rect, `+${j.reward} 🎟️`);
+      sfx('coin');
+      if (prodState) { prodState.total += j.reward; renderLive(); }
+      loadProduction();
+    } catch (e) {
+      floatText(rect, e.message);
+      sfx('error');
+    }
+    end();
+  };
+}
+scheduleWalker(randBetween(20000, 60000));
+
 // ---------- Inicio ----------
 (async () => {
   cfg = await api('/api/config');
