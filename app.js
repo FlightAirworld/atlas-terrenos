@@ -43,9 +43,6 @@ try {
   throw e;
 }
 map = createCompatMap(gl);     // API tipo Leaflet usada por el resto del juego (ver mapshim.js)
-gl.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
-gl.addControl(new maplibregl.GlobeControl(), 'bottom-right');
-gl.addControl(new maplibregl.TerrainControl({ source: 'dem', exaggeration: 1 }), 'bottom-right');   // relieve: opcional
 
 let glReady = false;
 // Entrada cinematográfica: del espacio a Gibraltar (inclinado, para ver el 3D)
