@@ -176,3 +176,20 @@ path.buy-range {
   text-shadow: 0 1px 3px #000, 0 0 8px #000; animation: walkerfloat 1.5s ease-out forwards;
 }
 @keyframes walkerfloat { 0% { opacity: 1; transform: translateY(0) scale(1.1); } 100% { opacity: 0; transform: translateY(-60px) scale(1); } }
+
+/* Jugadores en línea: botón flotante a la izquierda (encima de "mis terrenos" y del regalo diario) */
+#online-btn { position: fixed; left: 12px; bottom: 156px; z-index: 1000; width: 56px; height: 56px; border-radius: 50%; padding: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; line-height: 1;
+  border: 1px solid var(--line); background: var(--card); color: var(--fg); box-shadow: 0 2px 8px rgba(0,0,0,.3); touch-action: manipulation; }
+#online-btn b { font-size: 17px; font-weight: 800; }
+#online-btn small { font-size: 9px; font-weight: 600; color: var(--muted); }
+#online-btn i { position: absolute; top: 4px; right: 4px; width: 12px; height: 12px; border-radius: 50%;
+  background: #2ecc71; border: 2px solid var(--bg); animation: onlinepulse 1.8s infinite; }
+#online-btn.off i { background: #9aa6b6; animation: none; }
+#online-tip { position: fixed; left: 76px; bottom: 172px; z-index: 1000; padding: 6px 12px; border-radius: 999px; white-space: nowrap;
+  background: var(--card); color: var(--fg); border: 1px solid var(--line); box-shadow: 0 2px 8px rgba(0,0,0,.3); font-size: 13px; font-weight: 600;
+  opacity: 0; transform: translateX(-6px); pointer-events: none; transition: opacity .2s, transform .2s; }
+#online-tip.show { opacity: 1; transform: none; }
+#online-tip:empty { display: none; }
+@keyframes onlinepulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(46,204,113,.6); } 70% { box-shadow: 0 0 0 7px rgba(46,204,113,0); } }
+@media (prefers-reduced-motion: reduce) { #online-btn i { animation: none; } #online-tip { transition: none; } }

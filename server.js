@@ -653,6 +653,63 @@ async function walkerTap(req, body) {
   return { ok: true, reward: WALKER_REWARD, left: WALKER_DAILY_MAX - s.count };
 }
 
+// ---------- Jugadores en línea en tiempo real (SSE) ----------
+// Cada pestaña abierta mantiene una conexión GET /api/online (Server-Sent Events). Se cuenta un jugador por
+// identificador anónimo (cid), así que varias pestañas del mismo navegador cuentan como uno. Todo vive en memoria:
+// no se guarda nada en la base de datos. Cuando el número cambia, el servidor se lo envía a todos los conectados.
+const ONLINE_MAX_PER_IP = Math.max(1, Number(process.env.ONLINE_MAX_PER_IP || 60));   // conexiones abiertas por conexión de red
+const onlineClients = new Map();   // cid -> Set de respuestas abiertas
+const onlineByIp = new Map();      // ip -> nº de conexiones abiertas
+let onlineSent = -1, onlineTimer = null;
+
+function broadcastOnline(force) {
+  const n = onlineClients.size;
+  if (!force && n === onlineSent) return;
+  onlineSent = n;
+  const msg = `data: ${n}\n\n`;
+  for (const set of onlineClients.values()) for (const r of set) { try { r.write(msg); } catch {} }
+}
+function scheduleOnlineBroadcast() {   // agrupa altas y bajas seguidas en un solo aviso
+  if (onlineTimer) return;
+  onlineTimer = setTimeout(() => { onlineTimer = null; broadcastOnline(false); }, 500);
+}
+// Cada 20 s se reenvía el número: sirve de latido (los proxies cortan conexiones mudas) y corrige cualquier desajuste
+setInterval(() => broadcastOnline(true), 20_000).unref();
+
+function onlineStream(req, res, url) {
+  const ip = clientIp(req);
+  if ((onlineByIp.get(ip) || 0) >= ONLINE_MAX_PER_IP) {
+    res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('Demasiadas conexiones');
+  }
+  const cid = String(url.searchParams.get('cid') || '').replace(/[^\w-]/g, '').slice(0, 40) || crypto.randomBytes(8).toString('hex');
+  req.socket.setTimeout(0);
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',          // que nginx y similares no retengan los avisos
+    'X-Content-Type-Options': 'nosniff'
+  });
+  let set = onlineClients.get(cid);
+  if (!set) { set = new Set(); onlineClients.set(cid, set); }
+  set.add(res);
+  onlineByIp.set(ip, (onlineByIp.get(ip) || 0) + 1);
+  res.write(`retry: 3000\n\ndata: ${onlineClients.size}\n\n`);   // el recién llegado ve el número al instante
+  scheduleOnlineBroadcast();                                     // y los demás, medio segundo después
+  let gone = false;
+  const leave = () => {
+    if (gone) return; gone = true;
+    set.delete(res);
+    if (!set.size && onlineClients.get(cid) === set) onlineClients.delete(cid);
+    const k = (onlineByIp.get(ip) || 1) - 1;
+    if (k > 0) onlineByIp.set(ip, k); else onlineByIp.delete(ip);
+    scheduleOnlineBroadcast();
+  };
+  req.on('close', leave);
+  res.on('error', leave);
+}
+
 async function route(req, res, url) {
   const { pathname: pn, searchParams: sp } = url;
   // Límite de peticiones por conexión: 240 por minuto en total y 40 por minuto las que modifican datos
@@ -687,6 +744,7 @@ async function route(req, res, url) {
     return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country, house: r.house }));
   }
 
+  if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineClients.size };
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };
 
@@ -730,6 +788,7 @@ http.createServer(async (req, res) => {
   const send = (status, body, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000' }); res.end(body); };
   try {
     await ready;
+    if (req.method === 'GET' && url.pathname === '/api/online') return onlineStream(req, res, url);   // conexión larga (SSE): no pasa por route()
     if (url.pathname.startsWith('/api/')) {
       const out = await route(req, res, url);
       return send(200, JSON.stringify(out));

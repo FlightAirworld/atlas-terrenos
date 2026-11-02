@@ -106,6 +106,11 @@
 <body>
   <div id="map" aria-label="Mapa mundial de terrenos"></div>
 
+  <button id="online-btn" type="button" title="Jugadores en línea" aria-label="Jugadores en línea">
+    <i></i><b id="online-n">–</b><small>en línea</small>
+  </button>
+  <div id="online-tip" role="status" aria-live="polite"></div>
+
   <span id="stats" class="stats" style="display:none" aria-live="polite"></span>
 
   <div id="map-controls">
@@ -296,6 +301,7 @@
   <script src="weather.js"></script>
   <script src="people.js"></script>
   <script src="vehicles.js"></script>
+  <script src="online.js"></script>
 <footer style="text-align:center; font-size:13px; padding:12px;">
   <a href="/privacidad.html">Política de Privacidad</a> ·
   <a href="/terminos.html">Condiciones del Servicio</a> ·
