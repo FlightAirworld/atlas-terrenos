@@ -62,7 +62,7 @@ const isUniqueViolation = e => e && e.code === '23505';
 
 const q = {
   parcelById: id => one('SELECT * FROM parcels WHERE id = $1', [id]),
-  parcelsInBox: (x0, x1, y0, y1) => all('SELECT id, x, y, owner, avatar, country, house FROM parcels WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1]),
+  parcelsInBox: (x0, x1, y0, y1) => all('SELECT id, x, y, owner, avatar, country, house, level FROM parcels WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1]),
   insertParcel: (id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house) =>
     run('INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, house) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', [id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house]),
   activeOrderForParcel: (id, now) => one("SELECT order_id FROM orders WHERE parcel_id = $1 AND status = 'CREATED' AND expires_at > $2", [id, now]),
@@ -558,26 +558,78 @@ const PROD_RATE = Math.max(0, Number(process.env.PROD_RATE || 0.002));          
 const PROD_CAP_HOURS = Math.max(1, Number(process.env.PROD_CAP_HOURS || 24));  // horas máximas que se acumulan sin recoger
 const HOUR_MS = 3600000;
 
+// ---------- Niveles de terreno ----------
+// Cada terreno tiene un nivel de 1 a MAX_LEVEL. Pasar del nivel L al L+1 cuesta LEVEL_COSTS[L-1] créditos y el terreno
+// produce PROD_RATE × LEVEL_MULTS[nivel-1]. Se pueden cambiar con las variables LEVEL_MULTS y LEVEL_COSTS (listas separadas por comas).
+const numList = (s, def) => { const a = String(s || '').split(',').map(x => Number(x.trim())).filter(x => Number.isFinite(x) && x >= 0); return a.length ? a : def; };
+const LEVEL_MULTS = numList(process.env.LEVEL_MULTS, [1, 1.5, 2, 3, 5]);     // multiplicador de cada nivel (el primero es el nivel 1)
+const MAX_LEVEL = LEVEL_MULTS.length;
+const LEVEL_COSTS = (() => {                                                  // créditos para pasar al nivel 2, 3, 4…
+  const c = numList(process.env.LEVEL_COSTS, [1, 2, 4, 8]).map(x => Math.floor(x));
+  while (c.length < MAX_LEVEL - 1) c.push(c.length ? c[c.length - 1] : 1);
+  return c.slice(0, Math.max(0, MAX_LEVEL - 1));
+})();
+
+// Subir un terreno propio al siguiente nivel. "from" (opcional) es el nivel que ve el jugador: evita cobrar dos veces por un doble toque.
+async function upgradeParcel(req, { id, from }) {
+  const user = await needUser(req);
+  const pack = await ensureUserPack(user);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const par = (await client.query('SELECT level FROM parcels WHERE id = $1 AND user_id = $2 FOR UPDATE', [String(id), user.id])).rows[0];
+    if (!par) throw new HttpError(403, 'Este terreno no es tuyo');
+    const level = Math.max(1, Math.min(MAX_LEVEL, Number(par.level) || 1));
+    if (from != null && Number(from) !== level) throw new HttpError(409, 'El nivel de este terreno ya ha cambiado');
+    if (level >= MAX_LEVEL) throw new HttpError(409, 'Este terreno ya está al nivel máximo');
+    const cost = LEVEL_COSTS[level - 1];
+    // Se cobra primero (la fila del pack queda bloqueada): así la hora de la mejora es posterior a cualquier recogida en curso
+    const r = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [cost, pack.code]);
+    if (!r.rows[0]) throw new HttpError(402, `Subir al nivel ${level + 1} cuesta ${cost} ${cost === 1 ? 'crédito' : 'créditos'} y no te quedan`);
+    await client.query('UPDATE parcels SET level = $1, level_at = $2 WHERE id = $3', [level + 1, Date.now(), String(id)]);
+    await client.query('COMMIT');
+    return { ok: true, level: level + 1, credits: r.rows[0].credits, cost };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 // Suma, por cada terreno de la cuenta, el tiempo producido desde la última recogida (o desde que se reclamó), con tope.
+// Cada terreno produce según su nivel. Si subió de nivel dentro del periodo que se está acumulando, el tiempo anterior a la
+// mejora cuenta con el multiplicador del nivel anterior y el posterior con el nuevo: la mejora solo vale desde que se hace,
+// así que subir de nivel justo antes de recoger no da créditos de más.
 async function prodCompute(db, userId, lastCollect, carry, now) {
   const r = (await db.query(
     `SELECT COUNT(*) AS n,
-            COALESCE(SUM(LEAST(e, $4::bigint)), 0) AS ms,
+            COALESCE(SUM(wms), 0) AS wms,
+            COALESCE(SUM(mc), 0) AS mult,
             COUNT(*) FILTER (WHERE e < $4::bigint) AS active,
+            COALESCE(SUM(mc) FILTER (WHERE e < $4::bigint), 0) AS active_mult,
             MIN($4::bigint - e) FILTER (WHERE e < $4::bigint) AS next_cap
-       FROM (SELECT GREATEST($2::bigint - GREATEST(created_at, $3::bigint), 0) AS e FROM parcels WHERE user_id = $1) s`,
-    [userId, now, lastCollect || 0, Math.round(PROD_CAP_HOURS * HOUR_MS)])).rows[0];
+       FROM (SELECT e, mc,
+                    LEAST(o, LEAST(e, $4::bigint)) * mp + (LEAST(e, $4::bigint) - LEAST(o, LEAST(e, $4::bigint))) * mc AS wms
+               FROM (SELECT GREATEST($2::bigint - GREATEST(created_at, $3::bigint), 0) AS e,
+                            GREATEST(COALESCE(level_at, 0) - GREATEST(created_at, $3::bigint), 0) AS o,
+                            ($5::float8[])[LEAST(GREATEST(level, 1), ${MAX_LEVEL})] AS mc,
+                            ($5::float8[])[LEAST(GREATEST(level - 1, 1), ${MAX_LEVEL})] AS mp
+                       FROM parcels WHERE user_id = $1) a) s`,
+    [userId, now, lastCollect || 0, Math.round(PROD_CAP_HOURS * HOUR_MS), LEVEL_MULTS])).rows[0];
   const n = Number(r.n);
-  const total = (Number(carry) || 0) + (Number(r.ms) / HOUR_MS) * PROD_RATE;
-  // active = terrenos que aún no han llegado al tope y siguen produciendo; next_cap = ms hasta que el primero llegue al tope
-  return { parcels: n, perHour: n * PROD_RATE, total, ready: Math.floor(total + 1e-9), active: Number(r.active), nextCap: r.next_cap == null ? null : Number(r.next_cap) };
+  const total = (Number(carry) || 0) + (Number(r.wms) / HOUR_MS) * PROD_RATE;
+  // active = terrenos que aún no han llegado al tope y siguen produciendo (activeMult: suma de sus multiplicadores);
+  // next_cap = ms hasta que el primero llegue al tope
+  return { parcels: n, perHour: Number(r.mult) * PROD_RATE, total, ready: Math.floor(total + 1e-9), active: Number(r.active),
+    activeMult: Number(r.active_mult), nextCap: r.next_cap == null ? null : Number(r.next_cap) };
 }
 
 async function myParcels(req) {
   const user = await needUser(req);
-  const rows = await all('SELECT id, x, y, avatar, country, created_at FROM parcels WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200', [user.id]);
+  const rows = await all('SELECT id, x, y, avatar, country, level, created_at FROM parcels WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200', [user.id]);
   const total = (await one('SELECT COUNT(*) AS n FROM parcels WHERE user_id = $1', [user.id])).n;
-  return { total, parcels: rows.map(r => ({ id: r.id, x: r.x, y: r.y, avatar: r.avatar, country: r.country, since: r.created_at })) };
+  return { total, parcels: rows.map(r => ({ id: r.id, x: r.x, y: r.y, avatar: r.avatar, country: r.country, level: r.level, since: r.created_at })) };
 }
 
 async function productionGet(req) {
@@ -586,7 +638,7 @@ async function productionGet(req) {
   const p = await one('SELECT last_collect, prod_carry FROM packs WHERE code = $1', [pack.code]);
   const st = await prodCompute(pool, user.id, p && p.last_collect, p && p.prod_carry, Date.now());
   return { parcels: st.parcels, perHour: Math.round(st.perHour * 10000) / 10000, ready: st.ready, capHours: PROD_CAP_HOURS, rate: PROD_RATE,
-    total: Math.round(st.total * 1e6) / 1e6, activeRate: st.active * PROD_RATE, nextCapMs: st.nextCap };
+    total: Math.round(st.total * 1e6) / 1e6, activeRate: st.activeMult * PROD_RATE, nextCapMs: st.nextCap };
 }
 
 async function productionCollect(req) {
@@ -803,7 +855,7 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
     return { demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PRICE, size: SIZE, packSize: PACK_SIZE,
-      maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
+      maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')));
@@ -811,7 +863,7 @@ async function route(req, res, url) {
     const row = await q.parcelById(p.id);
     const user = row && row.user_id ? await userFrom(req) : null;
     return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null, avatar: row ? row.avatar : null, country: row ? row.country : null,
-      house: row ? row.house : null, mine: !!(user && row && row.user_id === user.id) };
+      house: row ? row.house : null, level: row ? row.level : null, mine: !!(user && row && row.user_id === user.id) };
   }
 
   if (req.method === 'GET' && pn === '/api/parcels') {
@@ -819,7 +871,7 @@ async function route(req, res, url) {
     if (![s, w, n, e].every(Number.isFinite) || n - s > 0.3 || e - w > 0.3) throw new HttpError(400, 'Zona demasiado grande');
     const x0 = Math.max(0, Math.floor((w + 180) / SIZE)), x1 = Math.min(MAX_X - 1, Math.floor((e + 180) / SIZE));
     const y0 = Math.max(0, Math.floor((s + 90) / SIZE)), y1 = Math.min(MAX_Y - 1, Math.floor((n + 90) / SIZE));
-    return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country, house: r.house }));
+    return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country, house: r.house, level: r.level }));
   }
 
   if (req.method === 'GET' && pn === '/api/health') return { ok: true };   // la pantalla de carga del sitio estático pregunta aquí si ya despertó
@@ -836,6 +888,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/daily') return dailyGet(req);
   if (req.method === 'POST' && pn === '/api/daily/claim') return dailyClaim(req);
   if (req.method === 'POST' && pn === '/api/parcel/house') return setHouse(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/parcel/upgrade') return upgradeParcel(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/claim') return claimWithCredit(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/auth/link') return linkAccount(req);
   if (req.method === 'GET' && pn === '/api/profile') return profileGet(req);
@@ -863,6 +916,10 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 
 // Migración automática (inofensiva si la columna ya existe)
 const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').catch(e => console.error('No se pudo añadir la columna house:', e.message))
+  .then(async () => {   // niveles de terreno (no hacen nada si las columnas ya existen)
+    await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level SMALLINT NOT NULL DEFAULT 1');
+    await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level_at BIGINT');
+  }).catch(e => console.error('No se pudieron añadir las columnas de nivel:', e.message))
   .then(async () => {   // tablas de "Invita y gana" (no hacen nada si ya existen)
     await run('CREATE TABLE IF NOT EXISTS ref_codes (code TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, created_at BIGINT NOT NULL, last_ip TEXT)');
     await run('CREATE TABLE IF NOT EXISTS referrals (invitee_id TEXT PRIMARY KEY, inviter_id TEXT NOT NULL, created_at BIGINT NOT NULL, ip_hash TEXT, rewarded_at BIGINT, inviter_credits INT NOT NULL DEFAULT 0)');

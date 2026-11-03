@@ -59,3 +59,21 @@ Cada terreno tiene una columna `house` (ruta de la imagen). Si está vacía se u
 El dueño con cuenta puede cambiarla desde el panel del terreno (`POST /api/parcel/house`). Cuesta 1 crédito (variable `HOUSE_COST`; pon 0 para que sea gratis). Elegir la casa al reclamar es gratis.
 El servidor añade la columna solo al arrancar (`migration-house.sql` es el mismo comando por si prefieres ejecutarlo a mano).
 Para añadir casas nuevas, ponlas al FINAL de `HOUSES` en `app.js` y en `server.js` (así no cambian las casas al azar ya existentes).
+
+## Niveles de terreno
+
+Cada terreno tiene un nivel del 1 al 5 (columnas `level` y `level_at` de `parcels`; el servidor las crea solo al arrancar).
+Subir de nivel cuesta créditos y multiplica lo que produce ese terreno (`POST /api/parcel/upgrade`, solo el dueño con cuenta):
+
+| Nivel | Cuesta | Produce |
+|---|---|---|
+| 2 | 1 crédito | ×1,5 |
+| 3 | 2 créditos | ×2 |
+| 4 | 4 créditos | ×3 |
+| 5 | 8 créditos | ×5 |
+
+La mejora cuenta desde el momento en que se compra (el tiempo anterior se paga con el multiplicador antiguo), así que subir de nivel justo antes de recoger no da créditos de más.
+En el mapa se ven más estrellas junto al nombre (a partir del zoom en que se ven los nombres) y el edificio es más alto.
+
+Variables opcionales (listas separadas por comas, sin espacios): `LEVEL_MULTS` (por defecto `1,1.5,2,3,5`; su longitud es el nivel máximo) y
+`LEVEL_COSTS` (por defecto `1,2,4,8`: créditos para pasar al nivel 2, 3, 4…). La producción base sigue siendo `PROD_RATE` (créditos por terreno y hora).

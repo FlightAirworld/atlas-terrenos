@@ -203,3 +203,9 @@ path.buy-range {
   opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+
+/* Nivel del terreno: estrellas encima del nombre (mismo tamaño que el nombre, ver .owner-pill) */
+.owner-stars { position: absolute; left: 0; top: 0; transform: translate(-50%, calc(-100% - .6em - 3px)); white-space: nowrap; pointer-events: none;
+  color: #ffd43b; line-height: 1; letter-spacing: .5px; text-shadow: 0 1px 2px #000;
+  font-size: clamp(7px, calc(var(--ppx, 60) * 1px / 8), 14px); }
+.labels-off .owner-stars { display: none; }

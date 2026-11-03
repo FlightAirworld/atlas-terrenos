@@ -134,9 +134,16 @@ const HOUSE_HEIGHT = {
   'restaurante': 8, 'mcdonald': 9, 'burgerking': 9, 'farmacia': 9, 'colegio': 15, 'parque': 0.6,
   'rascacielos': 120, 'casa-1': 8, 'casa-2': 10, 'casa-3': 12, 'casa-4': 9, 'casa-5': 11
 };
-function heightOf(url) {
+// Nivel del terreno (1 a 5): más estrellas junto al nombre y un edificio más alto
+const LEVEL_H = [1, 1.15, 1.3, 1.5, 1.8];   // cuánto crece la altura en cada nivel
+const maxLevel = () => (cfg && cfg.levels && cfg.levels.mults.length) || 5;
+const levelOf = p => Math.max(1, Math.min(maxLevel(), Math.floor(Number(p && p.level)) || 1));
+const multOf = lvl => (cfg && cfg.levels && cfg.levels.mults[lvl - 1]) || 1;
+const fmtNum = n => Number(n).toLocaleString('es-ES', { maximumFractionDigits: 2 });
+const starsOf = lvl => '★'.repeat(lvl);
+function heightOf(url, lvl = 1) {
   const k = String(url).split('/').pop().replace(/\.[a-z]+$/i, '').toLowerCase();
-  return HOUSE_HEIGHT[k] ?? 9;
+  return (HOUSE_HEIGHT[k] ?? 9) * (LEVEL_H[lvl - 1] ?? LEVEL_H[LEVEL_H.length - 1]) + (lvl - 1) * 2;
 }
 function ringOf(x, y) {
   const [[s, w], [n, e]] = boundsOf(x, y);
@@ -309,8 +316,14 @@ function mountDetail(ex, imgUrl, blob) {
   const pill = document.createElement('span');
   pill.className = 'owner-pill';
   pill.textContent = labelOf(ex.p);          // textContent: sin HTML
+  const stars = document.createElement('span');
+  stars.className = 'owner-stars';
+  stars.textContent = starsOf(ex.level);
+  ex.starsEl = stars;
+  const wrap = document.createElement('span');
+  wrap.append(stars, pill);
   ex.label = L.marker([(s + n) / 2, (w + e) / 2], {   // en el centro de la parcela, dentro de la casa
-    icon: L.divIcon({ className: 'owner-label', html: pill, iconSize: [0, 0] }),
+    icon: L.divIcon({ className: 'owner-label', html: wrap, iconSize: [0, 0] }),
     interactive: false, keyboard: false
   }).addTo(map);
   ex.hasDetail = true;
@@ -320,6 +333,7 @@ function dropDetail(ex) {
   if (!ex.hasDetail) return;
   ex.tok = (ex.tok || 0) + 1;
   if (ex.label) { ex.label.remove(); ex.label = null; }
+  ex.starsEl = null;
   if (gl.getLayer(ex.srcId)) gl.removeLayer(ex.srcId);
   if (gl.getSource(ex.srcId)) gl.removeSource(ex.srcId);
   freeBlob(ex);
@@ -344,23 +358,27 @@ function drawOwned(p) {
   if (!glReady) { pendingParcels.set(p.id, p); return; }
   const url = houseFor(p.id, p.house);
   const ex = drawn.get(p.id);
-  if (ex) {   // ya dibujada: solo actualiza foto y altura si el dueño cambió la casa
-    if (ex.url !== url) {
-      ex.url = url;
-      refreshPhoto(ex);
-      const f = ownedFeatures.get(p.id); if (f) { f.properties.h = heightOf(url); flushOwned(); }
+  if (ex) {   // ya dibujada: solo actualiza foto, altura y estrellas si cambió la casa o el nivel
+    const lvl = p.level ? levelOf(p) : ex.level;
+    if (ex.url !== url || ex.level !== lvl) {
+      const newHouse = ex.url !== url;
+      ex.url = url; ex.level = lvl;
+      if (newHouse) refreshPhoto(ex);
+      if (ex.starsEl) ex.starsEl.textContent = starsOf(lvl);
+      const f = ownedFeatures.get(p.id); if (f) { f.properties.h = heightOf(url, lvl); flushOwned(); }
     }
     return;
   }
+  const lvl = levelOf(p);
   const col = colorFor(p.owner);
   const [[s, w], [n, e]] = boundsOf(p.x, p.y);
   // Volumen 3D de la parcela (neutro, para no teñir la foto; el color del dueño va en el borde)
   ownedFeatures.set(p.id, {
     type: 'Feature', id: p.x * 1000003 + p.y,
-    properties: { pid: p.id, color: col, h: heightOf(url), clat: (s + n) / 2, clng: (w + e) / 2 },
+    properties: { pid: p.id, color: col, h: heightOf(url, lvl), clat: (s + n) / 2, clng: (w + e) / 2 },
     geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] }
   });
-  drawn.set(p.id, { p, srcId: 'img-' + p.id, url, label: null, hasDetail: false });
+  drawn.set(p.id, { p, srcId: 'img-' + p.id, url, level: lvl, starsEl: null, label: null, hasDetail: false });
   flushOwned();
   updateDetail();
   queueCuts();
@@ -583,12 +601,49 @@ function showPanel(p) {
     if (p.mine) markHouse($('house-pick-edit'), p.house);
     $('p-avatar').textContent = p.avatar || '';
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
+    renderLevelBox(p);
   } else {
     $('p-price').textContent = new Intl.NumberFormat('es-ES', { style: 'currency', currency: cfg.currency }).format(cfg.price);
     $('pack-size').textContent = cfg.packSize;
   }
 }
 $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; };
+
+// ---------- Nivel del terreno y botón de mejora ----------
+function renderLevelBox(p) {
+  if (!cfg || !cfg.levels) { $('p-level').textContent = ''; $('level-edit').classList.add('hidden'); return; }
+  const lvl = levelOf(p), max = maxLevel();
+  $('p-level').textContent = `${'⭐'.repeat(lvl)} Nivel ${lvl} de ${max} · produce ×${fmtNum(multOf(lvl))}`;
+  $('level-edit').classList.toggle('hidden', !p.mine);
+  if (!p.mine) return;
+  const btn = $('upgrade-btn'), note = $('level-note');
+  if (lvl >= max) { btn.classList.add('hidden'); note.textContent = '🏆 Nivel máximo: tu terreno produce al máximo.'; return; }
+  const cost = cfg.levels.costs[lvl - 1];
+  btn.classList.remove('hidden');
+  btn.textContent = `⬆️ Subir a nivel ${lvl + 1} · ${cost} 🎟️`;
+  note.textContent = `Pasará a producir ×${fmtNum(multOf(lvl + 1))} (ahora ×${fmtNum(multOf(lvl))}). La mejora cuenta desde el momento en que la compras.`;
+}
+$('upgrade-btn').onclick = async () => {
+  if (!selected || !selected.mine || !cfg || !cfg.levels) return;
+  const lvl = levelOf(selected);
+  if (lvl >= maxLevel()) return;
+  const cost = cfg.levels.costs[lvl - 1];
+  if (credits < cost) return setMsg(`Subir al nivel ${lvl + 1} cuesta ${cost} ${plural(cost, 'crédito', 'créditos')} y no te quedan`, 'err');
+  if (!confirm(`Subir este terreno al nivel ${lvl + 1} cuesta ${cost} ${plural(cost, 'crédito', 'créditos')}. ¿Continuar?`)) return;
+  const btn = $('upgrade-btn');
+  btn.disabled = true;
+  try {
+    const j = await api('/api/parcel/upgrade', { method: 'POST', body: { id: selected.id, from: lvl } });
+    credits = j.credits; updateCreditUi();
+    selected.level = j.level;
+    showPanel(selected);
+    drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house, level: j.level });
+    sfx('claim');
+    setMsg(`⭐ ¡Nivel ${j.level}! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
+    loadProduction();
+  } catch (e) { setMsg(e.message, 'err'); sfx('error'); refreshCredits(); }
+  finally { btn.disabled = false; }
+};
 
 // ---------- Avatar ----------
 const AVATARS = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀','👑','⚽','🌟'];
@@ -645,7 +700,7 @@ function markHouse(box, current) {
       selected.house = j.house;
       markHouse(editBox, j.house);
       $('p-photo').src = houseFor(selected.id, j.house);
-      drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: j.house });
+      drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: j.house, level: selected.level });
       sfx('claim');
       setMsg(`🏠 ¡Casa cambiada! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
     } catch (e) { setMsg(e.message, 'err'); }
@@ -1121,7 +1176,7 @@ function setMineMsg(text, kind = '') { const m = $('mine-msg'); m.textContent = 
 function renderMine(prod, mine) {
   const n = prod.parcels;
   $('mine-prod').textContent = n
-    ? `⏱️ Tienes ${n} ${plural(n, 'terreno', 'terrenos')}: producen ${prod.perHour.toLocaleString('es-ES', { maximumFractionDigits: 4 })} créditos por hora. Se acumulan hasta ${prod.capHours} h, ¡recógelos antes de que se llene!`
+    ? `⏱️ Tienes ${n} ${plural(n, 'terreno', 'terrenos')}: producen ${prod.perHour.toLocaleString('es-ES', { maximumFractionDigits: 4 })} créditos por hora (según el nivel de cada uno). Se acumulan hasta ${prod.capHours} h, ¡recógelos antes de que se llene!`
     : 'Aún no tienes terrenos con producción. Reclama uno y empezará a producir créditos.';
   setProd(prod); renderLive();
   $('mine-count').textContent = mine.total > mine.parcels.length ? `Mostrando los ${mine.parcels.length} más recientes de ${mine.total}.` : (mine.total ? `${mine.total} ${plural(mine.total, 'terreno', 'terrenos')} en total.` : '');
@@ -1130,7 +1185,7 @@ function renderMine(prod, mine) {
     const b = document.createElement('button');
     b.type = 'button';
     b.style.cssText = 'display:block;width:100%;text-align:left;margin:6px 0;padding:10px';
-    b.textContent = `${flagOf(p.country)} ${p.avatar || ''} Terreno ${p.id} · ${new Date(p.since).toLocaleDateString('es-ES')}`.trim();
+    b.textContent = `${flagOf(p.country)} ${p.avatar || ''} Terreno ${p.id} · ${starsOf(levelOf(p))} · ${new Date(p.since).toLocaleDateString('es-ES')}`.trim();
     b.onclick = () => {
       $('mine').classList.add('hidden');
       const bb = boundsOf(p.x, p.y);
