@@ -85,6 +85,10 @@ function colorFor(name) {
   let h = 0; for (const c of name) h = (h * 31 + c.codePointAt(0)) >>> 0;
   return `hsl(${h % 360}, 70%, 42%)`;
 }
+function glassFor(name) {   // color claro del dueño para las paredes del cubo (translúcido: deja ver la foto del suelo)
+  let h = 0; for (const c of name) h = (h * 31 + c.codePointAt(0)) >>> 0;
+  return `hsl(${h % 360}, 62%, 64%)`;
+}
 function boundsOf(x, y) {
   const s = cfg.size, west = x * s - 180, south = y * s - 90;
   return [[south, west], [south + s, west + s]];
@@ -149,11 +153,26 @@ const tierOf = lvl => Math.max(1, Math.ceil(lvl * 5 / maxLevel()));
 const starsOf = lvl => `${'★'.repeat(tierOf(lvl))} ${lvl}`;
 function heightOf(url, lvl = 1) {
   const k = String(url).split('/').pop().replace(/\.[a-z]+$/i, '').toLowerCase();
-  const t = (lvl - 1) / Math.max(1, maxLevel() - 1);   // 0 en el nivel 1, 1 en el máximo: hasta ×1,8 de altura y +8 m
-  return (HOUSE_HEIGHT[k] ?? 9) * (1 + 0.8 * t) + 8 * t;
+  const up = lvl - 1;                                  // niveles por encima del 1
+  // El tipo de edificio da la altura base; cada nivel añade un 15 % y 3 m: nivel 1 ≈ 9 m, nivel 10 ≈ 48 m, nivel 50 ≈ 250 m (tope)
+  return Math.min(250, (HOUSE_HEIGHT[k] ?? 9) * (1 + 0.15 * up) + 3 * up);
 }
 function ringOf(x, y) {
   const [[s, w], [n, e]] = boundsOf(x, y);
+  return [[w, s], [e, s], [e, n], [w, n], [w, s]];
+}
+// La parcela es un rectángulo en grados (más estrecha cuanto más al norte). El edificio es un CUADRADO perfecto en metros,
+// centrado en la parcela y con un pequeño margen: así el cubo, la foto y el borde no salen deformados en ninguna latitud.
+const CUBE_FILL = 0.88;
+function cubeBoundsOf(x, y) {
+  const [[s, w], [n, e]] = boundsOf(x, y);
+  const lat = (s + n) / 2, lng = (w + e) / 2, M = 111320, k = Math.max(0.05, Math.cos(lat * Math.PI / 180));
+  const half = Math.min((n - s) * M, (e - w) * M * k) * CUBE_FILL / 2;
+  const dLat = half / M, dLng = half / (M * k);
+  return [[lat - dLat, lng - dLng], [lat + dLat, lng + dLng]];
+}
+function cubeRingOf(x, y) {
+  const [[s, w], [n, e]] = cubeBoundsOf(x, y);
   return [[w, s], [e, s], [e, n], [w, n], [w, s]];
 }
 function flushOwned() {
@@ -243,7 +262,7 @@ function roadAreaFor(p) {
   }
   if (!area) return none;
   try {
-    const parcel = turf.polygon([ringOf(p.x, p.y)]);
+    const parcel = turf.polygon([cubeRingOf(p.x, p.y)]);
     const rest = turf.difference(parcel, area);
     if (!rest) return none;                                          // la calle cubriría todo: se deja la casa entera
     if (turf.area(rest) / turf.area(parcel) > 0.995) return none;    // la calle no toca realmente la parcela
@@ -268,7 +287,7 @@ async function clippedPhoto(url, p, road) {
   const ctx = cv.getContext('2d');
   ctx.drawImage(img, 0, 0, W, H);
   ctx.globalCompositeOperation = 'destination-out';
-  const [[s, w], [n, e]] = boundsOf(p.x, p.y);
+  const [[s, w], [n, e]] = cubeBoundsOf(p.x, p.y);
   const polys = road.geometry.type === 'Polygon' ? [road.geometry.coordinates] : road.geometry.coordinates;
   ctx.beginPath();
   for (const poly of polys) for (const ring of poly) {
@@ -316,7 +335,7 @@ function addDetail(ex) {
   });
 }
 function mountDetail(ex, imgUrl, blob) {
-  const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y);
+  const [[s, w], [n, e]] = cubeBoundsOf(ex.p.x, ex.p.y);
   ex.blob = blob;
   gl.addSource(ex.srcId, { type: 'image', url: imgUrl, coordinates: [[w, n], [e, n], [e, s], [w, s]] });
   gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
@@ -382,8 +401,8 @@ function drawOwned(p) {
   // Volumen 3D de la parcela (neutro, para no teñir la foto; el color del dueño va en el borde)
   ownedFeatures.set(p.id, {
     type: 'Feature', id: p.x * 1000003 + p.y,
-    properties: { pid: p.id, color: col, h: heightOf(url, lvl), clat: (s + n) / 2, clng: (w + e) / 2 },
-    geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] }
+    properties: { pid: p.id, color: col, glass: glassFor(p.owner), h: heightOf(url, lvl), clat: (s + n) / 2, clng: (w + e) / 2 },
+    geometry: { type: 'Polygon', coordinates: [cubeRingOf(p.x, p.y)] }
   });
   drawn.set(p.id, { p, srcId: 'img-' + p.id, url, level: lvl, starsEl: null, label: null, hasDetail: false });
   flushOwned();
@@ -397,16 +416,16 @@ gl.on('load', () => {
   gl.addLayer({
     id: 'owned-3d', type: 'fill-extrusion', source: 'owned',
     paint: {
-      'fill-extrusion-color': '#f1ede4',
+      'fill-extrusion-color': ['get', 'glass'],
       'fill-extrusion-height': ['get', 'h'],
       'fill-extrusion-base': 0,
-      'fill-extrusion-opacity': 0.35,
-      'fill-extrusion-vertical-gradient': false
+      'fill-extrusion-opacity': 0.5,
+      'fill-extrusion-vertical-gradient': true
     }
   });
   gl.addLayer({
     id: 'owned-line', type: 'line', source: 'owned',
-    paint: { 'line-color': ['get', 'color'], 'line-width': 2 }
+    paint: { 'line-color': ['get', 'color'], 'line-width': 2.5 }
   });
   gl.addSource('sel', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   gl.addLayer({
