@@ -309,13 +309,22 @@ async function createPackOrder(req, body) {
   const want = body && body.pack != null ? Number(body.pack) : PACKS[0].credits;   // sin indicar pack: el primero (clientes antiguos)
   const pack = PACKS.find(p => p.credits === want);
   if (!pack) throw new HttpError(400, 'Pack no válido');
-  let orderId;
+  let orderId, approveUrl = null;
   if (DEMO) {
     orderId = 'DEMO-' + crypto.randomUUID();
   } else {
+    const ctx = { shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', landing_page: 'GUEST_CHECKOUT' };
+    if (body && body.returnUrl) {   // pago por redirección (botón "Tarjeta" en móvil): PayPal necesita a dónde volver
+      let u; try { u = new URL(String(body.returnUrl)); } catch { throw new HttpError(400, 'Dirección de retorno no válida'); }
+      if (!/^https?:$/.test(u.protocol)) throw new HttpError(400, 'Dirección de retorno no válida');
+      u.search = ''; u.hash = '';
+      ctx.return_url = u.toString();
+      u.searchParams.set('pay', 'cancel');
+      ctx.cancel_url = u.toString();
+    }
     const o = await paypal('POST', '/v2/checkout/orders', {
       intent: 'CAPTURE',
-      payment_source: { paypal: { experience_context: { shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', landing_page: 'GUEST_CHECKOUT' } } },
+      payment_source: { paypal: { experience_context: ctx } },
       purchase_units: [{
         reference_id: 'PACK',
         description: `Pack de ${pack.credits} créditos`,
@@ -323,9 +332,11 @@ async function createPackOrder(req, body) {
       }],
     });
     orderId = o.id;
+    const l = (o.links || []).find(x => x.rel === 'payer-action') || (o.links || []).find(x => x.rel === 'approve');
+    approveUrl = l ? l.href : null;
   }
   await run('INSERT INTO pack_orders (order_id, status, created_at, pack_credits, pack_price) VALUES ($1,$2,$3,$4,$5)', [orderId, 'CREATED', now, pack.credits, pack.price]);
-  return { orderId, size: pack.credits, price: pack.price, currency: CURRENCY };
+  return { orderId, size: pack.credits, price: pack.price, currency: CURRENCY, approveUrl };
 }
 
 async function capturePackOrder(req, orderId) {

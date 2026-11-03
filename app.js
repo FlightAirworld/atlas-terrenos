@@ -929,14 +929,39 @@ async function renderPaypal(sel = '#paypal-box') {
   try {
     await loadPaypalSdk();
     if (!isSmallPay()) { paypal.Buttons(paypalOpts()).render(sel); return; }   // escritorio: PayPal + Tarjeta de serie
-    // Móvil: botón PayPal y, debajo, un botón "Tarjeta" que lleva al mismo pago de PayPal
-    // (encima va un botón de PayPal invisible, así el toque abre exactamente el mismo flujo).
+    // Móvil: botón PayPal y, debajo, un botón "Tarjeta" que lleva a la página de pago de PayPal (donde se paga con tarjeta como invitado)
     const box = document.querySelector(sel);
-    box.innerHTML = '<div class="pp-main"></div><div class="pp-card"><span class="pp-card-label">💳 Tarjeta</span><div class="pp-card-hit"></div></div>';
-    const opts = { ...paypalOpts(), fundingSource: paypal.FUNDING.PAYPAL };
-    paypal.Buttons(opts).render(box.querySelector('.pp-main'));
-    paypal.Buttons(opts).render(box.querySelector('.pp-card-hit'));
+    box.innerHTML = '<div class="pp-main"></div><button type="button" class="pp-card">💳 Tarjeta</button>';
+    paypal.Buttons(paypalOpts()).render(box.querySelector('.pp-main'));
+    const card = box.querySelector('.pp-card');
+    card.dataset.nosound = '';
+    card.onclick = async () => {
+      card.disabled = true;
+      try {
+        setMsg('Abriendo el pago…');
+        const here = location.origin + location.pathname;
+        const o = await api('/api/packs/orders', { method: 'POST', body: { pack: chosenPack, returnUrl: here } });
+        if (!o.approveUrl) throw new Error('No se pudo abrir el pago con tarjeta');
+        localStorage.setItem('pendingPay', o.orderId);
+        location.href = o.approveUrl;   // PayPal -> pago con tarjeta -> vuelve aquí (ver resumePayment)
+      } catch (e) { card.disabled = false; fail(e); }
+    };
   } catch (e) { setMsg(e.message, 'err'); }
+}
+// Al volver de PayPal tras pagar con el botón "Tarjeta": cobra el pedido
+async function resumePayment() {
+  const sp = new URLSearchParams(location.search);
+  const token = sp.get('token'), cancelled = sp.get('pay') === 'cancel';
+  if (!token && !cancelled) return;
+  let pending = null;
+  try { pending = localStorage.getItem('pendingPay'); } catch {}
+  if (!pending || (token && token !== pending)) return;
+  try { localStorage.removeItem('pendingPay'); } catch {}
+  ['token', 'PayerID', 'pay'].forEach(k => sp.delete(k));
+  history.replaceState(null, '', location.pathname + (sp.toString() ? '?' + sp : '') + location.hash);
+  if (cancelled) return setMsg('Pago cancelado', 'err');
+  for (let i = 0; i < 40 && loginRequired() && !authToken; i++) await new Promise(r => setTimeout(r, 150));   // espera a la sesión
+  try { await captureOrder(token); } catch (e) { fail(e); }
 }
 
 // ---------- Comprar créditos desde "Mis terrenos" ----------
@@ -1374,6 +1399,7 @@ scheduleWalker(randBetween(20000, 60000));
   loadStats();
   loadParcels();
   openSharedParcel();
+  resumePayment();
 })();
 
 
