@@ -119,6 +119,15 @@
     #boot-retry { margin-top:14px; padding:10px 18px; border-radius:99px; border:1px solid rgba(255,255,255,.4); background:rgba(255,255,255,.12); color:#fff; font-weight:700; }
     @keyframes bootbar { 0% { transform:translateX(-110%); } 100% { transform:translateX(260%); } }
     @media (prefers-reduced-motion: reduce) { #boot .boot-bar i { animation:none; width:100%; opacity:.6; } #boot { transition:none; } }
+
+    /* Menú desplegable de la derecha (ver menu.js): un solo botón que agrupa los demás */
+    #map-controls { align-items:flex-end; gap:8px; }
+    #map-controls #menu-btn { width:auto !important; height:46px !important; padding:0 18px !important; border-radius:99px !important; font-size:16px !important; font-weight:800 !important; display:flex !important; align-items:center; gap:6px; white-space:nowrap; }
+    #menu-items { display:none; flex-direction:column; gap:8px; align-items:flex-end; max-height:calc(100vh - 80px); max-height:calc(100dvh - 80px); overflow-y:auto; padding:2px; }
+    #map-controls.open #menu-items { display:flex; }
+    #map-controls #menu-items button { width:auto !important; height:44px !important; padding:0 16px 0 12px !important; border-radius:99px !important; font-size:20px !important; display:flex !important; align-items:center; gap:8px; white-space:nowrap; }
+    #map-controls #menu-items button.hidden { display:none !important; }
+    #map-controls #menu-items button::after { content:attr(data-label) !important; display:inline !important; font-size:14px; font-weight:700; }
   </style>
 </head>
 
@@ -158,16 +167,19 @@
   <span id="stats" class="stats" style="display:none" aria-live="polite"></span>
 
   <div id="map-controls">
-    <button id="locate" type="button" title="Ir a mi ubicación" aria-label="Ir a mi ubicación">📍</button>
-    <button id="search-btn" type="button" title="Buscar un lugar" aria-label="Buscar un lugar">
+    <button id="menu-btn" type="button" aria-expanded="false" aria-controls="menu-items">☰ Menú</button>
+    <div id="menu-items">
+    <button id="locate" data-label="Mi ubicación" type="button" title="Ir a mi ubicación" aria-label="Ir a mi ubicación">📍</button>
+    <button id="search-btn" data-label="Buscar" type="button" title="Buscar un lugar" aria-label="Buscar un lugar">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
     </button>
-    <button id="rank-btn" type="button" title="Ranking" aria-label="Ranking">🏆</button>
-    <button id="people-btn" type="button" title="Gente caminando: activada" aria-label="Activar o desactivar la gente caminando" aria-pressed="true">🚶</button>
-    <button id="vehicles-btn" type="button" title="Coches y taxis: activados" aria-label="Activar o desactivar los coches y taxis" aria-pressed="true">🚓</button>
-    <button id="sound-btn" type="button" title="Música y efectos" aria-label="Sonido">🔊</button>
-    <button id="account-btn" type="button" class="hidden" title="Entrar" aria-label="Entrar">👤</button>
-    <button id="install-btn" type="button" class="hidden" title="Instalar la app" aria-label="Instalar la app">📲</button>
+    <button id="rank-btn" data-label="Ranking" type="button" title="Ranking" aria-label="Ranking">🏆</button>
+    <button id="people-btn" data-label="Gente" type="button" title="Gente caminando: activada" aria-label="Activar o desactivar la gente caminando" aria-pressed="true">🚶</button>
+    <button id="vehicles-btn" data-label="Coches" type="button" title="Coches y taxis: activados" aria-label="Activar o desactivar los coches y taxis" aria-pressed="true">🚓</button>
+    <button id="sound-btn" data-label="Sonido" type="button" title="Música y efectos" aria-label="Sonido">🔊</button>
+    <button id="account-btn" data-label="Cuenta" type="button" class="hidden" title="Entrar" aria-label="Entrar">👤</button>
+    <button id="install-btn" data-label="Instalar app" type="button" class="hidden" title="Instalar la app" aria-label="Instalar la app">📲</button>
+    </div>
   </div>
 
   <button id="credit-pill" type="button" title="Mis terrenos y créditos" aria-label="Mis créditos">🌎 🎟️ <span id="credit-count">0</span> <small id="credit-live" style="font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums"></small></button>
@@ -374,6 +386,7 @@
   <script src="online.js"></script>
   <script src="install.js"></script>
   <script src="invite.js"></script>
+  <script src="menu.js"></script>
 <footer style="text-align:center; font-size:13px; padding:12px;">
   <a href="/privacidad.html">Política de Privacidad</a> ·
   <a href="/terminos.html">Condiciones del Servicio</a> ·
