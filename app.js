@@ -93,8 +93,10 @@ function authHeaders() { return authToken ? { 'X-Auth-Token': authToken } : {}; 
 function setMsg(text, kind = '') {
   for (const id of ['msg', 'buy-msg']) { const m = $(id); if (m) { m.textContent = text; m.className = 'msg ' + kind; } }   // 'buy-msg': ventana de comprar créditos
 }
-async function api(url, opts) {
-  const r = await fetch(url, opts && { ...opts, headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(opts.body) });
+async function api(url, opts = {}) {
+  // Siempre manda el token de sesión (antes, en los GET sin opciones no se enviaba y el servidor respondía "Inicia sesión")
+  const hasBody = opts.body !== undefined;
+  const r = await fetch(url, { ...opts, headers: { ...(hasBody ? { 'Content-Type': 'application/json' } : {}), ...authHeaders() }, body: hasBody ? JSON.stringify(opts.body) : undefined });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || 'Error ' + r.status);
   return j;
