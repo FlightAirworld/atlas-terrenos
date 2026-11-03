@@ -40,7 +40,6 @@
       box-shadow:0 2px 8px rgba(0,0,0,.3);
     }
     #mine-btn.hidden { display:none !important; }
-    #weather-canvas { position:fixed; inset:0; width:100vw; height:100vh; z-index:900; pointer-events:none; }
     /* Controles flotantes sobre el mapa (sin barra superior) */
     #map-controls { position:fixed; top:12px; right:12px; z-index:1000; display:flex; flex-direction:column; gap:10px; }
     #map-controls button, #credit-pill {
@@ -122,7 +121,7 @@
     <button id="rank-btn" type="button" title="Ranking" aria-label="Ranking">🏆</button>
     <button id="people-btn" type="button" title="Gente caminando: activada" aria-label="Activar o desactivar la gente caminando" aria-pressed="true">🚶</button>
     <button id="vehicles-btn" type="button" title="Coches y taxis: activados" aria-label="Activar o desactivar los coches y taxis" aria-pressed="true">🚓</button>
-    <button id="weather-btn" type="button" title="Tormentas: activadas" aria-label="Activar o desactivar las tormentas" aria-pressed="true">🌧️</button>
+    <button id="sound-btn" type="button" title="Música y efectos" aria-label="Sonido">🔊</button>
     <button id="account-btn" type="button" class="hidden" title="Entrar" aria-label="Entrar">👤</button>
     <button id="install-btn" type="button" class="hidden" title="Instalar la app" aria-label="Instalar la app">📲</button>
   </div>
@@ -326,7 +325,6 @@
   <script async src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js" onload="if (window.queueCuts) queueCuts()"></script>
   <script src="sounds.js"></script>
   <script src="app.js"></script>
-  <script src="weather.js"></script>
   <script src="people.js"></script>
   <script src="vehicles.js"></script>
   <script src="online.js"></script>

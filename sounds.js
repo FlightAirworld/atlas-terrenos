@@ -3,7 +3,7 @@
 // Modos: 2 = música + efectos, 1 = solo efectos, 0 = silencio. Se recuerda en el dispositivo.
 (function () {
   const KEY = 'soundMode';
-  let mode = 1;   // por defecto solo efectos (sin música); sin botón 🔊 en la página no se puede cambiar
+  let mode = 2;   // por defecto música + efectos (la música empieza con el primer toque); el botón 🔊 los cambia
   try { const s = localStorage.getItem(KEY); if (s !== null) mode = Math.min(2, Math.max(0, Number(s) || 0)); } catch (e) {}
 
   let ctx = null, master, sfxBus, musicBus, delay, started = false, timer = null, nextTime = 0, step = 0;
@@ -16,7 +16,7 @@
     ctx = new AC();
     master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination);
     sfxBus = ctx.createGain(); sfxBus.gain.value = 0.35; sfxBus.connect(master);
-    musicBus = ctx.createGain(); musicBus.gain.value = 0.16; musicBus.connect(master);
+    musicBus = ctx.createGain(); musicBus.gain.value = 0.22; musicBus.connect(master);
     // pequeño eco para dar ambiente a la música
     delay = ctx.createDelay(1); delay.delayTime.value = 0.375;
     const fb = ctx.createGain(); fb.gain.value = 0.35;
