@@ -129,4 +129,5 @@
   }, true);
 
   window.sfx = play;
+  window.soundMode = () => mode;   // 0 = silencio, 1 = solo efectos, 2 = música y efectos (lo usa vehicles.js para aviones y sirenas)
 })();

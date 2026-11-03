@@ -1452,9 +1452,49 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
 // Sitio estático en otro dominio: CORS_ORIGINS = direcciones permitidas, separadas por comas (p. ej. https://atlas-terrenos-web.onrender.com)
 const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(x => x.trim().replace(/\/+$/, '')).filter(Boolean);
 
+// ---------- Archivos estáticos: ETag + caché + gzip (ahorra ancho de banda) ----------
+// Imágenes: el navegador las guarda 7 días. HTML/JS/CSS: siempre pregunta, pero si no han cambiado el servidor contesta 304 (sin cuerpo).
+const zlib = require('node:zlib');
+const staticCache = new Map();   // ruta -> { mtime, etag, buf, gz }
+const COMPRESSIBLE = /^(text\/|application\/(json|manifest\+json)|image\/svg)/;
+function sendStatic(req, res, file) {
+  const type = MIME[path.extname(file)] || 'application/octet-stream';
+  const st = fs.statSync(file);
+  let ent = staticCache.get(file);
+  if (!ent || ent.mtime !== st.mtimeMs) {
+    const buf = fs.readFileSync(file);
+    ent = { mtime: st.mtimeMs, buf, etag: '"' + require('node:crypto').createHash('md5').update(buf).digest('hex').slice(0, 20) + '"', gz: null };
+    if (staticCache.size > 300) staticCache.clear();
+    staticCache.set(file, ent);
+  }
+  const isImg = /^image\//.test(type) && !/svg/.test(type);
+  const headers = { 'Content-Type': type, 'ETag': ent.etag, 'Vary': 'Accept-Encoding',
+    'Cache-Control': isImg ? 'public, max-age=604800' : 'no-cache',
+    'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000' };
+  if (req.headers['if-none-match'] === ent.etag) { res.writeHead(304, headers); return res.end(); }
+  let body = ent.buf;
+  if (COMPRESSIBLE.test(type) && /\bgzip\b/.test(String(req.headers['accept-encoding'] || '')) && body.length > 1024) {
+    if (!ent.gz) ent.gz = zlib.gzipSync(ent.buf, { level: 9 });
+    body = ent.gz; headers['Content-Encoding'] = 'gzip';
+  }
+  headers['Content-Length'] = body.length;
+  res.writeHead(200, headers); res.end(body);
+}
+
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  const send = (status, body, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000' }); res.end(body); };
+  const send = (status, body, type = 'application/json; charset=utf-8') => {
+    const h = { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000', 'Vary': 'Accept-Encoding' };
+    const plain = () => { res.writeHead(status, h); res.end(body); };
+    // Respuestas grandes (JSON de parcelas, ranking…): comprimidas con gzip si el navegador lo admite (ahorra ancho de banda)
+    if (typeof body === 'string' && body.length > 1024 && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) {
+      return zlib.gzip(body, { level: 5 }, (err, gz) => {
+        if (err) return plain();
+        res.writeHead(status, { ...h, 'Content-Encoding': 'gzip', 'Content-Length': gz.length }); res.end(gz);
+      });
+    }
+    plain();
+  };
   if (url.pathname.startsWith('/api/')) {
     const origin = req.headers.origin;
     if (origin && CORS_ORIGINS.includes(origin)) {   // también vale para la conexión larga de /api/online
@@ -1477,7 +1517,7 @@ http.createServer(async (req, res) => {
     let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname));
     const rel = path.relative(PUBLIC, file);
     if (!file.startsWith(PUBLIC + path.sep) || /(^|[\\/])(\.|node_modules)/.test(rel) || /^(server\.js|build-static\.js|package(-lock)?\.json)$/.test(rel) || !MIME[path.extname(file)] || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(404, 'No encontrado', 'text/plain');
-    send(200, fs.readFileSync(file), MIME[path.extname(file)] || 'application/octet-stream');
+    return sendStatic(req, res, file);
   } catch (e) {
     const status = e.status || 500;
     if (status === 500) console.error(e, e.details ? JSON.stringify(e.details) : '');
