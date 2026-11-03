@@ -28,6 +28,7 @@
   function open() {
     clearTimeout(retryTimer);
     if (es) return;
+    if (window.apiState && !window.apiState.ready) return;      // servidor dormido: se abre cuando despierte
     es = new EventSource('/api/online?cid=' + encodeURIComponent(cid));
     es.onopen = () => btn.classList.remove('off');
     es.onmessage = e => { const n = parseInt(e.data, 10); if (Number.isFinite(n) && n >= 0) show(n); };
@@ -55,5 +56,5 @@
     tipTimer = setTimeout(() => tip.classList.remove('show'), 3500);
   });
 
-  open();
+  (window.apiReady || Promise.resolve()).then(open);
 })();
