@@ -319,9 +319,22 @@
       <p id="mine-prod" class="muted">Cargando…</p>
       <p id="mine-live" style="font-weight:700;font-size:18px;margin:6px 0;font-variant-numeric:tabular-nums"></p>
       <button id="mine-collect" class="primary" type="button" disabled>Recoger créditos</button>
+      <button id="mine-buy" type="button" style="width:100%;margin-top:8px;padding:10px">🎟️ Comprar créditos</button>
       <p id="mine-msg" class="msg" aria-live="polite"></p>
       <p id="mine-count" class="muted"></p>
       <div id="mine-list" style="max-height:40vh;overflow:auto"></div>
+    </div>
+  </div>
+
+  <div id="buy" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="buy-title">
+    <div class="modal-card">
+      <button id="buy-close" class="close" type="button">×</button>
+      <h2 id="buy-title">🎟️ Comprar créditos</h2>
+      <p class="muted">Los créditos sirven para reclamar terrenos, subirlos de nivel y cambiar la casa.</p>
+      <div id="pack-list-2" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0 10px"></div>
+      <div id="paypal-box-2"></div>
+      <button id="demo-pay-2" class="hidden primary" type="button">Simular pago (modo demo)</button>
+      <p id="buy-msg" class="msg" aria-live="polite"></p>
     </div>
   </div>
 

@@ -90,7 +90,9 @@ function boundsOf(x, y) {
   return [[south, west], [south + s, west + s]];
 }
 function authHeaders() { return authToken ? { 'X-Auth-Token': authToken } : {}; }
-function setMsg(text, kind = '') { const m = $('msg'); m.textContent = text; m.className = 'msg ' + kind; }
+function setMsg(text, kind = '') {
+  for (const id of ['msg', 'buy-msg']) { const m = $(id); if (m) { m.textContent = text; m.className = 'msg ' + kind; } }   // 'buy-msg': ventana de comprar créditos
+}
 async function api(url, opts) {
   const r = await fetch(url, opts && { ...opts, headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify(opts.body) });
   const j = await r.json().catch(() => ({}));
@@ -873,8 +875,8 @@ function nameOrThrow() {
 }
 // Packs a la venta (vienen del servidor): el elegido se manda al crear el pedido de PayPal
 let chosenPack = null;
-function buildPackPicker() {
-  const box = $('pack-list');
+function buildPackPicker(boxId = 'pack-list') {
+  const box = $(boxId);
   if (!box || !cfg.packs || !cfg.packs.length) return;
   if (!cfg.packs.some(p => p.credits === chosenPack)) chosenPack = cfg.packs[0].credits;
   const money = new Intl.NumberFormat('es-ES', { style: 'currency', currency: cfg.currency });
@@ -913,17 +915,31 @@ function loadPaypalSdk() {
   });
   return paypalLoaded;
 }
-async function renderPaypal() {
+const paypalOpts = () => ({
+  style: { layout: 'vertical', shape: 'rect', label: 'pay', height: 30 },
+  createOrder: () => createOrder().catch(e => { fail(e); throw e; }),
+  onApprove: data => captureOrder(data.orderID).catch(fail),
+  onError: e => setMsg('Error con PayPal: ' + (e.message || e), 'err'),
+});
+async function renderPaypal(sel = '#paypal-box') {
   try {
     await loadPaypalSdk();
-    paypal.Buttons({
-      style: { layout: 'vertical', shape: 'rect', label: 'pay', height: 30 },
-      createOrder: () => createOrder().catch(e => { fail(e); throw e; }),
-      onApprove: data => captureOrder(data.orderID).catch(fail),
-      onError: e => setMsg('Error con PayPal: ' + (e.message || e), 'err'),
-    }).render('#paypal-box');
+    paypal.Buttons(paypalOpts()).render(sel);
   } catch (e) { setMsg(e.message, 'err'); }
 }
+
+// ---------- Comprar créditos desde "Mis terrenos" ----------
+let buyReady = false;
+function openBuy() {
+  buildPackPicker('pack-list-2');
+  setMsg('');
+  $('buy').classList.remove('hidden');
+  if (cfg.demo) $('demo-pay-2').classList.remove('hidden');
+  else if (!buyReady) { buyReady = true; renderPaypal('#paypal-box-2'); }   // los botones de PayPal se crean al abrir (no se dibujan bien en una ventana oculta)
+}
+$('mine-buy').onclick = () => { $('mine').classList.add('hidden'); openBuy(); };
+$('buy-close').onclick = () => $('buy').classList.add('hidden');
+$('demo-pay-2').onclick = async () => { try { await captureOrder(await createOrder()); } catch (e) { fail(e); } };
 $('demo-pay').onclick = async () => {
   try { await captureOrder(await createOrder()); } catch (e) { fail(e); }
 };
