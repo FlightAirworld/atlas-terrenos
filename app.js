@@ -1473,3 +1473,57 @@ scheduleWalker(randBetween(20000, 60000));
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
+
+// ---------- Primer minuto: guía para reclamar el primer terreno ----------
+// Aparece cuando la cuenta tiene créditos y ningún terreno. Paso 1: tocar una parcela libre; paso 2: reclamarla;
+// al conseguirlo se felicita y se explica cómo recoger créditos. Se puede cerrar (solo hasta recargar).
+(function () {
+  const KEY = 'coachDone';
+  const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  const ssGet = k => { try { return sessionStorage.getItem(k); } catch { return null; } };
+  const ssSet = (k, v) => { try { sessionStorage.setItem(k, v); } catch {} };
+
+  const box = document.createElement('div');
+  box.id = 'coach'; box.className = 'hidden'; box.setAttribute('role', 'status'); box.setAttribute('aria-live', 'polite');
+  box.innerHTML = '<div class="coach-step"></div><div class="coach-text"></div><div class="coach-btns"><button type="button" class="coach-go"></button><button type="button" class="coach-x" aria-label="Cerrar guía">✕</button></div>';
+  document.body.appendChild(box);
+  const stepEl = box.querySelector('.coach-step'), textEl = box.querySelector('.coach-text'), goBtn = box.querySelector('.coach-go');
+  let mode = '', shown = false;
+
+  function toast(text, ms) {
+    let t = document.getElementById('toast');
+    if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+    t.textContent = text; t.classList.add('show');
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), ms);
+  }
+  function set(m, step, text, btn) {
+    if (m === mode) return;
+    mode = m; stepEl.textContent = step; textEl.textContent = text; goBtn.textContent = btn;
+  }
+  goBtn.onclick = () => {
+    if (mode === 'pick') { const b = document.getElementById('locate'); if (b) b.click(); }
+    else { const b = document.getElementById('use-credit'); if (b) b.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  };
+  box.querySelector('.coach-x').onclick = () => { ssSet('coachHide', '1'); box.classList.add('hidden'); };
+
+  function tick() {
+    if (typeof authToken === 'undefined' || !authToken || !prodState || lsGet(KEY) === '1') { box.classList.add('hidden'); return; }
+    const owned = Number(prodState.parcels) || 0;
+    if (owned > 0) {                                  // ya tiene terreno: si la guía estaba en pantalla, se celebra
+      box.classList.add('hidden');
+      if (shown) { toast('🏠 ¡Ya tienes tu primer terreno! Produce créditos cada hora: recógelos en 🏠 Mis terrenos.', 9000); try { sfx('claim'); } catch {} }
+      lsSet(KEY, '1'); return;
+    }
+    const welcome = document.getElementById('welcome');
+    if (credits < 1 || ssGet('coachHide') === '1' || (welcome && !welcome.classList.contains('hidden'))) { box.classList.add('hidden'); return; }
+    const panelOpen = !document.getElementById('panel').classList.contains('hidden');
+    if (panelOpen && typeof selected !== 'undefined' && selected && !selected.owner) {
+      set('claim', 'Paso 2 de 2', 'Escribe el nombre que verá la gente, elige tu casa y pulsa «Reclamar este terreno».', '⬇ Ir al botón');
+    } else {
+      set('pick', 'Paso 1 de 2', `Tienes ${credits} ${plural(credits, 'crédito', 'créditos')}. Toca una parcela libre del mapa para hacerla tuya.`, '📍 Ir a mi ubicación');
+    }
+    box.classList.remove('hidden'); shown = true;
+  }
+  setInterval(tick, 700);
+})();
