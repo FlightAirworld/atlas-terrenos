@@ -244,3 +244,12 @@ path.buy-range {
 /* Punto rojo: hay mensajes nuevos cerca */
 #chat-btn, #menu-btn { position: relative; }
 #chat-btn.has-dot::before, #menu-btn.has-dot::before { content: ''; position: absolute; top: 4px; right: 6px; width: 11px; height: 11px; border-radius: 50%; background: #e63946; border: 2px solid #fff; box-sizing: content-box; }
+
+/* Ranking por ciudades */
+.rank-link { cursor: pointer; }
+.rank-link:hover, .rank-link:focus-visible { text-decoration: underline; }
+#rank-back { background: none; border: 0; font: inherit; color: inherit; padding: 4px 0; cursor: pointer; font-weight: 600; }
+#rank-cities-list { padding-left: 22px; }
+.rank-city { width: 100%; text-align: left; background: none; border: 0; font: inherit; font-weight: 600; color: inherit; padding: 6px 0; cursor: pointer; }
+.rank-owners { padding: 0 0 8px 4px; opacity: .8; }
+.rank-owners.hidden { display: none; }

@@ -994,11 +994,34 @@ async function loadStats() {
     s.top.forEach(t => { const li = document.createElement('li'); li.textContent = `${flagOf(t.country) ? flagOf(t.country) + ' ' : ''}${t.owner} — ${t.n}`; ol.appendChild(li); });
     if (!s.top.length) ol.textContent = 'Aún no hay propietarios. ¡Sé el primero!';
     const oc = $('rank-countries'); oc.replaceChildren();
-    (s.countries || []).forEach(c => { const li = document.createElement('li'); li.textContent = `${flagOf(c.country)} ${countryName(c.country)} — ${c.n}`; oc.appendChild(li); });
+    (s.countries || []).forEach(c => { const li = document.createElement('li'); li.className = 'rank-link'; li.tabIndex = 0; li.setAttribute('role', 'button'); li.textContent = `${flagOf(c.country)} ${countryName(c.country)} — ${c.n}`; li.onclick = () => showCities(c.country); li.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showCities(c.country); } }; oc.appendChild(li); });
     if (!(s.countries || []).length) oc.textContent = 'Aún no hay países. Elige el tuyo al reclamar un terreno.';
   } catch {}
 }
-$('rank-btn').onclick = () => { loadStats(); $('rank').classList.remove('hidden'); };
+// Ranking por ciudades: al tocar un país salen sus ciudades con más terrenos y los propietarios de cada una
+function showRankMain() { $('rank-cities').classList.add('hidden'); $('rank-main').classList.remove('hidden'); }
+async function showCities(code) {
+  $('rank-main').classList.add('hidden'); $('rank-cities').classList.remove('hidden');
+  $('rank-cities-title').textContent = `${flagOf(code)} ${countryName(code)} — ciudades`;
+  const ol = $('rank-cities-list'), note = $('rank-cities-note');
+  ol.replaceChildren(); note.textContent = 'Cargando…';
+  try {
+    const j = await api('/api/rank/cities?country=' + encodeURIComponent(code));
+    j.cities.forEach((c, i) => {
+      const li = document.createElement('li');
+      const head = document.createElement('button'); head.type = 'button'; head.className = 'rank-city';
+      head.textContent = `${c.city} — ${c.n}`;
+      const owners = document.createElement('div'); owners.className = 'rank-owners' + (i ? ' hidden' : '');   // la primera ciudad sale abierta
+      c.owners.forEach(o => { const d = document.createElement('div'); d.textContent = `${o.owner} — ${o.n}`; owners.appendChild(d); });
+      head.onclick = () => owners.classList.toggle('hidden');
+      li.append(head, owners); ol.appendChild(li);
+    });
+    note.textContent = !j.cities.length ? 'Aún no hay ciudades para este país.' + (j.other ? ' Se están calculando, vuelve en un rato.' : '')
+      : j.other ? `${j.other} terreno${j.other === 1 ? '' : 's'} sin ciudad asignada todavía (se van completando solos).` : '';
+  } catch (e) { note.textContent = 'No se pudieron cargar las ciudades: ' + e.message; }
+}
+$('rank-back').onclick = showRankMain;
+$('rank-btn').onclick = () => { showRankMain(); loadStats(); $('rank').classList.remove('hidden'); };
 $('rank-close').onclick = () => $('rank').classList.add('hidden');
 $('locate').onclick = () => {
   if (!navigator.geolocation) return alert('Tu navegador no permite geolocalización');

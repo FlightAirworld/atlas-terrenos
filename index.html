@@ -270,10 +270,19 @@
     <div class="modal-card">
       <button id="rank-close" class="close" type="button">×</button>
       <h2 id="rank-title">🏆 Mayores propietarios</h2>
-      <p class="muted">Descubre quién posee más terrenos.</p>
-      <ol id="rank-list"></ol>
-      <h3 style="margin:16px 0 4px">🌍 Por países</h3>
-      <ol id="rank-countries"></ol>
+      <div id="rank-main">
+        <p class="muted">Descubre quién posee más terrenos.</p>
+        <ol id="rank-list"></ol>
+        <h3 style="margin:16px 0 4px">🌍 Por países</h3>
+        <p class="muted" style="margin:0 0 4px">Toca un país para ver sus ciudades.</p>
+        <ol id="rank-countries"></ol>
+      </div>
+      <div id="rank-cities" class="hidden">
+        <button id="rank-back" type="button">← Volver</button>
+        <h3 id="rank-cities-title" style="margin:10px 0 4px"></h3>
+        <ol id="rank-cities-list"></ol>
+        <p id="rank-cities-note" class="muted"></p>
+      </div>
     </div>
   </div>
 

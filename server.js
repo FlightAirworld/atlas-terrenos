@@ -999,6 +999,65 @@ async function friendsRemove(req, body) {
   return { ok: true };
 }
 
+// ---------- Ranking por ciudades ----------
+// El país lo elige el jugador al reclamar, pero la ciudad se averigua sola a partir de las coordenadas del terreno
+// (geocodificación inversa con Nominatim, como mucho 1 consulta por segundo). Los terrenos antiguos se van rellenando
+// solos en segundo plano. CITY_GEOCODE=0 lo desactiva. CITY_CONTACT = email/web de contacto (Nominatim lo pide).
+const CITY_GEOCODE = process.env.CITY_GEOCODE !== '0';
+const CITY_NONE = 'Sin ciudad';
+const cityCache = new Map();   // celda de ~500 m -> nombre de la ciudad
+const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+async function reverseCity(lat, lng) {
+  const key = Math.round(lat / 0.005) + ',' + Math.round(lng / 0.005);
+  if (cityCache.has(key)) return { name: cityCache.get(key), cached: true };
+  const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=es&lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}`,
+    { headers: { 'User-Agent': 'atlas-terrenos/1.0 (' + (process.env.CITY_CONTACT || 'https://atlas-terrenos.onrender.com') + ')' }, signal: AbortSignal.timeout(10_000) });
+  if (!r.ok) throw new Error('Nominatim ' + r.status);
+  const a = ((await r.json()) || {}).address || {};
+  const name = String(a.city || a.town || a.village || a.municipality || a.hamlet || a.county || '').trim().slice(0, 80) || CITY_NONE;
+  if (cityCache.size > 20000) cityCache.clear();
+  cityCache.set(key, name);
+  return { name, cached: false };
+}
+let cityBusy = false;
+async function cityTick() {
+  if (cityBusy) return;
+  cityBusy = true;
+  try {
+    for (let i = 0; i < 300; i++) {
+      const p = await one('SELECT id, x, y FROM parcels WHERE city IS NULL AND (city_try IS NULL OR city_try < $1) ORDER BY created_at DESC LIMIT 1', [Date.now() - 3600_000]);
+      if (!p) break;
+      try {
+        const { name, cached } = await reverseCity(p.y * SIZE - 90 + SIZE / 2, p.x * SIZE - 180 + SIZE / 2);
+        await run('UPDATE parcels SET city = $1 WHERE id = $2', [name, p.id]);
+        if (!cached) await sleepMs(1100);   // respeta el límite de Nominatim
+      } catch (e) {
+        await run('UPDATE parcels SET city_try = $1 WHERE id = $2', [Date.now(), p.id]).catch(() => {});   // reintenta dentro de 1 h
+        await sleepMs(3000);
+      }
+    }
+  } catch (e) { console.error('Ciudades:', e.message); }
+  cityBusy = false;
+}
+// filas {city, owner, n} -> ciudades con más terrenos y, en cada una, sus propietarios
+function groupCities(rows, maxCities = 20, maxOwners = 10) {
+  const by = new Map();
+  for (const r of rows) {
+    const c = by.get(r.city) || { city: r.city, n: 0, owners: [] };
+    c.n += Number(r.n); c.owners.push({ owner: r.owner, n: Number(r.n) });
+    by.set(r.city, c);
+  }
+  return [...by.values()].sort((a, b) => b.n - a.n || a.city.localeCompare(b.city)).slice(0, maxCities)
+    .map(c => ({ ...c, owners: c.owners.sort((a, b) => b.n - a.n || a.owner.localeCompare(b.owner)).slice(0, maxOwners) }));
+}
+async function rankCities(url) {
+  const country = cleanCountry(url.searchParams.get('country'));
+  if (!country) throw new HttpError(400, 'País no válido');
+  const rows = await all('SELECT city, owner, COUNT(*) AS n FROM parcels WHERE country = $1 AND city IS NOT NULL AND city <> $2 GROUP BY city, owner', [country, CITY_NONE]);
+  const other = Number((await one('SELECT COUNT(*) AS n FROM parcels WHERE country = $1 AND (city IS NULL OR city = $2)', [country, CITY_NONE])).n);
+  return { country, cities: groupCities(rows), other };
+}
+
 // ---------- Avisos al móvil (notificaciones push) ----------
 // Hace falta el paquete "web-push" y un par de claves VAPID (npx web-push generate-vapid-keys) en las variables
 // VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY (y VAPID_SUBJECT, p. ej. mailto:tu@correo.com). Sin ellas, los avisos quedan desactivados.
@@ -1241,6 +1300,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineClients.size };
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/rank/cities') return rankCities(url);
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };
 
@@ -1292,6 +1352,9 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
   .then(async () => {   // niveles de terreno (no hacen nada si las columnas ya existen)
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level SMALLINT NOT NULL DEFAULT 1');
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level_at BIGINT');
+    await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS city TEXT');          // ranking por ciudades
+    await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS city_try BIGINT');
+    await run('CREATE INDEX IF NOT EXISTS parcels_country_city ON parcels (country, city)');
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_credits INT');   // qué pack se pidió en cada pedido
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_price TEXT');
   }).catch(e => console.error('No se pudieron añadir las columnas nuevas (niveles / packs):', e.message))
@@ -1314,6 +1377,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     if (PUSH_ON) { setTimeout(pushRun, 120_000).unref(); setInterval(pushRun, 15 * 60_000).unref(); }   // revisa cada 15 min quién tiene algo pendiente
     const purge = () => run('DELETE FROM chat_msgs WHERE created_at < $1', [Date.now() - CHAT_KEEP_MS]).then(() => run('DELETE FROM chat_reacts WHERE msg_id NOT IN (SELECT id FROM chat_msgs)')).catch(() => {});
     purge(); setInterval(purge, 3600_000).unref();
+    if (CITY_GEOCODE) { setTimeout(cityTick, 5000).unref(); setInterval(cityTick, 20_000).unref(); }   // pone ciudad a los terrenos que no la tienen
   }).catch(e => console.error('No se pudo crear la tabla del chat:', e.message));
 
 // Sitio estático en otro dominio: CORS_ORIGINS = direcciones permitidas, separadas por comas (p. ej. https://atlas-terrenos-web.onrender.com)
