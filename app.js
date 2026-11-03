@@ -919,6 +919,14 @@ function setupPayBoxes(sfx = '', ppSel = '#paypal-box') {
   if (cfg.stripe && sbox) {
     sbox.classList.remove('hidden');
     btn.onclick = () => payWithStripe(btn);
+    const gp = $('gpay-pay' + sfx);   // Google Pay: abre el mismo pago de Stripe, que ofrece Google Pay arriba si tu móvil lo admite
+    if (gp) {
+      gp.onclick = () => payWithStripe(gp);
+      // Si existe images/gpay-button.svg (botón oficial de Google Pay), se usa en lugar del texto
+      const img = new Image(); img.alt = 'Pagar con Google Pay'; img.className = 'gpay-img';
+      img.onload = () => { gp.replaceChildren(img); gp.classList.add('official'); };
+      img.src = 'images/gpay-button.svg';
+    }
     if (or) or.classList.toggle('hidden', !cfg.paypal);
   }
   if (cfg.paypal && cfg.clientId) renderPaypal(ppSel);
