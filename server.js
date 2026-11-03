@@ -1414,7 +1414,18 @@ function sendStatic(req, res, file) {
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  const send = (status, body, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000' }); res.end(body); };
+  const send = (status, body, type = 'application/json; charset=utf-8') => {
+    const h = { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000', 'Vary': 'Accept-Encoding' };
+    const plain = () => { res.writeHead(status, h); res.end(body); };
+    // Respuestas grandes (JSON de parcelas, ranking…): comprimidas con gzip si el navegador lo admite (ahorra ancho de banda)
+    if (typeof body === 'string' && body.length > 1024 && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) {
+      return zlib.gzip(body, { level: 5 }, (err, gz) => {
+        if (err) return plain();
+        res.writeHead(status, { ...h, 'Content-Encoding': 'gzip', 'Content-Length': gz.length }); res.end(gz);
+      });
+    }
+    plain();
+  };
   if (url.pathname.startsWith('/api/')) {
     const origin = req.headers.origin;
     if (origin && CORS_ORIGINS.includes(origin)) {   // también vale para la conexión larga de /api/online
