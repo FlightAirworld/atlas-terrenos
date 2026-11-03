@@ -17,11 +17,13 @@ const PAYPAL_BASE = PAYPAL_ENV === 'live' ? 'https://api-m.paypal.com' : 'https:
 const PRICE = (process.env.PRICE || '1.00');              // precio por parcela
 const CURRENCY = (process.env.CURRENCY || 'EUR').toUpperCase();
 const HAS_PAYPAL = !!(PAYPAL_CLIENT_ID && PAYPAL_SECRET);
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';   // sk_test_... (pruebas) o sk_live_... (real). Solo en el servidor
+const HAS_STRIPE = /^(sk|rk)_(test|live)_/.test(STRIPE_SECRET_KEY);
 const IS_PROD = process.env.NODE_ENV === 'production' || !!process.env.RENDER;   // Render define RENDER=true
-const DEMO = process.env.DEMO === '1' || !HAS_PAYPAL;
+const DEMO = process.env.DEMO === '1' || !(HAS_STRIPE || HAS_PAYPAL);
 if (DEMO && IS_PROD && process.env.DEMO !== '1') {
   // Sin esto, un fallo de configuración regalaría packs sin cobrar.
-  console.error('Faltan PAYPAL_CLIENT_ID / PAYPAL_SECRET en producción. Configúralos, o pon DEMO=1 si de verdad quieres el modo demo.');
+  console.error('Falta STRIPE_SECRET_KEY (o PAYPAL_CLIENT_ID / PAYPAL_SECRET) en producción. Configúralos, o pon DEMO=1 si de verdad quieres el modo demo.');
   process.exit(1);
 }
 if (DEMO && IS_PROD) console.warn('AVISO: modo DEMO activo en producción. No se cobra dinero real.');
@@ -188,6 +190,20 @@ async function paypal(method, url, body) {
   if (!r.ok) { const e = new Error('PayPal: ' + (j.message || r.status)); e.details = j; throw e; }
   return j;
 }
+// ---------- Stripe (pago principal) ----------
+// Se usa Stripe Checkout (página de pago alojada por Stripe) sin instalar ningún paquete: llamadas directas a su API.
+async function stripe(method, url, form) {
+  const r = await fetch('https://api.stripe.com' + url, {
+    method,
+    headers: { Authorization: 'Bearer ' + STRIPE_SECRET_KEY, ...(form ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
+    body: form ? new URLSearchParams(form).toString() : undefined,
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error('Stripe: ' + ((j.error && j.error.message) || r.status)); e.details = j; throw e; }
+  return j;
+}
+const cents = price => Math.round(Number(price) * 100);
+
 // ---------- API ----------
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 
@@ -324,8 +340,32 @@ async function createPackOrder(req, body) {
   const pack = PACKS.find(p => p.credits === want);
   if (!pack) throw new HttpError(400, 'Pack no válido');
   let orderId, approveUrl = null;
+  const useStripe = !DEMO && HAS_STRIPE && (!body || body.method !== 'paypal');
   if (DEMO) {
     orderId = 'DEMO-' + crypto.randomUUID();
+  } else if (useStripe) {
+    // Stripe Checkout: devuelve una dirección a la que mandar al cliente a pagar. Vuelve a returnUrl con ?stripe=ok&session_id=...
+    let u; try { u = new URL(String(body && body.returnUrl)); } catch { throw new HttpError(400, 'Dirección de retorno no válida'); }
+    const host = req.headers.host;
+    const allowed = new Set([...CORS_ORIGINS, `https://${host}`, `http://${host}`]);
+    if (!/^https?:$/.test(u.protocol) || !allowed.has(u.origin)) throw new HttpError(400, 'Dirección de retorno no válida');
+    u.search = ''; u.hash = '';
+    const base = u.toString();
+    const form = {
+      mode: 'payment',
+      'line_items[0][quantity]': '1',
+      'line_items[0][price_data][currency]': CURRENCY.toLowerCase(),
+      'line_items[0][price_data][unit_amount]': String(cents(pack.price)),
+      'line_items[0][price_data][product_data][name]': `Pack de ${pack.credits} créditos`,
+      success_url: base + '?stripe=ok&session_id={CHECKOUT_SESSION_ID}',
+      cancel_url: base + '?pay=cancel',
+      'metadata[pack_credits]': String(pack.credits),
+    };
+    const user = await userFrom(req);
+    if (user) form.client_reference_id = user.id;
+    if (user && user.email) form.customer_email = user.email;
+    const o = await stripe('POST', '/v1/checkout/sessions', form);
+    orderId = o.id; approveUrl = o.url;
   } else {
     const ctx = { shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', landing_page: 'GUEST_CHECKOUT' };
     if (body && body.returnUrl) {   // pago por redirección (botón "Tarjeta" en móvil): PayPal necesita a dónde volver
@@ -365,7 +405,18 @@ async function capturePackOrder(req, orderId) {
 
   const user = REQUIRE_LOGIN ? await needUser(req) : await userFrom(req);   // antes de cobrar nada
   let captureId = null;
-  if (!DEMO) {
+  const isStripeOrder = orderId.startsWith('cs_');
+  if (!DEMO && isStripeOrder) {
+    if (!HAS_STRIPE) throw new HttpError(503, 'Stripe no está configurado');
+    // Se comprueba en Stripe (nunca nos fiamos del navegador) que está pagado, con el importe y la moneda del pack pedido
+    const ses = await stripe('GET', `/v1/checkout/sessions/${encodeURIComponent(orderId)}`);
+    if (ses.payment_status !== 'paid') throw new HttpError(402, 'El pago no se ha completado');
+    if (ses.amount_total !== cents(packPrice) || String(ses.currency).toUpperCase() !== CURRENCY) throw new HttpError(402, 'Importe incorrecto');
+    captureId = typeof ses.payment_intent === 'string' ? ses.payment_intent : (ses.payment_intent && ses.payment_intent.id) || ses.id;
+    // Evita que dos peticiones a la vez (p. ej. recargar la página) sumen los créditos dos veces
+    const claimed = await one("UPDATE pack_orders SET status = 'PROCESSING' WHERE order_id = $1 AND status = 'CREATED' RETURNING order_id", [orderId]);
+    if (!claimed) throw new HttpError(409, 'Este pago ya se está procesando. Espera unos segundos y recarga');
+  } else if (!DEMO) {
     const cap = await paypal('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`);
     const c = cap.purchase_units?.[0]?.payments?.captures?.[0];
     if (cap.status !== 'COMPLETED' || !c || c.status !== 'COMPLETED') throw new HttpError(402, 'El pago no se ha completado');
@@ -387,6 +438,7 @@ async function capturePackOrder(req, orderId) {
     }
     await run("UPDATE pack_orders SET status = 'PAID', code = $1 WHERE order_id = $2", [code, orderId]);
   } catch (e) {
+    if (isStripeOrder) await run("UPDATE pack_orders SET status = 'CREATED' WHERE order_id = $1 AND status = 'PROCESSING'", [orderId]).catch(() => {});
     if (captureId) console.error('PAGO CAPTURADO PERO PACK NO GUARDADO, REVISAR', captureId, orderId, e.message);
     throw e;
   }
@@ -1290,7 +1342,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/admin/stats') return adminStats(req);
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
-    return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, packSize: PACKS[0].credits, packs: PACKS,
+    return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, demo: DEMO, stripe: !DEMO && HAS_STRIPE, paypal: !DEMO && HAS_PAYPAL, clientId: (DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, packSize: PACKS[0].credits, packs: PACKS,
       maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
@@ -1432,5 +1484,5 @@ http.createServer(async (req, res) => {
     send(status, JSON.stringify({ error: status === 500 ? 'Error interno' : e.message }));
   }
 }).listen(PORT, () => {
-  console.log(`Redecora El Mundo en http://localhost:${PORT}  [${DEMO ? 'MODO DEMO (sin PayPal real)' : 'PayPal ' + PAYPAL_ENV}]  packs ${PACKS.map(p => p.credits + '=' + p.price).join(', ')} ${CURRENCY}`);
+  console.log(`Redecora El Mundo en http://localhost:${PORT}  [${DEMO ? 'MODO DEMO (sin cobro real)' : [HAS_STRIPE ? 'Stripe ' + (STRIPE_SECRET_KEY.includes('_live_') ? 'LIVE' : 'test') : null, HAS_PAYPAL ? 'PayPal ' + PAYPAL_ENV : null].filter(Boolean).join(' + ')}]  packs ${PACKS.map(p => p.credits + '=' + p.price).join(', ')} ${CURRENCY}`);
 });

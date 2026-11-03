@@ -898,8 +898,31 @@ function buildPackPicker(boxId = 'pack-list') {
   mark();
 }
 async function createOrder() {
-  const o = await api('/api/packs/orders', { method: 'POST', body: { pack: chosenPack } });
+  const o = await api('/api/packs/orders', { method: 'POST', body: { pack: chosenPack, method: 'paypal' } });
   return o.orderId;
+}
+// Stripe (pago principal): Stripe Checkout en su propia página; al terminar vuelve aquí (ver resumePayment)
+async function payWithStripe(btn) {
+  btn.disabled = true;
+  try {
+    setMsg('Abriendo el pago…');
+    const here = location.origin + location.pathname;
+    const o = await api('/api/packs/orders', { method: 'POST', body: { pack: chosenPack, method: 'stripe', returnUrl: here } });
+    if (!o.approveUrl) throw new Error('No se pudo abrir el pago');
+    localStorage.setItem('pendingPay', o.orderId);
+    location.href = o.approveUrl;
+  } catch (e) { btn.disabled = false; fail(e); }
+}
+// Muestra el botón de Stripe (principal) y, debajo, PayPal (secundario) según lo que tenga configurado el servidor
+function setupPayBoxes(sfx = '', ppSel = '#paypal-box') {
+  const sbox = $('stripe-box' + sfx), btn = $('stripe-pay' + sfx), or = $('pay-or' + sfx), ppBox = document.querySelector(ppSel);
+  if (cfg.stripe && sbox) {
+    sbox.classList.remove('hidden');
+    btn.onclick = () => payWithStripe(btn);
+    if (or) or.classList.toggle('hidden', !cfg.paypal);
+  }
+  if (cfg.paypal && cfg.clientId) renderPaypal(ppSel);
+  else if (ppBox) ppBox.classList.add('hidden');
 }
 async function captureOrder(orderId) {
   const r = await api(`/api/packs/orders/${encodeURIComponent(orderId)}/capture`, { method: 'POST', body: {} });
@@ -916,7 +939,7 @@ function loadPaypalSdk() {
     // En móvil se quita el botón "Tarjeta" incrustado (su formulario se sale de la pantalla): el botón "Tarjeta" que se ve
     // debajo de PayPal abre el mismo pago de PayPal, y allí se paga con tarjeta como invitado en su propia ventana, que sí se desplaza bien.
     const small = isSmallPay();
-    s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(cfg.clientId)}&currency=${cfg.currency}&intent=capture${small ? '&disable-funding=card' : ''}`;
+    s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(cfg.clientId)}&currency=${cfg.currency}&intent=capture${small || cfg.stripe ? '&disable-funding=card' : ''}`;
     s.onload = ok; s.onerror = () => ko(new Error('No se pudo cargar PayPal'));
     document.head.appendChild(s);
   });
@@ -931,7 +954,7 @@ const paypalOpts = () => ({
 async function renderPaypal(sel = '#paypal-box') {
   try {
     await loadPaypalSdk();
-    if (!isSmallPay()) { paypal.Buttons(paypalOpts()).render(sel); return; }   // escritorio: PayPal + Tarjeta de serie
+    if (!isSmallPay() || cfg.stripe) { paypal.Buttons(paypalOpts()).render(sel); return; }   // escritorio (o con Stripe, que ya cobra con tarjeta): solo el botón PayPal
     // Móvil: botón PayPal y, debajo, un botón "Tarjeta" que lleva a la página de pago de PayPal (donde se paga con tarjeta como invitado)
     const box = document.querySelector(sel);
     box.innerHTML = '<div class="pp-main"></div><button type="button" class="pp-card">💳 Tarjeta</button>';
@@ -943,7 +966,7 @@ async function renderPaypal(sel = '#paypal-box') {
       try {
         setMsg('Abriendo el pago…');
         const here = location.origin + location.pathname;
-        const o = await api('/api/packs/orders', { method: 'POST', body: { pack: chosenPack, returnUrl: here } });
+        const o = await api('/api/packs/orders', { method: 'POST', body: { pack: chosenPack, method: 'paypal', returnUrl: here } });
         if (!o.approveUrl) throw new Error('No se pudo abrir el pago con tarjeta');
         localStorage.setItem('pendingPay', o.orderId);
         location.href = o.approveUrl;   // PayPal -> pago con tarjeta -> vuelve aquí (ver resumePayment)
@@ -954,13 +977,13 @@ async function renderPaypal(sel = '#paypal-box') {
 // Al volver de PayPal tras pagar con el botón "Tarjeta": cobra el pedido
 async function resumePayment() {
   const sp = new URLSearchParams(location.search);
-  const token = sp.get('token'), cancelled = sp.get('pay') === 'cancel';
+  const token = sp.get('token') || (sp.get('stripe') === 'ok' ? sp.get('session_id') : null), cancelled = sp.get('pay') === 'cancel';
   if (!token && !cancelled) return;
   let pending = null;
   try { pending = localStorage.getItem('pendingPay'); } catch {}
   if (!pending || (token && token !== pending)) return;
   try { localStorage.removeItem('pendingPay'); } catch {}
-  ['token', 'PayerID', 'pay'].forEach(k => sp.delete(k));
+  ['token', 'PayerID', 'pay', 'stripe', 'session_id'].forEach(k => sp.delete(k));
   history.replaceState(null, '', location.pathname + (sp.toString() ? '?' + sp : '') + location.hash);
   if (cancelled) return setMsg('Pago cancelado', 'err');
   for (let i = 0; i < 40 && loginRequired() && !authToken; i++) await new Promise(r => setTimeout(r, 150));   // espera a la sesión
@@ -974,7 +997,7 @@ function openBuy() {
   setMsg('');
   $('buy').classList.remove('hidden');
   if (cfg.demo) $('demo-pay-2').classList.remove('hidden');
-  else if (!buyReady) { buyReady = true; renderPaypal('#paypal-box-2'); }   // los botones de PayPal se crean al abrir (no se dibujan bien en una ventana oculta)
+  else if (!buyReady) { buyReady = true; setupPayBoxes('-2', '#paypal-box-2'); }   // los botones de PayPal se crean al abrir (no se dibujan bien en una ventana oculta)
 }
 $('mine-buy').onclick = () => { $('mine').classList.add('hidden'); openBuy(); };
 $('panel-buy').onclick = openBuy;   // el mismo botón, desde el panel de tu terreno
@@ -1074,6 +1097,7 @@ function updateAuthUi() {
   const gate = needLoginToBuy();
   $('buy-login').classList.toggle('hidden', !gate);
   $('paypal-box').classList.toggle('hidden', gate);
+  $('stripe-box').classList.toggle('hidden', gate || !cfg.stripe);
   if (cfg.demo) $('demo-pay').classList.toggle('hidden', gate);
   if (dailyState) renderDaily();
 }
@@ -1409,7 +1433,7 @@ scheduleWalker(randBetween(20000, 60000));
   if (adminViewEnabled()) setupAdminControls();
 
   if (cfg.demo) $('demo-pay').classList.remove('hidden');
-  else renderPaypal();
+  else setupPayBoxes();
 
   if (cfg.demo) {
     const h = document.createElement('p');

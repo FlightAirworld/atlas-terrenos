@@ -235,6 +235,10 @@
         <button id="buy-login" class="hidden primary" type="button" style="margin-bottom:8px">👤 Entra para comprar</button>
         <p>🎁 Elige tu pack de créditos</p>
         <div id="pack-list" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0 10px"></div>
+        <div id="stripe-box" class="hidden">
+          <button id="stripe-pay" class="primary" type="button" data-nosound>💳 Pagar con tarjeta</button>
+          <p id="pay-or" class="muted hidden" style="text-align:center;margin:8px 0 2px">o con PayPal</p>
+        </div>
         <div id="paypal-box"></div>
         <button id="demo-pay" class="hidden primary" type="button">
           Simular pago (modo demo)
@@ -343,6 +347,10 @@
       <h2 id="buy-title">🎟️ Comprar créditos</h2>
       <p class="muted">Los créditos sirven para reclamar terrenos, subirlos de nivel y cambiar la casa.</p>
       <div id="pack-list-2" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0 10px"></div>
+      <div id="stripe-box-2" class="hidden">
+        <button id="stripe-pay-2" class="primary" type="button" data-nosound>💳 Pagar con tarjeta</button>
+        <p id="pay-or-2" class="muted hidden" style="text-align:center;margin:8px 0 2px">o con PayPal</p>
+      </div>
       <div id="paypal-box-2"></div>
       <button id="demo-pay-2" class="hidden primary" type="button">Simular pago (modo demo)</button>
       <p id="buy-msg" class="msg" aria-live="polite"></p>
