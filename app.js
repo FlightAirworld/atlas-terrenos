@@ -938,6 +938,7 @@ function openBuy() {
   else if (!buyReady) { buyReady = true; renderPaypal('#paypal-box-2'); }   // los botones de PayPal se crean al abrir (no se dibujan bien en una ventana oculta)
 }
 $('mine-buy').onclick = () => { $('mine').classList.add('hidden'); openBuy(); };
+$('panel-buy').onclick = openBuy;   // el mismo botón, desde el panel de tu terreno
 $('buy-close').onclick = () => $('buy').classList.add('hidden');
 $('demo-pay-2').onclick = async () => { try { await captureOrder(await createOrder()); } catch (e) { fail(e); } };
 $('demo-pay').onclick = async () => {
