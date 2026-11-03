@@ -263,14 +263,19 @@ async function profileSet(req, { nickname }) {
   return { ok: true, nickname: name };
 }
 
+// Regalo de bienvenida: créditos que recibe una cuenta nueva, una sola vez (WELCOME_CREDITS=0 lo desactiva)
+const WELCOME_CREDITS = Math.max(0, Math.floor(Number(process.env.WELCOME_CREDITS ?? 5)));
+
 // Al iniciar sesión: ata a la cuenta el código de este dispositivo (o junta sus terrenos con los de la cuenta)
 async function linkAccount(req) {
   const user = await needUser(req);
   const local = packCodeFrom(req);
   const client = await pool.connect();
+  let welcomeBonus = 0;
   try {
     await client.query('BEGIN');
     let mine = (await client.query('SELECT code, credits FROM packs WHERE user_id = $1 FOR UPDATE', [user.id])).rows[0];
+    const isNewAccount = !mine;          // la cuenta aún no tenía pack: es la primera vez que entra
     let old = null;
     if (local && (!mine || mine.code !== local)) {
       old = (await client.query('SELECT code, credits, user_id FROM packs WHERE code = $1 FOR UPDATE', [local])).rows[0] || null;
@@ -291,9 +296,18 @@ async function linkAccount(req) {
         mine.credits = up.rows[0].credits;
       }
     }
+    // Regalo de bienvenida: solo cuentas nuevas y una sola vez (la clave primaria de welcome_gifts lo garantiza)
+    if (isNewAccount && WELCOME_CREDITS > 0) {
+      const g = await client.query('INSERT INTO welcome_gifts (user_id, credits, created_at) VALUES ($1,$2,$3) ON CONFLICT (user_id) DO NOTHING RETURNING user_id', [user.id, WELCOME_CREDITS, Date.now()]);
+      if (g.rows[0]) {
+        const up = await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING credits', [WELCOME_CREDITS, mine.code]);
+        mine.credits = up.rows[0].credits;
+        welcomeBonus = WELCOME_CREDITS;
+      }
+    }
     await client.query('COMMIT');
     const prof = await getProfile(user.id);
-    return { ok: true, code: mine.code, credits: mine.credits, email: user.email, nickname: prof ? prof.nickname : null };
+    return { ok: true, code: mine.code, credits: mine.credits, email: user.email, nickname: prof ? prof.nickname : null, welcomeBonus };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Inténtalo de nuevo');
@@ -1358,6 +1372,9 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_credits INT');   // qué pack se pidió en cada pedido
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_price TEXT');
   }).catch(e => console.error('No se pudieron añadir las columnas nuevas (niveles / packs):', e.message))
+  .then(async () => {   // regalo de bienvenida (una fila por cuenta: así solo se cobra una vez)
+    await run('CREATE TABLE IF NOT EXISTS welcome_gifts (user_id TEXT PRIMARY KEY, credits INT NOT NULL, created_at BIGINT NOT NULL)');
+  }).catch(e => console.error('No se pudo crear la tabla welcome_gifts:', e.message))
   .then(async () => {   // tablas de "Invita y gana" (no hacen nada si ya existen)
     await run('CREATE TABLE IF NOT EXISTS ref_codes (code TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, created_at BIGINT NOT NULL, last_ip TEXT)');
     await run('CREATE TABLE IF NOT EXISTS referrals (invitee_id TEXT PRIMARY KEY, inviter_id TEXT NOT NULL, created_at BIGINT NOT NULL, ip_hash TEXT, rewarded_at BIGINT, inviter_credits INT NOT NULL DEFAULT 0)');
@@ -1383,49 +1400,9 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
 // Sitio estático en otro dominio: CORS_ORIGINS = direcciones permitidas, separadas por comas (p. ej. https://atlas-terrenos-web.onrender.com)
 const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(x => x.trim().replace(/\/+$/, '')).filter(Boolean);
 
-// ---------- Archivos estáticos: ETag + caché + gzip (ahorra ancho de banda) ----------
-// Imágenes: el navegador las guarda 7 días. HTML/JS/CSS: siempre pregunta, pero si no han cambiado el servidor contesta 304 (sin cuerpo).
-const zlib = require('node:zlib');
-const staticCache = new Map();   // ruta -> { mtime, etag, buf, gz }
-const COMPRESSIBLE = /^(text\/|application\/(json|manifest\+json)|image\/svg)/;
-function sendStatic(req, res, file) {
-  const type = MIME[path.extname(file)] || 'application/octet-stream';
-  const st = fs.statSync(file);
-  let ent = staticCache.get(file);
-  if (!ent || ent.mtime !== st.mtimeMs) {
-    const buf = fs.readFileSync(file);
-    ent = { mtime: st.mtimeMs, buf, etag: '"' + require('node:crypto').createHash('md5').update(buf).digest('hex').slice(0, 20) + '"', gz: null };
-    if (staticCache.size > 300) staticCache.clear();
-    staticCache.set(file, ent);
-  }
-  const isImg = /^image\//.test(type) && !/svg/.test(type);
-  const headers = { 'Content-Type': type, 'ETag': ent.etag, 'Vary': 'Accept-Encoding',
-    'Cache-Control': isImg ? 'public, max-age=604800' : 'no-cache',
-    'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000' };
-  if (req.headers['if-none-match'] === ent.etag) { res.writeHead(304, headers); return res.end(); }
-  let body = ent.buf;
-  if (COMPRESSIBLE.test(type) && /\bgzip\b/.test(String(req.headers['accept-encoding'] || '')) && body.length > 1024) {
-    if (!ent.gz) ent.gz = zlib.gzipSync(ent.buf, { level: 9 });
-    body = ent.gz; headers['Content-Encoding'] = 'gzip';
-  }
-  headers['Content-Length'] = body.length;
-  res.writeHead(200, headers); res.end(body);
-}
-
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  const send = (status, body, type = 'application/json; charset=utf-8') => {
-    const h = { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000', 'Vary': 'Accept-Encoding' };
-    const plain = () => { res.writeHead(status, h); res.end(body); };
-    // Respuestas grandes (JSON de parcelas, ranking…): comprimidas con gzip si el navegador lo admite (ahorra ancho de banda)
-    if (typeof body === 'string' && body.length > 1024 && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) {
-      return zlib.gzip(body, { level: 5 }, (err, gz) => {
-        if (err) return plain();
-        res.writeHead(status, { ...h, 'Content-Encoding': 'gzip', 'Content-Length': gz.length }); res.end(gz);
-      });
-    }
-    plain();
-  };
+  const send = (status, body, type = 'application/json; charset=utf-8') => { res.writeHead(status, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000' }); res.end(body); };
   if (url.pathname.startsWith('/api/')) {
     const origin = req.headers.origin;
     if (origin && CORS_ORIGINS.includes(origin)) {   // también vale para la conexión larga de /api/online
@@ -1448,7 +1425,7 @@ http.createServer(async (req, res) => {
     let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname));
     const rel = path.relative(PUBLIC, file);
     if (!file.startsWith(PUBLIC + path.sep) || /(^|[\\/])(\.|node_modules)/.test(rel) || /^(server\.js|build-static\.js|package(-lock)?\.json)$/.test(rel) || !MIME[path.extname(file)] || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(404, 'No encontrado', 'text/plain');
-    return sendStatic(req, res, file);
+    send(200, fs.readFileSync(file), MIME[path.extname(file)] || 'application/octet-stream');
   } catch (e) {
     const status = e.status || 500;
     if (status === 500) console.error(e, e.details ? JSON.stringify(e.details) : '');

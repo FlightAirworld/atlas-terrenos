@@ -132,10 +132,6 @@ function houseFor(id, house) {
   }
   return HOUSES[(h >>> 16) % HOUSES.length];
 }
-// En la base de datos las casas se guardan como 'images/xxx.png' (no cambiar esos nombres); lo que se descarga son las versiones
-// WebP (mucho más ligeras): imgSrc = foto normal, thumbSrc = miniatura para el selector. Si ya es un blob: no se toca.
-const imgSrc = h => typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h;
-const thumbSrc = h => h.replace(/\.png$/i, '-t.webp');   // miniatura: images/casa-1.png -> images/casa-1-t.webp
 // Altura aproximada (en metros) de cada tipo de edificio: da volumen 3D a las parcelas
 const HOUSE_HEIGHT = {
   'casa-aerea': 9, 'casa-frente': 9, 'policia': 12, 'pisos': 30, 'gasolinera': 6, 'choza': 4,
@@ -261,7 +257,7 @@ function applyCut(ex, cut) {
 }
 
 function loadImg(url) {
-  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = imgSrc(url); });
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
 }
 // Foto de la casa con la zona de calle transparente → URL de blob
 async function clippedPhoto(url, p, road) {
@@ -300,7 +296,7 @@ async function refreshPhoto(ex) {
   const src = ex.hasDetail && tok === ex.tok && url === ex.url && gl.getSource(ex.srcId);
   if (!src) { if (blob) URL.revokeObjectURL(blob); return; }
   freeBlob(ex); ex.blob = blob;
-  src.updateImage({ url: imgSrc(u) });
+  src.updateImage({ url: u });
 }
 
 function addDetail(ex) {
@@ -321,7 +317,7 @@ function addDetail(ex) {
 function mountDetail(ex, imgUrl, blob) {
   const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y);
   ex.blob = blob;
-  gl.addSource(ex.srcId, { type: 'image', url: imgSrc(imgUrl), coordinates: [[w, n], [e, n], [e, s], [w, s]] });
+  gl.addSource(ex.srcId, { type: 'image', url: imgUrl, coordinates: [[w, n], [e, n], [e, s], [w, s]] });
   gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
   const pill = document.createElement('span');
   pill.className = 'owner-pill';
@@ -606,7 +602,7 @@ function showPanel(p) {
   if (owned) {
     $('p-owner').textContent = [flagOf(p.country), p.owner].filter(Boolean).join(' ');
     $('p-owner-icon').textContent = p.avatar || '👤';
-    $('p-photo').src = imgSrc(houseFor(p.id, p.house));
+    $('p-photo').src = houseFor(p.id, p.house);
     $('house-edit').classList.toggle('hidden', !p.mine);
     if (p.mine) markHouse($('house-pick-edit'), p.house);
     $('p-avatar').textContent = p.avatar || '';
@@ -684,7 +680,7 @@ function buildHousePicker(box, onPick, withRandom) {
   if (withRandom) add(null, '🎲', 'Al azar');
   HOUSES.forEach(h => {
     const i = document.createElement('img');
-    i.src = thumbSrc(h); i.alt = ''; i.loading = 'lazy'; i.decoding = 'async';
+    i.src = h; i.alt = ''; i.loading = 'lazy';
     i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;display:block';
     add(h, i, houseName(h));
   });
@@ -708,7 +704,7 @@ function markHouse(box, current) {
       credits = j.credits; updateCreditUi();
       selected.house = j.house;
       markHouse(editBox, j.house);
-      $('p-photo').src = imgSrc(houseFor(selected.id, j.house));
+      $('p-photo').src = houseFor(selected.id, j.house);
       drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: j.house, level: selected.level });
       sfx('claim');
       setMsg(`🏠 ¡Casa cambiada! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
@@ -1080,6 +1076,14 @@ function updateAuthUi() {
   if (cfg.demo) $('demo-pay').classList.toggle('hidden', gate);
   if (dailyState) renderDaily();
 }
+function showWelcomeGift(n) {
+  let t = document.getElementById('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+  t.textContent = `🎁 ¡Bienvenido! Te regalamos ${n} ${plural(n, 'crédito', 'créditos')} para empezar. ¡Reclama tu primer terreno!`;
+  t.classList.add('show');
+  clearTimeout(showWelcomeGift.t); showWelcomeGift.t = setTimeout(() => t.classList.remove('show'), 7000);
+  try { sfx('gift'); } catch {}
+}
 async function linkAccountOnServer() {
   try {
     const r = await fetch('/api/auth/link', { method: 'POST', headers: { ...(packCode ? { Authorization: 'Bearer ' + packCode } : {}), ...authHeaders() } });
@@ -1098,6 +1102,7 @@ async function linkAccountOnServer() {
       $('login').classList.add('hidden');
     }
     loadDaily(); loadProduction();
+    if (j.welcomeBonus > 0) showWelcomeGift(j.welcomeBonus);   // regalo de bienvenida (solo la primera vez)
     if (window.inviteAfterLink) inviteAfterLink();      // Invita y gana: apunta de quién viene
   } catch (e) { linkedFor = null; setLoginMsg(e.message, 'err'); }
 }
