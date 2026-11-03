@@ -235,3 +235,12 @@ path.buy-range {
 .chat-card-name { font-weight: 700; font-size: 16px; margin-bottom: 8px; }
 .chat-card-btns { display: flex; gap: 6px; }
 .chat-card-btns button { width: auto; flex: 1; padding: 8px; }
+.chat-msg .reacts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 3px; }
+.chat-msg .reacts button { padding: 1px 8px; border-radius: 999px; font-size: 13px; }
+.chat-msg .reacts button.on { border-color: var(--accent); background: #0b6e4f26; }
+.chat-msg .reacts .plus { opacity: .55; }
+.chat-msg .reacts .pick { display: inline-flex; gap: 3px; }
+.chat-msg .reacts .pick button { font-size: 16px; padding: 0 6px; border: 0; background: transparent; }
+/* Punto rojo: hay mensajes nuevos cerca */
+#chat-btn, #menu-btn { position: relative; }
+#chat-btn.has-dot::before, #menu-btn.has-dot::before { content: ''; position: absolute; top: 4px; right: 6px; width: 11px; height: 11px; border-radius: 50%; background: #e63946; border: 2px solid #fff; box-sizing: content-box; }

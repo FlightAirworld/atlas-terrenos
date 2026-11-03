@@ -411,6 +411,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house })
       [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), cleanCountry(country), user ? user.id : null, cleanHouse(house)]);
     await client.query('COMMIT');
     let bonus = 0;   // invitación: premio al invitado y a quien le invitó (si no hay invitación, no pasa nada)
+    if (user) notifyFriendsOf(user.id, 'claim');   // sin esperar: el aviso no retrasa la respuesta
     if (user) { try { const rr = await rewardReferral(user.id, code); if (rr) bonus = rr.inviteeBonus; } catch (e) { console.error('Invitación:', e.message); } }
     return { ok: true, parcel: p.id, owner: name, credits: r.rows[0].credits + bonus, referralBonus: bonus };
   } catch (e) {
@@ -616,6 +617,7 @@ async function upgradeParcel(req, { id, from }) {
     if (!r.rows[0]) throw new HttpError(402, 'NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.');
     await client.query('UPDATE parcels SET level = $1, level_at = $2 WHERE id = $3', [level + 1, Date.now(), String(id)]);
     await client.query('COMMIT');
+    notifyFriendsOf(user.id, 'level', level + 1);
     return { ok: true, level: level + 1, credits: r.rows[0].credits, cost };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -792,35 +794,50 @@ function onlineStream(req, res, url) {
   res.on('error', leave);
 }
 
-// ---------- Chat por zona ----------
-// El mapa se divide en zonas de 0,02° (unos 2 km); cada zona tiene su chat. El cliente calcula el id de zona ("x:y")
-// con el centro del mapa. Leer es libre; escribir exige cuenta con apodo. Los mensajes se guardan 7 días.
+// ---------- Chat por zona (radio de CHAT_RADIUS_KM) ----------
+// Cada mensaje guarda el punto del mapa (redondeado a ~1 km) desde el que se envió, y se ve a CHAT_RADIUS_KM a la redonda
+// (50 km por defecto). Leer es libre; escribir exige cuenta con apodo. Los mensajes se guardan 7 días.
 // Antiabuso: 1 mensaje cada 3 s, 15 por minuto, sin repetir el mismo, sin enlaces y con lista de palabras prohibidas
 // opcional (CHAT_BANNED="palabra1,palabra2"). El admin puede borrar mensajes (POST /api/chat/delete con la clave).
+const CHAT_RADIUS_KM = Math.min(200, Math.max(1, Number(process.env.CHAT_RADIUS_KM || 50)));
 const CHAT_MAX_LEN = 200, CHAT_KEEP_MS = 7 * 24 * 3600 * 1000, CHAT_HISTORY = 50;
 const CHAT_MAX_PER_IP = Math.max(1, Number(process.env.CHAT_MAX_PER_IP || 30));
 const CHAT_BANNED = String(process.env.CHAT_BANNED || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
-const chatSubs = new Map();    // zona -> Set de respuestas abiertas (SSE)
+const CHAT_EMOJIS = ['❤️', '😂', '👍', '😮', '🔥'];
+const chatSubs = new Set();    // { res, lat, lng } de cada conexión abierta (SSE)
 const chatByIp = new Map();    // ip -> nº de conexiones abiertas
 const chatLast = new Map();    // user_id -> { t: [marcas de tiempo], text }
-const cleanZone = z => (typeof z === 'string' && /^\d{1,5}:\d{1,5}$/.test(z)) ? z : null;
+function cleanLatLng(lat, lng) {
+  lat = Number(lat); lng = Number(lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 };
+}
+function kmBetween(a, b) {   // distancia sobre la esfera (haversine)
+  const R = 6371, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function chatBox(p) {   // rectángulo que contiene el círculo (filtro rápido en la base de datos)
+  const dLat = CHAT_RADIUS_KM / 111, c = Math.cos(p.lat * Math.PI / 180);
+  const dLng = c < 0.05 ? 360 : CHAT_RADIUS_KM / (111 * c);
+  return [p.lat - dLat, p.lat + dLat, p.lng - dLng, p.lng + dLng];
+}
 function cleanChatText(raw) {
   if (typeof raw !== 'string') return null;
   const s = raw.normalize('NFC').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e<>]/g, '').replace(/\s+/g, ' ').trim();
   return s.length >= 1 && s.length <= CHAT_MAX_LEN ? s : null;
 }
-function chatPublish(zone, payload) {
-  const set = chatSubs.get(zone);
-  if (!set) return;
+function chatPublish(at, payload) {
   const msg = `data: ${JSON.stringify(payload)}\n\n`;
-  for (const r of set) { try { r.write(msg); } catch {} }
+  for (const s of chatSubs) { if (kmBetween(at, s) <= CHAT_RADIUS_KM) { try { s.res.write(msg); } catch {} } }
 }
-setInterval(() => { for (const set of chatSubs.values()) for (const r of set) { try { r.write(': ping\n\n'); } catch {} } }, 20_000).unref();   // latido
+setInterval(() => { for (const s of chatSubs) { try { s.res.write(': ping\n\n'); } catch {} } }, 20_000).unref();   // latido
 
 function chatStream(req, res, url) {
-  const zone = cleanZone(url.searchParams.get('zone'));
+  const at = cleanLatLng(url.searchParams.get('lat'), url.searchParams.get('lng'));
   const ip = clientIp(req);
-  if (!zone) { res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Zona no válida'); }
+  if (!at) { res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Posición no válida'); }
   if ((chatByIp.get(ip) || 0) >= CHAT_MAX_PER_IP) { res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Demasiadas conexiones'); }
   req.socket.setTimeout(0);
   res.writeHead(200, {
@@ -831,15 +848,13 @@ function chatStream(req, res, url) {
     'X-Content-Type-Options': 'nosniff'
   });
   res.write('retry: 3000\n\n: ok\n\n');
-  let set = chatSubs.get(zone);
-  if (!set) { set = new Set(); chatSubs.set(zone, set); }
-  set.add(res);
+  const sub = { res, lat: at.lat, lng: at.lng };
+  chatSubs.add(sub);
   chatByIp.set(ip, (chatByIp.get(ip) || 0) + 1);
   let gone = false;
   const leave = () => {
     if (gone) return; gone = true;
-    set.delete(res);
-    if (!set.size && chatSubs.get(zone) === set) chatSubs.delete(zone);
+    chatSubs.delete(sub);
     const k = (chatByIp.get(ip) || 1) - 1;
     if (k > 0) chatByIp.set(ip, k); else chatByIp.delete(ip);
   };
@@ -848,21 +863,46 @@ function chatStream(req, res, url) {
 }
 
 const chatRow = r => ({ id: Number(r.id), nick: r.nick, avatar: r.avatar, country: r.country, text: r.text, t: Number(r.created_at) });
-async function chatList(url) {
-  const zone = cleanZone(url.searchParams.get('zone'));
-  if (!zone) throw new HttpError(400, 'Zona no válida');
+// Mensajes del radio (más nuevos que "after" si se indica). Añade las reacciones de cada uno y, si hay sesión, la tuya.
+async function chatList(req, url) {
+  const at = cleanLatLng(url.searchParams.get('lat'), url.searchParams.get('lng'));
+  if (!at) throw new HttpError(400, 'Posición no válida');
   const after = Math.max(0, Math.floor(Number(url.searchParams.get('after')) || 0));
-  const rows = after
-    ? await all('SELECT id, nick, avatar, country, text, created_at FROM chat_msgs WHERE zone = $1 AND id > $2 ORDER BY id ASC LIMIT 100', [zone, after])
-    : await all('SELECT * FROM (SELECT id, nick, avatar, country, text, created_at FROM chat_msgs WHERE zone = $1 ORDER BY id DESC LIMIT $2) s ORDER BY id ASC', [zone, CHAT_HISTORY]);
-  return { messages: rows.map(chatRow) };
+  const [s, n, w, e] = chatBox(at);
+  const near = rows => rows.filter(r => kmBetween(at, r) <= CHAT_RADIUS_KM);
+  let rows;
+  if (after) rows = near(await all('SELECT id, nick, avatar, country, text, created_at, lat, lng FROM chat_msgs WHERE lat BETWEEN $1 AND $2 AND lng BETWEEN $3 AND $4 AND id > $5 ORDER BY id ASC LIMIT 200', [s, n, w, e, after]));
+  else rows = near(await all('SELECT id, nick, avatar, country, text, created_at, lat, lng FROM chat_msgs WHERE lat BETWEEN $1 AND $2 AND lng BETWEEN $3 AND $4 ORDER BY id DESC LIMIT 300', [s, n, w, e])).slice(0, CHAT_HISTORY).reverse();
+  const messages = rows.map(chatRow);
+  if (messages.length) {
+    const ids = messages.map(m => m.id);
+    const cnt = await all('SELECT msg_id, emoji, COUNT(*) AS n FROM chat_reacts WHERE msg_id = ANY($1::bigint[]) GROUP BY msg_id, emoji', [ids]);
+    const user = await userFrom(req);
+    const mine = user ? await all('SELECT msg_id, emoji FROM chat_reacts WHERE user_id = $1 AND msg_id = ANY($2::bigint[])', [user.id, ids]) : [];
+    const by = new Map(messages.map(m => [m.id, m]));
+    for (const m of messages) { m.r = {}; m.mine = null; }
+    for (const c of cnt) { const m = by.get(Number(c.msg_id)); if (m) m.r[c.emoji] = Number(c.n); }
+    for (const c of mine) { const m = by.get(Number(c.msg_id)); if (m) m.mine = c.emoji; }
+  }
+  return { messages, km: CHAT_RADIUS_KM };
+}
+// ¿Hay mensajes nuevos en tu radio? (para el punto rojo del botón). Sin "seen" solo devuelve cuál es el último.
+async function chatUnread(url) {
+  const at = cleanLatLng(url.searchParams.get('lat'), url.searchParams.get('lng'));
+  if (!at) throw new HttpError(400, 'Posición no válida');
+  const hasSeen = url.searchParams.has('seen');
+  const seen = Math.max(0, Math.floor(Number(url.searchParams.get('seen')) || 0));
+  const [s, n, w, e] = chatBox(at);
+  const rows = (await all('SELECT id, lat, lng FROM chat_msgs WHERE lat BETWEEN $1 AND $2 AND lng BETWEEN $3 AND $4 AND id > $5 ORDER BY id DESC LIMIT 100', [s, n, w, e, seen]))
+    .filter(r => kmBetween(at, r) <= CHAT_RADIUS_KM);
+  return { n: hasSeen ? rows.length : 0, last: rows.length ? Number(rows[0].id) : seen };
 }
 async function chatSend(req, body) {
   const user = await needUser(req);
   const prof = await getProfile(user.id);
   if (!prof) throw new HttpError(403, 'Elige tu apodo para poder escribir');
-  const zone = cleanZone(body && body.zone);
-  if (!zone) throw new HttpError(400, 'Zona no válida');
+  const at = cleanLatLng(body && body.lat, body && body.lng);
+  if (!at) throw new HttpError(400, 'Posición no válida');
   const text = cleanChatText(body && body.text);
   if (!text) throw new HttpError(400, `Escribe un mensaje (máximo ${CHAT_MAX_LEN} caracteres)`);
   const low = text.toLowerCase();
@@ -878,18 +918,37 @@ async function chatSend(req, body) {
   if (chatLast.size > 5000) chatLast.clear();
   chatLast.set(user.id, st);
   const avatar = cleanAvatar(body.avatar), country = cleanCountry(body.country);
-  const row = await one('INSERT INTO chat_msgs (zone, user_id, nick, avatar, country, text, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
-    [zone, user.id, prof.nickname, avatar, country, text, now]);
-  const msg = { id: Number(row.id), nick: prof.nickname, avatar, country, text, t: now };
-  chatPublish(zone, msg);
+  const zone = Math.floor((at.lng + 180) / 0.02) + ':' + Math.floor((at.lat + 90) / 0.02);   // columna antigua, ya sin uso
+  const row = await one('INSERT INTO chat_msgs (zone, user_id, nick, avatar, country, text, created_at, lat, lng) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
+    [zone, user.id, prof.nickname, avatar, country, text, now, at.lat, at.lng]);
+  const msg = { id: Number(row.id), nick: prof.nickname, avatar, country, text, t: now, r: {}, mine: null };
+  chatPublish(at, msg);
   return { ok: true, message: msg };
+}
+// Reaccionar con un emoji (uno por persona y mensaje; tocar el mismo otra vez lo quita)
+async function chatReact(req, body) {
+  const user = await needUser(req);
+  const id = Math.floor(Number(body && body.id));
+  const emoji = body && body.emoji;
+  if (!Number.isFinite(id) || id < 1 || !CHAT_EMOJIS.includes(emoji)) throw new HttpError(400, 'Reacción no válida');
+  const m = await one('SELECT lat, lng FROM chat_msgs WHERE id = $1', [id]);
+  if (!m) throw new HttpError(404, 'Ese mensaje ya no existe');
+  const cur = await one('SELECT emoji FROM chat_reacts WHERE msg_id = $1 AND user_id = $2', [id, user.id]);
+  let mine = emoji;
+  if (cur && cur.emoji === emoji) { await run('DELETE FROM chat_reacts WHERE msg_id = $1 AND user_id = $2', [id, user.id]); mine = null; }
+  else await run('INSERT INTO chat_reacts (msg_id, user_id, emoji) VALUES ($1,$2,$3) ON CONFLICT (msg_id, user_id) DO UPDATE SET emoji = $3', [id, user.id, emoji]);
+  const r = {};
+  for (const c of await all('SELECT emoji, COUNT(*) AS n FROM chat_reacts WHERE msg_id = $1 GROUP BY emoji', [id])) r[c.emoji] = Number(c.n);
+  if (m.lat != null) chatPublish({ lat: m.lat, lng: m.lng }, { react: { id, r } });
+  return { ok: true, id, r, mine };
 }
 async function chatDelete(req, body) {
   if (!isAdmin(req)) throw new HttpError(403, 'No autorizado');
   const id = Math.floor(Number(body && body.id));
   if (!Number.isFinite(id) || id < 1) throw new HttpError(400, 'Mensaje no válido');
-  const row = await one('DELETE FROM chat_msgs WHERE id = $1 RETURNING zone', [id]);
-  if (row) chatPublish(row.zone, { del: id });
+  const row = await one('DELETE FROM chat_msgs WHERE id = $1 RETURNING lat, lng', [id]);
+  await run('DELETE FROM chat_reacts WHERE msg_id = $1', [id]);
+  if (row && row.lat != null) chatPublish({ lat: row.lat, lng: row.lng }, { del: id });
   return { ok: true };
 }
 
@@ -897,6 +956,7 @@ async function chatDelete(req, body) {
 // Lista de amigos de cada cuenta (en un solo sentido: no hace falta que el otro acepte). Se añade desde el chat tocando
 // el apodo: el cliente manda el id del mensaje y el servidor busca la cuenta, así nunca se expone el id de usuario.
 const FRIENDS_MAX = 100;
+const friendPushAt = new Map();   // 'quien>amigo' -> última vez que se avisó
 async function friendsList(req) {
   const user = await needUser(req);
   const rows = await all('SELECT f.friend_id, p.nickname FROM friends f JOIN profiles p ON p.user_id = f.friend_id WHERE f.user_id = $1 ORDER BY f.created_at DESC', [user.id]);
@@ -920,7 +980,15 @@ async function friendsAdd(req, body) {
   if (m.user_id === user.id) throw new HttpError(400, 'Ese eres tú');
   const n = Number((await one('SELECT COUNT(*) AS n FROM friends WHERE user_id = $1', [user.id])).n);
   if (n >= FRIENDS_MAX) throw new HttpError(409, `Máximo ${FRIENDS_MAX} amigos`);
-  await run('INSERT INTO friends (user_id, friend_id, created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [user.id, m.user_id, Date.now()]);
+  const ins = await run('INSERT INTO friends (user_id, friend_id, created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [user.id, m.user_id, Date.now()]);
+  if (ins.rowCount === 1 && PUSH_ON) {   // avisa al nuevo amigo (como mucho una vez al día por pareja)
+    const key = user.id + '>' + m.user_id, last = friendPushAt.get(key) || 0;
+    if (Date.now() - last > 24 * 3600_000) {
+      friendPushAt.set(key, Date.now());
+      if (friendPushAt.size > 5000) friendPushAt.clear();
+      getProfile(user.id).then(me => me && pushSocial(m.user_id, { title: '👥 Nuevo amigo', body: `${me.nickname} te ha añadido como amigo.`, tag: 'friend', url: '/' })).catch(() => {});
+    }
+  }
   return { ok: true, nick: m.nick };
 }
 async function friendsRemove(req, body) {
@@ -929,6 +997,134 @@ async function friendsRemove(req, body) {
   const f = nick && await one('SELECT user_id FROM profiles WHERE nickname = $1', [nick]);
   if (f) await run('DELETE FROM friends WHERE user_id = $1 AND friend_id = $2', [user.id, f.user_id]);
   return { ok: true };
+}
+
+// ---------- Avisos al móvil (notificaciones push) ----------
+// Hace falta el paquete "web-push" y un par de claves VAPID (npx web-push generate-vapid-keys) en las variables
+// VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY (y VAPID_SUBJECT, p. ej. mailto:tu@correo.com). Sin ellas, los avisos quedan desactivados.
+// Avisos: "producción lista", "regalo diario" y "X te ha añadido como amigo". Para no molestar: nada de noche (solo entre
+// las 10:00 y las 21:00 hora del jugador), 6 h mínimo entre avisos y se paran tras 3 avisos sin que el jugador vuelva a entrar.
+let webpush = null;
+try { webpush = require('web-push'); } catch { /* sin el paquete: avisos desactivados */ }
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '', VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
+const PUSH_ON = !!(webpush && VAPID_PUBLIC && VAPID_PRIVATE);
+if (PUSH_ON) {
+  try { webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'https://atlas-terrenos.onrender.com', VAPID_PUBLIC, VAPID_PRIVATE); }
+  catch (e) { console.error('Claves VAPID no válidas, avisos desactivados:', e.message); }
+}
+const PUSH_QUIET_FROM = 10, PUSH_QUIET_TO = 21, PUSH_GAP_MS = 6 * 3600_000, PUSH_MAX_UNSEEN = 3, PUSH_MAX_SUBS = 5;
+const cleanTz = tz => { try { new Intl.DateTimeFormat('en', { timeZone: String(tz) }); return String(tz).slice(0, 60); } catch { return 'Europe/Madrid'; } };
+
+async function pushToUser(userId, payload) {
+  if (!PUSH_ON) return false;
+  const subs = await all('SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = $1', [userId]);
+  let sent = false;
+  for (const s of subs) {
+    try {
+      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), { TTL: 6 * 3600 });
+      sent = true;
+    } catch (e) {
+      if (e.statusCode === 404 || e.statusCode === 410) await run('DELETE FROM push_subs WHERE endpoint = $1', [s.endpoint]).catch(() => {});   // el móvil ya no acepta avisos
+    }
+  }
+  return sent;
+}
+
+async function pushSubscribe(req, body) {
+  if (!PUSH_ON) throw new HttpError(503, 'Los avisos no están disponibles');
+  const user = await needUser(req);
+  const sub = body && body.subscription;
+  const endpoint = sub && typeof sub.endpoint === 'string' ? sub.endpoint : '';
+  const k = sub && sub.keys;
+  if (!/^https:\/\//.test(endpoint) || endpoint.length > 1000 || !k || typeof k.p256dh !== 'string' || typeof k.auth !== 'string' || k.p256dh.length > 200 || k.auth.length > 100)
+    throw new HttpError(400, 'Suscripción no válida');
+  const now = Date.now();
+  await run(`INSERT INTO push_subs (endpoint, user_id, p256dh, auth, tz, created_at) VALUES ($1,$2,$3,$4,$5,$6)
+             ON CONFLICT (endpoint) DO UPDATE SET user_id = $2, p256dh = $3, auth = $4, tz = $5`, [endpoint, user.id, k.p256dh, k.auth, cleanTz(body.tz), now]);
+  await run('DELETE FROM push_subs WHERE user_id = $1 AND endpoint NOT IN (SELECT endpoint FROM push_subs WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2)', [user.id, PUSH_MAX_SUBS]);
+  await run(`INSERT INTO push_state (user_id, last_seen, unseen) VALUES ($1,$2,0) ON CONFLICT (user_id) DO UPDATE SET last_seen = $2, unseen = 0`, [user.id, now]);   // volver a entrar reactiva los avisos
+  return { ok: true };
+}
+async function pushUnsubscribe(req, body) {
+  const user = await needUser(req);
+  if (body && typeof body.endpoint === 'string') await run('DELETE FROM push_subs WHERE endpoint = $1 AND user_id = $2', [body.endpoint, user.id]);
+  return { ok: true };
+}
+
+// Avisos sociales (amigos): respetan la hora tranquila, el tope de avisos sin volver a entrar y 2 h mínimo entre avisos
+async function pushSocial(userId, payload) {
+  if (!PUSH_ON) return false;
+  const sub = await one('SELECT MAX(tz) AS tz FROM push_subs WHERE user_id = $1', [userId]);
+  if (!sub) return false;
+  const now = Date.now();
+  let hour; try { hour = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hourCycle: 'h23', timeZone: sub.tz || 'Europe/Madrid' }).format(now)); } catch { hour = 12; }
+  if (hour < PUSH_QUIET_FROM || hour >= PUSH_QUIET_TO) return false;
+  const st = await one('SELECT unseen, last_any FROM push_state WHERE user_id = $1', [userId]);
+  if (st && (st.unseen >= PUSH_MAX_UNSEEN || now - Number(st.last_any || 0) < 2 * 3600_000)) return false;
+  if (!await pushToUser(userId, payload)) return false;
+  await run(`INSERT INTO push_state (user_id, last_any, unseen) VALUES ($1,$2,1) ON CONFLICT (user_id) DO UPDATE SET last_any = $2, unseen = push_state.unseen + 1`, [userId, now]);
+  return true;
+}
+// Avisa a quienes tienen a este jugador como amigo: reclama un terreno o sube uno de nivel (máx. 1 aviso por pareja cada 6 h)
+const socialAt = new Map();
+async function notifyFriendsOf(userId, kind, level) {
+  if (!PUSH_ON) return;
+  try {
+    const me = await getProfile(userId);
+    if (!me) return;
+    const rows = await all('SELECT user_id FROM friends WHERE friend_id = $1 LIMIT 200', [userId]);
+    const now = Date.now();
+    for (const r of rows) {
+      const key = userId + '>' + r.user_id;
+      if (now - (socialAt.get(key) || 0) < 6 * 3600_000) continue;
+      if (await pushSocial(r.user_id, kind === 'claim'
+        ? { title: '🏡 Tu amigo ha comprado un terreno', body: `${me.nickname} ha reclamado un terreno nuevo.`, tag: 'friend-act', url: '/' }
+        : { title: '⭐ Tu amigo ha subido de nivel', body: `${me.nickname} ha subido un terreno al nivel ${level}.`, tag: 'friend-act', url: '/' })) {
+        socialAt.set(key, now);
+        if (socialAt.size > 5000) socialAt.clear();
+      }
+    }
+  } catch (e) { console.error('push social:', e.message); }
+}
+
+let pushBusy = false;
+async function pushRun() {
+  if (!PUSH_ON || pushBusy) return;
+  pushBusy = true;
+  try {
+    const users = await all('SELECT user_id, MAX(tz) AS tz FROM push_subs GROUP BY user_id LIMIT 2000');
+    for (const u of users) {
+      try {
+        const now = Date.now();
+        let hour; try { hour = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hourCycle: 'h23', timeZone: u.tz || 'Europe/Madrid' }).format(now)); } catch { hour = 12; }
+        if (hour < PUSH_QUIET_FROM || hour >= PUSH_QUIET_TO) continue;
+        const st = await one('SELECT * FROM push_state WHERE user_id = $1', [u.user_id]);
+        if (st && (st.unseen >= PUSH_MAX_UNSEEN || now - Number(st.last_any || 0) < PUSH_GAP_MS)) continue;
+        const pack = await one('SELECT last_collect, prod_carry, last_daily, streak FROM packs WHERE user_id = $1', [u.user_id]);
+        let payload = null, field = null, value = null;
+        if (pack) {
+          const pr = await prodCompute(pool, u.user_id, pack.last_collect, pack.prod_carry, now);
+          const lastProd = st ? Number(st.last_prod_push || 0) : 0;
+          if (pr.ready >= 1 && (lastProd < Number(pack.last_collect || 0) || now - lastProd > 24 * 3600_000)) {
+            payload = { title: '🎟️ ¡Producción lista!', body: `Tus terrenos han producido ${pr.ready} ${pr.ready === 1 ? 'crédito' : 'créditos'}. Entra a recogerlos.`, tag: 'prod', url: '/' };
+            field = 'last_prod_push'; value = now;
+          }
+        }
+        const day = dayKey();
+        if (!payload && dailyInfo(pack).canClaim && (!st || st.last_daily_push !== day)) {
+          const s = dailyInfo(pack).streak;
+          payload = { title: '🎁 Tu regalo diario te espera', body: s > 0 ? `Llevas ${s} ${s === 1 ? 'día' : 'días'} seguidos: ¡no pierdas la racha!` : 'Entra hoy y empieza tu racha.', tag: 'daily', url: '/' };
+          field = 'last_daily_push'; value = day;
+        }
+        if (!payload) continue;
+        if (await pushToUser(u.user_id, payload)) {
+          await run(`INSERT INTO push_state (user_id, last_any, unseen, ${field}) VALUES ($1,$2,1,$3)
+                     ON CONFLICT (user_id) DO UPDATE SET last_any = $2, unseen = push_state.unseen + 1, ${field} = $3`, [u.user_id, now, value]);
+        }
+      } catch (e) { console.error('push:', e.message); }
+    }
+  } catch (e) { console.error('push:', e.message); }
+  finally { pushBusy = false; }
 }
 
 // ---------- Invita y gana ----------
@@ -1021,7 +1217,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/admin/stats') return adminStats(req);
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
-    return { demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, packSize: PACKS[0].credits, packs: PACKS,
+    return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, packSize: PACKS[0].credits, packs: PACKS,
       maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
@@ -1060,11 +1256,15 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/auth/link') return linkAccount(req);
   if (req.method === 'GET' && pn === '/api/profile') return profileGet(req);
   if (req.method === 'POST' && pn === '/api/profile') return profileSet(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/push/subscribe') return pushSubscribe(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/push/unsubscribe') return pushUnsubscribe(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/friends') return friendsList(req);
   if (req.method === 'POST' && pn === '/api/friends/add') return friendsAdd(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/friends/remove') return friendsRemove(req, await readJson(req));
-  if (req.method === 'GET' && pn === '/api/chat') return chatList(url);
+  if (req.method === 'GET' && pn === '/api/chat') return chatList(req, url);
+  if (req.method === 'GET' && pn === '/api/chat/unread') return chatUnread(url);
   if (req.method === 'POST' && pn === '/api/chat/send') return chatSend(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/chat/react') return chatReact(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/chat/delete') return chatDelete(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/my-parcels') return myParcels(req);
   if (req.method === 'GET' && pn === '/api/production') return productionGet(req);
@@ -1103,8 +1303,16 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
   .then(async () => {   // chat por zona (no hace nada si ya existe)
     await run('CREATE TABLE IF NOT EXISTS chat_msgs (id BIGSERIAL PRIMARY KEY, zone TEXT NOT NULL, user_id TEXT NOT NULL, nick TEXT NOT NULL, avatar TEXT, country TEXT, text TEXT NOT NULL, created_at BIGINT NOT NULL)');
     await run('CREATE INDEX IF NOT EXISTS chat_msgs_zone ON chat_msgs (zone, id)');
+    await run('ALTER TABLE chat_msgs ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION');   // radio de 50 km: punto desde el que se escribió
+    await run('ALTER TABLE chat_msgs ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION');
+    await run('CREATE INDEX IF NOT EXISTS chat_msgs_lat ON chat_msgs (lat)');
+    await run('CREATE TABLE IF NOT EXISTS chat_reacts (msg_id BIGINT NOT NULL, user_id TEXT NOT NULL, emoji TEXT NOT NULL, PRIMARY KEY (msg_id, user_id))');
     await run('CREATE TABLE IF NOT EXISTS friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, friend_id))');
-    const purge = () => run('DELETE FROM chat_msgs WHERE created_at < $1', [Date.now() - CHAT_KEEP_MS]).catch(() => {});
+    await run('CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, tz TEXT, created_at BIGINT NOT NULL)');
+    await run('CREATE INDEX IF NOT EXISTS push_subs_user ON push_subs (user_id)');
+    await run('CREATE TABLE IF NOT EXISTS push_state (user_id TEXT PRIMARY KEY, last_seen BIGINT, unseen INT NOT NULL DEFAULT 0, last_any BIGINT, last_prod_push BIGINT, last_daily_push TEXT)');
+    if (PUSH_ON) { setTimeout(pushRun, 120_000).unref(); setInterval(pushRun, 15 * 60_000).unref(); }   // revisa cada 15 min quién tiene algo pendiente
+    const purge = () => run('DELETE FROM chat_msgs WHERE created_at < $1', [Date.now() - CHAT_KEEP_MS]).then(() => run('DELETE FROM chat_reacts WHERE msg_id NOT IN (SELECT id FROM chat_msgs)')).catch(() => {});
     purge(); setInterval(purge, 3600_000).unref();
   }).catch(e => console.error('No se pudo crear la tabla del chat:', e.message));
 
