@@ -796,10 +796,10 @@ function onlineStream(req, res, url) {
 
 // ---------- Chat por zona (radio de CHAT_RADIUS_KM) ----------
 // Cada mensaje guarda el punto del mapa (redondeado a ~1 km) desde el que se envió, y se ve a CHAT_RADIUS_KM a la redonda
-// (50 km por defecto). Leer es libre; escribir exige cuenta con apodo. Los mensajes se guardan 7 días.
+// (10 km por defecto). Leer es libre; escribir exige cuenta con apodo. Los mensajes se guardan 7 días.
 // Antiabuso: 1 mensaje cada 3 s, 15 por minuto, sin repetir el mismo, sin enlaces y con lista de palabras prohibidas
 // opcional (CHAT_BANNED="palabra1,palabra2"). El admin puede borrar mensajes (POST /api/chat/delete con la clave).
-const CHAT_RADIUS_KM = Math.min(200, Math.max(1, Number(process.env.CHAT_RADIUS_KM || 50)));
+const CHAT_RADIUS_KM = Math.min(200, Math.max(1, Number(process.env.CHAT_RADIUS_KM || 10)));
 const CHAT_MAX_LEN = 200, CHAT_KEEP_MS = 7 * 24 * 3600 * 1000, CHAT_HISTORY = 50;
 const CHAT_MAX_PER_IP = Math.max(1, Number(process.env.CHAT_MAX_PER_IP || 30));
 const CHAT_BANNED = String(process.env.CHAT_BANNED || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
@@ -959,9 +959,9 @@ const FRIENDS_MAX = 100;
 const friendPushAt = new Map();   // 'quien>amigo' -> última vez que se avisó
 async function friendsList(req) {
   const user = await needUser(req);
-  const rows = await all('SELECT f.friend_id, p.nickname FROM friends f JOIN profiles p ON p.user_id = f.friend_id WHERE f.user_id = $1 ORDER BY f.created_at DESC', [user.id]);
+  const rows = await all('SELECT f.friend_id, p.nickname FROM friends f JOIN profiles p ON p.user_id::text = f.friend_id WHERE f.user_id = $1 ORDER BY f.created_at DESC', [user.id]);
   const ids = rows.map(r => r.friend_id);
-  const ps = ids.length ? await all('SELECT DISTINCT ON (user_id) user_id::text AS uid, x, y, avatar, country FROM parcels WHERE user_id::text = ANY($1::text[]) ORDER BY user_id::text, created_at ASC', [ids]) : [];
+  const ps = ids.length ? await all('SELECT DISTINCT ON (user_id::text) user_id::text AS uid, x, y, avatar, country FROM parcels WHERE user_id::text = ANY($1::text[]) ORDER BY user_id::text, created_at ASC', [ids]) : [];
   const byUser = new Map(ps.map(p => [p.uid, p]));
   return {
     friends: rows.map(r => {

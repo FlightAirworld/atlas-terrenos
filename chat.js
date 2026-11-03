@@ -1,5 +1,5 @@
 'use strict';
-// Chat de la zona: se ve lo que escribe la gente que juega a menos de X km (50 por defecto, ver CHAT_RADIUS_KM en el servidor)
+// Chat de la zona: se ve lo que escribe la gente que juega a menos de X km (10 por defecto, ver CHAT_RADIUS_KM en el servidor)
 // del punto donde está centrado el mapa. Leer es libre; para escribir hace falta cuenta con apodo.
 // También: punto rojo en el botón cuando hay mensajes nuevos, reacciones con emojis y lista de amigos.
 (function () {
@@ -7,7 +7,7 @@
   const btn = document.getElementById('chat-btn'), menuBtn = document.getElementById('menu-btn');
   if (!btn) return;
   const MAX = 200, EMOJIS = ['❤️', '😂', '👍', '😮', '🔥'];
-  const km = () => (typeof cfg !== 'undefined' && cfg && cfg.chatKm) || 50;
+  const km = () => (typeof cfg !== 'undefined' && cfg && cfg.chatKm) || 10;
   const here = () => { const c = map.getCenter(); return { lat: c.lat, lng: c.lng }; };
   const qs = p => 'lat=' + p.lat.toFixed(4) + '&lng=' + p.lng.toFixed(4);
 
@@ -137,7 +137,7 @@
   const isFriend = nick => friends.some(f => f.nick === nick);
   async function loadFriends() {
     if (!authToken) { friends = []; return; }
-    try { friends = (await api('/api/friends')).friends || []; } catch { /* sin lista: se puede seguir chateando */ }
+    try { friends = (await api('/api/friends')).friends || []; } catch (e) { say('No se pudo cargar tu lista de amigos: ' + e.message, 'err'); }
     fbtn.textContent = '👥 Amigos' + (friends.length ? ' (' + friends.length + ')' : '');
   }
   function showCard(m) {
