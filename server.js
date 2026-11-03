@@ -93,7 +93,7 @@ const HOUSES = [
   'images/casa-aerea.webp','images/casa-frente.webp','images/policia.webp','images/pisos.webp','images/gasolinera.webp',
   'images/choza.webp','images/Restaurante.webp','images/McDonald.webp','images/Burgerking.webp','images/Farmacia.webp',
   'images/colegio.webp','images/parque.webp','images/rascacielos.webp','images/casa-1.webp','images/casa-2.webp',
-  'images/casa-3.webp','images/casa-4.webp','images/casa-5.webp','images/casa-6.webp'
+  'images/casa-3.webp','images/casa-4.webp','images/casa-5.webp'
 ];
 const cleanHouse = h => { h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h; return HOUSES.includes(h) ? h : null; };   // null = al azar (como hasta ahora)
 const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
