@@ -792,6 +792,107 @@ function onlineStream(req, res, url) {
   res.on('error', leave);
 }
 
+// ---------- Chat por zona ----------
+// El mapa se divide en zonas de 0,02° (unos 2 km); cada zona tiene su chat. El cliente calcula el id de zona ("x:y")
+// con el centro del mapa. Leer es libre; escribir exige cuenta con apodo. Los mensajes se guardan 7 días.
+// Antiabuso: 1 mensaje cada 3 s, 15 por minuto, sin repetir el mismo, sin enlaces y con lista de palabras prohibidas
+// opcional (CHAT_BANNED="palabra1,palabra2"). El admin puede borrar mensajes (POST /api/chat/delete con la clave).
+const CHAT_MAX_LEN = 200, CHAT_KEEP_MS = 7 * 24 * 3600 * 1000, CHAT_HISTORY = 50;
+const CHAT_MAX_PER_IP = Math.max(1, Number(process.env.CHAT_MAX_PER_IP || 30));
+const CHAT_BANNED = String(process.env.CHAT_BANNED || '').split(',').map(w => w.trim().toLowerCase()).filter(Boolean);
+const chatSubs = new Map();    // zona -> Set de respuestas abiertas (SSE)
+const chatByIp = new Map();    // ip -> nº de conexiones abiertas
+const chatLast = new Map();    // user_id -> { t: [marcas de tiempo], text }
+const cleanZone = z => (typeof z === 'string' && /^\d{1,5}:\d{1,5}$/.test(z)) ? z : null;
+function cleanChatText(raw) {
+  if (typeof raw !== 'string') return null;
+  const s = raw.normalize('NFC').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e<>]/g, '').replace(/\s+/g, ' ').trim();
+  return s.length >= 1 && s.length <= CHAT_MAX_LEN ? s : null;
+}
+function chatPublish(zone, payload) {
+  const set = chatSubs.get(zone);
+  if (!set) return;
+  const msg = `data: ${JSON.stringify(payload)}\n\n`;
+  for (const r of set) { try { r.write(msg); } catch {} }
+}
+setInterval(() => { for (const set of chatSubs.values()) for (const r of set) { try { r.write(': ping\n\n'); } catch {} } }, 20_000).unref();   // latido
+
+function chatStream(req, res, url) {
+  const zone = cleanZone(url.searchParams.get('zone'));
+  const ip = clientIp(req);
+  if (!zone) { res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Zona no válida'); }
+  if ((chatByIp.get(ip) || 0) >= CHAT_MAX_PER_IP) { res.writeHead(429, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Demasiadas conexiones'); }
+  req.socket.setTimeout(0);
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    'X-Content-Type-Options': 'nosniff'
+  });
+  res.write('retry: 3000\n\n: ok\n\n');
+  let set = chatSubs.get(zone);
+  if (!set) { set = new Set(); chatSubs.set(zone, set); }
+  set.add(res);
+  chatByIp.set(ip, (chatByIp.get(ip) || 0) + 1);
+  let gone = false;
+  const leave = () => {
+    if (gone) return; gone = true;
+    set.delete(res);
+    if (!set.size && chatSubs.get(zone) === set) chatSubs.delete(zone);
+    const k = (chatByIp.get(ip) || 1) - 1;
+    if (k > 0) chatByIp.set(ip, k); else chatByIp.delete(ip);
+  };
+  req.on('close', leave);
+  res.on('error', leave);
+}
+
+const chatRow = r => ({ id: Number(r.id), nick: r.nick, avatar: r.avatar, country: r.country, text: r.text, t: Number(r.created_at) });
+async function chatList(url) {
+  const zone = cleanZone(url.searchParams.get('zone'));
+  if (!zone) throw new HttpError(400, 'Zona no válida');
+  const after = Math.max(0, Math.floor(Number(url.searchParams.get('after')) || 0));
+  const rows = after
+    ? await all('SELECT id, nick, avatar, country, text, created_at FROM chat_msgs WHERE zone = $1 AND id > $2 ORDER BY id ASC LIMIT 100', [zone, after])
+    : await all('SELECT * FROM (SELECT id, nick, avatar, country, text, created_at FROM chat_msgs WHERE zone = $1 ORDER BY id DESC LIMIT $2) s ORDER BY id ASC', [zone, CHAT_HISTORY]);
+  return { messages: rows.map(chatRow) };
+}
+async function chatSend(req, body) {
+  const user = await needUser(req);
+  const prof = await getProfile(user.id);
+  if (!prof) throw new HttpError(403, 'Elige tu apodo para poder escribir');
+  const zone = cleanZone(body && body.zone);
+  if (!zone) throw new HttpError(400, 'Zona no válida');
+  const text = cleanChatText(body && body.text);
+  if (!text) throw new HttpError(400, `Escribe un mensaje (máximo ${CHAT_MAX_LEN} caracteres)`);
+  const low = text.toLowerCase();
+  if (/https?:\/\/|www\./.test(low)) throw new HttpError(400, 'No se pueden enviar enlaces');
+  if (CHAT_BANNED.some(w => low.includes(w))) throw new HttpError(400, 'Mensaje no permitido');
+  const now = Date.now();
+  const st = chatLast.get(user.id) || { t: [], text: '' };
+  st.t = st.t.filter(x => now - x < 60_000);
+  if (st.t.length && now - st.t[st.t.length - 1] < 3000) throw new HttpError(429, 'Vas muy rápido: espera unos segundos');
+  if (st.t.length >= 15) throw new HttpError(429, 'Demasiados mensajes: espera un poco');
+  if (st.text === low) throw new HttpError(429, 'No repitas el mismo mensaje');
+  st.t.push(now); st.text = low;
+  if (chatLast.size > 5000) chatLast.clear();
+  chatLast.set(user.id, st);
+  const avatar = cleanAvatar(body.avatar), country = cleanCountry(body.country);
+  const row = await one('INSERT INTO chat_msgs (zone, user_id, nick, avatar, country, text, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+    [zone, user.id, prof.nickname, avatar, country, text, now]);
+  const msg = { id: Number(row.id), nick: prof.nickname, avatar, country, text, t: now };
+  chatPublish(zone, msg);
+  return { ok: true, message: msg };
+}
+async function chatDelete(req, body) {
+  if (!isAdmin(req)) throw new HttpError(403, 'No autorizado');
+  const id = Math.floor(Number(body && body.id));
+  if (!Number.isFinite(id) || id < 1) throw new HttpError(400, 'Mensaje no válido');
+  const row = await one('DELETE FROM chat_msgs WHERE id = $1 RETURNING zone', [id]);
+  if (row) chatPublish(row.zone, { del: id });
+  return { ok: true };
+}
+
 // ---------- Invita y gana ----------
 // Cada cuenta tiene un código de invitación (enlace /?ref=CODIGO). Cuando un jugador NUEVO entra con ese enlace,
 // crea su cuenta y reclama su primer terreno, el que invita gana créditos y el invitado recibe un regalo de bienvenida.
@@ -921,6 +1022,9 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/auth/link') return linkAccount(req);
   if (req.method === 'GET' && pn === '/api/profile') return profileGet(req);
   if (req.method === 'POST' && pn === '/api/profile') return profileSet(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/chat') return chatList(url);
+  if (req.method === 'POST' && pn === '/api/chat/send') return chatSend(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/chat/delete') return chatDelete(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/my-parcels') return myParcels(req);
   if (req.method === 'GET' && pn === '/api/production') return productionGet(req);
   if (req.method === 'POST' && pn === '/api/production/collect') return productionCollect(req);
@@ -954,7 +1058,13 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE TABLE IF NOT EXISTS ref_codes (code TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, created_at BIGINT NOT NULL, last_ip TEXT)');
     await run('CREATE TABLE IF NOT EXISTS referrals (invitee_id TEXT PRIMARY KEY, inviter_id TEXT NOT NULL, created_at BIGINT NOT NULL, ip_hash TEXT, rewarded_at BIGINT, inviter_credits INT NOT NULL DEFAULT 0)');
     await run('CREATE INDEX IF NOT EXISTS referrals_inviter ON referrals (inviter_id)');
-  }).catch(e => console.error('No se pudieron crear las tablas de invitaciones:', e.message));
+  }).catch(e => console.error('No se pudieron crear las tablas de invitaciones:', e.message))
+  .then(async () => {   // chat por zona (no hace nada si ya existe)
+    await run('CREATE TABLE IF NOT EXISTS chat_msgs (id BIGSERIAL PRIMARY KEY, zone TEXT NOT NULL, user_id TEXT NOT NULL, nick TEXT NOT NULL, avatar TEXT, country TEXT, text TEXT NOT NULL, created_at BIGINT NOT NULL)');
+    await run('CREATE INDEX IF NOT EXISTS chat_msgs_zone ON chat_msgs (zone, id)');
+    const purge = () => run('DELETE FROM chat_msgs WHERE created_at < $1', [Date.now() - CHAT_KEEP_MS]).catch(() => {});
+    purge(); setInterval(purge, 3600_000).unref();
+  }).catch(e => console.error('No se pudo crear la tabla del chat:', e.message));
 
 // Sitio estático en otro dominio: CORS_ORIGINS = direcciones permitidas, separadas por comas (p. ej. https://atlas-terrenos-web.onrender.com)
 const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(x => x.trim().replace(/\/+$/, '')).filter(Boolean);
@@ -975,7 +1085,8 @@ http.createServer(async (req, res) => {
   }
   try {
     await ready;
-    if (req.method === 'GET' && url.pathname === '/api/online') return onlineStream(req, res, url);   // conexión larga (SSE): no pasa por route()
+    if (req.method === 'GET' && url.pathname === '/api/online') return onlineStream(req, res, url);
+    if (req.method === 'GET' && url.pathname === '/api/chat/stream') return chatStream(req, res, url);   // conexión larga (SSE) del chat   // conexión larga (SSE): no pasa por route()
     if (url.pathname.startsWith('/api/')) {
       const out = await route(req, res, url);
       return send(200, JSON.stringify(out));

@@ -214,3 +214,15 @@ path.buy-range {
   color: #ffd43b; line-height: 1; letter-spacing: .5px; text-shadow: 0 1px 2px #000;
   font-size: clamp(7px, calc(var(--ppx, 60) * 1px / 8), 14px); }
 .labels-off .owner-stars { display: none; }
+
+/* Chat por zona */
+#chat-list { height: min(46vh, 340px); overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+.chat-msg { margin: 0 0 9px; word-break: break-word; }
+.chat-msg .who { font-weight: 700; font-size: 13px; }
+.chat-msg.mine .who { color: var(--accent); }
+.chat-msg .when { color: var(--muted); font-size: 11px; margin-left: 6px; }
+.chat-msg .del { float: right; padding: 0 6px; border: 0; background: transparent; }
+.chat-msg .text { font-size: 15px; }
+#chat-form { display: flex; gap: 6px; }
+#chat-form input { margin: 0; flex: 1; min-width: 0; }
+#chat-form button { width: auto; padding: 8px 14px; }
