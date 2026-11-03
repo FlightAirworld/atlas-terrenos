@@ -88,12 +88,12 @@ const AVATARS = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀',
 const cleanAvatar = a => AVATARS.includes(a) ? a : AVATARS[0];
 // Casas que se pueden elegir (deben coincidir con HOUSES de app.js; para añadir más, ponlas al FINAL de ambas listas)
 const HOUSES = [
-  'images/casa-aerea.png','images/casa-frente.png','images/policia.png','images/pisos.png','images/gasolinera.png',
-  'images/choza.png','images/Restaurante.png','images/McDonald.png','images/Burgerking.png','images/Farmacia.png',
-  'images/colegio.png','images/parque.png','images/rascacielos.png','images/casa-1.png','images/casa-2.png',
-  'images/casa-3.png','images/casa-4.png','images/casa-5.png'
+  'images/casa-aerea.webp','images/casa-frente.webp','images/policia.webp','images/pisos.webp','images/gasolinera.webp',
+  'images/choza.webp','images/Restaurante.webp','images/McDonald.webp','images/Burgerking.webp','images/Farmacia.webp',
+  'images/colegio.webp','images/parque.webp','images/rascacielos.webp','images/casa-1.webp','images/casa-2.webp',
+  'images/casa-3.webp','images/casa-4.webp','images/casa-5.webp'
 ];
-const cleanHouse = h => HOUSES.includes(h) ? h : null;   // null = al azar (como hasta ahora)
+const cleanHouse = h => { h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h; return HOUSES.includes(h) ? h : null; };   // null = al azar (como hasta ahora)
 const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
 
 // ---------- Seguridad de administrador ----------

@@ -104,27 +104,28 @@ async function api(url, opts = {}) {
 
 // ---------- Parcelas compradas en pantalla ----------
 const HOUSES = [
-    'images/casa-aerea.png',
-    'images/casa-frente.png',
-    'images/policia.png',
-    'images/pisos.png',
-    'images/gasolinera.png',
-    'images/choza.png',
-    'images/Restaurante.png',
-    'images/McDonald.png',
-    'images/Burgerking.png',
-    'images/Farmacia.png',
-    'images/colegio.png',
-    'images/parque.png',
-    'images/rascacielos.png',
-    'images/casa-1.png',
-    'images/casa-2.png',
-    'images/casa-3.png',
-    'images/casa-4.png',
-    'images/casa-5.png'
+    'images/casa-aerea.webp',
+    'images/casa-frente.webp',
+    'images/policia.webp',
+    'images/pisos.webp',
+    'images/gasolinera.webp',
+    'images/choza.webp',
+    'images/Restaurante.webp',
+    'images/McDonald.webp',
+    'images/Burgerking.webp',
+    'images/Farmacia.webp',
+    'images/colegio.webp',
+    'images/parque.webp',
+    'images/rascacielos.webp',
+    'images/casa-1.webp',
+    'images/casa-2.webp',
+    'images/casa-3.webp',
+    'images/casa-4.webp',
+    'images/casa-5.webp'
 ];
 
 function houseFor(id, house) {
+  if (house) house = String(house).replace(/\.png$/i, '.webp');   // terrenos guardados antes del cambio a webp
   if (house && HOUSES.includes(house)) return house;   // la que eligió el dueño
   let h = 2166136261;
   for (const c of id) {
@@ -604,7 +605,7 @@ function showPanel(p) {
     $('p-owner-icon').textContent = p.avatar || '👤';
     $('p-photo').src = houseFor(p.id, p.house);
     $('house-edit').classList.toggle('hidden', !p.mine);
-    if (p.mine) markHouse($('house-pick-edit'), p.house);
+    if (p.mine) markHouse($('house-pick-edit'), p.house && String(p.house).replace(/\.png$/i, '.webp'));
     $('p-avatar').textContent = p.avatar || '';
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
     renderLevelBox(p);
@@ -668,7 +669,7 @@ try { const s = localStorage.getItem('avatar'); if (AVATARS.includes(s)) avatar 
 
 // ---------- Elegir casa ----------
 let chosenHouse = null;   // casa elegida para el terreno que vas a reclamar (null = al azar)
-const houseName = h => h.replace(/^images\//, '').replace(/\.png$/i, '').replace(/[-_]/g, ' ');
+const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '').replace(/[-_]/g, ' ');
 function buildHousePicker(box, onPick, withRandom) {
   box.replaceChildren();
   const add = (value, content, label) => {
