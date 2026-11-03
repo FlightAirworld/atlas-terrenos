@@ -740,7 +740,7 @@ $('use-credit').onclick = async () => {
     selected.owner = j.owner; selected.avatar = avatar; selected.country = country; selected.since = Date.now();
     selected.house = chosenHouse; selected.mine = !!authToken;
     showPanel(selected);
-    setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉` + (j.referralBonus ? ` 🎁 (incluye +${j.referralBonus} de regalo por venir invitado)` : ''), 'ok'); sfx('claim');
+    setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉` + (j.referralBonus ? ` 👫 (incluye +${j.referralBonus} de regalo por venir invitado)` : ''), 'ok'); sfx('claim');
     drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house });
     loadStats(); loadParcels(); loadProduction();
   } catch (e) {

@@ -20,7 +20,7 @@
       localStorage.setItem('refCode', r.toUpperCase());
       u.searchParams.delete('ref');
       history.replaceState(null, '', u.pathname + u.search + u.hash);
-      setTimeout(() => { if (typeof authToken === 'undefined' || !authToken) toast('🎁 Te han invitado: entra con tu cuenta y reclama tu primer terreno, ¡con regalo de bienvenida!'); }, 2500);
+      setTimeout(() => { if (typeof authToken === 'undefined' || !authToken) toast('👫 Te han invitado: entra con tu cuenta y reclama tu primer terreno, ¡con regalo de bienvenida!'); }, 2500);
     }
   } catch (e) {}
 
@@ -34,7 +34,7 @@
       const j = await r.json().catch(() => ({}));
       if (r.ok) {
         try { localStorage.removeItem('refCode'); } catch (e) {}
-        if (j.bonus > 0) toast(`🎁 Te invitó un amigo: al reclamar tu primer terreno recibes +${j.bonus} ${plural(j.bonus, 'terreno', 'terrenos')} de regalo`);
+        if (j.bonus > 0) toast(`👫 Te invitó un amigo: al reclamar tu primer terreno recibes +${j.bonus} ${plural(j.bonus, 'terreno', 'terrenos')} de regalo`);
       } else if (r.status !== 401 && r.status !== 429 && r.status < 500) {
         try { localStorage.removeItem('refCode'); } catch (e) {}      // código no válido, propio o ya usado: no se reintenta
       }
@@ -45,7 +45,7 @@
   let linkUrl = '', shareText = '';
   const setMsg2 = (t, k = '') => { const m = $id('invite-msg'); m.textContent = t; m.className = 'msg ' + k; };
   async function openInvite() {
-    if (!authToken) return openLogin('Entra para conseguir tu enlace de invitación 🎁');
+    if (!authToken) return openLogin('Entra para conseguir tu enlace de invitación 👫');
     setMsg2(''); box.classList.remove('hidden');
     $id('invite-link').value = 'Cargando…'; $id('invite-stats').textContent = '';
     try {
