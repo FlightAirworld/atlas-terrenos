@@ -905,13 +905,14 @@ async function captureOrder(orderId) {
 }
 function fail(e) { if (e.message !== 'nombre') setMsg(e.message, 'err'); }
 
+const isSmallPay = () => matchMedia('(max-width: 700px), (pointer: coarse)').matches;
 function loadPaypalSdk() {
   if (paypalLoaded) return paypalLoaded;
   paypalLoaded = new Promise((ok, ko) => {
     const s = document.createElement('script');
-    // En móvil se quita el botón "Tarjeta" incrustado (su formulario se sale de la pantalla): se paga con el botón de PayPal,
-    // y PayPal ofrece "Pagar con tarjeta" como invitado en su propia ventana, que sí se desplaza bien.
-    const small = matchMedia('(max-width: 700px), (pointer: coarse)').matches;
+    // En móvil se quita el botón "Tarjeta" incrustado (su formulario se sale de la pantalla): el botón "Tarjeta" que se ve
+    // debajo de PayPal abre el mismo pago de PayPal, y allí se paga con tarjeta como invitado en su propia ventana, que sí se desplaza bien.
+    const small = isSmallPay();
     s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(cfg.clientId)}&currency=${cfg.currency}&intent=capture${small ? '&disable-funding=card' : ''}`;
     s.onload = ok; s.onerror = () => ko(new Error('No se pudo cargar PayPal'));
     document.head.appendChild(s);
@@ -927,7 +928,14 @@ const paypalOpts = () => ({
 async function renderPaypal(sel = '#paypal-box') {
   try {
     await loadPaypalSdk();
-    paypal.Buttons(paypalOpts()).render(sel);
+    if (!isSmallPay()) { paypal.Buttons(paypalOpts()).render(sel); return; }   // escritorio: PayPal + Tarjeta de serie
+    // Móvil: botón PayPal y, debajo, un botón "Tarjeta" que lleva al mismo pago de PayPal
+    // (encima va un botón de PayPal invisible, así el toque abre exactamente el mismo flujo).
+    const box = document.querySelector(sel);
+    box.innerHTML = '<div class="pp-main"></div><div class="pp-card"><span class="pp-card-label">💳 Tarjeta</span><div class="pp-card-hit"></div></div>';
+    const opts = { ...paypalOpts(), fundingSource: paypal.FUNDING.PAYPAL };
+    paypal.Buttons(opts).render(box.querySelector('.pp-main'));
+    paypal.Buttons(opts).render(box.querySelector('.pp-card-hit'));
   } catch (e) { setMsg(e.message, 'err'); }
 }
 

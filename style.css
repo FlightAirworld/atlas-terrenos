@@ -49,6 +49,11 @@ input { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; borde
 /* PayPal más pequeño: botones más estrechos y centrados */
 #paypal-box, #paypal-box-2 { max-width: 220px; margin: 4px auto 0; }
 
+/* Botón "Tarjeta" bajo PayPal (móvil): se ve el nuestro, el botón real de PayPal va encima, invisible */
+.pp-card { position: relative; height: 30px; margin-top: 8px; border-radius: 4px; background: #2c2e2f; color: #fff;
+  display: flex; align-items: center; justify-content: center; font: 600 14px/1 system-ui, sans-serif; }
+.pp-card-hit { position: absolute; inset: 0; opacity: 0.01; overflow: hidden; z-index: 2; }
+
 /* Fotos de las casas compradas */
 .house-img { border-radius: 3px; }
 .owner-label { background: transparent !important; border: 0 !important; }
