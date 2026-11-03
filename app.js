@@ -331,7 +331,7 @@ function mountDetail(ex, imgUrl, blob) {
   ex.starsEl = stars;
   const wrap = document.createElement('span');
   wrap.append(stars, pill);
-  ex.label = L.marker([(s + n) / 2, (w + e) / 2], {   // en el centro de la parcela, dentro de la casa
+  ex.label = L.marker([s, (w + e) / 2], {   // en el borde de abajo (sur) de la parcela: el nombre queda justo debajo de la foto
     icon: L.divIcon({ className: 'owner-label', html: wrap, iconSize: [0, 0] }),
     interactive: false, keyboard: false
   }).addTo(map);
