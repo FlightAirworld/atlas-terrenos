@@ -893,6 +893,44 @@ async function chatDelete(req, body) {
   return { ok: true };
 }
 
+// ---------- Amigos ----------
+// Lista de amigos de cada cuenta (en un solo sentido: no hace falta que el otro acepte). Se añade desde el chat tocando
+// el apodo: el cliente manda el id del mensaje y el servidor busca la cuenta, así nunca se expone el id de usuario.
+const FRIENDS_MAX = 100;
+async function friendsList(req) {
+  const user = await needUser(req);
+  const rows = await all('SELECT f.friend_id, p.nickname FROM friends f JOIN profiles p ON p.user_id = f.friend_id WHERE f.user_id = $1 ORDER BY f.created_at DESC', [user.id]);
+  const ids = rows.map(r => r.friend_id);
+  const ps = ids.length ? await all('SELECT DISTINCT ON (user_id) user_id::text AS uid, x, y, avatar, country FROM parcels WHERE user_id::text = ANY($1::text[]) ORDER BY user_id::text, created_at ASC', [ids]) : [];
+  const byUser = new Map(ps.map(p => [p.uid, p]));
+  return {
+    friends: rows.map(r => {
+      const p = byUser.get(String(r.friend_id));
+      return { nick: r.nickname, avatar: p ? p.avatar : null, country: p ? p.country : null,
+        lat: p ? p.y * SIZE - 90 + SIZE / 2 : null, lng: p ? p.x * SIZE - 180 + SIZE / 2 : null };
+    })
+  };
+}
+async function friendsAdd(req, body) {
+  const user = await needUser(req);
+  const id = Math.floor(Number(body && body.msgId));
+  if (!Number.isFinite(id) || id < 1) throw new HttpError(400, 'Mensaje no válido');
+  const m = await one('SELECT user_id, nick FROM chat_msgs WHERE id = $1', [id]);
+  if (!m) throw new HttpError(404, 'Ese mensaje ya no existe');
+  if (m.user_id === user.id) throw new HttpError(400, 'Ese eres tú');
+  const n = Number((await one('SELECT COUNT(*) AS n FROM friends WHERE user_id = $1', [user.id])).n);
+  if (n >= FRIENDS_MAX) throw new HttpError(409, `Máximo ${FRIENDS_MAX} amigos`);
+  await run('INSERT INTO friends (user_id, friend_id, created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [user.id, m.user_id, Date.now()]);
+  return { ok: true, nick: m.nick };
+}
+async function friendsRemove(req, body) {
+  const user = await needUser(req);
+  const nick = cleanName(body && body.nick);
+  const f = nick && await one('SELECT user_id FROM profiles WHERE nickname = $1', [nick]);
+  if (f) await run('DELETE FROM friends WHERE user_id = $1 AND friend_id = $2', [user.id, f.user_id]);
+  return { ok: true };
+}
+
 // ---------- Invita y gana ----------
 // Cada cuenta tiene un código de invitación (enlace /?ref=CODIGO). Cuando un jugador NUEVO entra con ese enlace,
 // crea su cuenta y reclama su primer terreno, el que invita gana créditos y el invitado recibe un regalo de bienvenida.
@@ -1022,6 +1060,9 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/auth/link') return linkAccount(req);
   if (req.method === 'GET' && pn === '/api/profile') return profileGet(req);
   if (req.method === 'POST' && pn === '/api/profile') return profileSet(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/friends') return friendsList(req);
+  if (req.method === 'POST' && pn === '/api/friends/add') return friendsAdd(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/friends/remove') return friendsRemove(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/chat') return chatList(url);
   if (req.method === 'POST' && pn === '/api/chat/send') return chatSend(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/chat/delete') return chatDelete(req, await readJson(req));
@@ -1062,6 +1103,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
   .then(async () => {   // chat por zona (no hace nada si ya existe)
     await run('CREATE TABLE IF NOT EXISTS chat_msgs (id BIGSERIAL PRIMARY KEY, zone TEXT NOT NULL, user_id TEXT NOT NULL, nick TEXT NOT NULL, avatar TEXT, country TEXT, text TEXT NOT NULL, created_at BIGINT NOT NULL)');
     await run('CREATE INDEX IF NOT EXISTS chat_msgs_zone ON chat_msgs (zone, id)');
+    await run('CREATE TABLE IF NOT EXISTS friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, friend_id))');
     const purge = () => run('DELETE FROM chat_msgs WHERE created_at < $1', [Date.now() - CHAT_KEEP_MS]).catch(() => {});
     purge(); setInterval(purge, 3600_000).unref();
   }).catch(e => console.error('No se pudo crear la tabla del chat:', e.message));
