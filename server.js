@@ -559,13 +559,18 @@ const PROD_CAP_HOURS = Math.max(1, Number(process.env.PROD_CAP_HOURS || 24));  /
 const HOUR_MS = 3600000;
 
 // ---------- Niveles de terreno ----------
-// Cada terreno tiene un nivel de 1 a MAX_LEVEL. Pasar del nivel L al L+1 cuesta LEVEL_COSTS[L-1] créditos y el terreno
-// produce PROD_RATE × LEVEL_MULTS[nivel-1]. Se pueden cambiar con las variables LEVEL_MULTS y LEVEL_COSTS (listas separadas por comas).
-const numList = (s, def) => { const a = String(s || '').split(',').map(x => Number(x.trim())).filter(x => Number.isFinite(x) && x >= 0); return a.length ? a : def; };
-const LEVEL_MULTS = numList(process.env.LEVEL_MULTS, [1, 1.5, 2, 3, 5]);     // multiplicador de cada nivel (el primero es el nivel 1)
+// Cada terreno tiene un nivel de 1 a MAX_LEVEL (50 por defecto). Pasar del nivel L al L+1 cuesta LEVEL_COSTS[L-1] créditos y el
+// terreno produce PROD_RATE × LEVEL_MULTS[nivel-1]. Por defecto: multiplicador = 1 + LEVEL_STEP × (nivel-1) y coste = ceil(LEVEL_COST_K × L).
+// Variables opcionales: LEVEL_MAX, LEVEL_STEP, LEVEL_COST_K, o listas completas LEVEL_MULTS / LEVEL_COSTS (separadas por comas) que mandan sobre la fórmula.
+const numEnv = (name, def) => { const v = String(process.env[name] ?? '').trim(); const n = v === '' ? NaN : Number(v); return Number.isFinite(n) && n >= 0 ? n : def; };
+const numList = (s, def) => { const a = String(s || '').split(',').map(x => x.trim()).filter(x => x !== '').map(Number).filter(x => Number.isFinite(x) && x >= 0); return a.length ? a : def; };
+const LEVEL_MAX = Math.max(1, Math.min(200, Math.floor(numEnv('LEVEL_MAX', 50))));
+const LEVEL_STEP = numEnv('LEVEL_STEP', 0.5);
+const LEVEL_COST_K = numEnv('LEVEL_COST_K', 0.75);
+const LEVEL_MULTS = numList(process.env.LEVEL_MULTS, Array.from({ length: LEVEL_MAX }, (_, i) => Math.round((1 + i * LEVEL_STEP) * 10000) / 10000));
 const MAX_LEVEL = LEVEL_MULTS.length;
 const LEVEL_COSTS = (() => {                                                  // créditos para pasar al nivel 2, 3, 4…
-  const c = numList(process.env.LEVEL_COSTS, [1, 2, 4, 8]).map(x => Math.floor(x));
+  const c = numList(process.env.LEVEL_COSTS, Array.from({ length: MAX_LEVEL - 1 }, (_, i) => Math.max(1, Math.ceil((i + 1) * LEVEL_COST_K)))).map(x => Math.floor(x));
   while (c.length < MAX_LEVEL - 1) c.push(c.length ? c[c.length - 1] : 1);
   return c.slice(0, Math.max(0, MAX_LEVEL - 1));
 })();

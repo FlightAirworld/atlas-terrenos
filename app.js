@@ -135,15 +135,17 @@ const HOUSE_HEIGHT = {
   'rascacielos': 120, 'casa-1': 8, 'casa-2': 10, 'casa-3': 12, 'casa-4': 9, 'casa-5': 11
 };
 // Nivel del terreno (1 a 5): más estrellas junto al nombre y un edificio más alto
-const LEVEL_H = [1, 1.15, 1.3, 1.5, 1.8];   // cuánto crece la altura en cada nivel
 const maxLevel = () => (cfg && cfg.levels && cfg.levels.mults.length) || 5;
 const levelOf = p => Math.max(1, Math.min(maxLevel(), Math.floor(Number(p && p.level)) || 1));
 const multOf = lvl => (cfg && cfg.levels && cfg.levels.mults[lvl - 1]) || 1;
 const fmtNum = n => Number(n).toLocaleString('es-ES', { maximumFractionDigits: 2 });
-const starsOf = lvl => '★'.repeat(lvl);
+// Con tantos niveles, 1 estrella por cada 1/5 del camino (1 a 5) y el número de nivel al lado
+const tierOf = lvl => Math.max(1, Math.ceil(lvl * 5 / maxLevel()));
+const starsOf = lvl => `${'★'.repeat(tierOf(lvl))} ${lvl}`;
 function heightOf(url, lvl = 1) {
   const k = String(url).split('/').pop().replace(/\.[a-z]+$/i, '').toLowerCase();
-  return (HOUSE_HEIGHT[k] ?? 9) * (LEVEL_H[lvl - 1] ?? LEVEL_H[LEVEL_H.length - 1]) + (lvl - 1) * 2;
+  const t = (lvl - 1) / Math.max(1, maxLevel() - 1);   // 0 en el nivel 1, 1 en el máximo: hasta ×1,8 de altura y +8 m
+  return (HOUSE_HEIGHT[k] ?? 9) * (1 + 0.8 * t) + 8 * t;
 }
 function ringOf(x, y) {
   const [[s, w], [n, e]] = boundsOf(x, y);
@@ -613,7 +615,7 @@ $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(nul
 function renderLevelBox(p) {
   if (!cfg || !cfg.levels) { $('p-level').textContent = ''; $('level-edit').classList.add('hidden'); return; }
   const lvl = levelOf(p), max = maxLevel();
-  $('p-level').textContent = `${'⭐'.repeat(lvl)} Nivel ${lvl} de ${max} · produce ×${fmtNum(multOf(lvl))}`;
+  $('p-level').textContent = `${'⭐'.repeat(tierOf(lvl))} Nivel ${lvl} de ${max} · produce ×${fmtNum(multOf(lvl))}`;
   $('level-edit').classList.toggle('hidden', !p.mine);
   if (!p.mine) return;
   const btn = $('upgrade-btn'), note = $('level-note');

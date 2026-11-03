@@ -62,18 +62,13 @@ Para añadir casas nuevas, ponlas al FINAL de `HOUSES` en `app.js` y en `server.
 
 ## Niveles de terreno
 
-Cada terreno tiene un nivel del 1 al 5 (columnas `level` y `level_at` de `parcels`; el servidor las crea solo al arrancar).
-Subir de nivel cuesta créditos y multiplica lo que produce ese terreno (`POST /api/parcel/upgrade`, solo el dueño con cuenta):
-
-| Nivel | Cuesta | Produce |
-|---|---|---|
-| 2 | 1 crédito | ×1,5 |
-| 3 | 2 créditos | ×2 |
-| 4 | 4 créditos | ×3 |
-| 5 | 8 créditos | ×5 |
+Cada terreno tiene un nivel del 1 al 50 (columnas `level` y `level_at` de `parcels`; el servidor las crea solo al arrancar).
+Subir de nivel cuesta créditos y multiplica lo que produce ese terreno (`POST /api/parcel/upgrade`, solo el dueño con cuenta).
+Por defecto el multiplicador del nivel N es `1 + 0,5 × (N-1)` (nivel 2: ×1,5 · nivel 10: ×5,5 · nivel 50: ×25,5) y pasar del nivel N al N+1 cuesta `ceil(0,75 × N)` créditos (1, 2, 3, 3, 4, 5…).
 
 La mejora cuenta desde el momento en que se compra (el tiempo anterior se paga con el multiplicador antiguo), así que subir de nivel justo antes de recoger no da créditos de más.
-En el mapa se ven más estrellas junto al nombre (a partir del zoom en que se ven los nombres) y el edificio es más alto.
+En el mapa se ve 1 a 5 estrellas (una por cada décima parte del camino) y el número de nivel junto al nombre, y el edificio es más alto.
 
-Variables opcionales (listas separadas por comas, sin espacios): `LEVEL_MULTS` (por defecto `1,1.5,2,3,5`; su longitud es el nivel máximo) y
-`LEVEL_COSTS` (por defecto `1,2,4,8`: créditos para pasar al nivel 2, 3, 4…). La producción base sigue siendo `PROD_RATE` (créditos por terreno y hora).
+Variables opcionales: `LEVEL_MAX` (niveles, por defecto 50), `LEVEL_STEP` (por defecto 0.5) y `LEVEL_COST_K` (por defecto 0.75).
+Para control total: `LEVEL_MULTS` y `LEVEL_COSTS` como listas separadas por comas, que mandan sobre la fórmula (la longitud de `LEVEL_MULTS` es el nivel máximo; `LEVEL_COSTS` son los créditos para pasar al nivel 2, 3, 4…).
+La producción base sigue siendo `PROD_RATE` (créditos por terreno y hora).
