@@ -439,7 +439,7 @@ async function setHouse(req, { id, house }) {
       credits = (await client.query('SELECT credits FROM packs WHERE code = $1', [pack.code])).rows[0].credits;
     } else {
       const r = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [HOUSE_COST, pack.code]);
-      if (!r.rows[0]) throw new HttpError(402, `Cambiar la casa cuesta ${HOUSE_COST} ${HOUSE_COST === 1 ? 'crédito' : 'créditos'} y no te quedan`);
+      if (!r.rows[0]) throw new HttpError(402, 'NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.');
       credits = r.rows[0].credits;
       await client.query('UPDATE parcels SET house = $1 WHERE id = $2', [h, String(id)]);
     }
@@ -613,7 +613,7 @@ async function upgradeParcel(req, { id, from }) {
     const cost = LEVEL_COSTS[level - 1];
     // Se cobra primero (la fila del pack queda bloqueada): así la hora de la mejora es posterior a cualquier recogida en curso
     const r = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [cost, pack.code]);
-    if (!r.rows[0]) throw new HttpError(402, `Subir al nivel ${level + 1} cuesta ${cost} ${cost === 1 ? 'crédito' : 'créditos'} y no te quedan`);
+    if (!r.rows[0]) throw new HttpError(402, 'NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.');
     await client.query('UPDATE parcels SET level = $1, level_at = $2 WHERE id = $3', [level + 1, Date.now(), String(id)]);
     await client.query('COMMIT');
     return { ok: true, level: level + 1, credits: r.rows[0].credits, cost };

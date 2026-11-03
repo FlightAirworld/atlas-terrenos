@@ -631,7 +631,7 @@ $('upgrade-btn').onclick = async () => {
   const lvl = levelOf(selected);
   if (lvl >= maxLevel()) return;
   const cost = cfg.levels.costs[lvl - 1];
-  if (credits < cost) return setMsg(`Subir al nivel ${lvl + 1} cuesta ${cost} ${plural(cost, 'crédito', 'créditos')} y no te quedan`, 'err');
+  if (credits < cost) return setMsg('NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.', 'err');
   if (!confirm(`Subir este terreno al nivel ${lvl + 1} cuesta ${cost} ${plural(cost, 'crédito', 'créditos')}. ¿Continuar?`)) return;
   const btn = $('upgrade-btn');
   btn.disabled = true;
@@ -694,7 +694,7 @@ function markHouse(box, current) {
     if (!selected || !selected.mine || h === selected.house) return;
     const cost = cfg.houseCost ?? 1;
     if (cost > 0) {
-      if (credits < cost) return setMsg(`Cambiar la casa cuesta ${cost} ${plural(cost, 'crédito', 'créditos')} y no te quedan`, 'err');
+      if (credits < cost) return setMsg('NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.', 'err');
       if (!confirm(`Cambiar la casa cuesta ${cost} ${plural(cost, 'crédito', 'créditos')}. ¿Continuar?`)) return;
     }
     try {
