@@ -909,7 +909,10 @@ function loadPaypalSdk() {
   if (paypalLoaded) return paypalLoaded;
   paypalLoaded = new Promise((ok, ko) => {
     const s = document.createElement('script');
-    s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(cfg.clientId)}&currency=${cfg.currency}&intent=capture`;
+    // En móvil se quita el botón "Tarjeta" incrustado (su formulario se sale de la pantalla): se paga con el botón de PayPal,
+    // y PayPal ofrece "Pagar con tarjeta" como invitado en su propia ventana, que sí se desplaza bien.
+    const small = matchMedia('(max-width: 700px), (pointer: coarse)').matches;
+    s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(cfg.clientId)}&currency=${cfg.currency}&intent=capture${small ? '&disable-funding=card' : ''}`;
     s.onload = ok; s.onerror = () => ko(new Error('No se pudo cargar PayPal'));
     document.head.appendChild(s);
   });
