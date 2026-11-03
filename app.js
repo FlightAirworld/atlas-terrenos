@@ -121,7 +121,9 @@ const HOUSES = [
     'images/casa-2.webp',
     'images/casa-3.webp',
     'images/casa-4.webp',
-    'images/casa-5.webp'
+    'images/casa-5.webp',
+    'images/casa-6.webp',
+    'images/pisos-2.webp'
 ];
 
 function houseFor(id, house) {
@@ -137,7 +139,7 @@ function houseFor(id, house) {
 const HOUSE_HEIGHT = {
   'casa-aerea': 9, 'casa-frente': 9, 'policia': 12, 'pisos': 30, 'gasolinera': 6, 'choza': 4,
   'restaurante': 8, 'mcdonald': 9, 'burgerking': 9, 'farmacia': 9, 'colegio': 15, 'parque': 0.6,
-  'rascacielos': 120, 'casa-1': 8, 'casa-2': 10, 'casa-3': 12, 'casa-4': 9, 'casa-5': 11
+  'rascacielos': 120, 'casa-1': 8, 'casa-2': 10, 'casa-3': 12, 'casa-4': 9, 'casa-5': 11, 'casa-6': 9, 'pisos-2': 20
 };
 // Nivel del terreno (1 a 5): más estrellas junto al nombre y un edificio más alto
 const maxLevel = () => (cfg && cfg.levels && cfg.levels.mults.length) || 5;
