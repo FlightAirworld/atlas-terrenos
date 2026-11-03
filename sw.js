@@ -1,4 +1,4 @@
-const CACHE = 'redecora-v9';
+const CACHE = 'redecora-v10';
 const SHELL = ['/', '/style.css', '/app.js', '/mapshim.js', '/sounds.js', '/images/icon-192.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
@@ -21,4 +21,21 @@ self.addEventListener('fetch', e => {
     if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(r, copy)); }
     return res;
   }).catch(() => caches.match(r).then(m => m || caches.match('/'))));
+});
+
+// Avisos push (ver push.js y el apartado "Avisos al móvil" de server.js)
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (x) {}
+  e.waitUntil(self.registration.showNotification(d.title || 'Redecora El Mundo', {
+    body: d.body || '', tag: d.tag || 'redecora', icon: '/images/icon-192.png', badge: '/images/favicon-32.png', data: { url: d.url || '/' }
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) if ('focus' in c) return c.focus();
+    return clients.openWindow(url);
+  }));
 });

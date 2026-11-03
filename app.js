@@ -831,14 +831,18 @@ function renderDaily() {
   $('daily-info').textContent = d.canClaim
     ? (d.streak > 0 ? `🔥 Racha actual: ${racha}. ¡No la pierdas! Hoy te llevas ${premio}.` : `Hoy te llevas ${premio}.`)
     : `¡Hoy ya lo has cobrado! Vuelve mañana: ${premio}. Racha: ${racha}.`;
+  const nextIdx = d.canClaim ? d.dayInCycle : d.dayInCycle % 7, left = 6 - nextIdx;   // días hasta el premio grande (el último de la racha)
+  const big = d.rewards[6];
+  $('daily-info').textContent += left === 0 ? ` 🏆 ¡Hoy es el premio grande: +${big}!`
+    : (d.canClaim || nextIdx > 0 ? ` 🏆 ${left === 1 ? 'Mañana' : `En ${left} días`} llega el premio grande: +${big}.` : '');
   const box = $('daily-days');
   box.replaceChildren();
   d.rewards.forEach((n, i) => {
     const done = i < d.dayInCycle, today = d.canClaim && i === d.dayInCycle;
     const cell = document.createElement('div');
     cell.style.cssText = 'text-align:center;padding:6px 2px;border-radius:8px;border:1px solid var(--line);font-size:12px;white-space:pre-line;'
-      + (done ? 'background:var(--accent);color:#fff;' : '') + (today ? 'outline:2px solid #ffb703;' : '');
-    cell.textContent = `Día ${i + 1}\n${done ? '✅' : '🎟️'}\n+${n}`;
+      + (done ? 'background:var(--accent);color:#fff;' : '') + (today ? 'outline:2px solid #ffb703;' : '') + (i === 6 && !done ? 'background:#ffb70322;border-color:#ffb703;font-weight:800;' : '');
+    cell.textContent = `Día ${i + 1}\n${done ? '✅' : (i === 6 ? '🏆' : '🎟️')}\n+${n}`;
     box.appendChild(cell);
   });
   const btn = $('daily-claim');

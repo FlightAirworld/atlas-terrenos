@@ -522,7 +522,10 @@ async function setHouse(req, { id, house }) {
 
 // ---------- Regalo diario ----------
 const DAILY_TZ = process.env.DAILY_TZ || 'Europe/Madrid';       // el "día" cambia a medianoche de esta zona
-const DAILY_REWARDS = [1, 1, 2, 2, 3, 3, 5];                    // terrenos de cada día de la racha (se repite cada 7 días)
+const DAILY_REWARDS = (() => {                                   // créditos de cada día de la racha (se repite cada 7 días; el día 7 es el premio grande)
+  const l = String(process.env.DAILY_REWARDS || '').split(',').map(x => Math.floor(Number(x))).filter(x => x >= 1 && x <= 1000);
+  return l.length === 7 ? l : [1, 1, 2, 2, 3, 3, 10];
+})();
 const DAILY_SALT = process.env.DAILY_SALT || ADMIN_TOKEN || 'atlas-terrenos';
 const dayKey = () => new Date().toLocaleDateString('en-CA', { timeZone: DAILY_TZ });   // AAAA-MM-DD
 const yesterdayKey = () => { const d = new Date(dayKey() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
@@ -1127,7 +1130,7 @@ async function rankCities(url) {
 // ---------- Avisos al móvil (notificaciones push) ----------
 // Hace falta el paquete "web-push" y un par de claves VAPID (npx web-push generate-vapid-keys) en las variables
 // VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY (y VAPID_SUBJECT, p. ej. mailto:tu@correo.com). Sin ellas, los avisos quedan desactivados.
-// Avisos: "producción lista", "regalo diario" y "X te ha añadido como amigo". Para no molestar: nada de noche (solo entre
+// Avisos: "racha en peligro" (tarde), "producción a punto de llenarse", "producción lista", "regalo diario" y "X te ha añadido como amigo". Para no molestar: nada de noche (solo entre
 // las 10:00 y las 21:00 hora del jugador), 6 h mínimo entre avisos y se paran tras 3 avisos sin que el jugador vuelva a entrar.
 let webpush = null;
 try { webpush = require('web-push'); } catch { /* sin el paquete: avisos desactivados */ }
@@ -1213,6 +1216,7 @@ async function notifyFriendsOf(userId, kind, level) {
 }
 
 let pushBusy = false;
+const PUSH_STREAK_FROM = 18, PUSH_STREAK_GAP_MS = 2 * 3600_000, PUSH_FULL_SOON_MS = 2 * 3600_000;
 async function pushRun() {
   if (!PUSH_ON || pushBusy) return;
   pushBusy = true;
@@ -1224,20 +1228,43 @@ async function pushRun() {
         let hour; try { hour = Number(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hourCycle: 'h23', timeZone: u.tz || 'Europe/Madrid' }).format(now)); } catch { hour = 12; }
         if (hour < PUSH_QUIET_FROM || hour >= PUSH_QUIET_TO) continue;
         const st = await one('SELECT * FROM push_state WHERE user_id = $1', [u.user_id]);
-        if (st && (st.unseen >= PUSH_MAX_UNSEEN || now - Number(st.last_any || 0) < PUSH_GAP_MS)) continue;
+        if (st && st.unseen >= PUSH_MAX_UNSEEN) continue;
+        const since = st ? now - Number(st.last_any || 0) : Infinity;   // tiempo desde el último aviso
+        if (since < PUSH_STREAK_GAP_MS) continue;
+        const roomy = since >= PUSH_GAP_MS;                              // ¿ha pasado el descanso normal entre avisos?
         const pack = await one('SELECT last_collect, prod_carry, last_daily, streak FROM packs WHERE user_id = $1', [u.user_id]);
+        const day = dayKey(), info = dailyInfo(pack);
         let payload = null, field = null, value = null;
-        if (pack) {
-          const pr = await prodCompute(pool, u.user_id, pack.last_collect, pack.prod_carry, now);
-          const lastProd = st ? Number(st.last_prod_push || 0) : 0;
-          if (pr.ready >= 1 && (lastProd < Number(pack.last_collect || 0) || now - lastProd > 24 * 3600_000)) {
+
+        // 1) La racha se pierde hoy: solo por la tarde y con un descanso más corto, porque es el aviso que más importa
+        if (info.canClaim && info.streak > 0 && hour >= PUSH_STREAK_FROM && (!st || st.last_daily_push !== day + '!')) {
+          const left = 6 - info.dayInCycle;
+          payload = { title: `🔥 ¡Tu racha de ${info.streak} ${info.streak === 1 ? 'día' : 'días'} se acaba hoy!`,
+            body: left === 0 ? `Hoy toca el premio grande: +${info.next} créditos. ¡No lo pierdas!` : `Entra y reclama tu regalo diario. ${left === 1 ? 'Mañana' : `En ${left} días`} llega el premio grande.`,
+            tag: 'streak', url: '/' };
+          field = 'last_daily_push'; value = day + '!';
+        }
+        if (!payload && !roomy) continue;
+
+        let pr = null;
+        if (!payload && pack) {
+          pr = await prodCompute(pool, u.user_id, pack.last_collect, pack.prod_carry, now);
+          const lastProd = st ? Number(st.last_prod_push || 0) : 0, lastFull = st ? Number(st.last_full_push || 0) : 0;
+          // 2) Un terreno está a punto de llenarse (deja de producir): una vez por recogida
+          if (pr.ready >= 1 && pr.nextCap != null && pr.nextCap <= PUSH_FULL_SOON_MS && lastFull < Number(pack.last_collect || 0)) {
+            const h = Math.max(1, Math.ceil(pr.nextCap / 3600_000));
+            payload = { title: '⏳ Tu producción se llena pronto', body: `En ${h} ${h === 1 ? 'hora' : 'horas'} un terreno dejará de producir. Recoge tus ${pr.ready} ${pr.ready === 1 ? 'crédito' : 'créditos'}.`, tag: 'full', url: '/' };
+            field = 'last_full_push'; value = now;
+          }
+          // 3) Hay créditos listos
+          else if (pr.ready >= 1 && (lastProd < Number(pack.last_collect || 0) || now - lastProd > 24 * 3600_000)) {
             payload = { title: '🎟️ ¡Producción lista!', body: `Tus terrenos han producido ${pr.ready} ${pr.ready === 1 ? 'crédito' : 'créditos'}. Entra a recogerlos.`, tag: 'prod', url: '/' };
             field = 'last_prod_push'; value = now;
           }
         }
-        const day = dayKey();
-        if (!payload && dailyInfo(pack).canClaim && (!st || st.last_daily_push !== day)) {
-          const s = dailyInfo(pack).streak;
+        // 4) Regalo diario por la mañana
+        if (!payload && info.canClaim && (!st || (st.last_daily_push !== day && st.last_daily_push !== day + '!'))) {
+          const s = info.streak;
           payload = { title: '🎁 Tu regalo diario te espera', body: s > 0 ? `Llevas ${s} ${s === 1 ? 'día' : 'días'} seguidos: ¡no pierdas la racha!` : 'Entra hoy y empieza tu racha.', tag: 'daily', url: '/' };
           field = 'last_daily_push'; value = day;
         }
@@ -1442,6 +1469,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE TABLE IF NOT EXISTS friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, friend_id))');
     await run('CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, user_id TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, tz TEXT, created_at BIGINT NOT NULL)');
     await run('CREATE INDEX IF NOT EXISTS push_subs_user ON push_subs (user_id)');
+    await run('ALTER TABLE push_state ADD COLUMN IF NOT EXISTS last_full_push BIGINT');   // aviso "se llena pronto" (una vez por recogida)
     await run('CREATE TABLE IF NOT EXISTS push_state (user_id TEXT PRIMARY KEY, last_seen BIGINT, unseen INT NOT NULL DEFAULT 0, last_any BIGINT, last_prod_push BIGINT, last_daily_push TEXT)');
     if (PUSH_ON) { setTimeout(pushRun, 120_000).unref(); setInterval(pushRun, 15 * 60_000).unref(); }   // revisa cada 15 min quién tiene algo pendiente
     const purge = () => run('DELETE FROM chat_msgs WHERE created_at < $1', [Date.now() - CHAT_KEEP_MS]).then(() => run('DELETE FROM chat_reacts WHERE msg_id NOT IN (SELECT id FROM chat_msgs)')).catch(() => {});

@@ -272,3 +272,11 @@ path.buy-range {
 @keyframes coachin { from { opacity: 0; transform: translate(-50%, -8px); } }
 @keyframes coachpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,183,3,.6); } 70% { box-shadow: 0 0 0 9px rgba(255,183,3,0); } }
 @media (prefers-reduced-motion: reduce) { #coach, #coach .coach-go { animation: none; } }
+
+/* Pregunta de avisos al móvil (push.js) */
+#push-ask { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 1050; width: min(92vw, 380px); padding: 12px 14px; border-radius: 16px;
+  background: rgba(11,61,46,.96); color: #fff; box-shadow: 0 4px 18px rgba(0,0,0,.45); }
+#push-ask .pa-text { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+#push-ask .pa-btns { display: flex; gap: 8px; }
+#push-ask .pa-yes { flex: 1; padding: 9px 12px; border: 0; border-radius: 999px; background: #ffb703; color: #222; font-weight: 800; }
+#push-ask .pa-no { padding: 9px 14px; border-radius: 999px; background: transparent; color: #fff; border: 1px solid #fff8; }
