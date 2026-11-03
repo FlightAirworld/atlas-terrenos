@@ -57,6 +57,8 @@
   window.personSVG = personSVG;   // lo reutilizan los pasajeros de los taxis (vehicles.js)
 
   const walkers = [];
+  window.peopleWalkers = walkers;   // los usa animals.js (el león busca presas entre los peatones)
+  window.peopleKill = w => { const i = walkers.indexOf(w); if (i >= 0) remove(i); };
   let zooming = false;
 
   // Coloca al peatón sobre su trayecto (centro de la calle) según la distancia recorrida w.s
