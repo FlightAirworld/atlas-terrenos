@@ -64,11 +64,11 @@ input { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; borde
 /* Fotos de las casas compradas */
 .house-img { border-radius: 3px; }
 .owner-label { background: transparent !important; border: 0 !important; }
-/* Nombre del dueño pequeño, justo debajo de la foto de su parcela; el tamaño sigue al de la parcela en pantalla (--ppx, ver syncLabels) */
-.owner-pill { position: absolute; left: 0; top: 0; transform: translate(-50%, 1px); white-space: nowrap; pointer-events: none;
+/* Nombre del dueño centrado dentro de su casa; el tamaño sigue al de la parcela en pantalla (--ppx, ver syncLabels) */
+.owner-pill { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); white-space: nowrap; pointer-events: none;
   max-width: calc(var(--ppx, 60) * .92px); overflow: hidden; text-overflow: ellipsis; text-align: center;
-  background: rgba(0,0,0,.65); color: #fff; font-family: system-ui, sans-serif; font-weight: 600; line-height: 1.15;
-  font-size: clamp(5px, calc(var(--ppx, 60) * 1px / 16), 8px); padding: 1px 4px; border-radius: 999px; }
+  background: rgba(0,0,0,.7); color: #fff; font-family: system-ui, sans-serif; font-weight: 700; line-height: 1.2;
+  font-size: clamp(7px, calc(var(--ppx, 60) * 1px / 8), 14px); padding: 2px 6px; border-radius: 999px; }
 .labels-off .owner-pill { display: none; }
 .p-photo { display: block; width: 100%; height: 120px; object-fit: cover; border-radius: 10px; margin: 6px 0 4px; }
 
@@ -216,10 +216,10 @@ path.buy-range {
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 
-/* Nivel del terreno: estrellas justo encima del nombre, en el borde de abajo de la foto (mismo tamaño que el nombre, ver .owner-pill) */
-.owner-stars { position: absolute; left: 0; top: 0; transform: translate(-50%, calc(-100% - 1px)); white-space: nowrap; pointer-events: none;
-  color: #ffd43b; line-height: 1; letter-spacing: .3px; text-shadow: 0 1px 2px #000;
-  font-size: clamp(5px, calc(var(--ppx, 60) * 1px / 16), 8px); }
+/* Nivel del terreno: estrellas encima del nombre (mismo tamaño que el nombre, ver .owner-pill) */
+.owner-stars { position: absolute; left: 0; top: 0; transform: translate(-50%, calc(-100% - .6em - 3px)); white-space: nowrap; pointer-events: none;
+  color: #ffd43b; line-height: 1; letter-spacing: .5px; text-shadow: 0 1px 2px #000;
+  font-size: clamp(7px, calc(var(--ppx, 60) * 1px / 8), 14px); }
 .labels-off .owner-stars { display: none; }
 
 /* Chat por zona */

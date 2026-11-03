@@ -8,6 +8,12 @@ let myNick = null;             // apodo fijo guardado en el servidor
 const drawn = new Map();       // id -> { srcId, url, label }
 
 // ---------- Mapa 3D (MapLibre GL): globo + satélite + relieve ----------
+// Vista plana (tipo Atlas Earth): cámara cenital, sin inclinación y sin volúmenes 3D. Por defecto activada.
+let flatView = true;
+try { flatView = localStorage.getItem('flatView') !== '0'; } catch (e) {}
+// Mapa base: 'estilizado' (dibujo limpio tipo Atlas Earth, vectorial) o 'satelite'
+let baseMode = 'estilizado';
+try { baseMode = localStorage.getItem('baseMode') === 'satelite' ? 'satelite' : 'estilizado'; } catch (e) {}
 const FLAT_NEAR = 14;          // (zoom MapLibre) a partir de aquí el globo se ve plano
 const MAP_STYLE = {
   version: 8,
@@ -27,7 +33,22 @@ const MAP_STYLE = {
     }
   },
   layers: [
-    { id: 'sat', type: 'raster', source: 'sat' },
+    { id: 'st-bg', type: 'background', paint: { 'background-color': '#cfe6a5' } },
+    { id: 'st-landcover', type: 'fill', source: 'roads', 'source-layer': 'landcover', paint: { 'fill-color': ['match', ['get', 'class'], 'wood', '#a9d68a', 'grass', '#bfe29a', 'farmland', '#dcebb0', 'sand', '#f1e6b8', 'rock', '#d6d3c8', 'ice', '#f4f8fb', '#cfe6a5'] } },
+    { id: 'st-landuse', type: 'fill', source: 'roads', 'source-layer': 'landuse', paint: { 'fill-color': ['match', ['get', 'class'], 'residential', '#ece6d6', 'commercial', '#efdcc6', 'industrial', '#e2dde0', 'retail', '#efdcc6', 'cemetery', '#c3dfa6', 'school', '#f0e3c2', 'hospital', '#f4d7d2', '#e9e4d2'], 'fill-opacity': 0.9 } },
+    { id: 'st-park', type: 'fill', source: 'roads', 'source-layer': 'park', paint: { 'fill-color': '#9fd58a', 'fill-opacity': 0.9 } },
+    { id: 'st-water', type: 'fill', source: 'roads', 'source-layer': 'water', paint: { 'fill-color': '#7cc4e8' } },
+    { id: 'st-waterway', type: 'line', source: 'roads', 'source-layer': 'waterway', paint: { 'line-color': '#7cc4e8', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.5, 16, 4] } },
+    { id: 'st-buildings', type: 'fill', source: 'roads', 'source-layer': 'building', minzoom: 14, paint: { 'fill-color': '#d9d2c3', 'fill-outline-color': '#c2baa8' } },
+    { id: 'st-road-casing', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
+      filter: ['all', ['!=', ['get', 'brunnel'], 'tunnel'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service']]]],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 1, 16, 14, 19, 60] } },
+    { id: 'st-road', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
+      filter: ['all', ['!=', ['get', 'brunnel'], 'tunnel'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service']]]],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': ['match', ['get', 'class'], 'motorway', '#f6c76b', 'trunk', '#f6c76b', 'primary', '#fbe29a', '#ffffff'], 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.6, 16, 11, 19, 50] } },
+    { id: 'sat', type: 'raster', source: 'sat', layout: { visibility: baseMode === 'satelite' ? 'visible' : 'none' } },
     // Capa invisible: solo sirve para consultar la geometría de las calles (coches). Apagada hasta que se necesita.
     {
       id: 'roads-q', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 15,
@@ -42,7 +63,7 @@ try {
   gl = new maplibregl.Map({
     container: 'map', style: MAP_STYLE,
     center: [-5.3536, 36.1408], zoom: 1.6, pitch: 0, bearing: 0,    // empieza visto desde el espacio
-    minZoom: 1, maxZoom: 19.5, maxPitch: 60,
+    minZoom: 1, maxZoom: 19.5, maxPitch: flatView ? 0 : 60,
     pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),          // menos píxeles = más fluidez en móvil
     fadeDuration: 0
   });
@@ -58,7 +79,7 @@ let flightRequested = false;
 const HOME = [-5.3536, 36.1408];   // Gibraltar: destino si no hay ubicación
 function introFlight() {
   if (!glReady) { flightRequested = true; return; }
-  const fly = (center, zoom) => gl.flyTo({ center, zoom, pitch: 45, bearing: -15, duration: 7000, essential: true });
+  const fly = (center, zoom) => gl.flyTo({ center, zoom, pitch: flatView ? 0 : 45, bearing: flatView ? 0 : -15, duration: 7000, essential: true });
   let done = false;
   const toHome = () => { if (done) return; done = true; fly(HOME, 16); };
   if (!navigator.geolocation) return toHome();
@@ -121,9 +142,7 @@ const HOUSES = [
     'images/casa-2.webp',
     'images/casa-3.webp',
     'images/casa-4.webp',
-    'images/casa-5.webp',
-    'images/casa-6.webp',
-    'images/pisos-2.webp'
+    'images/casa-5.webp'
 ];
 
 function houseFor(id, house) {
@@ -139,7 +158,7 @@ function houseFor(id, house) {
 const HOUSE_HEIGHT = {
   'casa-aerea': 9, 'casa-frente': 9, 'policia': 12, 'pisos': 30, 'gasolinera': 6, 'choza': 4,
   'restaurante': 8, 'mcdonald': 9, 'burgerking': 9, 'farmacia': 9, 'colegio': 15, 'parque': 0.6,
-  'rascacielos': 120, 'casa-1': 8, 'casa-2': 10, 'casa-3': 12, 'casa-4': 9, 'casa-5': 11, 'casa-6': 9, 'pisos-2': 20
+  'rascacielos': 120, 'casa-1': 8, 'casa-2': 10, 'casa-3': 12, 'casa-4': 9, 'casa-5': 11
 };
 // Nivel del terreno (1 a 5): más estrellas junto al nombre y un edificio más alto
 const maxLevel = () => (cfg && cfg.levels && cfg.levels.mults.length) || 5;
@@ -331,7 +350,7 @@ function mountDetail(ex, imgUrl, blob) {
   ex.starsEl = stars;
   const wrap = document.createElement('span');
   wrap.append(stars, pill);
-  ex.label = L.marker([s, (w + e) / 2], {   // en el borde de abajo (sur) de la parcela: el nombre queda justo debajo de la foto
+  ex.label = L.marker([(s + n) / 2, (w + e) / 2], {   // en el centro de la parcela, dentro de la casa
     icon: L.divIcon({ className: 'owner-label', html: wrap, iconSize: [0, 0] }),
     interactive: false, keyboard: false
   }).addTo(map);
@@ -393,6 +412,43 @@ function drawOwned(p) {
   queueCuts();
 }
 
+// ---------- Mapa base: estilizado / satélite ----------
+function applyBaseMode() {
+  if (!gl || !gl.getLayer('sat')) return;
+  const sat = baseMode === 'satelite';
+  gl.setLayoutProperty('sat', 'visibility', sat ? 'visible' : 'none');
+  for (const l of gl.getStyle().layers) if (l.id.startsWith('st-')) gl.setLayoutProperty(l.id, 'visibility', sat ? 'none' : 'visible');
+  const b = document.getElementById('base-btn');
+  if (b) { b.setAttribute('aria-pressed', sat ? 'true' : 'false'); b.title = sat ? 'Mapa: satélite' : 'Mapa: estilizado'; b.textContent = sat ? '🛰️' : '🎨'; }
+}
+function toggleBaseMode() {
+  baseMode = baseMode === 'satelite' ? 'estilizado' : 'satelite';
+  try { localStorage.setItem('baseMode', baseMode); } catch (e) {}
+  applyBaseMode();
+}
+document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#base-btn')) toggleBaseMode(); });
+
+// ---------- Vista plana / 3D ----------
+function applyViewMode(animate) {
+  if (!gl) return;
+  const vis = flatView ? 'none' : 'visible';
+  for (const id of ['owned-3d', 'sel-plate']) if (gl.getLayer(id)) gl.setLayoutProperty(id, 'visibility', vis);
+  gl.setMaxPitch(flatView ? 0 : 60);
+  if (flatView) {
+    if (animate) gl.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+    else gl.jumpTo({ pitch: 0, bearing: 0 });
+  }
+  const b = document.getElementById('view-btn');
+  if (b) { b.setAttribute('aria-pressed', flatView ? 'true' : 'false'); b.title = flatView ? 'Vista plana: activada' : 'Vista 3D: activada'; b.textContent = flatView ? '🗺️' : '🏙️'; }
+}
+function toggleViewMode() {
+  flatView = !flatView;
+  try { localStorage.setItem('flatView', flatView ? '1' : '0'); } catch (e) {}
+  applyViewMode(true);
+  if (!flatView) gl.easeTo({ pitch: 45, duration: 600 });
+}
+document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#view-btn')) toggleViewMode(); });
+
 // Capas del mapa que dependen de que el estilo esté cargado
 gl.on('load', () => {
   gl.addSource('owned', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -417,6 +473,8 @@ gl.on('load', () => {
   });
   gl.addLayer({ id: 'sel-line', type: 'line', source: 'sel', paint: { 'line-color': '#ffb703', 'line-width': 3.5 } });
   glReady = true;
+  applyViewMode(false);
+  applyBaseMode();
   pendingParcels.forEach(drawOwned); pendingParcels.clear();
   loadParcels();
   // Quien ya vio la introducción entra volando directamente; el nuevo espera a que acabe el vídeo
