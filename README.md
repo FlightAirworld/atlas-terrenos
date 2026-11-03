@@ -34,7 +34,7 @@ Los terrenos que ya perdiste en Render no se pueden recuperar; a partir de ahora
 
 3. Para cobrar de verdad usa las credenciales Live y `PAYPAL_ENV=live`.
 
-Otras variables: `DATABASE_URL` (obligatoria), `ADMIN_TOKEN`, `PRICE` (por defecto 1.00), `CURRENCY` (EUR), `PORT` (3000).
+Otras variables: `DATABASE_URL` (obligatoria), `ADMIN_TOKEN`, `PACKS` (packs a la venta, `créditos:precio` separados por comas; por defecto `50:1,150:2,300:3,500:4`; sustituye a `PRICE` y `PACK_SIZE`), `CURRENCY` (EUR), `PORT` (3000).
 
 ## Cómo funciona
 

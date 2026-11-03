@@ -27,7 +27,15 @@ if (DEMO && IS_PROD && process.env.DEMO !== '1') {
 if (DEMO && IS_PROD) console.warn('AVISO: modo DEMO activo en producción. No se cobra dinero real.');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const RESERVE_MINUTES = 10;                               // tiempo que se reserva una parcela mientras se paga
-const PACK_SIZE = Math.max(1, Number(process.env.PACK_SIZE || 50));   // terrenos por pack (el pack cuesta PRICE)
+const PACK_SIZE = Math.max(1, Number(process.env.PACK_SIZE || 50));   // (ya no se usa para vender: ver PACKS)
+// Packs a la venta: lista "créditos:precio" separada por comas, p. ej. PACKS="50:1,150:2,300:3,500:4" (sustituye a PRICE y PACK_SIZE)
+const PACKS = (() => {
+  const list = String(process.env.PACKS || '').split(',').map(x => x.trim()).filter(Boolean)
+    .map(x => { const [c, p] = x.split(':'); return { credits: Math.floor(Number(c)), price: Number(p) }; })
+    .filter(x => x.credits >= 1 && Number.isFinite(x.price) && x.price > 0)
+    .map(x => ({ credits: x.credits, price: x.price.toFixed(2) }));
+  return list.length ? list : [{ credits: 50, price: '1.00' }, { credits: 150, price: '2.00' }, { credits: 300, price: '3.00' }, { credits: 500, price: '4.00' }];
+})();
 const MAX_PARCELS_PER_ACCOUNT = Math.max(1, Number(process.env.MAX_PARCELS_PER_ACCOUNT || 500));   // tope de terrenos por cuenta
 const DATABASE_URL = process.env.DATABASE_URL || '';      // cadena de conexión de Supabase
 if (!DATABASE_URL) {
@@ -295,9 +303,12 @@ async function linkAccount(req) {
   }
 }
 
-async function createPackOrder(req) {
+async function createPackOrder(req, body) {
   if (REQUIRE_LOGIN) await needUser(req);
   const now = Date.now();
+  const want = body && body.pack != null ? Number(body.pack) : PACKS[0].credits;   // sin indicar pack: el primero (clientes antiguos)
+  const pack = PACKS.find(p => p.credits === want);
+  if (!pack) throw new HttpError(400, 'Pack no válido');
   let orderId;
   if (DEMO) {
     orderId = 'DEMO-' + crypto.randomUUID();
@@ -307,14 +318,14 @@ async function createPackOrder(req) {
       payment_source: { paypal: { experience_context: { shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', landing_page: 'GUEST_CHECKOUT' } } },
       purchase_units: [{
         reference_id: 'PACK',
-        description: `Pack de ${PACK_SIZE} terrenos`,
-        amount: { currency_code: CURRENCY, value: PRICE },
+        description: `Pack de ${pack.credits} créditos`,
+        amount: { currency_code: CURRENCY, value: pack.price },
       }],
     });
     orderId = o.id;
   }
-  await run('INSERT INTO pack_orders (order_id, status, created_at) VALUES ($1,$2,$3)', [orderId, 'CREATED', now]);
-  return { orderId, size: PACK_SIZE, price: PRICE, currency: CURRENCY };
+  await run('INSERT INTO pack_orders (order_id, status, created_at, pack_credits, pack_price) VALUES ($1,$2,$3,$4,$5)', [orderId, 'CREATED', now, pack.credits, pack.price]);
+  return { orderId, size: pack.credits, price: pack.price, currency: CURRENCY };
 }
 
 async function capturePackOrder(req, orderId) {
@@ -325,6 +336,7 @@ async function capturePackOrder(req, orderId) {
     return { ok: true, code: p.code, credits: p.credits };
   }
   if (ord.status !== 'CREATED') throw new HttpError(409, 'Pedido no válido');
+  const packCredits = ord.pack_credits ?? PACKS[0].credits, packPrice = ord.pack_price ?? PACKS[0].price;   // el pack que se pidió al crear el pedido
 
   const user = REQUIRE_LOGIN ? await needUser(req) : await userFrom(req);   // antes de cobrar nada
   let captureId = null;
@@ -332,7 +344,7 @@ async function capturePackOrder(req, orderId) {
     const cap = await paypal('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`);
     const c = cap.purchase_units?.[0]?.payments?.captures?.[0];
     if (cap.status !== 'COMPLETED' || !c || c.status !== 'COMPLETED') throw new HttpError(402, 'El pago no se ha completado');
-    if (c.amount.value !== Number(PRICE).toFixed(2) || c.amount.currency_code !== CURRENCY) throw new HttpError(402, 'Importe incorrecto');
+    if (c.amount.value !== Number(packPrice).toFixed(2) || c.amount.currency_code !== CURRENCY) throw new HttpError(402, 'Importe incorrecto');
     captureId = c.id;
   }
 
@@ -341,12 +353,12 @@ async function capturePackOrder(req, orderId) {
     if (user) {
       // Con cuenta: los terrenos se suman al pack de la cuenta
       const row = await ensureUserPack(user);
-      const up = await one('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING code, credits', [PACK_SIZE, row.code]);
+      const up = await one('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING code, credits', [packCredits, row.code]);
       code = up.code; credits = up.credits;
     } else {
       code = newPackCode();
-      await run('INSERT INTO packs (code, credits, created_at) VALUES ($1,$2,$3)', [code, PACK_SIZE, Date.now()]);
-      credits = PACK_SIZE;
+      await run('INSERT INTO packs (code, credits, created_at) VALUES ($1,$2,$3)', [code, packCredits, Date.now()]);
+      credits = packCredits;
     }
     await run("UPDATE pack_orders SET status = 'PAID', code = $1 WHERE order_id = $2", [code, orderId]);
   } catch (e) {
@@ -859,7 +871,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/admin/stats') return adminStats(req);
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
-    return { demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PRICE, size: SIZE, packSize: PACK_SIZE,
+    return { demo: DEMO, clientId: DEMO ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, packSize: PACKS[0].credits, packs: PACKS,
       maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
@@ -886,7 +898,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };
 
-  if (req.method === 'POST' && pn === '/api/packs/orders') return createPackOrder(req);
+  if (req.method === 'POST' && pn === '/api/packs/orders') return createPackOrder(req, await readJson(req));
   const pm = pn.match(/^\/api\/packs\/orders\/([^/]+)\/capture$/);
   if (req.method === 'POST' && pm) return capturePackOrder(req, decodeURIComponent(pm[1]));
   if (req.method === 'GET' && pn === '/api/pack') return { credits: (await getPack(req)).credits };
@@ -924,7 +936,9 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
   .then(async () => {   // niveles de terreno (no hacen nada si las columnas ya existen)
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level SMALLINT NOT NULL DEFAULT 1');
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level_at BIGINT');
-  }).catch(e => console.error('No se pudieron añadir las columnas de nivel:', e.message))
+    await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_credits INT');   // qué pack se pidió en cada pedido
+    await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_price TEXT');
+  }).catch(e => console.error('No se pudieron añadir las columnas nuevas (niveles / packs):', e.message))
   .then(async () => {   // tablas de "Invita y gana" (no hacen nada si ya existen)
     await run('CREATE TABLE IF NOT EXISTS ref_codes (code TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, created_at BIGINT NOT NULL, last_ip TEXT)');
     await run('CREATE TABLE IF NOT EXISTS referrals (invitee_id TEXT PRIMARY KEY, inviter_id TEXT NOT NULL, created_at BIGINT NOT NULL, ip_hash TEXT, rewarded_at BIGINT, inviter_credits INT NOT NULL DEFAULT 0)');
@@ -965,5 +979,5 @@ http.createServer(async (req, res) => {
     send(status, JSON.stringify({ error: status === 500 ? 'Error interno' : e.message }));
   }
 }).listen(PORT, () => {
-  console.log(`Redecora El Mundo en http://localhost:${PORT}  [${DEMO ? 'MODO DEMO (sin PayPal real)' : 'PayPal ' + PAYPAL_ENV}]  precio ${PRICE} ${CURRENCY}`);
+  console.log(`Redecora El Mundo en http://localhost:${PORT}  [${DEMO ? 'MODO DEMO (sin PayPal real)' : 'PayPal ' + PAYPAL_ENV}]  packs ${PACKS.map(p => p.credits + '=' + p.price).join(', ')} ${CURRENCY}`);
 });

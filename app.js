@@ -605,8 +605,7 @@ function showPanel(p) {
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
     renderLevelBox(p);
   } else {
-    $('p-price').textContent = new Intl.NumberFormat('es-ES', { style: 'currency', currency: cfg.currency }).format(cfg.price);
-    $('pack-size').textContent = cfg.packSize;
+    buildPackPicker();
   }
 }
 $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; };
@@ -872,14 +871,35 @@ function nameOrThrow() {
   if (n.length < 2) { setMsg('Escribe tu nombre (mínimo 2 letras) antes de pagar', 'err'); throw new Error('nombre'); }
   return n;
 }
+// Packs a la venta (vienen del servidor): el elegido se manda al crear el pedido de PayPal
+let chosenPack = null;
+function buildPackPicker() {
+  const box = $('pack-list');
+  if (!box || !cfg.packs || !cfg.packs.length) return;
+  if (!cfg.packs.some(p => p.credits === chosenPack)) chosenPack = cfg.packs[0].credits;
+  const money = new Intl.NumberFormat('es-ES', { style: 'currency', currency: cfg.currency });
+  const mark = () => [...box.children].forEach(b => { b.style.outline = Number(b.dataset.pack) === chosenPack ? '3px solid #ffb703' : ''; });
+  box.replaceChildren();
+  cfg.packs.forEach(p => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.pack = p.credits; b.dataset.nosound = '';
+    b.style.cssText = 'padding:8px 6px;border-radius:10px;line-height:1.25;text-align:center';
+    const top = document.createElement('strong'); top.textContent = `🎟️ ${p.credits} créditos`;
+    const price = document.createElement('div'); price.textContent = money.format(Number(p.price));
+    b.append(top, price);
+    b.onclick = () => { chosenPack = p.credits; mark(); };
+    box.appendChild(b);
+  });
+  mark();
+}
 async function createOrder() {
-  const o = await api('/api/packs/orders', { method: 'POST', body: {} });
+  const o = await api('/api/packs/orders', { method: 'POST', body: { pack: chosenPack } });
   return o.orderId;
 }
 async function captureOrder(orderId) {
   const r = await api(`/api/packs/orders/${encodeURIComponent(orderId)}/capture`, { method: 'POST', body: {} });
   saveCode(r.code); credits = r.credits; updateCreditUi();
-  setMsg(`¡Pack comprado! Tienes ${credits} terrenos. Guarda tu código 🔑`, 'ok'); sfx('claim');
+  setMsg(`¡Pack comprado! Tienes ${credits} créditos. Guarda tu código 🔑`, 'ok'); sfx('claim');
 }
 function fail(e) { if (e.message !== 'nombre') setMsg(e.message, 'err'); }
 
