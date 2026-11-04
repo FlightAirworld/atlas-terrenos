@@ -481,6 +481,7 @@ gl.on('load', () => {
   });
   gl.addLayer({
     id: 'owned-line', type: 'line', source: 'owned',
+    layout: { visibility: 'none' },   // sin marco de color alrededor de las casas (se ve más limpio); para volver a verlo: 'visible'
     paint: { 'line-color': ['get', 'color'], 'line-width': 2 }
   });
   gl.addSource('sel', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
