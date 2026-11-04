@@ -80,7 +80,7 @@
       const sz = (Math.abs(z.x - a.x) + Math.abs(z.y - a.y)) / 2;
       if (sz < 3 || c.x < -sz || c.y < -sz || c.x > W + sz || c.y > H + sz) continue;
       const id = String(p.id);
-      const cnt = sz < 14 ? 1 : Math.max(3, Math.min(8, Math.round(sz / 10)));
+      const cnt = sz < 14 ? 1 : Math.max(3, Math.min(9, Math.round(sz / 16)));
       let lit = 0;
       for (let i = 0; i < cnt; i++) {
         const thr = hash(id, i * 7 + 1), off = hash(id, i * 7 + 2);
@@ -88,19 +88,20 @@
         if (on <= 0.01) continue;
         lit += on;
         if (sz < 14) continue;
-        const x = c.x + (hash(id, i * 7 + 3) - 0.5) * sz * 0.62, y = c.y + (hash(id, i * 7 + 4) - 0.5) * sz * 0.62;
-        let al = on * 0.9, rgb = '255,206,120';
+        // Ventanas pequeñas y sueltas (nunca un foco grande: sumadas darían una mancha blanca)
+        const x = c.x + (hash(id, i * 7 + 3) - 0.5) * sz * 0.7, y = c.y + (hash(id, i * 7 + 4) - 0.5) * sz * 0.7;
+        let al = on * 0.8, rgb = '255,200,110';
         if (i === 0 && hash(id, 99) < 0.35) { rgb = '150,190,255'; al *= 0.55 + 0.45 * hash(id, tick % 40 + 100); }   // tele que parpadea
-        const r = Math.max(2.5, sz * 0.2);
+        const r = Math.max(2, Math.min(7, sz * 0.045));
         const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0, `rgba(${rgb},${al})`); g.addColorStop(0.35, `rgba(${rgb},${al * 0.35})`); g.addColorStop(1, `rgba(${rgb},0)`);
+        g.addColorStop(0, `rgba(${rgb},${al * 0.55})`); g.addColorStop(1, `rgba(${rgb},0)`);
         ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
-        ctx.fillStyle = `rgba(255,240,200,${Math.min(1, al)})`;
-        const ws = Math.max(1.2, sz * 0.05); ctx.fillRect(x - ws, y - ws * 0.8, ws * 2, ws * 1.6);
+        ctx.fillStyle = `rgba(255,226,160,${Math.min(0.95, al)})`;
+        const ws = Math.max(1, Math.min(2.6, sz * 0.012)); ctx.fillRect(x - ws, y - ws * 0.8, ws * 2, ws * 1.6);
       }
-      if (lit > 0.01) {   // halo suave de la casa entera
-        const r = sz * 0.75, k = Math.min(1, lit / cnt) * 0.28, g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
-        g.addColorStop(0, `rgba(255,190,100,${k})`); g.addColorStop(1, 'rgba(255,190,100,0)');
+      if (lit > 0.01 && sz < 14) {   // casas lejanas: un puntito cálido
+        const r = Math.max(2, sz * 0.5), g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
+        g.addColorStop(0, `rgba(255,190,100,${Math.min(0.5, lit * 0.4)})`); g.addColorStop(1, 'rgba(255,190,100,0)');
         ctx.fillStyle = g; ctx.fillRect(c.x - r, c.y - r, r * 2, r * 2);
       }
     }
