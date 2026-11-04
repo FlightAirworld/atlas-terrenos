@@ -282,6 +282,18 @@ function applyCut(ex, cut) {
   refreshPhoto(ex);                                                      // foto con la calle borrada
 }
 
+// Miniaturas: de lejos (zoom bajo) la parcela se ve pequeña, así que basta la versión -t.webp (128 px) y se descarga mucho menos
+const THUMB_ZOOM = 17.5;
+const useThumb = () => map.getZoom() < THUMB_ZOOM;
+const thumbOf = u => String(u).replace(/\.webp$/i, '-t.webp');
+const srcUrl = (ex, th = useThumb()) => th ? thumbOf(ex.url) : ex.url;
+function updateRes() {      // al acercar o alejar el zoom, cambia entre miniatura y foto completa
+  if (!glReady) return;
+  const th = useThumb();
+  for (const ex of drawn.values()) if (ex.hasDetail && ex.res !== th) refreshPhoto(ex);
+}
+gl.on('moveend', updateRes);
+
 function loadImg(url) {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
 }
@@ -316,12 +328,13 @@ function freeBlob(ex) {
 // Pone en la parcela la foto que toca: recortada si tiene calle, la normal si no
 async function refreshPhoto(ex) {
   if (!ex.hasDetail) return;
-  const tok = ex.tok = (ex.tok || 0) + 1, url = ex.url, cut = roadCut.get(ex.p.id);
+  const th = useThumb();
+  const tok = ex.tok = (ex.tok || 0) + 1, url = srcUrl(ex, th), cut = roadCut.get(ex.p.id);
   let u = url, blob = null;
   if (cut && cut.road) { try { blob = await clippedPhoto(url, ex.p, cut.road); u = blob; } catch (e) {} }
-  const src = ex.hasDetail && tok === ex.tok && url === ex.url && gl.getSource(ex.srcId);
+  const src = ex.hasDetail && tok === ex.tok && url === srcUrl(ex, th) && gl.getSource(ex.srcId);
   if (!src) { if (blob) URL.revokeObjectURL(blob); return; }
-  freeBlob(ex); ex.blob = blob;
+  freeBlob(ex); ex.blob = blob; ex.res = th;
   if (cut && cut.road) { const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y); src.updateImage({ url: u, coordinates: [[w, n], [e, n], [e, s], [w, s]] }); }
   else src.updateImage({ url: u });
 }
@@ -330,15 +343,15 @@ function addDetail(ex) {
   ex.want = true;
   if (ex.hasDetail || ex.adding) return;
   const cut = roadCut.get(ex.p.id);
-  if (!(cut && cut.road)) return mountDetail(ex, ex.url, null);
+  if (!(cut && cut.road)) return mountDetail(ex, srcUrl(ex), null);
   // Con calle: primero se prepara la foto recortada y luego se monta (así no parpadea la casa entera)
   ex.adding = true;
-  const used = ex.url;
+  const used = srcUrl(ex);
   clippedPhoto(used, ex.p, cut.road).catch(() => null).then(u => {
     ex.adding = false;
     if (!ex.want || ex.hasDetail) { if (u) URL.revokeObjectURL(u); return; }
-    if (used !== ex.url) { if (u) URL.revokeObjectURL(u); return addDetail(ex); }   // cambió la casa mientras tanto
-    mountDetail(ex, u || ex.url, u);
+    if (used !== srcUrl(ex)) { if (u) URL.revokeObjectURL(u); return addDetail(ex); }   // cambió la casa (o el zoom) mientras tanto
+    mountDetail(ex, u || used, u);
   });
 }
 function mountDetail(ex, imgUrl, blob) {
@@ -362,6 +375,7 @@ function mountDetail(ex, imgUrl, blob) {
     interactive: false, keyboard: false
   }).addTo(map);
   ex.hasDetail = true;
+  ex.res = useThumb();
 }
 function dropDetail(ex) {
   ex.want = false;
