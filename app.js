@@ -132,30 +132,23 @@ async function api(url, opts = {}) {
 
 // ---------- Parcelas compradas en pantalla ----------
 const HOUSES = [
-    'images/casa-aerea.webp',
-    'images/casa-frente.webp',
-    'images/policia.webp',
-    'images/pisos.webp',
-    'images/gasolinera.webp',
-    'images/choza.webp',
-    'images/Restaurante.webp',
-    'images/McDonald.webp',
-    'images/Burgerking.webp',
-    'images/Farmacia.webp',
-    'images/colegio.webp',
-    'images/parque.webp',
-    'images/rascacielos.webp',
-    'images/casa-1.webp',
-    'images/casa-2.webp',
-    'images/casa-3.webp',
-    'images/casa-4.webp',
-    'images/casa-5.webp',
-    'images/parque-infantil.webp',
-    'images/piscina.webp',
-    'images/bosque.webp',
-    'images/supermercado.webp',
-    'images/helipuerto.webp',
-    'images/jardin.webp'
+  'images/casa-1.webp',
+  'images/casa-6.webp',
+  'images/colegio.webp',
+  'images/pisos.webp',
+  'images/pisos-2.webp',
+  'images/Farmacia.webp',
+  'images/bosque.webp',
+  'images/parque-infantil.webp',
+  'images/supermercado.webp',
+  'images/helipuerto.webp',
+  'images/jardin.webp',
+  'images/condis.webp',
+  'images/cepsa.webp',
+  'images/aurgi.webp',
+  'images/burrito-blanco.webp',
+  'images/arcobaleno.webp',
+  'images/la-cruilla.webp'
 ];
 
 function houseFor(id, house) {
@@ -169,9 +162,7 @@ function houseFor(id, house) {
 }
 // Altura aproximada (en metros) de cada tipo de edificio: da volumen 3D a las parcelas
 const HOUSE_HEIGHT = {
-  'casa-aerea': 9, 'casa-frente': 9, 'policia': 12, 'pisos': 30, 'gasolinera': 6, 'choza': 4,
-  'restaurante': 8, 'mcdonald': 9, 'burgerking': 9, 'farmacia': 9, 'colegio': 15, 'parque': 0.6,
-  'rascacielos': 120, 'casa-1': 8, 'casa-2': 10, 'casa-3': 12, 'casa-4': 9, 'casa-5': 11, 'parque-infantil': 4, 'piscina': 3, 'bosque': 10, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4
+  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'condis': 9, 'cepsa': 7, 'aurgi': 8, 'burrito-blanco': 8, 'arcobaleno': 8, 'la-cruilla': 8
 };
 // Nivel del terreno (1 a 5): más estrellas junto al nombre y un edificio más alto
 const maxLevel = () => (cfg && cfg.levels && cfg.levels.mults.length) || 5;
