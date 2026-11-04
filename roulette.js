@@ -37,6 +37,7 @@
     '<p class="muted" id="rl-info">Gratis una vez al día. ¡Toca la ruleta para girar!</p>' +
     '<div id="rl-wrap"><div id="rl-pointer"></div><canvas id="rl-canvas" width="600" height="600" role="button" tabindex="0" aria-label="Girar la ruleta"></canvas></div>' +
     '<p id="rl-hint"></p><p id="rl-win" aria-live="polite"></p>' +
+    '<p class="muted" style="font-size:12px">Los premios de 1, 2, 5 y 10 créditos solo pueden salir una vez al mes.</p>' +
     '</div>';
   document.body.appendChild(box);
   const canvas = $id('rl-canvas'), ctx = canvas.getContext('2d');

@@ -72,13 +72,7 @@ const isUniqueViolation = e => e && e.code === '23505';
 
 const q = {
   parcelById: id => one('SELECT * FROM parcels WHERE id = $1', [id]),
-  parcelsInBox: async (x0, x1, y0, y1) => {
-    try { return await all('SELECT id, x, y, owner, avatar, country, house, level, rotation FROM parcels WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1]); }
-    catch (e) {   // la columna rotation aún no existe: el mapa sigue funcionando sin giros
-      if (e && e.code === '42703') return all('SELECT id, x, y, owner, avatar, country, house, level FROM parcels WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1]);
-      throw e;
-    }
-  },
+  parcelsInBox: (x0, x1, y0, y1) => all('SELECT id, x, y, owner, avatar, country, house, level FROM parcels WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1]),
   insertParcel: (id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house) =>
     run('INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, house) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', [id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house]),
   activeOrderForParcel: (id, now) => one("SELECT order_id FROM orders WHERE parcel_id = $1 AND status = 'CREATED' AND expires_at > $2", [id, now]),
@@ -92,11 +86,7 @@ const q = {
   top: () => all('SELECT owner, COUNT(*) AS n, (ARRAY_AGG(country ORDER BY created_at DESC) FILTER (WHERE country IS NOT NULL))[1] AS country FROM parcels GROUP BY owner ORDER BY n DESC, MIN(created_at) ASC LIMIT 10'),
 };
 // ---------- Avatares ----------
-// Los 12 emojis antiguos NO se tocan ni se reordenan (los terrenos existentes los usan). Los nuevos van siempre al final.
-// Esta lista debe ser idéntica a la de app.js.
-const AVATARS_LEGACY = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀','👑','⚽','🌟'];
-const AVATARS_NEW = ['avatar-1','avatar-2','avatar-3','avatar-4','avatar-5','avatar-6','avatar-7','avatar-8'];   // los únicos que se pueden elegir ahora
-const AVATARS = [...AVATARS_LEGACY, ...AVATARS_NEW];
+const AVATARS = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀','👑','⚽','🌟'];
 const cleanAvatar = a => AVATARS.includes(a) ? a : AVATARS[0];
 // Casas que se pueden elegir (deben coincidir con HOUSES de app.js; para añadir más, ponlas al FINAL de ambas listas)
 const HOUSES = [
@@ -280,18 +270,12 @@ async function ensureUserPack(user, create = true) {
 }
 
 // ---------- Apodo fijo (se elige una sola vez y no se puede cambiar) ----------
-async function getProfile(userId) {
-  try { return await one('SELECT nickname, avatar FROM profiles WHERE user_id = $1', [userId]); }
-  catch (e) {
-    if (e && e.code === '42703') return one('SELECT nickname FROM profiles WHERE user_id = $1', [userId]);   // la columna avatar aún no existe: todo sigue funcionando
-    throw e;
-  }
-}
+const getProfile = userId => one('SELECT nickname FROM profiles WHERE user_id = $1', [userId]);
 
 async function profileGet(req) {
   const user = await needUser(req);
   const p = await getProfile(user.id);
-  return { nickname: p ? p.nickname : null, avatar: p && p.avatar ? p.avatar : null };
+  return { nickname: p ? p.nickname : null };
 }
 async function profileSet(req, { nickname }) {
   const user = await needUser(req);
@@ -306,17 +290,6 @@ async function profileSet(req, { nickname }) {
     throw new HttpError(409, 'Ese apodo ya está en uso. Elige otro');
   }
   return { ok: true, nickname: name };
-}
-
-// Avatar del perfil: solo el dueño de la sesión puede cambiarlo (el user_id sale del token validado, nunca del cuerpo).
-// Solo se pueden elegir los avatares nuevos. Los terrenos ya reclamados NO cambian: cada terreno guarda su propio avatar.
-async function profileAvatarSet(req, body) {
-  const user = await needUser(req);
-  const avatar = body && body.avatar;
-  if (typeof avatar !== 'string' || !AVATARS_NEW.includes(avatar)) throw new HttpError(400, 'Avatar no válido');
-  const r = await run('UPDATE profiles SET avatar = $1 WHERE user_id = $2', [avatar, user.id]);
-  if (!r.rowCount) throw new HttpError(409, 'Elige primero tu apodo');
-  return { ok: true, avatar };
 }
 
 // Regalo de bienvenida: créditos que recibe una cuenta nueva, una sola vez (WELCOME_CREDITS=0 lo desactiva)
@@ -363,7 +336,7 @@ async function linkAccount(req) {
     }
     await client.query('COMMIT');
     const prof = await getProfile(user.id);
-    return { ok: true, code: mine.code, credits: mine.credits, email: user.email, nickname: prof ? prof.nickname : null, avatar: prof && prof.avatar ? prof.avatar : null, welcomeBonus };
+    return { ok: true, code: mine.code, credits: mine.credits, email: user.email, nickname: prof ? prof.nickname : null, welcomeBonus };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Inténtalo de nuevo');
@@ -492,7 +465,6 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house })
   const user = await userFrom(req);
   const prof = user && await getProfile(user.id);
   const name = prof ? prof.nickname : cleanName(owner);   // con cuenta, siempre sale el apodo fijo
-  const claimAvatar = cleanAvatar(prof && prof.avatar ? prof.avatar : avatar);   // con avatar en el perfil, siempre sale ese
   if (!name) throw new HttpError(400, 'Pon un nombre de 2 a 30 caracteres');
 
   const now = Date.now();
@@ -515,12 +487,12 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house })
     }
     await client.query(
       'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id, house) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
-      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, claimAvatar, cleanCountry(country), user ? user.id : null, cleanHouse(house)]);
+      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), cleanCountry(country), user ? user.id : null, cleanHouse(house)]);
     await client.query('COMMIT');
     let bonus = 0;   // invitación: premio al invitado y a quien le invitó (si no hay invitación, no pasa nada)
     if (user) notifyFriendsOf(user.id, 'claim');   // sin esperar: el aviso no retrasa la respuesta
     if (user) { try { const rr = await rewardReferral(user.id, code); if (rr) bonus = rr.inviteeBonus; } catch (e) { console.error('Invitación:', e.message); } }
-    return { ok: true, parcel: p.id, owner: name, avatar: claimAvatar, credits: r.rows[0].credits + bonus, referralBonus: bonus };
+    return { ok: true, parcel: p.id, owner: name, credits: r.rows[0].credits + bonus, referralBonus: bonus };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Este terreno ya tiene dueño');
@@ -559,18 +531,6 @@ async function setHouse(req, { id, house }) {
   } finally {
     client.release();
   }
-}
-
-// Girar la casa de un terreno propio (cualquier ángulo en grados, de 1 en 1). Gratis: no toca créditos ni pagos.
-// El user_id sale del token validado: solo el dueño puede girar su terreno.
-async function setRotation(req, body) {
-  const user = await needUser(req);
-  const deg = Math.round(Number(body && body.rotation));
-  if (!Number.isFinite(deg)) throw new HttpError(400, 'Giro no válido');
-  const rot = ((deg % 360) + 360) % 360;
-  const r = await run('UPDATE parcels SET rotation = $1 WHERE id = $2 AND user_id = $3', [rot, String((body && body.id) || ''), user.id]);
-  if (!r.rowCount) throw new HttpError(403, 'Este terreno no es tuyo');
-  return { ok: true, rotation: rot };
 }
 
 // ---------- Regalo diario ----------
@@ -1085,7 +1045,7 @@ async function chatSend(req, body) {
   st.t.push(now); st.text = low;
   if (chatLast.size > 5000) chatLast.clear();
   chatLast.set(user.id, st);
-  const avatar = cleanAvatar(prof.avatar || body.avatar), country = cleanCountry(body.country);
+  const avatar = cleanAvatar(body.avatar), country = cleanCountry(body.country);
   const zone = Math.floor((at.lng + 180) / 0.02) + ':' + Math.floor((at.lat + 90) / 0.02);   // columna antigua, ya sin uso
   const row = await one('INSERT INTO chat_msgs (zone, user_id, nick, avatar, country, text, created_at, lat, lng) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
     [zone, user.id, prof.nickname, avatar, country, text, now, at.lat, at.lng]);
@@ -1481,7 +1441,7 @@ async function route(req, res, url) {
     const row = await q.parcelById(p.id);
     const user = row && row.user_id ? await userFrom(req) : null;
     return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null, avatar: row ? row.avatar : null, country: row ? row.country : null,
-      house: row ? row.house : null, level: row ? row.level : null, rotation: row ? (row.rotation || 0) : 0, mine: !!(user && row && row.user_id === user.id) };
+      house: row ? row.house : null, level: row ? row.level : null, mine: !!(user && row && row.user_id === user.id) };
   }
 
   if (req.method === 'GET' && pn === '/api/parcels') {
@@ -1489,7 +1449,7 @@ async function route(req, res, url) {
     if (![s, w, n, e].every(Number.isFinite) || n - s > 0.3 || e - w > 0.3) throw new HttpError(400, 'Zona demasiado grande');
     const x0 = Math.max(0, Math.floor((w + 180) / SIZE)), x1 = Math.min(MAX_X - 1, Math.floor((e + 180) / SIZE));
     const y0 = Math.max(0, Math.floor((s + 90) / SIZE)), y1 = Math.min(MAX_Y - 1, Math.floor((n + 90) / SIZE));
-    return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country, house: r.house, level: r.level, rotation: r.rotation || 0 }));
+    return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country, house: r.house, level: r.level }));
   }
 
   if (req.method === 'GET' && pn === '/api/santa') return santaGet(req);
@@ -1511,13 +1471,11 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/roulette') return rouletteGet(req);
   if (req.method === 'POST' && pn === '/api/roulette/spin') return rouletteSpin(req);
   if (req.method === 'POST' && pn === '/api/parcel/house') return setHouse(req, await readJson(req));
-  if (req.method === 'POST' && pn === '/api/parcel/rotate') return setRotation(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/parcel/upgrade') return upgradeParcel(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/claim') return claimWithCredit(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/auth/link') return linkAccount(req);
   if (req.method === 'GET' && pn === '/api/profile') return profileGet(req);
   if (req.method === 'POST' && pn === '/api/profile') return profileSet(req, await readJson(req));
-  if (req.method === 'POST' && pn === '/api/profile/avatar') return profileAvatarSet(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/push/subscribe') return pushSubscribe(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/push/unsubscribe') return pushUnsubscribe(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/friends') return friendsList(req);
@@ -1551,8 +1509,6 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 
 // Migración automática (inofensiva si la columna ya existe)
 const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').catch(e => console.error('No se pudo añadir la columna house:', e.message))
-  .then(() => run('ALTER TABLE profiles ADD COLUMN IF NOT EXISTS avatar TEXT')).catch(e => console.error('No se pudo añadir profiles.avatar:', e.message))   // avatar del perfil (no destructivo)
-  .then(() => run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS rotation SMALLINT NOT NULL DEFAULT 0')).catch(e => console.error('No se pudo añadir parcels.rotation:', e.message))   // giro de la casa en grados (0 a 359)
   .then(async () => {   // niveles de terreno (no hacen nada si las columnas ya existen)
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level SMALLINT NOT NULL DEFAULT 1');
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level_at BIGINT');

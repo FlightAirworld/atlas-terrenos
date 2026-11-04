@@ -6,16 +6,14 @@
   const KEY = 'peopleOn', MIN_ZOOM = 16, REF_Z = 17;
   const SMALL = Math.min(innerWidth, innerHeight) < 600;
   const MAX = SMALL ? 22 : 36;                  // peatones a la vez
-  const SIDEWALK = 27, SIDEWALK_M = 7;         // distancia al centro de la calle: mínimo en px de pantalla / en px de mundo (crece con el zoom)
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const btn = document.getElementById('people-btn');
   let on = true;
-  try { const s = localStorage.getItem(KEY); if (s !== null) on = s === '1'; } catch (e) {}
 
   const st = document.createElement('style');
   st.textContent = `
     .pw { background: transparent !important; border: 0 !important; pointer-events: none !important; }
-    .pw-in { width: 20px; height: 30px; animation: pwbob .36s ease-in-out infinite alternate; transition: opacity .3s; }
+    .pw-in { width: 20px; height: 30px; transform-origin: 10px 28px; animation: pwbob .36s ease-in-out infinite alternate; transition: opacity .3s; }
     .pw-in svg { overflow: visible; }
     .pw-in.flip svg { transform: scaleX(-1); }
     .pw-in .umb { display: none; }
@@ -56,6 +54,7 @@
 
   window.personSVG = personSVG;   // lo reutilizan los pasajeros de los taxis (vehicles.js)
 
+  let FP = 1;                                     // tamaño de la persona según el ancho de la calle (ver sizes() en mapshim.js)
   const walkers = [];
   window.peopleWalkers = walkers;   // los usa animals.js (el león busca presas entre los peatones)
   window.peopleKill = w => { const i = walkers.indexOf(w); if (i >= 0) remove(i); };
@@ -66,18 +65,17 @@
     const P = w.path;
     while (w.seg < P.pts.length - 2 && P.cum[w.seg + 1] <= w.s) w.seg++;
     const a = P.pts[w.seg], b = P.pts[w.seg + 1], len = (P.cum[w.seg + 1] - P.cum[w.seg]) || 1;
-    w.cls = a.cls;
     const t = clamp((w.s - P.cum[w.seg]) / len, 0, 1);
     w.cx = a.x + (b.x - a.x) * t; w.cy = a.y + (b.y - a.y) * t;
     w.th = Math.atan2(b.y - a.y, b.x - a.x);
   }
-  // Lo separa del centro de la calle hacia la acera (derecha o izquierda del sentido de la marcha)
-  function sidewalk(w, scale) {
-    // Por la acera: justo en el borde dibujado junto a la calzada, según el tipo de calle y el zoom (w.off va de -1 a 1: unos pegados a la calzada, otros a la fachada)
-    const m = window.roadMetrics && map.gl ? window.roadMetrics(w.cls, map.gl.getZoom()) : null;
-    const target = m ? Math.max(11, m.half + 3, m.ringMid + w.off * m.ringHalf * 0.55) : Math.max(SIDEWALK, SIDEWALK_M * scale) + w.off;
-    w.offNow = w.offNow == null ? target : w.offNow + (target - w.offNow) * 0.15;   // cambia suave al pasar de una calle a otra
-    const o = w.offNow / scale * w.side;
+  // Lo separa del eje de la calle hacia la acera (derecha o izquierda del sentido de la marcha).
+  // La distancia sale del ancho con el que el mapa dibuja ESA calle ahora mismo: justo fuera de la calzada, a cualquier zoom.
+  function sidewalk(w, scale, dt) {
+    const cl = w.path.cl, m = map.roadMetrics(cl ? cl[Math.min(w.seg + 1, cl.length - 1)] : 'minor');
+    const target = m.curb + (2.5 + w.off * 0.35) * FP;
+    w.o = w.o == null || !dt ? target : w.o + clamp(target - w.o, -30 * dt, 30 * dt);   // cambia suave al pasar de una calle a otra / al hacer zoom
+    const o = w.o / scale * w.side;
     w.x = w.cx - Math.sin(w.h) * o; w.y = w.cy + Math.cos(w.h) * o;
   }
 
@@ -86,15 +84,16 @@
     const rr = window.roadRoute && window.roadRoute({ inside: true, len: 700, minLen: 140 });
     if (!rr || !rr.starts || !rr.starts.length) return false;
     const P = rr.path, scale = Math.pow(2, map.getZoom() - REF_Z);
+    FP = map.sizes ? map.sizes().fp : 1;
     const icon = L.divIcon({
       className: 'pw', iconSize: [20, 30], iconAnchor: [10, 28],
-      html: `<div class="pw-in" style="opacity:0">${personSVG(pick(SHIRTS), pick(SKINS), pick(PANTS), false)}</div>`
+      html: `<div class="pw-in" style="opacity:0;scale:${FP.toFixed(3)}">${personSVG(pick(SHIRTS), pick(SKINS), pick(PANTS), false)}</div>`
     });
     const w = {
-      mk: null, path: P, seg: 0, s: pick(rr.starts), side: Math.random() < 0.5 ? 1 : -1, off: rnd(-1, 1),
-      v: rnd(14, 22), h: 0, x: 0, y: 0, cx: 0, cy: 0, th: 0, age: 0, life: rnd(35, 70), el: null, flip: null, rain: false
+      mk: null, path: P, seg: 0, s: pick(rr.starts), side: Math.random() < 0.5 ? 1 : -1, off: rnd(0, 8),
+      v: rnd(14, 22) * FP, fp: FP, o: null, h: 0, x: 0, y: 0, cx: 0, cy: 0, th: 0, age: 0, life: rnd(35, 70), el: null, flip: null, rain: false
     };
-    place(w); w.h = w.th; sidewalk(w, scale);
+    place(w); w.h = w.th; sidewalk(w, scale, 0);
     w.mk = L.marker(map.unproject(L.point(w.x, w.y), REF_Z), { icon, pane: 'people', interactive: false, keyboard: false }).addTo(map);
     walkers.push(w);
     return true;
@@ -111,6 +110,7 @@
     const dt = Math.min((t - last) / 1000, 0.1); last = t;
     if (!document.hidden && !zooming) {
       const z = map.getZoom(), scale = Math.pow(2, z - REF_Z);
+      FP = map.sizes ? map.sizes().fp : 1;
       if (map.setRoads) map.setRoads(z >= MIN_ZOOM, 'p');      // las aceras salen de las calles reales
       // Sale gente a menudo (algo menos si hay tormenta fuerte); al principio llegan rápido hasta llenar las aceras
       nextSpawn -= dt;
@@ -126,16 +126,17 @@
       for (let i = walkers.length - 1; i >= 0; i--) {
         const w = walkers[i];
         w.age += dt;
-        w.s += w.v * dt / scale;                                // velocidad constante en pantalla
+        if (!(window.Xings && window.Xings.pedHold(w, scale))) w.s += w.v / w.fp * FP * dt / scale;   // espera en el paso de peatones con los coches en verde                    // velocidad en pantalla: crece y encoge con el tamaño de la persona
         if (w.s >= w.path.total || w.age > w.life) { remove(i); continue; }
         place(w);
         w.h += clamp(angDiff(w.th, w.h), -5 * dt, 5 * dt);      // gira suave en las esquinas
-        sidewalk(w, scale);
+        sidewalk(w, scale, dt);
         const ll = map.unproject(L.point(w.x, w.y), REF_Z);
         if (w.age > 3 && !view.contains(ll)) { remove(i); continue; }
         w.mk.setLatLng(ll);
         if (!w.el) { const e = w.mk.getElement(); w.el = e && e.firstChild; }
         if (w.el) {
+          if (w.fpA !== FP) { w.el.style.scale = FP.toFixed(3); w.fpA = FP; }
           const toEnd = (w.path.total - w.s) * scale / 40;
           w.el.style.opacity = Math.max(0, Math.min(1, w.age / 1.2, toEnd, (w.life - w.age) / 1.5));
           if (raining !== w.rain) { w.rain = raining; w.el.classList.toggle('rain', raining); }   // saca/guarda el paraguas

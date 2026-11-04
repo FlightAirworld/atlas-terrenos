@@ -10,7 +10,6 @@
   const MIN_ZOOM = 16, REF_Z = 17;
   const SMALL = Math.min(innerWidth, innerHeight) < 600;
   const MAX_PETS = SMALL ? 4 : 7;
-  const SIDEWALK = 27, SIDEWALK_M = 7;
   const LION_SPEED = 56;                 // px de pantalla por segundo (la gente va a 14-22)
   const LION_EVERY = [50, 90];           // segundos entre apariciones
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -96,16 +95,17 @@
     while (w.seg < P.pts.length - 2 && P.cum[w.seg + 1] <= w.s) w.seg++;
     const a = P.pts[w.seg], b = P.pts[w.seg + 1], len = (P.cum[w.seg + 1] - P.cum[w.seg]) || 1;
     const t = clamp((w.s - P.cum[w.seg]) / len, 0, 1);
-    w.cls = a.cls;
     w.cx = a.x + (b.x - a.x) * t; w.cy = a.y + (b.y - a.y) * t;
     w.th = Math.atan2(b.y - a.y, b.x - a.x);
   }
-  function sidewalk(w, scale) {
-    // Por la acera: justo en el borde dibujado junto a la calzada, según el tipo de calle y el zoom (w.off va de -1 a 1: unos pegados a la calzada, otros a la fachada)
-    const m = window.roadMetrics && map.gl ? window.roadMetrics(w.cls, map.gl.getZoom()) : null;
-    const target = m ? Math.max(11, m.half + 3, m.ringMid + w.off * m.ringHalf * 0.55) : Math.max(SIDEWALK, SIDEWALK_M * scale) + w.off;
-    w.offNow = w.offNow == null ? target : w.offNow + (target - w.offNow) * 0.15;   // cambia suave al pasar de una calle a otra
-    const o = w.offNow / scale * w.side;
+  // Igual que las personas (people.js): justo fuera de la calzada, según el ancho con el que se dibuja ESA calle ahora mismo
+  let FP = 1;
+  function sidewalk(w, scale, dt) {
+    FP = map.sizes ? map.sizes().fp : 1;
+    const cl = w.path.cl, m = map.roadMetrics(cl ? cl[Math.min(w.seg + 1, cl.length - 1)] : 'minor');
+    const target = m.curb + (2.5 + w.off * 0.3) * FP;
+    w.o = w.o == null || !dt ? target : w.o + clamp(target - w.o, -30 * dt, 30 * dt);
+    const o = w.o / scale * w.side;
     w.x = w.cx - Math.sin(w.h) * o; w.y = w.cy + Math.cos(w.h) * o;
   }
 
@@ -118,9 +118,9 @@
     const P = rr.path, scale = Math.pow(2, map.getZoom() - REF_Z);
     const svg = Math.random() < 0.5 ? dogSVG() : catSVG();
     const icon = L.divIcon({ className: 'an', iconSize: [26, 18], iconAnchor: [13, 16], html: `<div class="an-in" style="opacity:0">${svg}</div>` });
-    const w = { mk: null, path: P, seg: 0, s: pick(rr.starts), side: Math.random() < 0.5 ? 1 : -1, off: rnd(-1, 1),
+    const w = { mk: null, path: P, seg: 0, s: pick(rr.starts), side: Math.random() < 0.5 ? 1 : -1, off: rnd(10, 22),
       v: rnd(13, 22), h: 0, x: 0, y: 0, cx: 0, cy: 0, th: 0, age: 0, life: rnd(40, 80), el: null, flip: null };
-    place(w); w.h = w.th; sidewalk(w, scale);
+    place(w); w.h = w.th; sidewalk(w, scale, 0);
     w.mk = L.marker(toLL(w.x, w.y), { icon, pane: 'animals', interactive: false, keyboard: false }).addTo(map);
     pets.push(w);
     return true;
@@ -224,16 +224,17 @@
     const view = map.getBounds().pad(0.4);
     for (let i = pets.length - 1; i >= 0; i--) {
       const w = pets[i];
-      w.age += dt; w.s += w.v * dt / scale;
+      w.age += dt; w.s += w.v * FP * dt / scale;
       if (w.s >= w.path.total || w.age > w.life) { removePet(i); continue; }
       place(w);
       w.h += clamp(angDiff(w.th, w.h), -5 * dt, 5 * dt);
-      sidewalk(w, scale);
+      sidewalk(w, scale, dt);
       const ll = toLL(w.x, w.y);
       if (w.age > 3 && !view.contains(ll)) { removePet(i); continue; }
       w.mk.setLatLng(ll);
       if (!w.el) { const e = w.mk.getElement(); w.el = e && e.firstChild; }
       if (w.el) {
+        if (w.fpA !== FP) { w.el.style.scale = FP.toFixed(3); w.fpA = FP; }
         const toEnd = (w.path.total - w.s) * scale / 40;
         w.el.style.opacity = Math.max(0, Math.min(1, w.age / 1.2, toEnd, (w.life - w.age) / 1.5));
         const f = Math.cos(w.h) < 0;
