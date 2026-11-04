@@ -2,7 +2,7 @@
 // Día y noche sobre el mapa.
 //  - La hora es la hora solar REAL del punto donde está centrado el mapa: si vuelas a Australia ahí puede ser de día aunque aquí sea de noche.
 //    Al atardecer y al amanecer hay un tono anaranjado que va pasando al azul de la noche.
-//  - De noche las casas encienden ventanas (algunas se apagan de madrugada y alguna parpadea como una tele) y los coches van con faros y pilotos.
+//  - De noche se encienden las farolas de las calles y los coches van con faros y pilotos.
 //  - Botón 🌗 del menú: Automático (hora real) → Día → Noche → Rápido (un día entero en 90 s, para verlo).
 //    En la consola: setDayNight('auto' | 'day' | 'night' | 'fast')
 (function () {
@@ -17,6 +17,7 @@
 
   // ---------- Hora solar y oscuridad (0 = día, 1 = noche cerrada) ----------
   let fastShift = 0, fastT0 = 0;
+  const hash = (s, i) => { let h = 2166136261 ^ i; for (let k = 0; k < s.length; k++) { h ^= s.charCodeAt(k); h = Math.imul(h, 16777619); } h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); return ((h ^ (h >>> 15)) >>> 0) / 4294967296; };
   const rad = Math.PI / 180, smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
   function startFast() {
     const now = Date.now(), c = gl.getCenter();
@@ -44,7 +45,9 @@
   shade.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;mix-blend-mode:multiply;display:none;';
   host.appendChild(shade);
 
-  // ---------- Luces de las casas (canvas aditivo, por encima de la capa oscura y por debajo de nombres y vehículos) ----------
+  // ---------- Farolas (canvas aditivo, por debajo de nombres y vehículos) ----------
+  // Se colocan cada ~36 m a lo largo de las calles reales, alternando acera izquierda y derecha. Las calles salen de queryRoads()
+  // (solo se piden de noche y con zoom cercano). Cada farola es un charco de luz cálida pequeño y tenue sobre la calzada.
   const cv = document.createElement('canvas');
   cv.id = 'night-lights';
   cv.setAttribute('aria-hidden', 'true');
@@ -57,59 +60,67 @@
     W = host.clientWidth; H = host.clientHeight;
     cv.width = Math.max(1, Math.round(W * dpr)); cv.height = Math.max(1, Math.round(H * dpr));
   }
-  const hash = (s, i) => { let h = 2166136261 ^ i; for (let k = 0; k < s.length; k++) { h ^= s.charCodeAt(k); h = Math.imul(h, 16777619); } h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); return ((h ^ (h >>> 15)) >>> 0) / 4294967296; };
-
-  let cur = { nd: 0, hour: 12 };
-  function drawLights(tick) {
+  const LAMP_ZOOM = 16, SPACING_M = 36, MAX_LAMPS = 700;
+  let lamps = [], lampKey = '', roadsAsked = false, cur = { nd: 0, hour: 12 };
+  function wantRoads(on) {
+    if (on === roadsAsked || !map.setRoads) return;
+    roadsAsked = on; map.setRoads(on, 'n');
+  }
+  function buildLamps() {
+    if (!roadsAsked || !map.queryRoads) return;
+    const c = gl.getCenter(), key = c.lat.toFixed(4) + ',' + c.lng.toFixed(4) + ',' + map.getZoom().toFixed(1);
+    if (key === lampKey) return;
+    const lines = map.queryRoads();
+    if (!lines.length) return;                                   // la capa de calles aún no ha cargado: se reintenta en 'idle'
+    lampKey = key;
+    const out = [], seen = new Set(), mLat = 111320, mLng = 111320 * Math.cos(c.lat * Math.PI / 180), ppm = map.pxPerM();
+    for (const ln of lines) {
+      if (out.length >= MAX_LAMPS) break;
+      if (ln.cls === 'motorway' || ln.cls === 'trunk') continue;
+      const off = map.roadMetrics(ln.cls).curb / ppm;            // metros del eje de la calle a la acera
+      let side = 1, carry = hash(String(ln[0]), 1) * SPACING_M;
+      for (let i = 0; i + 1 < ln.length && out.length < MAX_LAMPS; i++) {
+        const [x0, y0] = ln[i], [x1, y1] = ln[i + 1];
+        const dx = (x1 - x0) * mLng, dy = (y1 - y0) * mLat, len = Math.hypot(dx, dy);
+        if (len < 0.5) continue;
+        const nx = -dy / len, ny = dx / len;                     // normal a la calle (metros)
+        for (let d = carry; d < len; d += SPACING_M) {
+          const f = d / len, lng = x0 + (x1 - x0) * f + side * nx * off / mLng, lat = y0 + (y1 - y0) * f + side * ny * off / mLat;
+          const k = Math.round(lng * 20000) + ',' + Math.round(lat * 20000);   // ~5 m: evita farolas repetidas donde se solapan tramos
+          if (!seen.has(k)) { seen.add(k); out.push([lng, lat]); }
+          side = -side; carry = d + SPACING_M - len;
+        }
+        carry = Math.max(0, carry);
+      }
+    }
+    lamps = out;
+    schedule();
+  }
+  function drawLights() {
     if (cv.style.display === 'none') return;
     if (cv.width !== Math.round(host.clientWidth * dpr) || cv.height !== Math.round(host.clientHeight * dpr)) resize();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    const zoom = map.getZoom();
-    if (typeof drawn === 'undefined' || typeof boundsOf !== 'function' || zoom < 14.5) return;
-    const nd = cur.nd, h = cur.hour;
-    const late = h >= 0.5 && h < 6 ? 0.3 : h >= 6 && h < 7.5 ? 0.6 : 1;    // de madrugada la mayoría de luces están apagadas
-    const b = gl.getBounds(), padLat = (b.getNorth() - b.getSouth()) * 0.1, padLng = (b.getEast() - b.getWest()) * 0.1;
+    if (!lamps.length || map.getZoom() < LAMP_ZOOM) return;
+    const on = smooth(0.25, 0.7, cur.nd);                        // se encienden al anochecer
+    if (on <= 0.01) return;
+    const ppm = map.pxPerM(), r = Math.max(5, Math.min(26, 8 * ppm)), dot = Math.max(1.2, Math.min(2.6, 0.5 * ppm));
     ctx.globalCompositeOperation = 'lighter';
-    for (const ex of drawn.values()) {
-      const p = ex.p; if (!p) continue;
-      const [[s, w], [n, e]] = boundsOf(p.x, p.y);
-      const cLat = (s + n) / 2, cLng = (w + e) / 2;
-      if (cLat < b.getSouth() - padLat || cLat > b.getNorth() + padLat || cLng < b.getWest() - padLng || cLng > b.getEast() + padLng) continue;
-      const c = gl.project([cLng, cLat]), a = gl.project([w, s]), z = gl.project([e, n]);
-      const sz = (Math.abs(z.x - a.x) + Math.abs(z.y - a.y)) / 2;
-      if (sz < 3 || c.x < -sz || c.y < -sz || c.x > W + sz || c.y > H + sz) continue;
-      const id = String(p.id);
-      const cnt = sz < 14 ? 1 : Math.max(3, Math.min(9, Math.round(sz / 16)));
-      let lit = 0;
-      for (let i = 0; i < cnt; i++) {
-        const thr = hash(id, i * 7 + 1), off = hash(id, i * 7 + 2);
-        const on = smooth(thr * 0.55 + 0.1, thr * 0.55 + 0.3, nd) * (off < late ? 1 : 0);   // se van encendiendo poco a poco al anochecer
-        if (on <= 0.01) continue;
-        lit += on;
-        if (sz < 14) continue;
-        // Ventanas pequeñas y sueltas (nunca un foco grande: sumadas darían una mancha blanca)
-        const x = c.x + (hash(id, i * 7 + 3) - 0.5) * sz * 0.7, y = c.y + (hash(id, i * 7 + 4) - 0.5) * sz * 0.7;
-        let al = on * 0.8, rgb = '255,200,110';
-        if (i === 0 && hash(id, 99) < 0.35) { rgb = '150,190,255'; al *= 0.55 + 0.45 * hash(id, tick % 40 + 100); }   // tele que parpadea
-        const r = Math.max(2, Math.min(7, sz * 0.045));
-        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0, `rgba(${rgb},${al * 0.55})`); g.addColorStop(1, `rgba(${rgb},0)`);
-        ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
-        ctx.fillStyle = `rgba(255,226,160,${Math.min(0.95, al)})`;
-        const ws = Math.max(1, Math.min(2.6, sz * 0.012)); ctx.fillRect(x - ws, y - ws * 0.8, ws * 2, ws * 1.6);
-      }
-      if (lit > 0.01 && sz < 14) {   // casas lejanas: un puntito cálido
-        const r = Math.max(2, sz * 0.5), g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, r);
-        g.addColorStop(0, `rgba(255,190,100,${Math.min(0.5, lit * 0.4)})`); g.addColorStop(1, 'rgba(255,190,100,0)');
-        ctx.fillStyle = g; ctx.fillRect(c.x - r, c.y - r, r * 2, r * 2);
-      }
+    for (const [lng, lat] of lamps) {
+      const p = gl.project([lng, lat]);
+      if (p.x < -r || p.y < -r || p.x > W + r || p.y > H + r) continue;
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+      g.addColorStop(0, `rgba(255,205,120,${0.34 * on})`); g.addColorStop(1, 'rgba(255,205,120,0)');
+      ctx.fillStyle = g; ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+      ctx.fillStyle = `rgba(255,236,190,${0.9 * on})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, dot, 0, 6.2832); ctx.fill();
     }
     ctx.globalCompositeOperation = 'source-over';
   }
-  let raf = 0, tick = 0;
-  const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; drawLights(tick); }); };
+  let raf = 0;
+  const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; drawLights(); }); };
   gl.on('render', schedule);
+  gl.on('idle', () => { if (cv.style.display !== 'none') buildLamps(); });
   addEventListener('resize', schedule);
 
   // ---------- Estilos: coches con luces, y personas, animales y nubes más oscuros ----------
@@ -149,7 +160,7 @@
   function apply(force) {
     cur = sun();
     const nd = cur.nd;
-    if (!force && Math.abs(nd - lastNd) < 0.004 && mode !== 'fast') { if (nd > 0.05) { tick++; schedule(); } return; }
+    if (!force && Math.abs(nd - lastNd) < 0.004 && mode !== 'fast') { schedule(); return; }
     lastNd = nd;
     document.documentElement.style.setProperty('--nd', nd.toFixed(3));
     document.body.classList.toggle('dn-on', nd > 0.04);
@@ -160,10 +171,12 @@
       shade.style.opacity = String(Math.min(0.78, Math.pow(nd, 0.85) * 0.78));
       shade.style.display = 'block'; cv.style.display = 'block';
     } else { shade.style.display = 'none'; cv.style.display = 'none'; ctx.clearRect(0, 0, cv.width, cv.height); }
-    tick++; schedule();
+    wantRoads(nd > 0.25 && map.getZoom() >= LAMP_ZOOM);
+    if (!roadsAsked) lamps = [];
+    buildLamps(); schedule();
   }
   setInterval(() => { if (!document.hidden) apply(false); }, reduce ? 4000 : 1000);
-  gl.on('moveend', () => apply(false));
+  gl.on('moveend', () => { apply(false); wantRoads(cur.nd > 0.25 && map.getZoom() >= LAMP_ZOOM); buildLamps(); });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) apply(true); });
 
   function setMode(m, save) {
