@@ -1,6 +1,6 @@
 'use strict';
-// Botón "Instalar la app": en Android/Chrome/Edge abre el aviso de instalación del navegador;
-// en iPhone/iPad (que no tiene ese aviso) explica cómo añadirla a la pantalla de inicio.
+// Botón "Descargar la app" (con el icono de la app): si el navegador ofrece instalar, abre su aviso de instalación;
+// si no (iPhone/iPad, o Chrome que aún no lo ha ofrecido) explica los pasos para añadirla a la pantalla de inicio.
 (function () {
   const btn = document.getElementById('install-btn'), help = document.getElementById('install-help');
   if (!btn) return;
@@ -14,7 +14,9 @@
 
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; show(); });
   window.addEventListener('appinstalled', () => { deferred = null; hide(); });
-  if (isIos) show();
+  show();                                                     // siempre visible: si el navegador no ofrece instalar solo, se muestran los pasos
+  const ad = document.getElementById('install-android'), io = document.getElementById('install-ios');
+  if (ad && io) { if (isIos) ad.classList.add('hidden'); else io.classList.add('hidden'); }   // solo los pasos de tu dispositivo
 
   btn.addEventListener('click', async () => {
     if (deferred) {
@@ -22,7 +24,7 @@
       try { d.prompt(); const r = await d.userChoice; if (r && r.outcome === 'accepted') hide(); else show(); } catch (e) {}
       return;
     }
-    if (help) help.classList.remove('hidden');                // iPhone: instrucciones
+    if (help) help.classList.remove('hidden');                // sin aviso del navegador: instrucciones paso a paso
   });
   if (help) {
     const close = () => help.classList.add('hidden');

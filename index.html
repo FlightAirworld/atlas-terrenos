@@ -180,7 +180,7 @@
     <button id="sound-btn" data-label="Sonido" type="button" title="Música y efectos" aria-label="Sonido">🔊</button>
     <button id="account-btn" data-label="Cuenta" type="button" class="hidden" title="Entrar" aria-label="Entrar">👤</button>
     <button id="push-btn" data-label="Avisos" type="button" class="hidden" title="Avisos al móvil" aria-label="Avisos al móvil">🔔</button>
-    <button id="install-btn" data-label="Instalar app" type="button" class="hidden" title="Instalar la app" aria-label="Instalar la app">📲</button>
+    <button id="install-btn" data-label="Descargar app" type="button" class="hidden" title="Descargar la app" aria-label="Descargar la app"><img src="/images/icon-192.png" alt="" width="28" height="28" style="width:28px;height:28px;border-radius:7px;display:block"></button>
     </div>
   </div>
 
@@ -388,13 +388,23 @@
   <div id="install-help" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="install-title">
     <div class="modal-card">
       <button id="install-close" class="close" type="button" aria-label="Cerrar">×</button>
-      <h2 id="install-title">📲 Instalar la app</h2>
-      <p>En iPhone o iPad:</p>
-      <ol>
-        <li>Toca el botón <b>Compartir</b> (el cuadrado con la flecha hacia arriba) de Safari.</li>
-        <li>Elige <b>«Añadir a pantalla de inicio»</b>.</li>
-        <li>Pulsa <b>Añadir</b>. ¡Listo! Se abrirá a pantalla completa, como una app.</li>
-      </ol>
+      <h2 id="install-title">📲 Descargar la app</h2>
+      <div id="install-android">
+        <p>En Android (Chrome):</p>
+        <ol>
+          <li>Toca los <b>tres puntos ⋮</b> de arriba a la derecha del navegador.</li>
+          <li>Elige <b>«Instalar aplicación»</b> o <b>«Añadir a la pantalla de inicio»</b>.</li>
+          <li>Pulsa <b>Instalar</b>. ¡Listo! Tendrás el icono en tu móvil y se abrirá a pantalla completa.</li>
+        </ol>
+      </div>
+      <div id="install-ios">
+        <p>En iPhone o iPad (Safari):</p>
+        <ol>
+          <li>Toca el botón <b>Compartir</b> (el cuadrado con la flecha hacia arriba).</li>
+          <li>Elige <b>«Añadir a pantalla de inicio»</b>.</li>
+          <li>Pulsa <b>Añadir</b>. ¡Listo! Se abrirá a pantalla completa, como una app.</li>
+        </ol>
+      </div>
     </div>
   </div>
 
