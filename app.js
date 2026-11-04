@@ -272,14 +272,76 @@ function roadAreaFor(p) {
     const rest = turf.difference(parcel, area);
     if (!rest) return none;                                          // la calle cubriría todo: se deja la casa entera
     if (turf.area(rest) / turf.area(parcel) > 0.995) return none;    // la calle no toca realmente la parcela
-    return { road: area, rest };
+    return { road: area, rest, box: freeBoxFor(p, rest) };
   } catch (err) { return none; }
+}
+
+// ---------- Casa bien colocada: se mueve al mayor hueco libre de calle de su parcela ----------
+// En vez de cortar la casa con la carretera, se busca el rectángulo más grande de la parcela que no toca ninguna calle
+// y la casa se pone ahí (con un pequeño margen), sin deformarla demasiado. Si no se puede, queda el recorte de antes.
+const rectGeom = ([w, s, e, n]) => ({ type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] });
+function bestRect(free, N, M) {                     // mayor rectángulo de celdas libres (algoritmo del histograma)
+  let best = null; const h = new Array(N).fill(0);
+  for (let j = 0; j < M; j++) {
+    for (let i = 0; i < N; i++) h[i] = free[j][i] ? h[i] + 1 : 0;
+    const st = [];
+    for (let i = 0; i <= N; i++) {
+      const cur = i === N ? 0 : h[i]; let start = i;
+      while (st.length && st[st.length - 1].h >= cur) {
+        const t = st.pop(); start = t.i;
+        const area = t.h * (i - t.i);
+        if (t.h > 0 && (!best || area > best.area)) best = { area, i0: t.i, i1: i, j0: j - t.h + 1, j1: j + 1 };
+      }
+      st.push({ i: start, h: cur });
+    }
+  }
+  return best;
+}
+function freeBoxFor(p, rest) {                      // [oeste, sur, este, norte] o null si no hay hueco decente
+  try {
+    const [[s, w], [n, e]] = boundsOf(p.x, p.y);
+    const N = 36, M = 36, free = [];
+    for (let j = 0; j < M; j++) {
+      const row = [], lat = n - (j + 0.5) / M * (n - s);
+      for (let i = 0; i < N; i++) row.push(turf.booleanPointInPolygon(turf.point([w + (i + 0.5) / N * (e - w), lat]), rest));
+      free.push(row);
+    }
+    const r = bestRect(free, N, M); if (!r) return null;
+    let { i0, i1, j0, j1 } = r;
+    if (i1 - i0 > 4) { i0++; i1--; }                // margen de una celda: la casa no roza la calle
+    if (j1 - j0 > 4) { j0++; j1--; }
+    let u0 = i0 / N, u1 = i1 / N, v0 = j0 / M, v1 = j1 / M;
+    if ((u1 - u0) * (v1 - v0) < 0.18) return null;  // casi toda la parcela es calle: se deja el recorte de antes
+    const pw = (e - w) * 111320 * Math.cos((s + n) / 2 * Math.PI / 180), ph = (n - s) * 111320;
+    const wm = (u1 - u0) * pw, hm = (v1 - v0) * ph;
+    if (wm / hm < 0.62) { const d = (hm - wm / 0.62) / 2 / ph; v0 += d; v1 -= d; }          // tira muy estrecha: casa más baja, centrada
+    else if (wm / hm > 1.5) { const d = (wm - hm * 1.5) / 2 / pw; u0 += d; u1 -= d; }      // muy ancha: más estrecha, centrada
+    return [w + u0 * (e - w), n - v1 * (n - s), w + u1 * (e - w), n - v0 * (n - s)];
+  } catch (err) { return null; }
+}
+function detailBounds(ex) {                         // dónde va la casa dentro de la parcela: [[sur, oeste], [norte, este]]
+  const cut = roadCut.get(ex.p.id);
+  if (cut && cut.box) { const [w, s, e, n] = cut.box; return [[s, w], [n, e]]; }
+  return boundsOf(ex.p.x, ex.p.y);
+}
+function coordsOf(ex) { const [[s, w], [n, e]] = detailBounds(ex); return [[w, n], [e, n], [e, s], [w, s]]; }
+function moveLabel(ex) {
+  if (!ex.label) return;
+  const [[s, w], [n, e]] = detailBounds(ex);
+  ex.label.setLatLng({ lat: (s + n) / 2, lng: (w + e) / 2 });
+}
+function moveDetail(ex) {
+  if (!ex.hasDetail) return;
+  const src = gl.getSource(ex.srcId);
+  if (src && src.setCoordinates) src.setCoordinates(coordsOf(ex));
+  moveLabel(ex);
 }
 
 function applyCut(ex, cut) {
   const f = ownedFeatures.get(ex.p.id);
-  if (f && cut.rest) { f.geometry = cut.rest.geometry; flushOwned(); }   // volumen 3D (y borde) con la forma recortada
-  refreshPhoto(ex);                                                      // foto con la calle borrada
+  if (f && cut.box) { f.geometry = rectGeom(cut.box); flushOwned(); }    // volumen 3D (y borde) = hueco libre de calle
+  else if (f && cut.rest) { f.geometry = cut.rest.geometry; flushOwned(); }   // sin hueco decente: forma recortada como antes
+  if (cut.box) moveDetail(ex); else refreshPhoto(ex);                    // la casa se mueve al hueco (o foto con la calle borrada)
 }
 
 function loadImg(url) {
@@ -318,18 +380,19 @@ async function refreshPhoto(ex) {
   if (!ex.hasDetail) return;
   const tok = ex.tok = (ex.tok || 0) + 1, url = ex.url, cut = roadCut.get(ex.p.id);
   let u = url, blob = null;
-  if (cut && cut.road) { try { blob = await clippedPhoto(url, ex.p, cut.road); u = blob; } catch (e) {} }
+  if (cut && cut.road && !cut.box) { try { blob = await clippedPhoto(url, ex.p, cut.road); u = blob; } catch (e) {} }
   const src = ex.hasDetail && tok === ex.tok && url === ex.url && gl.getSource(ex.srcId);
   if (!src) { if (blob) URL.revokeObjectURL(blob); return; }
   freeBlob(ex); ex.blob = blob;
-  src.updateImage({ url: u });
+  src.updateImage({ url: u, coordinates: coordsOf(ex) });
+  moveLabel(ex);
 }
 
 function addDetail(ex) {
   ex.want = true;
   if (ex.hasDetail || ex.adding) return;
   const cut = roadCut.get(ex.p.id);
-  if (!(cut && cut.road)) return mountDetail(ex, ex.url, null);
+  if (!(cut && cut.road && !cut.box)) return mountDetail(ex, ex.url, null);
   // Con calle: primero se prepara la foto recortada y luego se monta (así no parpadea la casa entera)
   ex.adding = true;
   const used = ex.url;
@@ -341,7 +404,7 @@ function addDetail(ex) {
   });
 }
 function mountDetail(ex, imgUrl, blob) {
-  const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y);
+  const [[s, w], [n, e]] = detailBounds(ex);
   ex.blob = blob;
   gl.addSource(ex.srcId, { type: 'image', url: imgUrl, coordinates: [[w, n], [e, n], [e, s], [w, s]] });
   gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
