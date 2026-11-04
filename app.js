@@ -686,6 +686,8 @@ function showPanel(p) {
     $('p-owner-icon').textContent = p.avatar || '👤';
     $('p-photo').src = houseFor(p.id, p.house);
     $('house-edit').classList.toggle('hidden', !p.mine);
+    $('house-pick-wrap').classList.add('hidden');
+    { const c = cfg.houseCost ?? 1; $('house-change-btn').textContent = '🏠 CAMBIAR CASA' + (c > 0 ? ` (${c} 🎟️)` : ' (gratis)'); }
     if (p.mine) markHouse($('house-pick-edit'), p.house && String(p.house).replace(/\.png$/i, '.webp'));
     $('p-avatar').textContent = p.avatar || '';
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
@@ -789,9 +791,11 @@ function markHouse(box, current) {
       $('p-photo').src = houseFor(selected.id, j.house);
       drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: j.house, level: selected.level });
       sfx('claim');
+      $('house-pick-wrap').classList.add('hidden');
       setMsg(`🏠 ¡Casa cambiada! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
     } catch (e) { setMsg(e.message, 'err'); }
   }, false);
+  $('house-change-btn').onclick = () => $('house-pick-wrap').classList.toggle('hidden');
 })();
 
 // ---------- País (bandera) ----------
