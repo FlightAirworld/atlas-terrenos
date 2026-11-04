@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { Pool, types } = require('pg');
+const ambient = require('./ambient');   // jugadores y mensajes de chat simulados (AMBIENT=off para apagarlo)
 
 types.setTypeParser(20, Number);   // BIGINT (created_at, COUNT) -> número, no texto
 
@@ -870,8 +871,7 @@ const ONLINE_MAX_PER_IP = Math.max(1, Number(process.env.ONLINE_MAX_PER_IP || 60
 const onlineClients = new Map();   // cid -> Set de respuestas abiertas
 const onlineByIp = new Map();      // ip -> nº de conexiones abiertas
 let onlineSent = -1, onlineTimer = null;
-const ONLINE_MIN = 500;   // lo que se muestra: 500 como mínimo; por encima de 500 es el número real
-const onlineShown = () => Math.max(ONLINE_MIN, onlineClients.size);
+const onlineShown = () => ambient.online() + onlineClients.size;   // jugadores simulados (ambient.js, suben y bajan solos) + reales
 
 function broadcastOnline(force) {
   const n = onlineShown();
@@ -886,6 +886,13 @@ function scheduleOnlineBroadcast() {   // agrupa altas y bajas seguidas en un so
 }
 // Cada 20 s se reenvía el número: sirve de latido (los proxies cortan conexiones mudas) y corrige cualquier desajuste
 setInterval(() => broadcastOnline(true), 20_000).unref();
+// El número simulado se mueve cada pocos segundos mientras haya alguien mirando
+(function ambientOnlineLoop() {
+  setTimeout(() => {
+    if (ambient.ON && onlineClients.size) { ambient.step(); broadcastOnline(false); }
+    ambientOnlineLoop();
+  }, ambient.int(3000, 8000)).unref();
+})();
 
 function onlineStream(req, res, url) {
   const ip = clientIp(req);
@@ -962,6 +969,26 @@ function chatPublish(at, payload) {
 }
 setInterval(() => { for (const s of chatSubs) { try { s.res.write(': ping\n\n'); } catch {} } }, 20_000).unref();   // latido
 
+// Vecinos virtuales: cada zona con alguien conectado recibe un mensaje simulado cada 15-50 s (nada se guarda en la base de datos)
+const ambientNext = new Map();   // zona (redondeada a 0,1°) -> cuándo toca el siguiente mensaje
+setInterval(() => {
+  if (!ambient.CHAT_ON || !chatSubs.size) return;
+  const now = Date.now(), centers = [];
+  for (const s of chatSubs) {
+    if (centers.length >= 40) break;
+    if (!centers.some(c => kmBetween(c, s) <= CHAT_RADIUS_KM / 2)) centers.push({ lat: s.lat, lng: s.lng });
+  }
+  for (const c of centers) {
+    const key = c.lat.toFixed(1) + ':' + c.lng.toFixed(1);
+    if (!ambientNext.has(key)) { ambientNext.set(key, now + ambient.int(4000, 15000)); continue; }
+    if (ambientNext.get(key) > now) continue;
+    ambientNext.set(key, now + ambient.int(15_000, 50_000));
+    const msg = ambient.live(c, CHAT_RADIUS_KM, kmBetween);
+    if (msg) chatPublish(c, msg);
+  }
+  if (ambientNext.size > 500) for (const [k, t] of ambientNext) if (t < now - 600_000) ambientNext.delete(k);
+}, 3000).unref();
+
 function chatStream(req, res, url) {
   const at = cleanLatLng(url.searchParams.get('lat'), url.searchParams.get('lng'));
   const ip = clientIp(req);
@@ -1011,6 +1038,10 @@ async function chatList(req, url) {
     for (const m of messages) { m.r = {}; m.mine = null; }
     for (const c of cnt) { const m = by.get(Number(c.msg_id)); if (m) m.r[c.emoji] = Number(c.n); }
     for (const c of mine) { const m = by.get(Number(c.msg_id)); if (m) m.mine = c.emoji; }
+  }
+  if (!after) {   // sin "after" (apertura del chat): se mezclan los vecinos virtuales por hora
+    const all2 = messages.concat(ambient.history(at, CHAT_RADIUS_KM, kmBetween)).sort((a, b) => a.t - b.t);
+    return { messages: all2.slice(-CHAT_HISTORY), km: CHAT_RADIUS_KM };
   }
   return { messages, km: CHAT_RADIUS_KM };
 }

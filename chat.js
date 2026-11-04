@@ -65,9 +65,10 @@
       const n = (m.r && m.r[e]) || 0;
       if (!n) continue;
       const b = document.createElement('button'); b.type = 'button'; b.className = m.mine === e ? 'on' : '';
-      b.textContent = e + ' ' + n; b.onclick = () => react(m, e);
+      b.textContent = e + ' ' + n; if (m.npc) b.disabled = true; else b.onclick = () => react(m, e);
       box.append(b);
     }
+    if (m.npc) return;   // vecino virtual: no se puede reaccionar
     const plus = document.createElement('button'); plus.type = 'button'; plus.className = 'plus'; plus.textContent = '😊+'; plus.title = 'Reaccionar';
     const pick = document.createElement('span'); pick.className = 'pick hidden';
     EMOJIS.forEach(e => { const b = document.createElement('button'); b.type = 'button'; b.textContent = e; b.onclick = () => { pick.classList.add('hidden'); react(m, e); }; pick.append(b); });
@@ -92,11 +93,12 @@
     row.dataset.id = m.id;
     const who = document.createElement('button'); who.type = 'button'; who.className = 'who';
     who.textContent = [flagOf(m.country), m.avatar, m.nick].filter(Boolean).join(' ');
-    who.onclick = () => showCard(m);
+    if (!m.npc) who.onclick = () => showCard(m); else who.style.cursor = 'default';
     const when = document.createElement('span'); when.className = 'when';
     when.textContent = new Date(m.t).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
     row.append(who, when);
-    if (isAdminView()) {
+    if (m.npc) { const b = document.createElement('span'); b.className = 'when'; b.textContent = '🤖'; b.title = 'Vecino virtual'; row.append(b); }
+    if (isAdminView() && !m.npc) {
       const del = document.createElement('button'); del.type = 'button'; del.className = 'del'; del.textContent = '🗑'; del.title = 'Borrar mensaje';
       del.onclick = () => removeAsAdmin(m.id);
       row.append(del);
