@@ -49,3 +49,23 @@
     sync();
   }
 })();
+
+// Botón "COMPARTIR" (dentro de Extras): comparte el enlace del juego; si el móvil no puede compartir, lo copia.
+(function () {
+  const btn = document.getElementById('share-app-btn');
+  if (!btn) return;
+  function note(text) {                                       // mismo aviso emergente (#toast) que usa el resto de la app
+    let t = document.getElementById('toast');
+    if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+    t.textContent = text; t.classList.add('show');
+    clearTimeout(note.t); note.t = setTimeout(() => t.classList.remove('show'), 2500);
+  }
+  btn.addEventListener('click', async () => {
+    const url = location.origin + '/';
+    const data = { title: 'Redecora El Mundo', text: 'Reclama terrenos virtuales en el mapa del mundo y ponles tu nombre.', url };
+    try { if (navigator.share) { await navigator.share(data); return; } }
+    catch (e) { if (e && e.name === 'AbortError') return; }   // cerró la hoja de compartir: no hacemos nada
+    try { await navigator.clipboard.writeText(url); note('🔗 Enlace copiado'); }
+    catch (e) { window.prompt('Copia este enlace:', url); }
+  });
+})();
