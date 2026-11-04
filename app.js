@@ -449,6 +449,17 @@ function toggleViewMode() {
 }
 document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#view-btn')) toggleViewMode(); });
 
+// Quita una parcela del mapa al instante (la usa el piromano, arson.js)
+function removeParcelClient(id) {
+  const ex = drawn.get(id);
+  if (ex) { dropDetail(ex); drawn.delete(id); }
+  ownedFeatures.delete(id);
+  if (typeof roadCut !== 'undefined' && roadCut.delete) roadCut.delete(id);
+  flushOwned();
+  if (selected && selected.id === id) { try { setSelected(null); } catch (e) {} selected = null; }
+}
+window.removeParcelClient = removeParcelClient;
+
 // Capas del mapa que dependen de que el estilo esté cargado
 gl.on('load', () => {
   gl.addSource('owned', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -506,9 +517,14 @@ map.on('moveend', loadParcels);
 function syncLabels() {
   map.getContainer().classList.toggle('labels-off', map.getZoom() < 17);
   // Ancho de una parcela en píxeles: el nombre se escala para caber dentro de la casa (ver .owner-pill en style.css)
-  if (cfg) map.getContainer().style.setProperty('--ppx', (cfg.size * 512 * Math.pow(2, gl.getZoom()) / 360).toFixed(1));
+  if (cfg) {
+    const ppx = cfg.size * 512 * Math.pow(2, gl.getZoom()) / 360;
+    map.getContainer().style.setProperty('--ppx', ppx.toFixed(1));
+    // En Mercator la parcela es más alta que ancha (1/cos(lat)): así el nombre queda en el borde de abajo
+    map.getContainer().style.setProperty('--ppy', (ppx / Math.max(0.2, Math.cos(gl.getCenter().lat * Math.PI / 180))).toFixed(1));
+  }
 }
-map.on('zoomend', syncLabels); gl.on('zoom', syncLabels); syncLabels();
+map.on('zoomend', syncLabels); gl.on('zoom', syncLabels); gl.on('moveend', syncLabels); syncLabels();
 
 // ---------- Selección de parcela ----------
 async function selectAt(latlng) {

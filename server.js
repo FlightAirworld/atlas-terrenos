@@ -849,6 +849,7 @@ function onlineStream(req, res, url) {
   set.add(res);
   onlineByIp.set(ip, (onlineByIp.get(ip) || 0) + 1);
   res.write(`retry: 3000\n\ndata: ${onlineClients.size}\n\n`);   // el recién llegado ve el número al instante
+  if (arsonActive) res.write(`event: arson\ndata: ${JSON.stringify({ type: 'start', now: Date.now(), ev: arsonPublic(arsonActive) })}\n\n`);   // si hay un incendio en marcha, el recién llegado lo ve
   scheduleOnlineBroadcast();                                     // y los demás, medio segundo después
   let gone = false;
   const leave = () => {
@@ -1366,6 +1367,10 @@ async function route(req, res, url) {
     requireAdmin(req);
     return adminClaimParcel(await readJson(req));
   }
+  if (req.method === 'POST' && pn === '/api/admin/arson') {   // prueba: prende un incendio ahora mismo
+    requireAdmin(req);
+    return { started: await arsonStart(true) };
+  }
   if (req.method === 'GET' && pn === '/api/admin/stats') return adminStats(req);
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
@@ -1389,6 +1394,8 @@ async function route(req, res, url) {
     return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country, house: r.house, level: r.level }));
   }
 
+  if (req.method === 'GET' && pn === '/api/arson') return arsonGet(req);
+  if (req.method === 'POST' && pn === '/api/arson/seen') return arsonSeen(req);
   if (req.method === 'GET' && pn === '/api/health') return { ok: true };   // la pantalla de carga del sitio estático pregunta aquí si ya despertó
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineClients.size };
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
@@ -1476,6 +1483,97 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     purge(); setInterval(purge, 3600_000).unref();
     if (CITY_GEOCODE) { setTimeout(cityTick, 5000).unref(); setInterval(cityTick, 20_000).unref(); }   // pone ciudad a los terrenos que no la tienen
   }).catch(e => console.error('No se pudo crear la tabla del chat:', e.message));
+
+
+// ---------- El piromano ----------
+// Cada ARSON_EVERY_MIN minutos (60 por defecto) un piromano prende fuego a una parcela al azar de cualquier jugador con cuenta.
+// Primero llega con su antorcha (5 s) y luego arde ARSON_BURN_SEC segundos (30) a la vista de todos los jugadores conectados; después la parcela se borra y su dueño la pierde.
+// Como compensación recibe ARSON_REWARD créditos (5 por defecto). Se le avisa con un mensaje al entrar (tabla arson_notices) y con aviso al móvil si lo tiene activado.
+// Para desactivarlo: ARSON=off. Para probarlo ya: POST /api/admin/arson con la clave de admin.
+const ARSON_ON = String(process.env.ARSON || 'on').toLowerCase() !== 'off';
+const ARSON_EVERY_MS = Math.max(60_000, Number(process.env.ARSON_EVERY_MIN || 60) * 60_000);
+const ARSON_BURN_MS = Math.min(300_000, Math.max(5_000, Number(process.env.ARSON_BURN_SEC || 30) * 1000));
+const ARSON_REWARD = Math.max(0, Math.floor(Number(process.env.ARSON_REWARD ?? 5)));   // créditos de consuelo para el dueño (ARSON_REWARD=0 para quitarlos)
+const ARSON_WALK_MS = 5_000;   // lo que tarda el piromano en llegar a la casa antes de prenderle fuego
+let arsonActive = null;   // { id, parcelId, userId, x, y, lat, lng, owner, house, level, startedAt, endsAt }
+const arsonPublic = ev => ev && ({ id: ev.id, parcelId: ev.parcelId, x: ev.x, y: ev.y, lat: ev.lat, lng: ev.lng, owner: ev.owner, house: ev.house, level: ev.level, startedAt: ev.startedAt, igniteAt: ev.igniteAt, endsAt: ev.endsAt });
+function arsonBroadcast(type, extra) {
+  const msg = `event: arson\ndata: ${JSON.stringify({ type, now: Date.now(), ev: arsonPublic(arsonActive), ...(extra || {}) })}\n\n`;
+  for (const set of onlineClients.values()) for (const res of set) { try { res.write(msg); } catch {} }
+}
+async function arsonStart(force) {
+  if (!ARSON_ON || arsonActive) return null;
+  if (!force) {
+    if (!onlineClients.size) return null;   // sin jugadores conectados no tiene gracia: espera
+    const last = await one('SELECT MAX(started_at) AS t FROM arson_log');
+    if (last && last.t && Date.now() - Number(last.t) < ARSON_EVERY_MS - 5000) return null;
+  }
+  const p = await one('SELECT id, x, y, owner, user_id, house, level FROM parcels WHERE user_id IS NOT NULL ORDER BY random() LIMIT 1');
+  if (!p) return null;
+  const now = Date.now();
+  const row = await one('INSERT INTO arson_log (parcel_id, x, y, owner, user_id, house, level, started_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+    [p.id, p.x, p.y, p.owner, String(p.user_id), p.house, p.level, now]);
+  arsonActive = { id: Number(row.id), parcelId: p.id, userId: String(p.user_id), x: p.x, y: p.y,
+    lat: p.y * SIZE - 90 + SIZE / 2, lng: p.x * SIZE - 180 + SIZE / 2, owner: p.owner, house: p.house, level: p.level, startedAt: now, igniteAt: now + ARSON_WALK_MS, endsAt: now + ARSON_WALK_MS + ARSON_BURN_MS };
+  arsonBroadcast('start');
+  setTimeout(arsonFinish, ARSON_WALK_MS + ARSON_BURN_MS).unref();
+  return arsonPublic(arsonActive);
+}
+async function arsonFinish() {
+  const ev = arsonActive; if (!ev) return;
+  let burned = false, reward = 0;
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const del = await client.query('DELETE FROM parcels WHERE id = $1 AND user_id::text = $2 RETURNING id', [ev.parcelId, ev.userId]);
+      if (del.rowCount) {
+        burned = true;
+        let paid = 0;
+        if (ARSON_REWARD > 0) {   // recompensa: créditos para el jugador al que le queman la casa
+          const up = await client.query('UPDATE packs SET credits = credits + $1 WHERE user_id::text = $2', [ARSON_REWARD, ev.userId]);
+          if (up.rowCount) paid = ARSON_REWARD;
+        }
+        reward = paid;
+        await client.query('INSERT INTO arson_notices (user_id, parcel_id, house, created_at, reward) VALUES ($1,$2,$3,$4,$5)', [ev.userId, ev.parcelId, ev.house, Date.now(), paid]);
+      }
+      await client.query('UPDATE arson_log SET ended_at = $1 WHERE id = $2', [Date.now(), ev.id]);
+      await client.query('COMMIT');
+    } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; }
+    finally { client.release(); }
+  } catch (e) { console.error('Piromano: no se pudo quemar la parcela:', e.message); }
+  arsonActive = null;
+  arsonBroadcast('end', { ev: null, parcelId: ev.parcelId, burned });
+  if (burned) pushToUser(ev.userId, { title: '🔥 EL PIROMANO TE HA QUEMADO UNA CASA', body: reward ? `Has perdido una de tus parcelas. Te damos ${reward} créditos de compensación.` : 'Has perdido una de tus parcelas.', tag: 'arson', url: '/' }).catch(() => {});
+}
+async function arsonResume() {   // si el servidor se reinició con un incendio a medias, se retoma (o se termina)
+  const r = await one('SELECT * FROM arson_log WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1');
+  if (!r) return;
+  const startedAt = Number(r.started_at);
+  arsonActive = { id: Number(r.id), parcelId: r.parcel_id, userId: String(r.user_id), x: r.x, y: r.y, lat: r.y * SIZE - 90 + SIZE / 2, lng: r.x * SIZE - 180 + SIZE / 2,
+    owner: r.owner, house: r.house, level: r.level, startedAt, igniteAt: startedAt + ARSON_WALK_MS, endsAt: startedAt + ARSON_WALK_MS + ARSON_BURN_MS };
+  setTimeout(arsonFinish, Math.max(0, arsonActive.endsAt - Date.now())).unref();
+}
+async function arsonGet(req) {
+  const user = await userFrom(req);
+  const notices = user ? (await all('SELECT id, parcel_id, house, created_at, reward FROM arson_notices WHERE user_id = $1 AND seen = FALSE ORDER BY id LIMIT 20', [user.id]))
+    .map(n => ({ id: Number(n.id), parcelId: n.parcel_id, house: n.house, reward: Number(n.reward) || 0, t: Number(n.created_at) })) : [];
+  return { on: ARSON_ON, now: Date.now(), active: arsonPublic(arsonActive), notices };
+}
+async function arsonSeen(req) {
+  const user = await needUser(req);
+  await run('UPDATE arson_notices SET seen = TRUE WHERE user_id = $1 AND seen = FALSE', [user.id]);
+  return { ok: true };
+}
+ready.then(async () => {
+  if (!ARSON_ON) return;
+  await run('CREATE TABLE IF NOT EXISTS arson_log (id BIGSERIAL PRIMARY KEY, parcel_id TEXT NOT NULL, x INT, y INT, owner TEXT, user_id TEXT, house TEXT, level SMALLINT, started_at BIGINT NOT NULL, ended_at BIGINT)');
+  await run('CREATE TABLE IF NOT EXISTS arson_notices (id BIGSERIAL PRIMARY KEY, user_id TEXT NOT NULL, parcel_id TEXT, house TEXT, created_at BIGINT NOT NULL, seen BOOLEAN NOT NULL DEFAULT FALSE)');
+  await run('ALTER TABLE arson_notices ADD COLUMN IF NOT EXISTS reward INT NOT NULL DEFAULT 0');
+  await run('CREATE INDEX IF NOT EXISTS arson_notices_user ON arson_notices (user_id, seen)');
+  await arsonResume();
+  setInterval(() => arsonStart(false).catch(e => console.error('Piromano:', e.message)), 60_000).unref();
+}).catch(e => console.error('No se pudo preparar el piromano:', e.message));
 
 // Sitio estático en otro dominio: CORS_ORIGINS = direcciones permitidas, separadas por comas (p. ej. https://atlas-terrenos-web.onrender.com)
 const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(x => x.trim().replace(/\/+$/, '')).filter(Boolean);
