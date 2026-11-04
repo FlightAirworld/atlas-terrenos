@@ -94,3 +94,17 @@ Racha de 7 días: premios de cada día en `DAILY_REWARDS` (7 números separados 
   (misma posición para todos los jugadores). Se coloca en el primer hueco libre de la celda: sin calle, edificio, agua ni parcela comprada
   (si alguien compra la parcela, el helipuerto desaparece). El helicóptero (cada 3 min, con zoom 16 o más) aterriza en el helipuerto
   más cercano al centro de la pantalla; si no hay ninguno a la vista, espera a que te acerques a uno. Para probarlo: `spawnAircraft('heli')` en la consola.
+
+## Semáforos y pasos de peatones (`crossings.js`)
+
+- En los cruces de 3 o más calles (zoom 16,5 o más; los 14 más cercanos al centro, 8 en móvil) hay un **paso de cebra** y una **línea de parada** en cada calle, y un **semáforo** por calle.
+- Ciclo de 20 s: calles principales (verde 7 s, ámbar 2 s, rojo) y calles transversales desfasadas 10 s; entre fases hay 1 s de rojo para todos.
+- **Coches**: frenan ante la línea de parada con rojo (y con ámbar si aún pueden parar) y hacen cola. Policía, bomberos y ambulancias no paran.
+- **Peatones**: esperan en el bordillo y cruzan solo cuando los coches de esa calle tienen el rojo.
+
+## Tren, vías y estaciones (`trains.js`)
+
+- Las **vías** son las reales de OpenStreetMap (clase `rail`, sin túneles ni apartaderos); el mapa las dibuja con balasto y traviesas (`st-rail` en `app.js`). Solo hay tren donde hay vía real: prueba por ejemplo cerca de una estación grande de tu ciudad.
+- Cada 60-80 s sale un tren (locomotora + 2 o 3 vagones) con zoom 16 o más. Para probarlo sin esperar: `spawnTrain()` en la consola.
+- **Estaciones**: el mundo se divide en celdas de ~650 m y en 4 de cada 10 hay una estación junto a la vía (andén con marquesina; misma posición para todos los jugadores). El tren frena, abre puertas (luces amarillas), baja y sube gente, avisa y arranca.
+- **Sonido** (Web Audio, respeta el botón 🔊): traqueteo según la velocidad, bocina al entrar y al salir, campana al llegar y pitidos antes de cerrar puertas. Botón 🚆 del menú para activar o desactivar el tren.

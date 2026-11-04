@@ -127,7 +127,7 @@
       for (let i = walkers.length - 1; i >= 0; i--) {
         const w = walkers[i];
         w.age += dt;
-        w.s += w.v / w.fp * FP * dt / scale;                    // velocidad en pantalla: crece y encoge con el tamaño de la persona
+        if (!(window.Xings && window.Xings.pedHold(w, scale))) w.s += w.v / w.fp * FP * dt / scale;   // espera en el paso de peatones con los coches en verde                    // velocidad en pantalla: crece y encoge con el tamaño de la persona
         if (w.s >= w.path.total || w.age > w.life) { remove(i); continue; }
         place(w);
         w.h += clamp(angDiff(w.th, w.h), -5 * dt, 5 * dt);      // gira suave en las esquinas

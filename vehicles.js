@@ -447,6 +447,7 @@
     return null;
   }
   window.roadRoute = roadRoute;     // lo usa también people.js (peatones por las aceras)
+  window.roadGraph = roadGraph;     // lo usa crossings.js (semáforos y pasos de peatones en los cruces)
 
   function pathRoute(Lc, roadsOnly) {
     const rr = roadRoute();
@@ -517,7 +518,13 @@
   }
 
   // Frenar si hay alguien justo delante (mismo sentido, mismo carril). Devuelve la velocidad máxima permitida.
+  // Velocidad máxima permitida: lo más restrictivo entre el coche de delante y un semáforo en rojo (crossings.js)
   function followLimit(v, scale) {
+    const a = followLimit0(v, scale), rem = window.Xings ? window.Xings.stopRem(v, scale) : Infinity;
+    if (rem === Infinity) return a;
+    return Math.min(a, rem <= 1 ? 0 : Math.sqrt(2 * 60 * rem) / SPD + 2);
+  }
+  function followLimit0(v, scale) {
     const ch = Math.cos(v.h), sh = Math.sin(v.h);
     let best = null, bf = 1e9;
     for (const u of vehicles) {

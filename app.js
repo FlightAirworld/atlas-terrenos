@@ -48,6 +48,13 @@ const MAP_STYLE = {
       filter: ['all', ['!=', ['get', 'brunnel'], 'tunnel'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service']]]],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': ['match', ['get', 'class'], 'motorway', '#f6c76b', 'trunk', '#f6c76b', 'primary', '#fbe29a', '#ffffff'], 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.6, 16, 11, 19, 50] } },
+    // Vías del tren (solo líneas principales, sin túneles ni apartaderos): trains.js hace circular el tren por ellas
+    { id: 'st-rail-bed', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
+      filter: ['all', ['==', ['get', 'class'], 'rail'], ['!=', ['get', 'brunnel'], 'tunnel'], ['!', ['has', 'service']]],
+      paint: { 'line-color': '#8b8478', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.8, 16, 6, 19, 26] } },
+    { id: 'st-rail', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
+      filter: ['all', ['==', ['get', 'class'], 'rail'], ['!=', ['get', 'brunnel'], 'tunnel'], ['!', ['has', 'service']]],
+      paint: { 'line-color': '#f4f1ea', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.4, 16, 3.4, 19, 15], 'line-dasharray': [1, 1.3] } },
     { id: 'sat', type: 'raster', source: 'sat', layout: { visibility: baseMode === 'satelite' ? 'visible' : 'none' } },
     // Capa invisible: solo sirve para consultar la geometría de las calles (coches). Apagada hasta que se necesita.
     {
