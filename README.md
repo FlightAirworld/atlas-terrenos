@@ -133,3 +133,10 @@ Racha de 7 días: premios de cada día en `DAILY_REWARDS` (7 números separados 
   y despega hacia el oeste (ciclo de ~85 s, con sonido de reactor y las luces de la pista parpadeando). El tamaño del avión sigue al de la pista a cualquier zoom.
 - Para probarlo en cualquier sitio, en la consola: `spawnAirport()` (pone un aeropuerto en el centro de la pantalla, sin mirar si hay calles debajo, y hace aterrizar un avión).
   Con un aeropuerto a la vista también vale `spawnAircraft('airliner')`.
+
+## Plazas de las rotondas (`rotondas.js`)
+
+- Las glorietas de las calles reales se detectan como anillos de calle (una calle cerrada, o varias unidas por los extremos) de ~5 a ~85 m de radio, bastante redondos. Las minirrotondas sin isleta no se tocan.
+- En la isleta central se dibuja, al azar, una de estas decoraciones: **fuente con agua animada, estatua sobre pedestal, arboleda, palmeras, jardín de flores o monumento con setos** (`BUILD` en `rotondas.js`: para añadir una nueva, crea otra función ahí).
+- "Al azar" sale de un hash de la posición del centro: cada rotonda tiene siempre la misma para todos los jugadores.
+- Solo se pintan las 10 más cercanas al centro de la pantalla (6 en móvil) y con zoom >= 16,5. Cubre solo la isleta: los coches siguen rodeándola.
