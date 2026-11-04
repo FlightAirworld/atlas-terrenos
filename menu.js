@@ -3,7 +3,7 @@
 (function () {
   const box = document.getElementById('map-controls'), btn = document.getElementById('menu-btn'), list = document.getElementById('menu-items');
   if (!box || !btn || !list) return;
-  const KEEP_OPEN = ['sound-btn', 'daynight-btn', 'view-btn', 'base-btn'];   // interruptores: se puede tocar varios seguidos
+  const KEEP_OPEN = ['sound-btn', 'view-btn', 'base-btn'];   // interruptores: se puede tocar varios seguidos
 
   function set(open) {
     box.classList.toggle('open', open);
