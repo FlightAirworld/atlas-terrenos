@@ -51,7 +51,7 @@
     }
     #map-controls button { width:50px !important; height:50px !important; min-width:0 !important; padding:0 !important; border-radius:50% !important; font-size:23px !important; }
     #map-controls button.hidden { display:none !important; }
-    #credit-pill { position:fixed; top:12px; left:60px; z-index:1000; height:40px !important; padding:0 14px !important; border-radius:999px !important; font-size:16px !important; font-weight:700; gap:6px; }
+    #credit-pill { position:fixed; top:12px; left:10px; z-index:1000; height:40px !important; padding:0 14px !important; border-radius:999px !important; font-size:16px !important; font-weight:700; gap:6px; }
     #map-controls button::before, #map-controls button::after, #credit-pill::before, #credit-pill::after { content:none !important; display:none !important; }
     @keyframes avatarbounce { 0%,100% {transform:translateY(0) rotate(0)} 25% {transform:translateY(-5px) rotate(-8deg)} 50% {transform:translateY(0) rotate(0)} 75% {transform:translateY(-3px) rotate(8deg)} }
     @media (prefers-reduced-motion: reduce) { #p-avatar {animation:none!important} }
@@ -127,6 +127,26 @@
     #map-controls.open #menu-items { display:flex; }
     #map-controls #menu-items button { width:auto !important; height:44px !important; padding:0 16px 0 12px !important; border-radius:99px !important; font-size:20px !important; display:flex !important; align-items:center; gap:8px; white-space:nowrap; }
     #map-controls #menu-items button.hidden { display:none !important; }
+
+    /* Extras: un solo desplegable arriba, en línea con Menú (ver menu.js). Agrupa en línea / invita / mis terrenos / regalo diario */
+    #top-row { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
+    #extras-wrap { position:relative; }
+    #map-controls #extras-btn { position:relative; width:auto !important; height:46px !important; padding:0 14px !important; border-radius:99px !important; font-size:15px !important; font-weight:800 !important; display:flex !important; align-items:center; gap:6px; white-space:nowrap; }
+    #extras-dot { position:absolute; top:1px; right:1px; width:13px; height:13px; border-radius:50%; background:#e63946; border:2px solid #fff; animation:dailypulse 1.4s infinite; }
+    #extras-dot.hidden { display:none; }
+    #extras-items { display:none; position:absolute; top:calc(100% + 8px); right:0; flex-direction:column; gap:8px; align-items:flex-end; }
+    #extras-wrap.open #extras-items { display:flex; }
+    #map-controls #extras-items button { position:relative; left:auto; bottom:auto; width:auto !important; height:44px !important; padding:0 16px 0 12px !important; border-radius:99px !important; font-size:20px !important; display:flex !important; flex-direction:row; align-items:center; gap:8px; white-space:nowrap; }
+    #map-controls #extras-items button.hidden { display:none !important; }
+    #map-controls #extras-items button::after { content:attr(data-label) !important; display:inline !important; font-size:14px; font-weight:700; }
+    #map-controls #extras-items #online-btn::after { content:none !important; display:none !important; }
+    #map-controls #extras-items #online-btn i { position:static; flex:none; width:11px; height:11px; }
+    #map-controls #extras-items #online-btn b { font-size:16px; font-weight:800; }
+    #map-controls #extras-items #online-btn small { font-size:14px; font-weight:700; color:var(--fg); }
+    #online-tip { display:none !important; }
+    /* La píldora de créditos deja sitio a Extras + Menú en la misma fila */
+    #credit-pill { max-width:calc(100vw - 232px); overflow:hidden; white-space:nowrap; }
+    @media (max-width:420px) { #credit-pill { font-size:14px !important; padding:0 10px !important; gap:4px !important; } #map-controls #extras-btn { padding:0 12px !important; font-size:14px !important; } }
     #map-controls #menu-items button::after { content:attr(data-label) !important; display:inline !important; font-size:14px; font-weight:700; }
   </style>
 </head>
@@ -158,16 +178,23 @@
   </div>
   <div id="map" aria-label="Mapa mundial de terrenos"></div>
 
-  <button id="online-btn" type="button" title="Jugadores en línea" aria-label="Jugadores en línea">
-    <i></i><b id="online-n">–</b><small>en línea</small>
-  </button>
   <div id="online-tip" role="status" aria-live="polite"></div>
-  <button id="invite-btn" class="hidden" type="button" title="Invita y gana" aria-label="Invita y gana">👫</button>
 
   <span id="stats" class="stats" style="display:none" aria-live="polite"></span>
 
   <div id="map-controls">
-    <button id="menu-btn" type="button" aria-expanded="false" aria-controls="menu-items">☰ Menú</button>
+    <div id="top-row">
+      <div id="extras-wrap">
+        <button id="extras-btn" type="button" aria-expanded="false" aria-controls="extras-items">⭐ Extras<span id="extras-dot" class="hidden"></span></button>
+        <div id="extras-items">
+          <button id="online-btn" type="button" title="Jugadores en línea" aria-label="Jugadores en línea"><i></i><b id="online-n">–</b><small>en línea</small></button>
+          <button id="invite-btn" class="hidden" data-label="Invita y gana" type="button" title="Invita y gana" aria-label="Invita y gana">👫</button>
+          <button id="mine-btn" class="hidden" data-label="Mis terrenos" type="button" title="Mis terrenos" aria-label="Mis terrenos">🏠</button>
+          <button id="daily-btn" data-label="Regalo diario" type="button" title="Regalo diario" aria-label="Regalo diario">🎁<span id="daily-dot" class="hidden"></span></button>
+        </div>
+      </div>
+      <button id="menu-btn" type="button" aria-expanded="false" aria-controls="menu-items">☰ Menú</button>
+    </div>
     <div id="menu-items">
     <button id="locate" data-label="Mi ubicación" type="button" title="Ir a mi ubicación" aria-label="Ir a mi ubicación">📍</button>
     <button id="search-btn" data-label="Buscar" type="button" title="Buscar un lugar" aria-label="Buscar un lugar">
@@ -259,7 +286,6 @@
     <p id="msg" class="msg" aria-live="polite"></p>
   </aside>
 
-  <button id="daily-btn" type="button" title="Regalo diario" aria-label="Regalo diario">🎁<span id="daily-dot" class="hidden"></span></button>
 
   <div id="daily" class="modal hidden" role="dialog"
     aria-modal="true" aria-labelledby="daily-title">
@@ -330,7 +356,6 @@
     </div>
   </div>
 
-  <button id="mine-btn" class="hidden" type="button" title="Mis terrenos" aria-label="Mis terrenos">🏠</button>
 
   <div id="mine" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mine-title">
     <div class="modal-card">
