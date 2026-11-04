@@ -15,9 +15,9 @@
 // y spawnAirport()   (coloca un aeropuerto de prueba en el centro de la pantalla, en cualquier sitio, y hace aterrizar un avión)
 (function () {
   if (typeof map === 'undefined' || !map) return;
-  const KEY = 'vehiclesOn', MIN_ZOOM = 16, REF_Z = 17, MAX_TAXIS = 3;
+  const KEY = 'vehiclesOn', MIN_ZOOM = 16, REF_Z = 17, MAX_TAXIS = 4;
   const SMALL = Math.min(innerWidth, innerHeight) < 600;
-  const MAX_TRAFFIC = SMALL ? 11 : 17;                      // coches, camiones, autobuses, motos, bicis y patinetes a la vez
+  const MAX_TRAFFIC = SMALL ? 22 : 34;                      // coches, camiones, autobuses, motos, bicis y patinetes a la vez
   const MIX = [['car', 0.46], ['truck', 0.14], ['bus', 0.1], ['moto', 0.12], ['bike', 0.1], ['scooter', 0.08]];  // reparto del tráfico
   const PERIOD = { police: 2 * 60e3, ambulance: 3 * 60e3, fire: 5 * 60e3 };   // cada cuánto sale cada emergencia
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1235,7 +1235,7 @@
         const n = trafficCount();
         let ok = true;
         if (z >= MIN_ZOOM && n < (raining ? Math.round(MAX_TRAFFIC * 0.7) : MAX_TRAFFIC)) ok = !!spawn(pickTraffic(), true);
-        nextTraffic = !ok ? 1 : (n < MAX_TRAFFIC * 0.5 ? rnd(0.4, 0.9) : rnd(1.2, 2.6));
+        nextTraffic = !ok ? 1 : (n < MAX_TRAFFIC * 0.7 ? rnd(0.3, 0.7) : rnd(0.7, 1.5));
       }
 
       for (let i = vehicles.length - 1; i >= 0; i--) {
