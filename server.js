@@ -1635,7 +1635,7 @@ http.createServer(async (req, res) => {
   };
   if (url.pathname.startsWith('/api/')) {
     const origin = req.headers.origin;
-    if (origin && CORS_ORIGINS.includes(origin)) {   // también vale para la conexión larga de /api/online
+    if (origin && (CORS_ORIGINS.includes(origin) || /^https:\/\/([a-z0-9-]+\.)*itch\.zone$/.test(origin))) {   // también vale para la conexión larga de /api/online; itch.zone = juego dentro de itch.io
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Vary', 'Origin');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Auth-Token');
