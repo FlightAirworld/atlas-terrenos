@@ -8,8 +8,11 @@
 //  - También circulan motos, bicicletas (con pedaleo) y patinetes; las bicis y patinetes van por el borde de la calzada.
 //  - Un avión cruza el cielo cada 5 min y un helicóptero llega cada 3 min, aterriza en un HELIPUERTO del mapa, para el rotor, arranca y se va (con sonido).
 //    Los helipuertos se reparten por el mundo en huecos libres (ni calle, ni edificio, ni agua, ni parcela comprada).
+//  - AEROPUERTO: en las afueras y descampados (recintos libres de calles y edificios) hay aeropuertos pequeños con pista, calles de rodaje, plataforma,
+//    terminal, torre y hangares. Cada ~100 s un avión aterriza, rueda hasta la terminal, espera, retrocede, rueda a la cabecera y despega (con sonido).
 // Para probar sin esperar, en la consola: spawnVehicle('car' | 'truck' | 'bus' | 'moto' | 'bike' | 'scooter' | 'police' | 'fire' | 'ambulance' | 'taxi')
-// y spawnAircraft('plane' | 'heli')   (el helicóptero necesita un helipuerto a la vista; con zoom >= 16)
+// spawnAircraft('plane' | 'heli' | 'airliner')   (helicóptero y avión de línea necesitan un helipuerto / aeropuerto a la vista)
+// y spawnAirport()   (coloca un aeropuerto de prueba en el centro de la pantalla, en cualquier sitio, y hace aterrizar un avión)
 (function () {
   if (typeof map === 'undefined' || !map) return;
   const KEY = 'vehiclesOn', MIN_ZOOM = 16, REF_Z = 17, MAX_TAXIS = 3;
@@ -60,7 +63,14 @@
     .hl { background: transparent !important; border: 0 !important; pointer-events: none !important; }
     .hl-in, .hl-rot { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform-origin: 60px 22px; }
     .hl-rot svg { position: absolute; left: 0; top: 0; overflow: visible; }
-    .hl-dust { position: absolute; left: 60px; top: 22px; width: 130px; height: 130px; margin: -65px 0 0 -65px; border-radius: 50%; opacity: 0; background: radial-gradient(circle, rgba(214,196,160,.55), rgba(214,196,160,0) 68%); }`;
+    .hl-dust { position: absolute; left: 60px; top: 22px; width: 130px; height: 130px; margin: -65px 0 0 -65px; border-radius: 50%; opacity: 0; background: radial-gradient(circle, rgba(214,196,160,.55), rgba(214,196,160,0) 68%); }
+    /* Aeropuerto: recinto con la pista, y avión que aterriza y despega */
+    .ap, .al { background: transparent !important; border: 0 !important; pointer-events: none !important; }
+    .ap-in, .al-in, .al-rot { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+    .ap-in svg, .al-rot svg { position: absolute; left: 0; top: 0; overflow: visible; }
+    .ap-l { fill: #c9ced6; }
+    .ap.on .ap-l { fill: #ffe27a; animation: padBlink .7s steps(1) infinite; }
+    @media (prefers-reduced-motion: reduce) { .ap.on .ap-l { animation: none; } }`;
   document.head.appendChild(st);
   map.createPane('vehicles'); map.getPane('vehicles').style.zIndex = 580;
   map.createPane('emergency'); map.getPane('emergency').style.zIndex = 595;
@@ -748,7 +758,8 @@
     } catch (e) {}
     return false;
   }
-  const padUsable = e => e.state === 'ok' && !padOwned(e.ll);
+  const inAirport = ll => { let r = false; airports.forEach(a => { if (r || !a.ll || (a.state !== 'ok')) return; const cl = Math.max(0.1, Math.cos(a.ll.lat * Math.PI / 180)); if (Math.abs(ll.lng - a.ll.lng) * 111320 * cl < AP_W / 2 + 12 && Math.abs(ll.lat - a.ll.lat) * 111320 < AP_H / 2 + 12) r = true; }); return r; };
+  const padUsable = e => e.state === 'ok' && !padOwned(e.ll) && !inAirport(e.ll);
   const padSVG = `
     <svg viewBox="0 0 100 100" preserveAspectRatio="none">
       <rect x="8" y="9" width="92" height="92" rx="10" fill="rgba(0,0,0,.25)"/>
@@ -828,6 +839,258 @@
   }
   const padLights = (e, on) => { if (e && e.el) e.el.classList.toggle('on', !!on); };
   function clearPads() { pads.forEach(padHide); pads.clear(); }
+
+  // ---------- Aeropuerto ----------
+  // Igual que los helipuertos, se reparten por el mundo de forma fija (misma posición para todos los jugadores): el mundo se divide en celdas de
+  // ~1,1 km y en algo menos de la mitad hay un aeropuerto pequeño (pista de 300 m, calles de rodaje, plataforma, terminal, torre y hangares).
+  // Dentro de la celda se prueban hasta 8 sitios, siempre en el mismo orden, y vale el primero libre (sin calle, edificio, agua ni parcela comprada
+  // en todo su recinto): por eso salen en las afueras y descampados, no en el centro de una ciudad. Con zoom >= 14,5.
+  // Los aviones aterrizan en la pista (de oeste a este), ruedan hasta la plataforma, esperan, retroceden, rodan hasta la cabecera y despegan hacia el oeste.
+  // Coordenadas del recinto en metros con el origen en el centro de la pista (x al este, y al sur).
+  const AP_CELL = 0.01, AP_RATE = 0.45, AP_TRIES = 8, AP_MIN_Z = 14.5;
+  const AP_X0 = -170, AP_Y0 = -26, AP_W = 340, AP_H = 130, AP_CY = AP_Y0 + AP_H / 2;     // recinto
+  const AP_PLANE_M = 26, AP_EVERY = 100e3, AP_VAPP = 32, AP_VTAXI = 10, AP_ACC = 2.8;
+  const airports = new Map();     // 'ix:iy' -> { ix, iy, state: 'pending' | 'ok' | 'none', k, ll, mk, el, inner, forced }
+  const apCand = (e, k) => ({ lat: (e.iy + 0.1 + 0.8 * unit3(e.ix, e.iy, 30 + 2 * k)) * AP_CELL - 90, lng: (e.ix + 0.1 + 0.8 * unit3(e.ix, e.iy, 31 + 2 * k)) * AP_CELL - 180 });
+
+  // Recorridos de los aviones (en metros): se redondean las esquinas con curvas de Bézier
+  function apRound(V, R) {
+    const out = [V[0]];
+    for (let i = 1; i < V.length - 1; i++) {
+      const a = V[i - 1], b = V[i], c = V[i + 1], d1 = Math.hypot(b[0] - a[0], b[1] - a[1]), d2 = Math.hypot(c[0] - b[0], c[1] - b[1]);
+      const cut = Math.min(R[i] || 12, d1 * 0.45, d2 * 0.45);
+      const p1 = [b[0] + (a[0] - b[0]) / d1 * cut, b[1] + (a[1] - b[1]) / d1 * cut], p2 = [b[0] + (c[0] - b[0]) / d2 * cut, b[1] + (c[1] - b[1]) / d2 * cut];
+      for (let k = 0; k <= 8; k++) { const t = k / 8, u = 1 - t; out.push([u * u * p1[0] + 2 * u * t * b[0] + t * t * p2[0], u * u * p1[1] + 2 * u * t * b[1] + t * t * p2[1]]); }
+    }
+    out.push(V[V.length - 1]);
+    const cum = [0];
+    for (let i = 1; i < out.length; i++) cum.push(cum[i - 1] + Math.hypot(out[i][0] - out[i - 1][0], out[i][1] - out[i - 1][1]));
+    return { pts: out, cum, total: cum[cum.length - 1] };
+  }
+  function apAt(P, s) {
+    s = clamp(s, 0, P.total);
+    let lo = 0, hi = P.cum.length - 2;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (P.cum[m] <= s) lo = m; else hi = m - 1; }
+    const a = P.pts[lo], b = P.pts[lo + 1], l = (P.cum[lo + 1] - P.cum[lo]) || 1, t = (s - P.cum[lo]) / l;
+    return { x: a[0] + (b[0] - a[0]) * t, y: a[1] + (b[1] - a[1]) * t, h: Math.atan2(b[1] - a[1], b[0] - a[0]) };
+  }
+  const AP_IN = apRound([[-530, 0], [-55, 0], [-55, 46], [15, 46], [15, 70]], [0, 14, 12, 12, 0]);      // final, pista, calle de salida, plataforma y puesto
+  const AP_OUT = apRound([[15, 52], [45, 52], [45, 0], [-600, 0]], [0, 12, 14, 0]);                      // puesto -> cabecera -> despegue hacia el oeste
+  const apS = (P, test) => { for (let i = 0; i < P.pts.length; i++) if (test(P.pts[i])) return P.cum[i]; return P.total; };
+  const AP_S_TD = 530 - 138;                                      // toma de contacto (x = -138 m: la pista empieza en -150)
+  const AP_S_RUN = apS(AP_OUT, p => p[1] <= 0.001);               // ya está en la pista (x = 31): empieza a acelerar
+  const AP_S_LO = AP_S_RUN + 31 + 130;                            // despega al llegar a x = -130 m
+  const apPd = P => P.pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
+  const apPlaneG = (x, y, deg, acc) => `<g transform="translate(${x} ${y}) rotate(${deg}) translate(${-AP_PLANE_M / 2} ${-AP_PLANE_M * 0.375})">${planeSVG(acc, AP_PLANE_M)}</g>`;
+
+  const AP_SVG = (() => {
+    let s = `<svg viewBox="${AP_X0} ${AP_Y0} ${AP_W} ${AP_H}" preserveAspectRatio="none">`;
+    s += `<rect x="${AP_X0 + 2}" y="${AP_Y0 + 2}" width="${AP_W - 4}" height="${AP_H - 4}" rx="9" fill="#c6e0a0" stroke="#a5c47e" stroke-width="1.2"/>`;         // terreno del aeródromo
+    s += `<rect x="${AP_X0 + 7}" y="${AP_Y0 + 7}" width="${AP_W - 14}" height="${AP_H - 14}" rx="6" fill="none" stroke="#7d8590" stroke-width=".7" stroke-dasharray="2.2 1.8"/>`;   // valla
+    [[-160, -18, 4], [-153, -21, 3], [-162, 90, 5], [-154, 96, 3.5], [158, -14, 4], [162, 95, 4.5], [150, 99, 3]].forEach(t => { s += `<circle cx="${t[0] + 1}" cy="${t[1] + 1.2}" r="${t[2]}" fill="rgba(0,0,0,.18)"/><circle cx="${t[0]}" cy="${t[1]}" r="${t[2]}" fill="#6fb35e"/><circle cx="${t[0] - 1}" cy="${t[1] - 1}" r="${t[2] * 0.5}" fill="#8cca76"/>`; });
+    // plataforma de hormigón (con juntas) y calles de rodaje
+    s += `<rect x="-76" y="36" width="231" height="46" rx="3" fill="#aab0b8" stroke="#8a9099" stroke-width="1"/>`;
+    let j = '';
+    for (let x = -64; x < 155; x += 12) j += `M${x} 36V82`;
+    for (let y = 47; y < 82; y += 11) j += `M-76 ${y}H155`;
+    s += `<path d="${j}" stroke="#8d939b" stroke-width=".35" opacity=".5" fill="none"/>`;
+    s += `<rect x="-61" y="14" width="12" height="24" fill="#565c66"/><rect x="39" y="14" width="12" height="24" fill="#565c66"/>`;
+    // pista
+    s += `<rect x="-150" y="-16" width="300" height="32" rx="3" fill="#464b54" stroke="#2f343b" stroke-width="1"/>`;
+    s += `<path d="M-146 -13.6H146M-146 13.6H146" stroke="#f1f3f5" stroke-width="1" fill="none"/>`;
+    s += `<path d="M-122 0H122" stroke="#f1f3f5" stroke-width="1.3" stroke-dasharray="11 8" fill="none"/>`;
+    for (let i = 0; i < 8; i++) { const y = -12.2 + i * 3.5; s += `<rect x="-147" y="${y}" width="10" height="1.7" fill="#f1f3f5"/><rect x="137" y="${y}" width="10" height="1.7" fill="#f1f3f5"/>`; }
+    s += `<text transform="translate(-124 0) rotate(90)" text-anchor="middle" dominant-baseline="central" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="9" fill="#f1f3f5">09</text>`;
+    s += `<text transform="translate(124 0) rotate(-90)" text-anchor="middle" dominant-baseline="central" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="9" fill="#f1f3f5">27</text>`;
+    for (let x = -140; x <= 140; x += 14) s += `<circle class="ap-l" cx="${x}" cy="-17.6" r="1.1"/><circle class="ap-l" cx="${x}" cy="17.6" r="1.1"/>`;
+    // líneas amarillas de rodaje, líneas de espera y puestos de estacionamiento
+    const yl = 'stroke="#f2c200" stroke-width=".9" fill="none"';
+    s += `<path d="${apPd(apRound([[-55, 3], [-55, 46], [15, 46], [15, 70]], [0, 12, 12, 0]))}" ${yl}/><path d="${apPd(apRound([[15, 52], [45, 52], [45, 3]], [0, 12, 0]))}" ${yl}/>`;
+    s += `<path d="M-61 20H-49M-61 21.6H-49M39 20H51M39 21.6H51" stroke="#f2c200" stroke-width=".6" fill="none"/>`;
+    [-62, -36, 15].forEach(x => { s += `<path d="M${x} 56V82" stroke="#f2c200" stroke-width=".6" fill="none" stroke-dasharray="3 2"/>`; });
+    s += apPlaneG(-62, 71, 90, '#d62839') + apPlaneG(-36, 71, 90, '#2a9d8f');                                // aviones aparcados mirando a la terminal
+    // terminal con pasarelas, torre de control y hangares
+    s += `<rect x="-71" y="88" width="120" height="16" rx="2" fill="rgba(0,0,0,.2)"/>`;
+    [-62, -36, 15].forEach(x => { s += `<rect x="${x - 1.6}" y="80" width="3.2" height="8" fill="#9aa3ad" stroke="#7b838d" stroke-width=".4"/>`; });
+    s += `<rect x="-75" y="86" width="120" height="16" rx="2" fill="#e3e7ec" stroke="#98a1ac" stroke-width=".8"/><rect x="-75" y="86" width="120" height="3.4" fill="#79a3c8" opacity=".9"/>`;
+    s += `<path d="M-67 93H37M-67 97H37" stroke="#c4cad2" stroke-width=".6"/><rect x="-24" y="86" width="22" height="3.4" fill="#3d6d99"/>`;
+    s += `<circle cx="66" cy="96" r="7.6" fill="rgba(0,0,0,.2)"/><circle cx="64" cy="94" r="3.6" fill="#cfd4db" stroke="#98a1ac" stroke-width=".5"/><circle cx="64" cy="94" r="6.2" fill="#5b86ad" stroke="#3d5f80" stroke-width=".8"/><circle cx="64" cy="94" r="4" fill="#93bde0"/><path d="M61.4 92.2A3.4 3.4 0 0 1 65 91" stroke="#fff" stroke-width=".8" fill="none" opacity=".8"/>`;
+    [[92, 40], [92, 62]].forEach(h => {
+      s += `<rect x="${h[0] + 2}" y="${h[1] + 2.4}" width="58" height="16" rx="1.5" fill="rgba(0,0,0,.22)"/><rect x="${h[0]}" y="${h[1]}" width="58" height="16" rx="1.5" fill="#c8ced6" stroke="#8f97a1" stroke-width=".8"/>`;
+      let r = ''; for (let x = h[0] + 6; x < h[0] + 58; x += 6) r += `M${x} ${h[1]}V${h[1] + 16}`;
+      s += `<path d="${r}" stroke="#aab1ba" stroke-width=".6"/><rect x="${h[0]}" y="${h[1] + 2}" width="2.4" height="12" fill="#5b6370"/>`;
+    });
+    // manga de viento
+    s += `<g transform="translate(128 -21)"><circle r="1.7" fill="#555"/><path d="M0 0L16 -2.5V2.5Z" fill="#ff7a1a"/><path d="M5.3 -.8V.8M10.6 -1.6V1.6" stroke="#fff" stroke-width="2.4"/></g>`;
+    return s + '</svg>';
+  })();
+
+  const apScale = () => Math.pow(2, map.getZoom() - REF_Z);
+  const apPpm17 = lat => 256 * Math.pow(2, REF_Z) / (40075016.686 * Math.max(0.05, Math.cos(lat * Math.PI / 180)));
+  function apShow(e) {
+    if (e.mk) return;
+    const k = apPpm17(e.ll.lat), Wp = AP_W * k, Hp = AP_H * k;
+    const icon = L.divIcon({ className: 'ap', iconSize: [Wp, Hp], iconAnchor: [Wp / 2, Hp / 2], html: `<div class="ap-in">${AP_SVG}</div>` });
+    e.mk = L.marker(e.ll, { icon, pane: 'pads', interactive: false, keyboard: false }).addTo(map);
+    e.el = e.mk.getElement();
+    e.inner = e.el && e.el.firstChild;
+    if (e.inner) e.inner.style.scale = apScale().toFixed(4);
+  }
+  function apHide(e) { if (e.mk) { map.removeLayer(e.mk); e.mk = e.el = e.inner = null; } }
+  map.on('zoom', () => { const k = apScale().toFixed(4); airports.forEach(e => { if (e.inner) e.inner.style.scale = k; }); });
+
+  // ¿Hay una parcela comprada dentro del recinto? (entonces ahí hay una casa y el aeropuerto desaparece)
+  function apOwned(e) {
+    try {
+      if (typeof drawn === 'undefined' || typeof cfg === 'undefined' || !cfg || !cfg.size) return false;
+      const sz = cfg.size, cl = Math.max(0.1, Math.cos(e.ll.lat * Math.PI / 180));
+      for (let dx = -AP_W / 2; dx <= AP_W / 2 + 1; dx += 45) for (let dy = -AP_H / 2; dy <= AP_H / 2 + 1; dy += 45) {
+        if (drawn.has(Math.floor((e.ll.lng + dx / (111320 * cl) + 180) / sz) + ':' + Math.floor((e.ll.lat + dy / 111320 + 90) / sz))) return true;
+      }
+    } catch (err) {}
+    return false;
+  }
+  const apUsable = e => e.state === 'ok' && (e.forced || !apOwned(e));
+
+  // ¿Está libre el sitio k de la celda? true / false, o null si ahora no se puede saber (recinto no entero a la vista o mapa sin cargar)
+  function apCheck(e, k) {
+    const gl = map.gl, c = apCand(e, k), size = map.getSize(), ppm = map.pxPerM(), p = map.latLngToContainerPoint(c);
+    const hw = (AP_W / 2 + 6) * ppm, hh = (AP_H / 2 + 6) * ppm;
+    if (p.x - hw < 0 || p.y - hh < 0 || p.x + hw > size.x || p.y + hh > size.y || !gl.areTilesLoaded()) return null;
+    try {
+      const layers = PAD_LAYERS.filter(l => gl.getLayer(l));
+      if (!layers.length) return null;
+      return gl.queryRenderedFeatures([[p.x - hw, p.y - hh], [p.x + hw, p.y + hh]], { layers }).length === 0;
+    } catch (err) { return null; }
+  }
+  let apT = 0;
+  function airportsTick(dt, z) {
+    apT -= dt;
+    if (apT > 0) return;
+    apT = 1;
+    if (z < AP_MIN_Z - 0.3) { airports.forEach(apHide); return; }
+    const b = map.getBounds(), q = b.pad(0.1), keep = b.pad(0.6);
+    const x0 = Math.floor((q.getWest() + 180) / AP_CELL), x1 = Math.floor((q.getEast() + 180) / AP_CELL);
+    const y0 = Math.floor((q.getSouth() + 90) / AP_CELL), y1 = Math.floor((q.getNorth() + 90) / AP_CELL);
+    let budget = 2;
+    for (let ix = x0; ix <= x1; ix++) for (let iy = y0; iy <= y1; iy++) {
+      if (unit3(ix, iy, 2) >= AP_RATE) continue;
+      const key = ix + ':' + iy;
+      let e = airports.get(key);
+      if (!e) airports.set(key, e = { ix, iy, state: 'pending', k: 0, ll: null, mk: null, el: null, inner: null, forced: false });
+      while (e.state === 'pending' && budget > 0) {          // en orden: el sitio k solo cuenta si los anteriores ya estaban descartados
+        const r = apCheck(e, e.k);
+        if (r === null) break;
+        budget--;
+        if (r) { e.state = 'ok'; e.ll = apCand(e, e.k); }
+        else if (++e.k >= AP_TRIES) e.state = 'none';
+      }
+      if (e.state === 'ok') { if (apUsable(e)) apShow(e); else apHide(e); }
+    }
+    airports.forEach(e => { if (e.forced && keep.contains(e.ll)) apShow(e); });
+    airports.forEach(e => { if (e.state === 'ok' && !keep.contains(e.ll)) apHide(e); });
+    if (airports.size > 600) airports.forEach((e, key) => { if (e.state === 'none') airports.delete(key); });
+  }
+  // El aeropuerto usable más cercano al centro de la pantalla (con el centro del recinto a la vista)
+  function pickAirport() {
+    const size = map.getSize(), cx = size.x / 2, cy = size.y / 2;
+    let best = null, bd = 1e9;
+    airports.forEach(e => {
+      if (!apUsable(e) || !e.mk) return;
+      const p = map.latLngToContainerPoint(e.ll);
+      if (p.x < size.x * 0.05 || p.x > size.x * 0.95 || p.y < size.y * 0.08 || p.y > size.y * 0.92) return;
+      const d = Math.hypot(p.x - cx, p.y - cy);
+      if (d < bd) { bd = d; best = e; }
+    });
+    return best;
+  }
+  const apLights = (e, on) => { if (e && e.el) e.el.classList.toggle('on', !!on); };
+  function clearAirports() { airports.forEach(apHide); airports.clear(); }
+  // Para probar en cualquier sitio (también en una ciudad): coloca un aeropuerto en el centro de la pantalla, sin mirar si hay calles debajo
+  function forceAirport() {
+    const ll = map.getCenter(), e = { ix: 0, iy: 0, state: 'ok', k: 0, ll: { lat: ll.lat, lng: ll.lng }, mk: null, el: null, inner: null, forced: true };
+    airports.forEach((o, key) => { if (o.forced) { apHide(o); airports.delete(key); } });
+    airports.set('forced:' + Date.now(), e);
+    apShow(e);
+    return e;
+  }
+
+  // ---------- Avión de línea: aterriza, rueda hasta la plataforma, espera, retrocede, rueda a la cabecera y despega ----------
+  const airliners = [];
+  const apWorld = (e, x, y) => { const k = apPpm17(e.ll.lat), c = e.c0 || (e.c0 = map.project(e.ll, REF_Z)); return { x: c.x + x * k, y: c.y + (y - AP_CY) * k }; };
+  function spawnAirliner(forced) {
+    const e = pickAirport();
+    if (!e) return null;
+    const acc = pick(['#1d6fb8', '#d62839', '#2a9d8f', '#f4a261', '#7b4fc9']);
+    const icon = L.divIcon({ className: 'al', iconSize: [160, 120], iconAnchor: [80, 60], html: `<div class="al-in"><div class="al-rot">${planeSVG(acc, 160)}</div></div>` });
+    const w0 = apWorld(e, AP_IN.pts[0][0], AP_IN.pts[0][1]);
+    const mk = L.marker(map.unproject(w0, REF_Z), { icon, pane: 'emergency', interactive: false, keyboard: false }).addTo(map), el = mk.getElement();
+    const A = { e, mk, wrap: el && el.querySelector('.al-in'), rot: el && el.querySelector('.al-rot'), state: 'in', s: 0, v: AP_VAPP, h: 0, t: 0, age: 0, pb: 0, snd: planeSound(), sndK: 'in', gone: false };
+    apLights(e, true);
+    airliners.push(A);
+    return A;
+  }
+  function removeAirliner(i) { const A = airliners[i]; apLights(A.e, false); killSnd(A.snd); map.removeLayer(A.mk); airliners.splice(i, 1); }
+  function updateAirliners(dt, scale) {
+    if (!airliners.length) return;
+    const size = map.getSize(), cx = size.x / 2, cy = size.y / 2, half = Math.hypot(cx, cy), ppm = map.pxPerM();
+    for (let i = airliners.length - 1; i >= 0; i--) {
+      const A = airliners[i], e = A.e;
+      if (!e.mk && !e.forced) { removeAirliner(i); continue; }   // el aeropuerto ha desaparecido (alguien compró una parcela)
+      A.t += dt; A.age += dt;
+      let alt = 0, fade = 1, px = 0, py = 0, th = A.h, su = null;
+      if (A.state === 'in') {
+        const rem = AP_IN.total - A.s;
+        let tgt = A.s < AP_S_TD ? AP_VAPP : Math.max(AP_VTAXI, Math.sqrt(Math.max(0, AP_VAPP * AP_VAPP - 2 * 6.8 * (A.s - AP_S_TD))));
+        if (rem < 45) tgt = Math.min(tgt, Math.sqrt(2 * 2.4 * rem) + 0.5);
+        A.v = approach(A.v, tgt, (tgt > A.v ? 4 : 9) * dt);
+        A.s = Math.min(AP_IN.total, A.s + A.v * dt);
+        const p = apAt(AP_IN, A.s); px = p.x; py = p.y; th = p.h;
+        alt = A.s < AP_S_TD ? Math.pow(clamp((AP_S_TD - A.s) / 330, 0, 1), 1.2) : 0;
+        fade = Math.min(1, A.age / 2);
+        su = clamp(A.s / (AP_S_TD + 130), 0, 1);
+        if (A.s > AP_S_TD + 130 && A.snd) { killSnd(A.snd); A.snd = null; }
+        if (rem <= 0.6) { A.state = 'park'; A.t = 0; A.v = 0; }
+        A.h += clamp(angDiff(th, A.h), -2.2 * dt, 2.2 * dt);
+      } else if (A.state === 'park') {
+        const p = apAt(AP_IN, AP_IN.total); px = p.x; py = p.y;
+        if (A.t > 14) { A.state = 'push'; A.t = 0; A.pb = 0; }
+      } else if (A.state === 'push') {                    // retrocede empujado por un tractor (sin cambiar de rumbo)
+        A.pb += 2.6 * dt;
+        const p = apAt(AP_IN, AP_IN.total); px = p.x; py = p.y - Math.min(18, A.pb);
+        if (A.pb >= 18) { A.state = 'turn'; A.t = 0; }
+      } else if (A.state === 'turn') {                    // gira en su sitio hacia la calle de rodaje
+        const p = apAt(AP_OUT, 0); px = p.x; py = p.y;
+        A.h += clamp(angDiff(p.h, A.h), -0.75 * dt, 0.75 * dt);
+        if (Math.abs(angDiff(p.h, A.h)) < 0.03) { A.state = 'out'; A.s = 0; A.v = 0; A.t = 0; }
+      } else {
+        const tgt = A.s < AP_S_RUN ? 9 : 46;
+        A.v = approach(A.v, tgt, (A.s < AP_S_RUN ? 2.5 : AP_ACC) * dt);
+        A.s = Math.min(AP_OUT.total, A.s + A.v * dt);
+        const p = apAt(AP_OUT, A.s); px = p.x; py = p.y; th = p.h;
+        A.h += clamp(angDiff(th, A.h), -2.2 * dt, 2.2 * dt);
+        alt = Math.pow(clamp((A.s - AP_S_LO) / 240, 0, 1), 1.3);
+        fade = clamp((AP_OUT.total - A.s) / 120, 0, 1);
+        if (A.s > AP_S_RUN - 12 && !A.snd && A.sndK !== 'out') { A.sndK = 'out'; A.snd = planeSound(); }
+        su = clamp((A.s - AP_S_RUN + 12) / 430, 0, 1);
+        if (A.s >= AP_OUT.total) { removeAirliner(i); continue; }
+      }
+      const w = apWorld(e, px, py);
+      A.mk.setLatLng(map.unproject(w, REF_Z));
+      if (A.rot) A.rot.style.transform = `rotate(${A.h}rad)`;
+      if (A.wrap) {                                       // más alto = más grande y su sombra más lejos; el tamaño sigue al de la pista
+        const f = clamp(ppm * AP_PLANE_M / 160, 0.03, 4) * (1 + 0.45 * alt), z = clamp(ppm / 0.7, 0.3, 1.6);
+        A.wrap.style.transform = `scale(${f.toFixed(4)})`;
+        A.wrap.style.opacity = fade.toFixed(2);
+        A.wrap.style.filter = `drop-shadow(${((2 + 30 * alt) * z / f).toFixed(1)}px ${((3 + 46 * alt) * z / f).toFixed(1)}px ${((1 + 8 * alt) * z / f).toFixed(1)}px rgba(0,0,0,${(0.34 - 0.14 * alt).toFixed(2)}))`;
+      }
+      if (A.snd && ac && su !== null) {
+        const pt = map.latLngToContainerPoint(A.mk.getLatLng());
+        const vol = clamp(1.2 - Math.hypot(pt.x - cx, pt.y - cy) / half, 0.08, 1) * fade * (sfxOn() ? 1 : 0);
+        planeSoundUpdate(A.snd, su, vol, clamp((pt.x - cx) / cx, -1, 1) * 0.85);
+      }
+    }
+  }
 
   // ---------- Helicóptero: llega, aterriza en el helipuerto, para el rotor, lo arranca, despega y se va ----------
   // El tamaño sigue al del helipuerto (que mide PAD_M metros) para que el aparato quepa en él a cualquier zoom.
@@ -914,11 +1177,13 @@
   function clearAircraft() {
     while (planes.length) removePlane(0);
     while (helis.length) removeHeli(0);
+    while (airliners.length) removeAirliner(0);
   }
 
   // ---------- Bucle ----------
   const lastSpawn = { t: 0 };
   const nextAt = { police: Date.now() + PERIOD.police, fire: Date.now() + PERIOD.fire, ambulance: Date.now() + PERIOD.ambulance };
+  let nextAirliner = Date.now() + 20e3;                            // el primer avión de línea sale pronto (si hay un aeropuerto a la vista)
   let nextPlane = Date.now() + 45e3, nextHeli = Date.now() + 100e3;   // el primero sale pronto; luego cada 5 y cada 3 min
   let nextTaxi = rnd(5, 10), nextTraffic = rnd(0.5, 1.5), last = performance.now(), running = false;
   const approach = (cur, target, step) => cur < target ? Math.min(target, cur + step) : Math.max(target, cur - step);
@@ -951,6 +1216,9 @@
       padsTick(dt, z);
       if (now >= nextHeli && !helis.length && z >= HELI_ZOOM) { if (spawnHeli()) nextHeli = now + HELI_EVERY; else nextHeli = now + 1500; }   // sin helipuerto a la vista, vuelve a mirar enseguida
       updateHelis(dt, scale);
+      airportsTick(dt, z);
+      if (now >= nextAirliner && !airliners.length && z >= AP_MIN_Z) { if (spawnAirliner()) nextAirliner = now + AP_EVERY * rnd(0.8, 1.2); else nextAirliner = now + 2000; }   // sin aeropuerto a la vista, vuelve a mirar enseguida
+      updateAirliners(dt, scale);
 
       // Tráfico normal: al principio llegan rápido hasta llenar la calle, luego se mantiene el flujo
       nextTraffic -= dt;
@@ -1044,14 +1312,14 @@
   map.on('zoomend', () => { zooming = false; if (map.getZoom() < MIN_ZOOM) clearAll(); });
   // Con la pestaña oculta no hay animación: se quitan los vehículos para que no se quede la sirena sonando
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { clearAll(); clearAircraft(); pads.forEach(e => padLights(e, false)); }
-    else { last = performance.now(); nextPlane = Math.max(nextPlane, Date.now() + 15e3); nextHeli = Math.max(nextHeli, Date.now() + 20e3); }
+    if (document.hidden) { clearAll(); clearAircraft(); pads.forEach(e => padLights(e, false)); airports.forEach(e => apLights(e, false)); }
+    else { last = performance.now(); nextPlane = Math.max(nextPlane, Date.now() + 15e3); nextHeli = Math.max(nextHeli, Date.now() + 20e3); nextAirliner = Math.max(nextAirliner, Date.now() + 12e3); }
   });
 
   function apply() {
     if (btn) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.style.opacity = on ? '1' : '.55'; btn.title = on ? 'Tráfico, aviones y helicóptero: activados' : 'Tráfico, aviones y helicóptero: desactivados'; }
     if (on && !running) { running = true; last = performance.now(); requestAnimationFrame(frame); }
-    if (!on) { running = false; clearAll(); clearAircraft(); clearPads(); if (map.setRoads) map.setRoads(false, 'v'); }
+    if (!on) { running = false; clearAll(); clearAircraft(); clearPads(); clearAirports(); if (map.setRoads) map.setRoads(false, 'v'); }
   }
   if (btn) btn.onclick = function () {
     on = !on;
@@ -1059,7 +1327,9 @@
     if (on) { initAudio(); nextTaxi = 1; nextTraffic = 0.3; }
     apply();
   };
-  window.spawnAircraft = kind => { if (!on) return false; initAudio(); if (kind === 'plane') return !!spawnPlane(); if (kind === 'heli') return !!spawnHeli(); return false; };
+  window.spawnAircraft = kind => { if (!on) return false; initAudio(); if (kind === 'plane') return !!spawnPlane(); if (kind === 'heli') return !!spawnHeli(); if (kind === 'airliner') return !!spawnAirliner(); return false; };
+  // Aeropuerto de prueba en el centro de la pantalla (sin mirar si hay calles debajo) y un avión que aterriza enseguida
+  window.spawnAirport = () => { if (!on) return false; initAudio(); forceAirport(); setTimeout(spawnAirliner, 1200); return true; };
   window.spawnVehicle = kind => { if (on && KINDS[kind]) { initAudio(); return !!spawn(kind); } return false; };
   apply();
 })();

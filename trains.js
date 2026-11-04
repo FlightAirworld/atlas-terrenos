@@ -119,16 +119,86 @@
   }
 
   // ---------- Dibujo del tren (vista cenital, mirando a la derecha) ----------
-  const COLORS = [['#d62839', '#f4f6f8'], ['#1d6fb8', '#f4f6f8'], ['#2a9d8f', '#f4f6f8'], ['#f5b800', '#2b2f36'], ['#7b4fc9', '#f4f6f8']];
-  function carSVG(L_, W, c, head) {
-    let win = '', doors = '';
-    for (let x = 8; x < L_ - 12; x += 11) win += `<rect x="${x}" y="4.4" width="7" height="${W - 8.8}" rx="1.6" fill="#26364f" opacity=".85"/>`;
-    [L_ * 0.28, L_ * 0.72].forEach(x => { doors += `<rect class="tr-door" x="${x - 3}" y=".3" width="6" height="2.2" rx=".8"/><rect class="tr-door" x="${x - 3}" y="${W - 2.5}" width="6" height="2.2" rx=".8"/>`; });
+  const COLORS = [['#c8102e', '#eef1f4'], ['#1d6fb8', '#eef1f4'], ['#1f8a70', '#eef1f4'], ['#e8a600', '#e9ecef'], ['#6a3fb5', '#eef1f4'], ['#2b3a55', '#dfe4ea']];   // [color de la franja y la cabina, color del techo]
+  let svgN = 0;
+  // Contorno del coche: morro aerodinámico delante (fF > 0) y testero redondeado detrás (fR > 0) en las cabezas de tren
+  function hullPath(L_, W, fF, fR) {
+    const m = W / 2, r = 4.5;
+    let d = fR ? `M${fR} .5` : `M${r + .5} .5`;
+    d += fF ? ` H${L_ - fF} C${L_ - fF * .5} .5 ${L_ - 2} ${W * .17} ${L_ - .5} ${m} C${L_ - 2} ${W * .83} ${L_ - fF * .5} ${W - .5} ${L_ - fF} ${W - .5}`
+            : ` H${L_ - r - .5} Q${L_ - .5} .5 ${L_ - .5} ${r + .5} V${W - r - .5} Q${L_ - .5} ${W - .5} ${L_ - r - .5} ${W - .5}`;
+    d += fR ? ` H${fR} C${fR * .5} ${W - .5} 2 ${W * .83} .5 ${m} C2 ${W * .17} ${fR * .5} .5 ${fR} .5Z`
+            : ` H${r + .5} Q.5 ${W - .5} .5 ${W - r - .5} V${r + .5} Q.5 .5 ${r + .5} .5Z`;
+    return d;
+  }
+  // Vista cenital, mirando a la derecha: techo con sombreado curvo, aires acondicionados, pantógrafo, ventanas y puertas a los lados,
+  // bogies asomando, fuelle entre coches, cabina con parabrisas y faros delante, luces rojas y cabina detrás.
+  function carSVG(L_, W, c, head, last) {
+    const id = 'trn' + (++svgN), m = W / 2, liv = c[0], body = c[1];
+    const fF = head ? 14 : 0, fR = last ? 9 : 0, hull = hullPath(L_, W, fF, fR);
+    const dX = [L_ * 0.28, L_ * 0.72];
+    const xa = fR ? fR + 4 : 5, xb = L_ - (fF ? fF + 3 : 5);
+    let win = '', doors = '', roof = '';
+    for (let x = xa; x + 6.8 <= xb; x += 9.4) {                                      // ventanas (se saltan las puertas)
+      if (dX.some(d => Math.abs(x + 3.4 - d) < 6.4)) continue;
+      win += `<rect x="${x.toFixed(1)}" y="1.25" width="6.8" height="2.7" rx="1" fill="#1b2a42"/><rect x="${(x + .5).toFixed(1)}" y="1.45" width="3.2" height=".7" rx=".35" fill="#fff" opacity=".28"/>`
+           + `<rect x="${x.toFixed(1)}" y="${W - 3.95}" width="6.8" height="2.7" rx="1" fill="#1b2a42"/><rect x="${(x + .5).toFixed(1)}" y="${W - 3.75}" width="3.2" height=".7" rx=".35" fill="#fff" opacity=".28"/>`;
+    }
+    dX.forEach(x => {                                                                   // puertas (se iluminan al abrir: .tr-door)
+      doors += `<rect class="tr-door" x="${x - 3}" y="1" width="6" height="3.4" rx="1"/><rect class="tr-door" x="${x - 3}" y="${W - 4.4}" width="6" height="3.4" rx="1"/>`
+             + `<rect x="${x - .2}" y="1" width=".4" height="3.4" fill="#fff" opacity=".4"/><rect x="${x - .2}" y="${W - 4.4}" width=".4" height="3.4" fill="#fff" opacity=".4"/>`;
+    });
+    const acX = head ? [L_ * 0.14, L_ * 0.66 - 5] : [L_ * 0.16, L_ * 0.58];            // aires acondicionados del techo
+    acX.forEach(x => {
+      if (x < xa - 2 || x + 10 > xb + 2) return;
+      roof += `<rect x="${x.toFixed(1)}" y="${m - 3.2}" width="10" height="6.4" rx="1.3" fill="#c3cad2" stroke="#98a1ab" stroke-width=".5"/>`
+            + `<circle cx="${(x + 3).toFixed(1)}" cy="${m}" r="2" fill="#8f98a3" stroke="#6f7782" stroke-width=".3"/><circle cx="${(x + 7).toFixed(1)}" cy="${m}" r="2" fill="#8f98a3" stroke="#6f7782" stroke-width=".3"/>`
+            + `<path d="M${(x + 1.6).toFixed(1)} ${m}H${(x + 4.4).toFixed(1)}M${(x + 5.6).toFixed(1)} ${m}H${(x + 8.4).toFixed(1)}" stroke="#6f7782" stroke-width=".3"/>`;
+    });
+    let pant = '';
+    if (head) {                                                                         // pantógrafo de la locomotora
+      const px = L_ * 0.4;
+      pant = `<rect x="${(px - 6).toFixed(1)}" y="${m - 2}" width="5" height="4" rx=".8" fill="#2b2f36"/>`
+           + `<path d="M${(px - 3.5).toFixed(1)} ${m - 1.2}L${(px + 1.6).toFixed(1)} ${m - 5}M${(px - 3.5).toFixed(1)} ${m + 1.2}L${(px + 1.6).toFixed(1)} ${m + 5}M${(px - 3.5).toFixed(1)} ${m - 1.2}L${(px + 1.6).toFixed(1)} ${m + 5}M${(px - 3.5).toFixed(1)} ${m + 1.2}L${(px + 1.6).toFixed(1)} ${m - 5}" stroke="#4a4f58" stroke-width=".7" fill="none"/>`
+           + `<rect x="${(px + .7).toFixed(1)}" y="${m - 5.8}" width="1.8" height="11.6" rx=".6" fill="#2b2f36"/>`;
+    }
+    let front = '', rear = '', beam = '', bell = '';
+    if (head) {
+      front = `<path d="M${L_ - 14} ${W * .19}C${L_ - 8} ${W * .19} ${L_ - 5.2} ${W * .3} ${L_ - 3.2} ${m}C${L_ - 5.2} ${W * .7} ${L_ - 8} ${W * .81} ${L_ - 14} ${W * .81}Z" fill="#17233a"/>`
+            + `<path d="M${L_ - 12} ${W * .27}C${L_ - 8.5} ${W * .27} ${L_ - 6.5} ${W * .34} ${L_ - 5} ${m - 1.2}" stroke="#fff" stroke-opacity=".35" stroke-width=".8" fill="none" stroke-linecap="round"/>`
+            + `<line x1="${L_ - 14}" y1="${m}" x2="${L_ - 3.4}" y2="${m}" stroke="#000" stroke-opacity=".25" stroke-width=".5"/>`
+            + `<circle cx="${L_ - 3.4}" cy="5.6" r="3.2" fill="url(#${id}h)"/><circle cx="${L_ - 3.4}" cy="${W - 5.6}" r="3.2" fill="url(#${id}h)"/>`
+            + `<circle cx="${L_ - 3.4}" cy="5.6" r="1.25" fill="#fff6c4"/><circle cx="${L_ - 3.4}" cy="${W - 5.6}" r="1.25" fill="#fff6c4"/>`;
+      beam = `<path d="M${L_ - 1} 4.5L${L_ + 42} -5V${W + 5}L${L_ - 1} ${W - 4.5}Z" fill="url(#${id}b)"/>`;
+    }
+    if (last) {
+      rear = `<path d="M10.5 ${W * .21}C7 ${W * .21} 5 ${W * .31} 3.4 ${m}C5 ${W * .69} 7 ${W * .79} 10.5 ${W * .79}Z" fill="#17233a"/>`
+           + `<rect x=".9" y="4.2" width="1.7" height="2.4" rx=".8" fill="#e3283a"/><rect x=".9" y="${W - 6.6}" width="1.7" height="2.4" rx=".8" fill="#e3283a"/>`;
+    } else {
+      bell = `<rect x="-3.6" y="${m - 4.2}" width="4.4" height="8.4" rx="1.4" fill="#262b33"/><path d="M-2.6 ${m - 4}V${m + 4}M-1.2 ${m - 4}V${m + 4}" stroke="#4b525d" stroke-width=".5"/>`;   // fuelle entre coches
+    }
     return `<svg width="${L_}" height="${W}" viewBox="0 0 ${L_} ${W}" style="overflow:visible">
-      <rect x="1.5" y="2.5" width="${L_}" height="${W}" rx="5" fill="rgba(0,0,0,.28)"/>
-      <rect x=".5" y=".5" width="${L_ - 1}" height="${W - 1}" rx="5" fill="${c[1]}" stroke="rgba(0,0,0,.5)"/>
-      <rect x="2" y="${W / 2 - 1.5}" width="${L_ - 4}" height="3" fill="${c[0]}"/>${win}${doors}
-      ${head ? `<path d="M${L_ - 10} 3L${L_ - 3} 5V${W - 5}L${L_ - 10} ${W - 3}Z" fill="#26364f"/><rect x="${L_ - 2.5}" y="3" width="2" height="3" rx="1" fill="#ffe9a0"/><rect x="${L_ - 2.5}" y="${W - 6}" width="2" height="3" rx="1" fill="#ffe9a0"/>` : ''}
+      <defs>
+        <linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".16"/><stop offset=".5" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#000" stop-opacity=".2"/></linearGradient>
+        <linearGradient id="${id}b" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff3b8" stop-opacity=".3"/><stop offset="1" stop-color="#fff3b8" stop-opacity="0"/></linearGradient>
+        <radialGradient id="${id}h"><stop offset="0" stop-color="#fff6c4" stop-opacity=".95"/><stop offset="1" stop-color="#fff6c4" stop-opacity="0"/></radialGradient>
+        <filter id="${id}s" x="-15%" y="-50%" width="130%" height="200%"><feGaussianBlur stdDeviation="1.3"/></filter>
+        <clipPath id="${id}c"><path d="${hull}"/></clipPath>
+      </defs>
+      ${beam}
+      <path d="${hull}" transform="translate(2.2 3.2)" fill="rgba(0,0,0,.36)" filter="url(#${id}s)"/>
+      <path d="M7 -.9H15M${L_ - 15} -.9H${L_ - 7}M7 ${W + .9}H15M${L_ - 15} ${W + .9}H${L_ - 7}" stroke="#2a2e35" stroke-width="1.7" stroke-linecap="round"/>
+      ${bell}
+      <path d="${hull}" fill="${body}" stroke="rgba(0,0,0,.55)" stroke-width=".8"/>
+      <g clip-path="url(#${id}c)">
+        ${fF ? `<rect x="${L_ - 17}" y="0" width="18" height="${W}" fill="${liv}"/>` : ''}${fR ? `<rect x="0" y="0" width="12" height="${W}" fill="${liv}"/>` : ''}
+        <rect x="0" y="0" width="${L_}" height="4.9" fill="${liv}"/><rect x="0" y="${W - 4.9}" width="${L_}" height="4.9" fill="${liv}"/>
+        <rect x="0" y="${m - .6}" width="${L_}" height="1.2" fill="${liv}" opacity=".55"/>
+        <rect x="0" y="4.9" width="${L_}" height=".5" fill="rgba(0,0,0,.2)"/><rect x="0" y="${W - 5.4}" width="${L_}" height=".5" fill="rgba(0,0,0,.2)"/>
+        <rect x="0" y="0" width="${L_}" height="${W}" fill="url(#${id}g)"/>
+      </g>
+      ${win}${doors}${roof}${pant}${front}${rear}
+      <path d="${hull}" fill="none" stroke="rgba(255,255,255,.25)" stroke-width=".4" transform="translate(0 .35)"/>
     </svg>`;
   }
 
@@ -238,8 +308,9 @@
     let P = pick(cands);
     if (Math.random() < 0.5) P = makePath(P.pts.slice().reverse());
     const col = pick(COLORS), kinds = [{ L: 62, head: true }]; for (let i = 0, n = 2 + Math.floor(Math.random() * 2); i < n; i++) kinds.push({ L: 56 });
+    kinds[kinds.length - 1].last = true;
     const cars = kinds.map(k => {
-      const icon = L.divIcon({ className: 'vh', iconSize: [k.L, 18], iconAnchor: [k.L / 2, 9], html: `<div class="vh-in"><div class="vh-rot">${carSVG(k.L, 18, col, k.head)}</div></div>` });
+      const icon = L.divIcon({ className: 'vh', iconSize: [k.L, 18], iconAnchor: [k.L / 2, 9], html: `<div class="vh-in"><div class="vh-rot">${carSVG(k.L, 18, col, k.head, k.last)}</div></div>` });
       const mk = L.marker(map.unproject(P.pts[0], REF_Z), { icon, pane: 'vehicles', interactive: false, keyboard: false }).addTo(map), el = mk.getElement();
       return { mk, L: k.L, wrap: el && el.querySelector('.vh-in'), rot: el && el.querySelector('.vh-rot'), x: P.pts[0].x, y: P.pts[0].y };
     });

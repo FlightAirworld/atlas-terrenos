@@ -101,10 +101,25 @@ Racha de 7 días: premios de cada día en `DAILY_REWARDS` (7 números separados 
 - Ciclo de 20 s: calles principales (verde 7 s, ámbar 2 s, rojo) y calles transversales desfasadas 10 s; entre fases hay 1 s de rojo para todos.
 - **Coches**: frenan ante la línea de parada con rojo (y con ámbar si aún pueden parar) y hacen cola. Policía, bomberos y ambulancias no paran.
 - **Peatones**: esperan en el bordillo y cruzan solo cuando los coches de esa calle tienen el rojo.
+- **Colores**: las calles del mapa son blancas, así que el paso de cebra y la línea de parada van en gris oscuro (`ZEBRA` en `crossings.js`) para que se vean.
+- **Balizas de precaución**: cada paso de peatones lleva dos luces ámbar intermitentes (una en cada bordillo, parpadean alternadas; clase `.xg-c`). Con `prefers-reduced-motion` quedan fijas.
 
 ## Tren, vías y estaciones (`trains.js`)
 
 - Las **vías** son las reales de OpenStreetMap (clase `rail`, sin túneles ni apartaderos); el mapa las dibuja con balasto y traviesas (`st-rail` en `app.js`). Solo hay tren donde hay vía real: prueba por ejemplo cerca de una estación grande de tu ciudad.
 - Cada 60-80 s sale un tren (locomotora + 2 o 3 vagones) con zoom 16 o más. Para probarlo sin esperar: `spawnTrain()` en la consola.
 - **Estaciones**: el mundo se divide en celdas de ~650 m y en 4 de cada 10 hay una estación junto a la vía (andén con marquesina; misma posición para todos los jugadores). El tren frena, abre puertas (luces amarillas), baja y sube gente, avisa y arranca.
+- **Aspecto**: techo con sombreado curvo y franja de color, ventanas con reflejo, puertas, aires acondicionados, pantógrafo en la locomotora, morro aerodinámico con parabrisas y faros (con haz de luz), cabina y luces rojas en el último coche, fuelles entre coches y bogies asomando (`carSVG` en `trains.js`).
 - **Sonido** (Web Audio, respeta el botón 🔊): traqueteo según la velocidad, bocina al entrar y al salir, campana al llegar y pitidos antes de cerrar puertas. Botón 🚆 del menú para activar o desactivar el tren.
+
+## Aeropuerto (`vehicles.js`)
+
+- Igual que los helipuertos, los aeropuertos están repartidos por el mundo en posiciones fijas (las mismas para todos los jugadores): celdas de ~1,1 km y en algo menos de la mitad hay uno
+  (`AP_CELL`, `AP_RATE`). Se prueban hasta 8 sitios por celda y vale el primero cuyo recinto entero (340 × 130 m) esté libre de calles, edificios y agua; por eso salen en las afueras y
+  descampados, no en el centro de una ciudad. Se ven con zoom 14,5 o más y desaparecen si alguien compra una parcela dentro del recinto. Los helipuertos no se colocan dentro de un aeropuerto.
+- Cada aeropuerto tiene pista de 300 m (09/27, con umbrales, eje, luces de borde y números), dos calles de rodaje con línea amarilla, plataforma con puestos, terminal con pasarelas,
+  torre de control, dos hangares, manga de viento y dos aviones aparcados.
+- Cada ~100 s (`AP_EVERY`) un avión de línea aterriza de oeste a este, frena, sale por la calle de rodaje, llega a la plataforma, espera 14 s, retrocede, gira, rueda hasta la cabecera
+  y despega hacia el oeste (ciclo de ~85 s, con sonido de reactor y las luces de la pista parpadeando). El tamaño del avión sigue al de la pista a cualquier zoom.
+- Para probarlo en cualquier sitio, en la consola: `spawnAirport()` (pone un aeropuerto en el centro de la pantalla, sin mirar si hay calles debajo, y hace aterrizar un avión).
+  Con un aeropuerto a la vista también vale `spawnAircraft('airliner')`.
