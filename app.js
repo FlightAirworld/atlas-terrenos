@@ -298,12 +298,22 @@ function loadImg(url) {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
 }
 // Foto de la casa con la zona de calle transparente → URL de blob
-async function clippedPhoto(url, p, road) {
+// Giro de la casa: 0 a 3 = vueltas de 90° a la derecha (en el servidor se guarda en grados: 0, 90, 180, 270)
+const rotOf = v => ((Math.round((Number(v) || 0) / 90) % 4) + 4) % 4;
+// "road" puede ser null: entonces solo se gira la foto (sin borrar calle)
+async function clippedPhoto(url, p, road, rot = 0) {
   const img = await loadImg(url);
-  const W = Math.min(img.naturalWidth || 256, 512), H = Math.min(img.naturalHeight || 256, 512);
+  let W = Math.min(img.naturalWidth || 256, 512), H = Math.min(img.naturalHeight || 256, 512);
+  if (rot) W = H = Math.max(W, H);   // al girar 90° el lienzo debe ser cuadrado
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
-  ctx.drawImage(img, 0, 0, W, H);
+  if (rot) { ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(rot * Math.PI / 2); ctx.drawImage(img, -W / 2, -H / 2, W, H); ctx.restore(); }
+  else ctx.drawImage(img, 0, 0, W, H);
+  if (!road) {   // solo girar: ya está
+    const blobOnly = await new Promise(r => cv.toBlob(r, 'image/png'));
+    if (!blobOnly) throw new Error('canvas');
+    return URL.createObjectURL(blobOnly);
+  }
   ctx.globalCompositeOperation = 'destination-out';
   const [[s, w], [n, e]] = boundsOf(p.x, p.y);
   const polys = road.geometry.type === 'Polygon' ? [road.geometry.coordinates] : road.geometry.coordinates;
@@ -331,7 +341,7 @@ async function refreshPhoto(ex) {
   const th = useThumb();
   const tok = ex.tok = (ex.tok || 0) + 1, url = srcUrl(ex, th), cut = roadCut.get(ex.p.id);
   let u = url, blob = null;
-  if (cut && cut.road) { try { blob = await clippedPhoto(url, ex.p, cut.road); u = blob; } catch (e) {} }
+  if ((cut && cut.road) || ex.rot) { try { blob = await clippedPhoto(url, ex.p, cut && cut.road, ex.rot); u = blob; } catch (e) {} }
   const src = ex.hasDetail && tok === ex.tok && url === srcUrl(ex, th) && gl.getSource(ex.srcId);
   if (!src) { if (blob) URL.revokeObjectURL(blob); return; }
   freeBlob(ex); ex.blob = blob; ex.res = th;
@@ -343,11 +353,11 @@ function addDetail(ex) {
   ex.want = true;
   if (ex.hasDetail || ex.adding) return;
   const cut = roadCut.get(ex.p.id);
-  if (!(cut && cut.road)) return mountDetail(ex, srcUrl(ex), null);
+  if (!(cut && cut.road) && !ex.rot) return mountDetail(ex, srcUrl(ex), null);
   // Con calle: primero se prepara la foto recortada y luego se monta (así no parpadea la casa entera)
   ex.adding = true;
   const used = srcUrl(ex);
-  clippedPhoto(used, ex.p, cut.road).catch(() => null).then(u => {
+  clippedPhoto(used, ex.p, cut && cut.road, ex.rot).catch(() => null).then(u => {
     ex.adding = false;
     if (!ex.want || ex.hasDetail) { if (u) URL.revokeObjectURL(u); return; }
     if (used !== srcUrl(ex)) { if (u) URL.revokeObjectURL(u); return addDetail(ex); }   // cambió la casa (o el zoom) mientras tanto
@@ -363,7 +373,7 @@ function mountDetail(ex, imgUrl, blob) {
   gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
   const pill = document.createElement('span');
   pill.className = 'owner-pill';
-  pill.textContent = labelOf(ex.p);          // textContent: sin HTML
+  fillLabel(pill, ex.p);          // nodos y textContent: sin HTML
   const stars = document.createElement('span');
   stars.className = 'owner-stars';
   stars.textContent = starsOf(ex.level);
@@ -409,10 +419,11 @@ function drawOwned(p) {
   const ex = drawn.get(p.id);
   if (ex) {   // ya dibujada: solo actualiza foto, altura y estrellas si cambió la casa o el nivel
     const lvl = p.level ? levelOf(p) : ex.level;
-    if (ex.url !== url || ex.level !== lvl) {
-      const newHouse = ex.url !== url;
-      ex.url = url; ex.level = lvl;
-      if (newHouse) refreshPhoto(ex);
+    const rot = p.rotation != null ? rotOf(p.rotation) : ex.rot;   // si no viene el giro, se conserva el que ya tiene
+    if (ex.url !== url || ex.level !== lvl || ex.rot !== rot) {
+      const newHouse = ex.url !== url, rotChanged = ex.rot !== rot;
+      ex.url = url; ex.level = lvl; ex.rot = rot;
+      if (newHouse || rotChanged) refreshPhoto(ex);
       if (ex.starsEl) ex.starsEl.textContent = starsOf(lvl);
       const f = ownedFeatures.get(p.id); if (f) { f.properties.h = heightOf(url, lvl); flushOwned(); }
     }
@@ -427,7 +438,7 @@ function drawOwned(p) {
     properties: { pid: p.id, color: col, h: heightOf(url, lvl), clat: (s + n) / 2, clng: (w + e) / 2 },
     geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] }
   });
-  drawn.set(p.id, { p, srcId: 'img-' + p.id, url, level: lvl, starsEl: null, label: null, hasDetail: false });
+  drawn.set(p.id, { p, srcId: 'img-' + p.id, url, level: lvl, rot: rotOf(p.rotation), starsEl: null, label: null, hasDetail: false });
   flushOwned();
   updateDetail();
   queueCuts();
@@ -700,17 +711,19 @@ function showPanel(p) {
   $('p-free').classList.toggle('hidden', owned);
   if (owned) {
     $('p-owner').textContent = [flagOf(p.country), p.owner].filter(Boolean).join(' ');
-    $('p-owner-icon').textContent = p.avatar || '👤';
+    $('p-owner-icon').replaceChildren(p.avatar ? avatarNode(p.avatar) : '👤');
     $('p-photo').src = houseFor(p.id, p.house);
     $('house-edit').classList.toggle('hidden', !p.mine);
     $('house-pick-wrap').classList.add('hidden');
     { const c = cfg.houseCost ?? 1; $('house-change-btn').textContent = '🏠 CAMBIAR CASA' + (c > 0 ? ` (${c} 🎟️)` : ' (gratis)'); }
     if (p.mine) markHouse($('house-pick-edit'), p.house && String(p.house).replace(/\.png$/i, '.webp'));
-    $('p-avatar').textContent = p.avatar || '';
+    $('p-avatar').replaceChildren(p.avatar ? avatarNode(p.avatar) : '');
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
     renderLevelBox(p);
+    updateRotUi(p);
   } else {
     buildPackPicker();
+    chosenRot = 0; updateRotUi(p);
   }
 }
 $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; };
@@ -752,19 +765,50 @@ $('upgrade-btn').onclick = async () => {
 };
 
 // ---------- Avatar ----------
-const AVATARS = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀','👑','⚽','🌟'];
-let avatar = AVATARS[0];
-try { const s = localStorage.getItem('avatar'); if (AVATARS.includes(s)) avatar = s; } catch {}
+// Los 12 emojis antiguos se conservan SOLO para mostrar terrenos existentes (no se pueden elegir). Idéntica a AVATARS de server.js.
+const AVATARS_LEGACY = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀','👑','⚽','🌟'];
+const AVATARS_NEW = ['avatar-1','avatar-2','avatar-3','avatar-4','avatar-5','avatar-6','avatar-7','avatar-8'];   // los únicos que se ofrecen en el selector
+const AVATARS = [...AVATARS_LEGACY, ...AVATARS_NEW];
+let avatar = AVATARS_NEW[0];
+try { const s = localStorage.getItem('avatar'); if (AVATARS_NEW.includes(s)) avatar = s; } catch {}
+// Dibuja un avatar: imagen si es avatar-N, emoji si es de los antiguos (si la imagen no carga, un emoji de reserva)
+const isImgAvatar = v => /^avatar-[1-8]$/.test(v || '');
+function avatarNode(v) {
+  const s = document.createElement('span'); s.className = 'av';
+  if (isImgAvatar(v)) {
+    const i = new Image(); i.className = 'av-img'; i.alt = ''; i.decoding = 'async'; i.src = 'images/' + v + '.webp';
+    i.onerror = () => { i.remove(); s.textContent = '🙂'; };
+    s.append(i);
+  } else s.textContent = v || '';
+  return s;
+}
+// Nombre del dueño con bandera + avatar + nombre (sin HTML: todo con textContent / nodos)
+function fillLabel(el, p) {
+  el.replaceChildren();
+  const f = flagOf(p.country); if (f) el.append(f + ' ');
+  if (p.avatar) el.append(avatarNode(p.avatar), ' ');
+  el.append(p.owner || '');
+}
+function markAvatars() {
+  const box = $('avatars'); if (!box) return;
+  [...box.children].forEach(b => { b.style.outline = b.dataset.av === avatar ? '2px solid #ffb703' : ''; });
+}
+const chosenAvatarStored = () => { try { const s = localStorage.getItem('avatar'); return AVATARS_NEW.includes(s) ? s : null; } catch { return null; } };
+async function saveAvatarToServer(a) {
+  if (!authToken || !myNick) return;   // sin cuenta o sin apodo se queda en este móvil y se sube al fijar el apodo
+  try { await api('/api/profile/avatar', { method: 'POST', body: { avatar: a } }); } catch (e) { setMsg(e.message, 'err'); }
+}
+const pushChosenAvatar = () => { const s = chosenAvatarStored(); return s ? saveAvatarToServer(s) : Promise.resolve(); };
 (function buildAvatarPicker() {
   const box = $('avatars');
-  const mark = () => [...box.children].forEach(b => { b.style.outline = b.textContent === avatar ? '2px solid #ffb703' : ''; });
-  AVATARS.forEach(a => {
+  AVATARS_NEW.forEach(a => {
     const b = document.createElement('button');
-    b.type = 'button'; b.textContent = a; b.style.fontSize = '22px';
-    b.onclick = () => { avatar = a; try { localStorage.setItem('avatar', a); } catch {} mark(); };
+    b.type = 'button'; b.dataset.av = a; b.title = a.replace('avatar-', 'Avatar '); b.setAttribute('aria-label', b.title);
+    b.append(avatarNode(a));
+    b.onclick = () => { avatar = a; try { localStorage.setItem('avatar', a); } catch {} markAvatars(); saveAvatarToServer(a); };
     box.appendChild(b);
   });
-  mark();
+  markAvatars();
 })();
 
 // ---------- Elegir casa ----------
@@ -791,7 +835,7 @@ function markHouse(box, current) {
 }
 (function setupHousePickers() {
   const freeBox = $('house-pick-free'), editBox = $('house-pick-edit');
-  buildHousePicker(freeBox, h => { chosenHouse = h; markHouse(freeBox, h); }, true);
+  buildHousePicker(freeBox, h => { chosenHouse = h; markHouse(freeBox, h); updateRotUi(); }, true);
   markHouse(freeBox, null);
   buildHousePicker(editBox, async h => {
     if (!selected || !selected.mine || h === selected.house) return;
@@ -815,6 +859,37 @@ function markHouse(box, current) {
   $('house-change-btn').onclick = () => $('house-pick-wrap').classList.toggle('hidden');
 })();
 
+// ---------- Girar la casa (90° a la izquierda o a la derecha) ----------
+// Al reclamar: se elige el giro y se guarda justo después de reclamar. Con terreno propio: botones de girar (gratis).
+// Hace falta cuenta (el giro se guarda en el servidor, asociado al dueño).
+let chosenRot = 0, rotBusy = false;
+function updateRotUi(arg) {
+  const p = arg || selected;
+  const wrap = $('rot-free-wrap');
+  if (wrap) wrap.classList.toggle('hidden', !authToken);
+  const im = $('rot-prev-free');
+  if (im && p && !p.owner) { im.src = houseFor(p.id, chosenHouse); im.style.transform = `rotate(${chosenRot * 90}deg)`; }
+  const l1 = $('rot-label-free'); if (l1) l1.textContent = `${chosenRot * 90}°`;
+  const l2 = $('rot-label-edit'); if (l2 && p) l2.textContent = `${rotOf(p.rotation) * 90}°`;
+}
+$('rot-left-free').onclick = () => { chosenRot = (chosenRot + 3) % 4; updateRotUi(); };
+$('rot-right-free').onclick = () => { chosenRot = (chosenRot + 1) % 4; updateRotUi(); };
+async function rotateOwned(dir) {
+  if (!selected || !selected.mine || rotBusy) return;
+  rotBusy = true;
+  const next = (rotOf(selected.rotation) + dir + 4) % 4;
+  try {
+    const j = await api('/api/parcel/rotate', { method: 'POST', body: { id: selected.id, rotation: next * 90 } });
+    selected.rotation = j.rotation;
+    drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house, level: selected.level, rotation: j.rotation });
+    updateRotUi(selected);
+    setMsg('🔄 Casa girada', 'ok');
+  } catch (e) { setMsg(e.message, 'err'); }
+  finally { rotBusy = false; }
+}
+$('rot-left-edit').onclick = () => rotateOwned(-1);
+$('rot-right-edit').onclick = () => rotateOwned(1);
+
 // ---------- País (bandera) ----------
 const COUNTRY_CODES = ('AD AE AF AG AI AL AM AO AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BW BY BZ '
   + 'CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR '
@@ -824,7 +899,7 @@ const COUNTRY_CODES = ('AD AE AF AG AI AL AM AO AR AS AT AU AW AX AZ BA BB BD BE
   + 'SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TG TH TJ TK TL TM TN TO TR TT TV TW TZ '
   + 'UA UG US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW').split(' ');
 const flagOf = c => /^[A-Z]{2}$/.test(c || '') ? String.fromCodePoint(...[...c].map(ch => 127397 + ch.charCodeAt(0))) : '';
-const labelOf = p => [flagOf(p.country), p.avatar, p.owner].filter(Boolean).join(' ');
+const labelOf = p => [flagOf(p.country), isImgAvatar(p.avatar) ? '' : p.avatar, p.owner].filter(Boolean).join(' ');   // solo texto (la etiqueta del mapa usa fillLabel)
 let country = '';
 (function buildCountryPicker() {
   const sel = $('country');
@@ -900,11 +975,15 @@ $('use-credit').onclick = async () => {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'No se pudo reclamar');
     credits = j.credits; updateCreditUi();
-    selected.owner = j.owner; selected.avatar = avatar; selected.country = country; selected.since = Date.now();
+    selected.owner = j.owner; selected.avatar = j.avatar || avatar; selected.country = country; selected.since = Date.now();
     selected.house = chosenHouse; selected.mine = !!authToken;
+    selected.rotation = 0;
+    if (authToken && chosenRot) {   // el giro se guarda aparte: si fallara, el terreno ya es tuyo igualmente
+      try { const rr = await api('/api/parcel/rotate', { method: 'POST', body: { id: selected.id, rotation: chosenRot * 90 } }); selected.rotation = rr.rotation; } catch (e) {}
+    }
     showPanel(selected);
     setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉` + (j.referralBonus ? ` 👫 (incluye +${j.referralBonus} de regalo por venir invitado)` : ''), 'ok'); sfx('claim');
-    drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house });
+    drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house, rotation: selected.rotation });
     loadStats(); loadParcels(); loadProduction();
   } catch (e) {
     setMsg(e.message, 'err'); sfx('error');
@@ -1230,6 +1309,8 @@ async function linkAccountOnServer() {
     if (!r.ok) throw new Error(j.error || 'No se pudo vincular la cuenta');
     saveCode(j.code); credits = j.credits; updateCreditUi();
     myNick = j.nickname || null;
+    if (j.avatar && AVATARS_NEW.includes(j.avatar)) { avatar = j.avatar; try { localStorage.setItem('avatar', j.avatar); } catch {} markAvatars(); }
+    else if (myNick) pushChosenAvatar();   // el perfil aún no tiene avatar: se guarda el que elegiste en este móvil
     updateAuthUi();
     applyNick();
     let asked = false;
@@ -1322,6 +1403,7 @@ $('login-nick-btn').onclick = async () => {
     const j = await api('/api/profile', { method: 'POST', body: { nickname: nick } });
     myNick = j.nickname;
     applyNick(); updateAuthUi();
+    pushChosenAvatar();
     setLoginMsg('✅ Apodo guardado para siempre', 'ok');
   } catch (e) { setLoginMsg(e.message, 'err'); }
   finally { btn.disabled = false; }
@@ -1433,7 +1515,7 @@ function renderMine(prod, mine) {
     const b = document.createElement('button');
     b.type = 'button';
     b.style.cssText = 'display:block;width:100%;text-align:left;margin:6px 0;padding:10px';
-    b.textContent = `${flagOf(p.country)} ${p.avatar || ''} Terreno ${p.id} · ${starsOf(levelOf(p))} · ${new Date(p.since).toLocaleDateString('es-ES')}`.trim();
+    b.textContent = `${flagOf(p.country)} ${isImgAvatar(p.avatar) ? '' : (p.avatar || '')} Terreno ${p.id} · ${starsOf(levelOf(p))} · ${new Date(p.since).toLocaleDateString('es-ES')}`.trim();
     b.onclick = () => {
       $('mine').classList.add('hidden');
       const bb = boundsOf(p.x, p.y);
