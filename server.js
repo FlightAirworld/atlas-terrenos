@@ -561,12 +561,12 @@ async function setHouse(req, { id, house }) {
   }
 }
 
-// Girar la casa de un terreno propio (0, 90, 180 o 270 grados). Gratis: no toca créditos ni pagos.
+// Girar la casa de un terreno propio (cualquier ángulo en grados, de 1 en 1). Gratis: no toca créditos ni pagos.
 // El user_id sale del token validado: solo el dueño puede girar su terreno.
 async function setRotation(req, body) {
   const user = await needUser(req);
   const deg = Math.round(Number(body && body.rotation));
-  if (!Number.isFinite(deg) || deg % 90 !== 0) throw new HttpError(400, 'Giro no válido');
+  if (!Number.isFinite(deg)) throw new HttpError(400, 'Giro no válido');
   const rot = ((deg % 360) + 360) % 360;
   const r = await run('UPDATE parcels SET rotation = $1 WHERE id = $2 AND user_id = $3', [rot, String((body && body.id) || ''), user.id]);
   if (!r.rowCount) throw new HttpError(403, 'Este terreno no es tuyo');
@@ -1552,7 +1552,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 // Migración automática (inofensiva si la columna ya existe)
 const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').catch(e => console.error('No se pudo añadir la columna house:', e.message))
   .then(() => run('ALTER TABLE profiles ADD COLUMN IF NOT EXISTS avatar TEXT')).catch(e => console.error('No se pudo añadir profiles.avatar:', e.message))   // avatar del perfil (no destructivo)
-  .then(() => run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS rotation SMALLINT NOT NULL DEFAULT 0')).catch(e => console.error('No se pudo añadir parcels.rotation:', e.message))   // giro de la casa (0/90/180/270)
+  .then(() => run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS rotation SMALLINT NOT NULL DEFAULT 0')).catch(e => console.error('No se pudo añadir parcels.rotation:', e.message))   // giro de la casa en grados (0 a 359)
   .then(async () => {   // niveles de terreno (no hacen nada si las columnas ya existen)
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level SMALLINT NOT NULL DEFAULT 1');
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level_at BIGINT');

@@ -241,10 +241,11 @@
       <p class="muted">🔒 Este terreno ya tiene propietario.</p>
       <div id="house-edit" class="hidden">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <button id="rot-left-edit" type="button" aria-label="Girar la casa a la izquierda" style="flex:1;padding:9px">↺ Girar</button>
-          <button id="rot-right-edit" type="button" aria-label="Girar la casa a la derecha" style="flex:1;padding:9px">Girar ↻</button>
-          <span id="rot-label-edit" class="muted">0°</span>
+          <button id="rot-left-edit" type="button" aria-label="Girar la casa 1 grado a la izquierda" title="Mantén pulsado para girar" style="flex:1;padding:9px">↺ 1°</button>
+          <button id="rot-right-edit" type="button" aria-label="Girar la casa 1 grado a la derecha" title="Mantén pulsado para girar" style="flex:1;padding:9px">1° ↻</button>
+          <span id="rot-label-edit" class="muted" style="min-width:42px;text-align:right">0°</span>
         </div>
+        <input id="rot-range-edit" type="range" min="0" max="359" step="1" value="0" aria-label="Giro de la casa en grados" style="width:100%;margin:0 0 8px">
         <button id="house-change-btn" type="button" style="width:100%;padding:9px;margin-bottom:6px">🏠 CAMBIAR CASA (1 🎟️)</button>
         <div id="house-pick-wrap" class="hidden">
           <div id="house-pick-edit" style="display:flex;gap:6px;flex-wrap:wrap;padding-bottom:6px"></div>
@@ -262,11 +263,12 @@
       <div id="rot-free-wrap" class="hidden">
         <label>Girar la casa</label>
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-          <button id="rot-left-free" type="button" aria-label="Girar a la izquierda" title="Girar a la izquierda" style="font-size:22px;width:48px;height:44px;padding:0">↺</button>
+          <button id="rot-left-free" type="button" aria-label="Girar 1 grado a la izquierda" title="Girar 1° (mantén pulsado para seguir)" style="font-size:22px;width:48px;height:44px;padding:0">↺</button>
           <span style="width:56px;height:56px;display:inline-flex;align-items:center;justify-content:center"><img id="rot-prev-free" alt="" style="width:46px;height:46px;object-fit:cover;border-radius:6px;transition:transform .2s"></span>
-          <button id="rot-right-free" type="button" aria-label="Girar a la derecha" title="Girar a la derecha" style="font-size:22px;width:48px;height:44px;padding:0">↻</button>
-          <span id="rot-label-free" class="muted">0°</span>
+          <button id="rot-right-free" type="button" aria-label="Girar 1 grado a la derecha" title="Girar 1° (mantén pulsado para seguir)" style="font-size:22px;width:48px;height:44px;padding:0">↻</button>
+          <span id="rot-label-free" class="muted" style="min-width:42px">0°</span>
         </div>
+        <input id="rot-range-free" type="range" min="0" max="359" step="1" value="0" aria-label="Giro de la casa en grados" style="width:100%;margin:-2px 0 8px">
       </div>
       <label>Tu avatar</label>
       <div id="avatars" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>

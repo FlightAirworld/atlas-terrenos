@@ -15,6 +15,41 @@ try { flatView = localStorage.getItem('flatView') !== '0'; } catch (e) {}
 let baseMode = 'estilizado';
 try { baseMode = localStorage.getItem('baseMode') === 'satelite' ? 'satelite' : 'estilizado'; } catch (e) {}
 const FLAT_NEAR = 14;          // (zoom MapLibre) a partir de aquí el globo se ve plano
+// ---------- Anchos de calle (los usan el dibujo del mapa y también coches y peatones, para que vayan justo por su sitio) ----------
+// Ancho de la calzada y del borde (la acera) en píxeles a los zooms 11, 16 y 19; cada tipo de calle lo multiplica por su factor.
+const ROAD_STOPS = [[11, 0.6], [16, 11], [19, 50]];
+const CASE_STOPS = [[11, 1.4], [16, 17], [19, 75]];
+const ROAD_FACTOR = { motorway: 1.4, trunk: 1.35, primary: 1.2, secondary: 1.05, tertiary: 0.95, minor: 0.8, service: 0.5 };
+const ROAD_F = ['match', ['get', 'class'], 'motorway', 1.4, 'trunk', 1.35, 'primary', 1.2, 'secondary', 1.05, 'tertiary', 0.95, 'minor', 0.8, 'service', 0.5, 0.8];
+function interpExp(stops, z, base) {
+  if (z <= stops[0][0]) return stops[0][1];
+  for (let i = 1; i < stops.length; i++) {
+    if (z <= stops[i][0]) {
+      const [z0, v0] = stops[i - 1], [z1, v1] = stops[i];
+      const t = (Math.pow(base, z - z0) - 1) / (Math.pow(base, z1 - z0) - 1);
+      return v0 + t * (v1 - v0);
+    }
+  }
+  return stops[stops.length - 1][1];
+}
+// Medidas reales (px de pantalla) de una calle de tipo `cls` al zoom `z` de MapLibre:
+//  half = medio ancho de la calzada, ringMid = centro de la acera (el borde que se ve junto a la calzada), ringHalf = medio grosor de la acera.
+window.roadMetrics = function (cls, z) {
+  const f = ROAD_FACTOR[cls] || 0.8;
+  const wr = f * interpExp(ROAD_STOPS, z, 1.6), wc = Math.max(wr, f * interpExp(CASE_STOPS, z, 1.6));
+  return { half: wr / 2, ringMid: wr / 2 + (wc - wr) / 4, ringHalf: (wc - wr) / 4 };
+};
+// Helipuertos: parcelas que tienen la casa «helipuerto». El helicóptero aterriza en ellas (vehicles.js).
+window.helipads = function () {
+  const out = [];
+  drawn.forEach((ex, id) => {
+    if (!/helipuerto/i.test(ex.url || '')) return;
+    const p = ex.p; if (!p) return;
+    const [[s, w], [n, e]] = boundsOf(p.x, p.y);
+    out.push({ id, lat: (s + n) / 2, lng: (w + e) / 2 });
+  });
+  return out;
+};
 const MAP_STYLE = {
   version: 8,
   projection: { type: 'globe' },
@@ -43,18 +78,11 @@ const MAP_STYLE = {
     { id: 'st-road-casing', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
       filter: ['all', ['!=', ['get', 'brunnel'], 'tunnel'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service']]]],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 1, 16, 14, 19, 60] } },
+      paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, ['*', CASE_STOPS[0][1], ROAD_F], 16, ['*', CASE_STOPS[1][1], ROAD_F], 19, ['*', CASE_STOPS[2][1], ROAD_F]] } },
     { id: 'st-road', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
       filter: ['all', ['!=', ['get', 'brunnel'], 'tunnel'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service']]]],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': ['match', ['get', 'class'], 'motorway', '#f6c76b', 'trunk', '#f6c76b', 'primary', '#fbe29a', '#ffffff'], 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.6, 16, 11, 19, 50] } },
-    // Vías del tren (solo líneas principales, sin túneles ni apartaderos): trains.js hace circular el tren por ellas
-    { id: 'st-rail-bed', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
-      filter: ['all', ['==', ['get', 'class'], 'rail'], ['!=', ['get', 'brunnel'], 'tunnel'], ['!', ['has', 'service']]],
-      paint: { 'line-color': '#8b8478', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.8, 16, 6, 19, 26] } },
-    { id: 'st-rail', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
-      filter: ['all', ['==', ['get', 'class'], 'rail'], ['!=', ['get', 'brunnel'], 'tunnel'], ['!', ['has', 'service']]],
-      paint: { 'line-color': '#f4f1ea', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.4, 16, 3.4, 19, 15], 'line-dasharray': [1, 1.3] } },
+      paint: { 'line-color': ['match', ['get', 'class'], 'motorway', '#f6c76b', 'trunk', '#f6c76b', 'primary', '#fbe29a', '#ffffff'], 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, ['*', ROAD_STOPS[0][1], ROAD_F], 16, ['*', ROAD_STOPS[1][1], ROAD_F], 19, ['*', ROAD_STOPS[2][1], ROAD_F]] } },
     { id: 'sat', type: 'raster', source: 'sat', layout: { visibility: baseMode === 'satelite' ? 'visible' : 'none' } },
     // Capa invisible: solo sirve para consultar la geometría de las calles (coches). Apagada hasta que se necesita.
     {
@@ -181,6 +209,25 @@ function ringOf(x, y) {
   const [[s, w], [n, e]] = boundsOf(x, y);
   return [[w, s], [e, s], [e, n], [w, n], [w, s]];
 }
+// ---------- Giro libre de la casa (en grados, de 1 en 1) ----------
+// Se gira el recuadro del terreno (el marco amarillo) alrededor de su centro y la casa se coloca con ese mismo giro.
+// El cálculo se hace en Mercator (lo que se ve en pantalla) y el recuadro se encoge lo justo para que siga dentro de su parcela.
+const rotDeg = v => ((Math.round(Number(v) || 0) % 360) + 360) % 360;
+const D2R = Math.PI / 180;
+const latToMY = lat => Math.log(Math.tan(Math.PI / 4 + lat * D2R / 2));
+const myToLat = y => (2 * Math.atan(Math.exp(y)) - Math.PI / 2) / D2R;
+function quadOf(x, y, deg) {   // esquinas [oeste-norte, este-norte, este-sur, oeste-sur] (orden de las fuentes de imagen)
+  const [[s, w], [n, e]] = boundsOf(x, y);
+  const cx = (w + e) / 2 * D2R, cy = (latToMY(s) + latToMY(n)) / 2;
+  const a = (e - w) / 2 * D2R, b = (latToMY(n) - latToMY(s)) / 2;
+  const t = deg * D2R, c = Math.cos(t), sn = Math.sin(t);
+  const f = deg ? Math.min(a / (a * Math.abs(c) + b * Math.abs(sn)), b / (a * Math.abs(sn) + b * Math.abs(c))) : 1;
+  return [[-a, b], [a, b], [a, -b], [-a, -b]].map(([px, py]) => {   // giro a la derecha (sentido del reloj) en pantalla
+    const rx = (px * c + py * sn) * f, ry = (-px * sn + py * c) * f;
+    return [(cx + rx) / D2R, myToLat(cy + ry)];
+  });
+}
+const ringRot = (x, y, deg) => { if (!deg) return ringOf(x, y); const q = quadOf(x, y, deg); return [...q, q[0]]; };
 function flushOwned() {
   if (!glReady || ownedDirty) return;
   ownedDirty = true;
@@ -298,17 +345,15 @@ function loadImg(url) {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
 }
 // Foto de la casa con la zona de calle transparente → URL de blob
-// Giro de la casa: 0 a 3 = vueltas de 90° a la derecha (en el servidor se guarda en grados: 0, 90, 180, 270)
-const rotOf = v => ((Math.round((Number(v) || 0) / 90) % 4) + 4) % 4;
-// "road" puede ser null: entonces solo se gira la foto (sin borrar calle)
+// Giro de la casa: grados a la derecha (0 a 359), tal como se guarda en el servidor
+const rotOf = rotDeg;
+// "road" puede ser null: entonces solo se copia la foto (sin borrar calle). El giro ya no se hace aquí: se gira el recuadro del mapa (coordsFor)
 async function clippedPhoto(url, p, road, rot = 0) {
   const img = await loadImg(url);
   let W = Math.min(img.naturalWidth || 256, 512), H = Math.min(img.naturalHeight || 256, 512);
-  if (rot) W = H = Math.max(W, H);   // al girar 90° el lienzo debe ser cuadrado
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
-  if (rot) { ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(rot * Math.PI / 2); ctx.drawImage(img, -W / 2, -H / 2, W, H); ctx.restore(); }
-  else ctx.drawImage(img, 0, 0, W, H);
+  ctx.drawImage(img, 0, 0, W, H);
   if (!road) {   // solo girar: ya está
     const blobOnly = await new Promise(r => cv.toBlob(r, 'image/png'));
     if (!blobOnly) throw new Error('canvas');
@@ -330,6 +375,13 @@ async function clippedPhoto(url, p, road, rot = 0) {
   if (!blob) throw new Error('canvas');
   return URL.createObjectURL(blob);
 }
+// Esquinas donde se pinta la foto de la casa: su cuadrado de la cuadrícula (sin calle se ensancha un 0,4 % para que dos vecinas no dejen rendija) o, si está girada, el recuadro girado
+function coordsFor(ex) {
+  if (ex.rot) return quadOf(ex.p.x, ex.p.y, ex.rot);
+  const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y);
+  const cut = roadCut.get(ex.p.id), k = (cut && cut.road) ? 0 : 0.004, dw = (e - w) * k, dh = (n - s) * k;
+  return [[w - dw, n + dh], [e + dw, n + dh], [e + dw, s - dh], [w - dw, s - dh]];
+}
 function freeBlob(ex) {
   if (!ex.blob) return;
   const b = ex.blob; ex.blob = null;
@@ -341,23 +393,22 @@ async function refreshPhoto(ex) {
   const th = useThumb();
   const tok = ex.tok = (ex.tok || 0) + 1, url = srcUrl(ex, th), cut = roadCut.get(ex.p.id);
   let u = url, blob = null;
-  if ((cut && cut.road) || ex.rot) { try { blob = await clippedPhoto(url, ex.p, cut && cut.road, ex.rot); u = blob; } catch (e) {} }
+  if (cut && cut.road && !ex.rot) { try { blob = await clippedPhoto(url, ex.p, cut.road); u = blob; } catch (e) {} }   // girada: sin recorte de calle
   const src = ex.hasDetail && tok === ex.tok && url === srcUrl(ex, th) && gl.getSource(ex.srcId);
   if (!src) { if (blob) URL.revokeObjectURL(blob); return; }
   freeBlob(ex); ex.blob = blob; ex.res = th;
-  if (cut && cut.road) { const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y); src.updateImage({ url: u, coordinates: [[w, n], [e, n], [e, s], [w, s]] }); }
-  else src.updateImage({ url: u });
+  src.updateImage({ url: u, coordinates: coordsFor(ex) });
 }
 
 function addDetail(ex) {
   ex.want = true;
   if (ex.hasDetail || ex.adding) return;
   const cut = roadCut.get(ex.p.id);
-  if (!(cut && cut.road) && !ex.rot) return mountDetail(ex, srcUrl(ex), null);
+  if (!(cut && cut.road && !ex.rot)) return mountDetail(ex, srcUrl(ex), null);
   // Con calle: primero se prepara la foto recortada y luego se monta (así no parpadea la casa entera)
   ex.adding = true;
   const used = srcUrl(ex);
-  clippedPhoto(used, ex.p, cut && cut.road, ex.rot).catch(() => null).then(u => {
+  clippedPhoto(used, ex.p, cut.road).catch(() => null).then(u => {
     ex.adding = false;
     if (!ex.want || ex.hasDetail) { if (u) URL.revokeObjectURL(u); return; }
     if (used !== srcUrl(ex)) { if (u) URL.revokeObjectURL(u); return addDetail(ex); }   // cambió la casa (o el zoom) mientras tanto
@@ -368,8 +419,7 @@ function mountDetail(ex, imgUrl, blob) {
   const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y);
   ex.blob = blob;
   // La casa llena su cuadrado de la cuadrícula hasta el borde; sin calle se ensancha un 0,4 % para que dos vecinas no dejen rendija
-  const cutNow = roadCut.get(ex.p.id), k = (cutNow && cutNow.road) ? 0 : 0.004, dw = (e - w) * k, dh = (n - s) * k;
-  gl.addSource(ex.srcId, { type: 'image', url: imgUrl, coordinates: [[w - dw, n + dh], [e + dw, n + dh], [e + dw, s - dh], [w - dw, s - dh]] });
+  gl.addSource(ex.srcId, { type: 'image', url: imgUrl, coordinates: coordsFor(ex) });
   gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
   const pill = document.createElement('span');
   pill.className = 'owner-pill';
@@ -425,7 +475,7 @@ function drawOwned(p) {
       ex.url = url; ex.level = lvl; ex.rot = rot;
       if (newHouse || rotChanged) refreshPhoto(ex);
       if (ex.starsEl) ex.starsEl.textContent = starsOf(lvl);
-      const f = ownedFeatures.get(p.id); if (f) { f.properties.h = heightOf(url, lvl); flushOwned(); }
+      const f = ownedFeatures.get(p.id); if (f) { f.properties.h = heightOf(url, lvl); if (rotChanged) f.geometry.coordinates = [ringRot(p.x, p.y, rot)]; flushOwned(); }
     }
     return;
   }
@@ -436,7 +486,7 @@ function drawOwned(p) {
   ownedFeatures.set(p.id, {
     type: 'Feature', id: p.x * 1000003 + p.y,
     properties: { pid: p.id, color: col, h: heightOf(url, lvl), clat: (s + n) / 2, clng: (w + e) / 2 },
-    geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] }
+    geometry: { type: 'Polygon', coordinates: [ringRot(p.x, p.y, rotOf(p.rotation))] }
   });
   drawn.set(p.id, { p, srcId: 'img-' + p.id, url, level: lvl, rot: rotOf(p.rotation), starsEl: null, label: null, hasDetail: false });
   flushOwned();
@@ -528,7 +578,7 @@ gl.on('load', () => {
 function setSelected(p) {
   const src = gl.getSource('sel'); if (!src) return;
   src.setData(p
-    ? { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] } }] }
+    ? { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ringRot(p.x, p.y, p.owner ? rotDeg(p.rotation) : chosenRot)] } }] }   // el marco amarillo lleva el mismo giro que la casa
     : { type: 'FeatureCollection', features: [] });
 }
 
@@ -723,7 +773,7 @@ function showPanel(p) {
     updateRotUi(p);
   } else {
     buildPackPicker();
-    chosenRot = 0; updateRotUi(p);
+    chosenRot = 0; updateRotUi(p); setSelected(p);
   }
 }
 $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; };
@@ -862,33 +912,61 @@ function markHouse(box, current) {
 // ---------- Girar la casa (90° a la izquierda o a la derecha) ----------
 // Al reclamar: se elige el giro y se guarda justo después de reclamar. Con terreno propio: botones de girar (gratis).
 // Hace falta cuenta (el giro se guarda en el servidor, asociado al dueño).
-let chosenRot = 0, rotBusy = false;
+let chosenRot = 0;
+const setTxt = (id, t) => { const el = $(id); if (el) el.textContent = t; };
 function updateRotUi(arg) {
   const p = arg || selected;
   const wrap = $('rot-free-wrap');
   if (wrap) wrap.classList.toggle('hidden', !authToken);
   const im = $('rot-prev-free');
-  if (im && p && !p.owner) { im.src = houseFor(p.id, chosenHouse); im.style.transform = `rotate(${chosenRot * 90}deg)`; }
-  const l1 = $('rot-label-free'); if (l1) l1.textContent = `${chosenRot * 90}°`;
-  const l2 = $('rot-label-edit'); if (l2 && p) l2.textContent = `${rotOf(p.rotation) * 90}°`;
+  if (im && p && !p.owner) { im.src = houseFor(p.id, chosenHouse); im.style.transition = 'none'; im.style.transform = `rotate(${chosenRot}deg)`; }
+  setTxt('rot-label-free', `${chosenRot}°`);
+  const rf = $('rot-range-free'); if (rf && Number(rf.value) !== chosenRot) rf.value = chosenRot;
+  if (p && p.owner) {
+    const d = rotDeg(p.rotation);
+    setTxt('rot-label-edit', `${d}°`);
+    const re = $('rot-range-edit'); if (re && Number(re.value) !== d) re.value = d;
+  }
 }
-$('rot-left-free').onclick = () => { chosenRot = (chosenRot + 3) % 4; updateRotUi(); };
-$('rot-right-free').onclick = () => { chosenRot = (chosenRot + 1) % 4; updateRotUi(); };
-async function rotateOwned(dir) {
-  if (!selected || !selected.mine || rotBusy) return;
-  rotBusy = true;
-  const next = (rotOf(selected.rotation) + dir + 4) % 4;
+// Mantener pulsado el botón repite el giro (1° cada vez)
+function holdRepeat(btn, fn) {
+  if (!btn) return;
+  let t1 = 0, t2 = 0;
+  const stop = () => { clearTimeout(t1); clearInterval(t2); t1 = t2 = 0; };
+  btn.addEventListener('pointerdown', e => { e.preventDefault(); stop(); fn(); t1 = setTimeout(() => { t2 = setInterval(fn, 45); }, 350); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+}
+// Al reclamar: se elige el giro (de 1 en 1 grado) y se guarda justo después de reclamar. Hace falta cuenta (se guarda en el servidor).
+function setChosenRot(d) {
+  chosenRot = rotDeg(d);
+  updateRotUi();
+  if (selected && !selected.owner) setSelected(selected);
+}
+holdRepeat($('rot-left-free'), () => setChosenRot(chosenRot - 1));
+holdRepeat($('rot-right-free'), () => setChosenRot(chosenRot + 1));
+$('rot-range-free').oninput = e => setChosenRot(e.target.value);
+// Con terreno propio: giro gratis, también de 1 en 1. Se ve al momento en el mapa y se guarda cuando dejas de moverlo.
+let rotSaveT = 0;
+function setOwnedRot(d) {
+  if (!selected || !selected.mine) return;
+  const deg = rotDeg(d), id = selected.id;
+  selected.rotation = deg;
+  drawOwned({ id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house, level: selected.level, rotation: deg });
+  setSelected(selected);
+  updateRotUi(selected);
+  clearTimeout(rotSaveT);
+  rotSaveT = setTimeout(() => saveOwnedRot(id, deg), 500);
+}
+async function saveOwnedRot(id, deg) {
   try {
-    const j = await api('/api/parcel/rotate', { method: 'POST', body: { id: selected.id, rotation: next * 90 } });
-    selected.rotation = j.rotation;
-    drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house, level: selected.level, rotation: j.rotation });
-    updateRotUi(selected);
-    setMsg('🔄 Casa girada', 'ok');
+    const j = await api('/api/parcel/rotate', { method: 'POST', body: { id, rotation: deg } });
+    setMsg(`🔄 Casa girada ${j.rotation}°`, 'ok');
   } catch (e) { setMsg(e.message, 'err'); }
-  finally { rotBusy = false; }
 }
-$('rot-left-edit').onclick = () => rotateOwned(-1);
-$('rot-right-edit').onclick = () => rotateOwned(1);
+holdRepeat($('rot-left-edit'), () => setOwnedRot(rotDeg(selected && selected.rotation) - 1));
+holdRepeat($('rot-right-edit'), () => setOwnedRot(rotDeg(selected && selected.rotation) + 1));
+$('rot-range-edit').oninput = e => setOwnedRot(e.target.value);
 
 // ---------- País (bandera) ----------
 const COUNTRY_CODES = ('AD AE AF AG AI AL AM AO AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BW BY BZ '
@@ -979,7 +1057,7 @@ $('use-credit').onclick = async () => {
     selected.house = chosenHouse; selected.mine = !!authToken;
     selected.rotation = 0;
     if (authToken && chosenRot) {   // el giro se guarda aparte: si fallara, el terreno ya es tuyo igualmente
-      try { const rr = await api('/api/parcel/rotate', { method: 'POST', body: { id: selected.id, rotation: chosenRot * 90 } }); selected.rotation = rr.rotation; } catch (e) {}
+      try { const rr = await api('/api/parcel/rotate', { method: 'POST', body: { id: selected.id, rotation: chosenRot } }); selected.rotation = rr.rotation; } catch (e) {}
     }
     showPanel(selected);
     setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉` + (j.referralBonus ? ` 👫 (incluye +${j.referralBonus} de regalo por venir invitado)` : ''), 'ok'); sfx('claim');
