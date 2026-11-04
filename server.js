@@ -827,9 +827,11 @@ const ONLINE_MAX_PER_IP = Math.max(1, Number(process.env.ONLINE_MAX_PER_IP || 60
 const onlineClients = new Map();   // cid -> Set de respuestas abiertas
 const onlineByIp = new Map();      // ip -> nº de conexiones abiertas
 let onlineSent = -1, onlineTimer = null;
+const ONLINE_MIN = 500;   // lo que se muestra: 500 como mínimo; por encima de 500 es el número real
+const onlineShown = () => Math.max(ONLINE_MIN, onlineClients.size);
 
 function broadcastOnline(force) {
-  const n = onlineClients.size;
+  const n = onlineShown();
   if (!force && n === onlineSent) return;
   onlineSent = n;
   const msg = `data: ${n}\n\n`;
@@ -861,7 +863,7 @@ function onlineStream(req, res, url) {
   if (!set) { set = new Set(); onlineClients.set(cid, set); }
   set.add(res);
   onlineByIp.set(ip, (onlineByIp.get(ip) || 0) + 1);
-  res.write(`retry: 3000\n\ndata: ${onlineClients.size}\n\n`);   // el recién llegado ve el número al instante
+  res.write(`retry: 3000\n\ndata: ${onlineShown()}\n\n`);   // el recién llegado ve el número al instante
   if (santaActive) res.write(`event: santa\ndata: ${JSON.stringify({ type: 'start', now: Date.now(), ev: santaPublic(santaActive) })}\n\n`);   // si Papá Noel está de visita, el recién llegado lo ve
   scheduleOnlineBroadcast();                                     // y los demás, medio segundo después
   let gone = false;
@@ -1410,7 +1412,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/santa') return santaGet(req);
   if (req.method === 'POST' && pn === '/api/santa/seen') return santaSeen(req);
   if (req.method === 'GET' && pn === '/api/health') return { ok: true };   // la pantalla de carga del sitio estático pregunta aquí si ya despertó
-  if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineClients.size };
+  if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineShown() };
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/rank/cities') return rankCities(url);
