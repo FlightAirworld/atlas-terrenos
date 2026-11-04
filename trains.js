@@ -11,7 +11,6 @@
   const KEY = 'trainsOn', MIN_ZOOM = 16, REF_Z = 17, MAX_ST = 5, GAP = 3, CELL = 0.006, STATION_RATE = 0.4;
   const gl = map.gl, btn = document.getElementById('train-btn');
   let on = true;
-  try { const s = localStorage.getItem(KEY); if (s !== null) on = s === '1'; } catch (e) {}
 
   const rnd = (a, b) => a + Math.random() * (b - a);
   const pick = a => a[Math.floor(Math.random() * a.length)];

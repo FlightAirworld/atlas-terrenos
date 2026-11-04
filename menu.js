@@ -3,7 +3,7 @@
 (function () {
   const box = document.getElementById('map-controls'), btn = document.getElementById('menu-btn'), list = document.getElementById('menu-items');
   if (!box || !btn || !list) return;
-  const KEEP_OPEN = ['people-btn', 'vehicles-btn', 'sound-btn', 'view-btn', 'base-btn'];   // interruptores: se puede tocar varios seguidos
+  const KEEP_OPEN = ['sound-btn', 'view-btn', 'base-btn'];   // interruptores: se puede tocar varios seguidos
 
   function set(open) {
     box.classList.toggle('open', open);
@@ -38,7 +38,7 @@
     set(open);
   });
   if (menuBtn) menuBtn.addEventListener('click', () => set(false));                          // abrir Menú cierra Extras
-  list.addEventListener('click', e => { const b = e.target.closest('button'); if (b && b.id !== 'online-btn') set(false); });
+  list.addEventListener('click', e => { const b = e.target.closest('button'); if (b) set(false); });
   document.addEventListener('pointerdown', e => { if (wrap.classList.contains('open') && !wrap.contains(e.target)) set(false); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && wrap.classList.contains('open')) { set(false); btn.focus(); } });
   // El puntito rojo del regalo diario también se ve en el botón Extras, aunque esté cerrado
@@ -50,7 +50,7 @@
   }
 })();
 
-// Botón "COMPARTIR" (dentro de Extras): comparte el enlace del juego; si el móvil no puede compartir, lo copia.
+// Botón "Compartir" (dentro de Extras): comparte el enlace del juego; si el móvil no puede compartir, lo copia.
 (function () {
   const btn = document.getElementById('share-app-btn');
   if (!btn) return;

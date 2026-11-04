@@ -9,7 +9,6 @@
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const btn = document.getElementById('people-btn');
   let on = true;
-  try { const s = localStorage.getItem(KEY); if (s !== null) on = s === '1'; } catch (e) {}
 
   const st = document.createElement('style');
   st.textContent = `

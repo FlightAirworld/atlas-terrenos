@@ -139,14 +139,16 @@
     #map-controls #extras-items button { position:relative; left:auto; bottom:auto; width:auto !important; height:44px !important; padding:0 16px 0 12px !important; border-radius:99px !important; font-size:20px !important; display:flex !important; flex-direction:row; align-items:center; gap:8px; white-space:nowrap; }
     #map-controls #extras-items button.hidden { display:none !important; }
     #map-controls #extras-items button::after { content:attr(data-label) !important; display:inline !important; font-size:14px; font-weight:700; }
-    #map-controls #extras-items #online-btn::after { content:none !important; display:none !important; }
-    #map-controls #extras-items #online-btn i { position:static; flex:none; width:11px; height:11px; }
-    #map-controls #extras-items #online-btn b { font-size:16px; font-weight:800; }
-    #map-controls #extras-items #online-btn small { font-size:14px; font-weight:700; color:var(--fg); }
+    /* En línea: fuera de Extras, en la fila de arriba justo a su lado */
+    #map-controls #top-row #online-btn { position:static !important; width:auto !important; height:46px !important; padding:0 12px !important; border-radius:99px !important; flex-direction:row !important; gap:6px !important; white-space:nowrap; }
+    #map-controls #top-row #online-btn::after { content:none !important; display:none !important; }
+    #map-controls #top-row #online-btn i { position:static; flex:none; width:11px; height:11px; }
+    #map-controls #top-row #online-btn b { font-size:16px; font-weight:800; }
+    #map-controls #top-row #online-btn small { font-size:13px; font-weight:700; color:var(--fg); }
     #online-tip { display:none !important; }
     /* La píldora de créditos deja sitio a Extras + Menú en la misma fila */
-    #credit-pill { max-width:calc(100vw - 232px); overflow:hidden; white-space:nowrap; }
-    @media (max-width:420px) { #credit-pill { font-size:14px !important; padding:0 10px !important; gap:4px !important; } #map-controls #extras-btn { padding:0 12px !important; font-size:14px !important; } }
+    #credit-pill { max-width:calc(100vw - 340px); overflow:hidden; white-space:nowrap; }
+    @media (max-width:420px) { #map-controls #top-row #online-btn small { display:none; } #map-controls #top-row #online-btn { padding:0 10px !important; } #credit-pill { max-width:calc(100vw - 280px) !important; font-size:14px !important; padding:0 10px !important; gap:4px !important; } #map-controls #extras-btn { padding:0 12px !important; font-size:14px !important; } }
     #map-controls #menu-items button::after { content:attr(data-label) !important; display:inline !important; font-size:14px; font-weight:700; }
   </style>
 </head>
@@ -184,14 +186,14 @@
 
   <div id="map-controls">
     <div id="top-row">
+      <button id="online-btn" type="button" title="Jugadores en línea" aria-label="Jugadores en línea"><i></i><b id="online-n">–</b><small>en línea</small></button>
       <div id="extras-wrap">
         <button id="extras-btn" type="button" aria-expanded="false" aria-controls="extras-items">⭐ Extras<span id="extras-dot" class="hidden"></span></button>
         <div id="extras-items">
-          <button id="online-btn" type="button" title="Jugadores en línea" aria-label="Jugadores en línea"><i></i><b id="online-n">–</b><small>en línea</small></button>
           <button id="invite-btn" class="hidden" data-label="Invita y gana" type="button" title="Invita y gana" aria-label="Invita y gana">👫</button>
           <button id="mine-btn" class="hidden" data-label="Mis terrenos" type="button" title="Mis terrenos" aria-label="Mis terrenos">🏠</button>
           <button id="daily-btn" data-label="Regalo diario" type="button" title="Regalo diario" aria-label="Regalo diario">🎁<span id="daily-dot" class="hidden"></span></button>
-          <button id="share-app-btn" data-label="COMPARTIR" type="button" title="Compartir el juego" aria-label="Compartir el juego">📤</button>
+          <button id="share-app-btn" data-label="Compartir" type="button" title="Compartir el juego" aria-label="Compartir el juego">📤</button>
         </div>
       </div>
       <button id="menu-btn" type="button" aria-expanded="false" aria-controls="menu-items">☰ Menú</button>
@@ -203,9 +205,6 @@
     </button>
     <button id="rank-btn" data-label="Ranking" type="button" title="Ranking" aria-label="Ranking">🏆</button>
     <button id="chat-btn" data-label="Chat" type="button" title="Chat de la zona" aria-label="Chat de la zona">💬</button>
-    <button id="people-btn" data-label="Gente" type="button" title="Gente caminando: activada" aria-label="Activar o desactivar la gente caminando" aria-pressed="true">🚶</button>
-    <button id="vehicles-btn" data-label="Coches" type="button" title="Coches y taxis: activados" aria-label="Activar o desactivar los coches y taxis" aria-pressed="true">🚓</button>
-    <button id="train-btn" data-label="Tren" type="button" title="Tren: activado" aria-label="Activar o desactivar el tren" aria-pressed="true">🚆</button>
     <button id="sound-btn" data-label="Sonido" type="button" title="Música y efectos" aria-label="Sonido">🔊</button>
     <button id="account-btn" data-label="Cuenta" type="button" class="hidden" title="Entrar" aria-label="Entrar">👤</button>
     <button id="push-btn" data-label="Avisos" type="button" class="hidden" title="Avisos al móvil" aria-label="Avisos al móvil">🔔</button>
