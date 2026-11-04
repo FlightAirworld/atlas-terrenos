@@ -4,7 +4,7 @@
 //  - Dos fases de 20 s: calles principales (verde 7 s, ámbar 2 s, rojo) y transversales desfasadas 10 s; entre fases hay 1 s de rojo para todos.
 //  - vehicles.js (followLimit → stopRem): los coches frenan ante la línea de parada con rojo (y con ámbar si aún pueden parar). Las emergencias no paran.
 //  - people.js (pedHold): los peatones esperan en el bordillo y cruzan solo cuando los coches de esa calle tienen el rojo.
-//  - Los pasos de cebra van en gris oscuro (las calles del mapa son blancas) y cada uno lleva dos balizas ámbar intermitentes de precaución, una en cada bordillo.
+//  - Los pasos de cebra van en gris oscuro (las calles del mapa son blancas).
 // Solo se dibujan los cruces más cercanos al centro de la pantalla (hasta 14; 8 en móvil) y con zoom >= 16,5.
 (function () {
   if (typeof map === 'undefined' || !map || !window.roadGraph) return;
@@ -22,13 +22,7 @@
     .xg-l { border-radius: 50%; box-sizing: border-box; border: 1.5px solid #2b2b2b; background: #777; transition: background .2s, box-shadow .2s; }
     .xg-l.g { background: #3df57f; box-shadow: 0 0 8px 2px rgba(61,245,127,.7); }
     .xg-l.y { background: #ffc533; box-shadow: 0 0 8px 2px rgba(255,197,51,.7); }
-    .xg-l.r { background: #ff3b3b; box-shadow: 0 0 8px 2px rgba(255,59,59,.7); }
-    /* Baliza ámbar intermitente de precaución en cada paso de peatones (una a cada lado, parpadean alternadas) */
-    .xg-c { border-radius: 50%; box-sizing: border-box; border: 1.5px solid #2b2b2b; background: #ffb300; box-shadow: 0 0 7px 3px rgba(255,170,0,.8); will-change: opacity; animation: xgBlinkA 1s steps(1, end) infinite; }
-    .xg-c.b { animation-name: xgBlinkB; }
-    @keyframes xgBlinkA { 0%, 49.9% { opacity: 1; } 50%, 100% { opacity: .15; } }
-    @keyframes xgBlinkB { 0%, 49.9% { opacity: .15; } 50%, 100% { opacity: 1; } }
-    @media (prefers-reduced-motion: reduce) { .xg-c, .xg-c.b { animation: none; opacity: .9; } }`;
+    .xg-l.r { background: #ff3b3b; box-shadow: 0 0 8px 2px rgba(255,59,59,.7); }`;
   document.head.appendChild(st);
 
   const active = new Map();     // clave del cruce -> { C, br: [{ th, u, cls, grp, half, xs, els }], mk, off, fp, fv }
@@ -51,9 +45,6 @@
       b.els.s.style.background = ZEBRA;
       const ls = Math.max(5, 7 * fp);
       set(b.els.l, b.xs + 1, -half - 3 * fp - ls, ls, ls);                     // semáforo en el bordillo, a la derecha de quien llega
-      const cs = Math.max(6, 8 * fp);
-      set(b.els.c1, dz - cs / 2, -half - 3 * fp - cs, cs, cs);                 // balizas ámbar intermitentes: una en cada bordillo, a la altura del paso
-      set(b.els.c2, dz - cs / 2, half + 3 * fp, cs, cs);
     });
     J.k = layoutKey();
   }
@@ -66,11 +57,11 @@
     for (const J of active.values()) if (Math.hypot(J.C.x - c.C.x, J.C.y - c.C.y) < 40) return;   // sin cruces pegados (autovías de doble calzada…)
     const br = c.br.sort((a, b) => RANK[b.cls] - RANK[a.cls]).slice(0, 4);
     br.forEach((b, i) => { b.u = { x: Math.cos(b.th), y: Math.sin(b.th) }; b.grp = i === 0 || Math.abs(angDiff(b.th, br[0].th + Math.PI)) < 0.8 ? 0 : 1; });
-    const html = br.map(b => `<div class="xg-r" style="transform:rotate(${b.th.toFixed(4)}rad)"><div class="xg-z"></div><div class="xg-s"></div><div class="xg-l"></div><div class="xg-c"></div><div class="xg-c b"></div></div>`).join('');
+    const html = br.map(b => `<div class="xg-r" style="transform:rotate(${b.th.toFixed(4)}rad)"><div class="xg-z"></div><div class="xg-s"></div><div class="xg-l"></div></div>`).join('');
     const mk = L.marker(map.unproject(c.C, REF_Z), { icon: L.divIcon({ className: 'xg', iconSize: [0, 0], iconAnchor: [0, 0], html }), pane: 'pads', interactive: false, keyboard: false }).addTo(map);
     const J = { key: c.key, C: c.C, br, mk, off: hash(c.key) / 4294967296 * CYCLE, k: '', fp: 1, fv: 1 };
     const rs = mk.getElement().querySelectorAll('.xg-r');
-    br.forEach((b, i) => { const r = rs[i]; b.els = { z: r.children[0], s: r.children[1], l: r.children[2], c1: r.children[3], c2: r.children[4] }; });
+    br.forEach((b, i) => { const r = rs[i]; b.els = { z: r.children[0], s: r.children[1], l: r.children[2] }; });
     active.set(c.key, J); layout(J); paint(J, Date.now() / 1000);
   }
   function removeJ(k) { const J = active.get(k); if (J) { map.removeLayer(J.mk); active.delete(k); } }

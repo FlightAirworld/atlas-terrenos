@@ -2,7 +2,7 @@
 // Tráfico por el mapa:
 //  - Coches, camiones y autobuses circulan todo el rato por las calles reales, por su carril (a la derecha), y frenan si hay otro delante.
 //    Su tamaño y su carril salen del ancho con el que el mapa dibuja la calle en cada zoom (ver roadMetrics/sizes en mapshim.js).
-//  - Policía cada 5 min, bomberos cada 12 min y ambulancia cada 17 min, con luces y sirena (sintetizada, sin archivos).
+//  - Policía cada 2 min, ambulancia cada 3 min y bomberos cada 5 min, con luces y sirena (sintetizada, sin archivos).
 //  - Los coches siguen las calles reales (OpenStreetMap vía OpenFreeMap); si no hay calles, los taxis y las emergencias cruzan en línea recta.
 //  - Taxis que recogen o dejan gente; la luz verde del techo se enciende cuando está libre o parado en la acera.
 //  - También circulan motos, bicicletas (con pedaleo) y patinetes; las bicis y patinetes van por el borde de la calzada.
@@ -19,7 +19,7 @@
   const SMALL = Math.min(innerWidth, innerHeight) < 600;
   const MAX_TRAFFIC = SMALL ? 11 : 17;                      // coches, camiones, autobuses, motos, bicis y patinetes a la vez
   const MIX = [['car', 0.46], ['truck', 0.14], ['bus', 0.1], ['moto', 0.12], ['bike', 0.1], ['scooter', 0.08]];  // reparto del tráfico
-  const PERIOD = { police: 5 * 60e3, fire: 12 * 60e3, ambulance: 17 * 60e3 };
+  const PERIOD = { police: 2 * 60e3, ambulance: 3 * 60e3, fire: 5 * 60e3 };   // cada cuánto sale cada emergencia
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const btn = document.getElementById('vehicles-btn');
   let on = true;
