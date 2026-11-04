@@ -395,6 +395,7 @@
     opt = opt || {};
     const g = roadGraph();
     if (!g) return null;
+    const oneWay = !opt.inside && !opt.anyWay;          // sentidos únicos: los respetan los coches, no los peatones ni las emergencias
     const near = p => {
       const out = [], cx = Math.round(p.x / SNAP), cy = Math.round(p.y / SNAP);
       for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const a = g.ends.get((cx + i) + ',' + (cy + j)); if (a) out.push(...a); }
@@ -408,7 +409,7 @@
       const sc = screenOf(ln);
       if (opt.inside) { if (sc.some(inside)) cand.push({ ln, e: Math.random() < 0.5 ? 0 : 1 }); }
       else [0, 1].forEach(e => {
-        if (!canGo(ln, e)) return;                        // calle de sentido único: solo entra por su entrada
+        if (oneWay && !canGo(ln, e)) return;              // calle de sentido único: solo entra por su entrada (las emergencias van por donde necesiten)
         const c = e ? sc[sc.length - 1] : sc[0];
         if (c.x < -10 || c.y < -10 || c.x > size.x + 10 || c.y > size.y + 10) cand.push({ ln, e });
       });
@@ -426,7 +427,7 @@
         const opts = [];
         near(a).forEach(o => {
           if (used.has(o.ln)) return;
-          if (!opt.inside && !canGo(o.ln, o.end)) return;   // no entran en una calle de sentido único por su salida
+          if (oneWay && !canGo(o.ln, o.end)) return;        // no entran en una calle de sentido único por su salida
           const q = o.end ? o.ln.pts.slice().reverse() : o.ln.pts;
           const turn = Math.abs(angDiff(Math.atan2(q[1].y - q[0].y, q[1].x - q[0].x), hin));
           if (turn < 2.0) opts.push({ o, q, turn });      // sin cambios de sentido bruscos
@@ -466,8 +467,8 @@
   window.roadRoute = roadRoute;     // lo usa también people.js (peatones por las aceras)
   window.roadGraph = roadGraph;     // lo usa crossings.js (semáforos y pasos de peatones en los cruces)
 
-  function pathRoute(Lc, roadsOnly) {
-    const rr = roadRoute();
+  function pathRoute(Lc, roadsOnly, emergency) {
+    const rr = roadRoute(emergency ? { anyWay: true } : undefined);
     if (rr) return rr;
     if (roadsOnly) return null;   // el tráfico normal solo circula por calles; el taxi y las emergencias, si no hay, cruzan recto
     const r = route(Lc);          // sin calles cerca (mar, campo…): línea recta como antes
@@ -487,7 +488,7 @@
   function spawn(kind, roadsOnly) {
     const K = KINDS[kind]; if (!K) return null;
     refreshSizes();
-    const r = pathRoute(K.L, roadsOnly); if (!r) return null;
+    const r = pathRoute(K.L, roadsOnly || !!K.siren || kind === 'taxi', !!K.siren); if (!r) return null;   // emergencias y taxis SOLO van por calles (si no hay ruta, no salen y lo reintentan)
     const P = r.path, p0 = P.pts[0], d0 = { dx: (P.pts[1].x - p0.x) / (P.cum[1] || 1), dy: (P.pts[1].y - p0.y) / (P.cum[1] || 1) };
     const look = K.look ? K.look() : null;
     const icon = L.divIcon({
@@ -1211,7 +1212,7 @@
       // Emergencias periódicas (si el zoom es bajo, esperan a que te acerques)
       if (z >= MIN_ZOOM && now - lastSpawn.t > 10000) {
         for (const k of ['police', 'fire', 'ambulance']) {
-          if (now >= nextAt[k]) { spawn(k); nextAt[k] = now + PERIOD[k]; lastSpawn.t = now; break; }
+          if (now >= nextAt[k]) { const ok = !!spawn(k); nextAt[k] = now + (ok ? PERIOD[k] : 4000); if (ok) lastSpawn.t = now; break; }   // sin ruta por calle, reintenta en 4 s
         }
       }
       // Taxis
