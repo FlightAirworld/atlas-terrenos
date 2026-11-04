@@ -84,13 +84,14 @@
         const dx = (x1 - x0) * mLng, dy = (y1 - y0) * mLat, len = Math.hypot(dx, dy);
         if (len < 0.5) continue;
         const nx = -dy / len, ny = dx / len;                     // normal a la calle (metros)
-        for (let d = carry; d < len; d += SPACING_M) {
+        let d = carry;
+        while (d < len) {
           const f = d / len, lng = x0 + (x1 - x0) * f + side * nx * off / mLng, lat = y0 + (y1 - y0) * f + side * ny * off / mLat;
           const k = Math.round(lng * 20000) + ',' + Math.round(lat * 20000);   // ~5 m: evita farolas repetidas donde se solapan tramos
           if (!seen.has(k)) { seen.add(k); out.push([lng, lat]); }
-          side = -side; carry = d + SPACING_M - len;
+          side = -side; d += SPACING_M;
         }
-        carry = Math.max(0, carry);
+        carry = d - len;                                           // lo que falta para la siguiente farola, ya en el tramo siguiente
       }
     }
     lamps = out;
