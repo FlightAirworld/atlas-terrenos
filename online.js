@@ -31,7 +31,7 @@
     if (window.apiState && !window.apiState.ready) return;      // servidor dormido: se abre cuando despierte
     es = new EventSource('/api/online?cid=' + encodeURIComponent(cid));
     es.onopen = () => btn.classList.remove('off');
-    es.addEventListener('arson', e => { try { window.dispatchEvent(new CustomEvent('arson-msg', { detail: JSON.parse(e.data) })); } catch (x) {} });   // el piromano (arson.js)
+    es.addEventListener('santa', e => { try { window.dispatchEvent(new CustomEvent('santa-msg', { detail: JSON.parse(e.data) })); } catch (x) {} });   // Papá Noel (santa.js)
     es.onmessage = e => { const n = parseInt(e.data, 10); if (Number.isFinite(n) && n >= 0) show(n); };
     es.onerror = () => {
       btn.classList.add('off');                                   // sin conexión: punto gris

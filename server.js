@@ -850,7 +850,7 @@ function onlineStream(req, res, url) {
   set.add(res);
   onlineByIp.set(ip, (onlineByIp.get(ip) || 0) + 1);
   res.write(`retry: 3000\n\ndata: ${onlineClients.size}\n\n`);   // el recién llegado ve el número al instante
-  if (arsonActive) res.write(`event: arson\ndata: ${JSON.stringify({ type: 'start', now: Date.now(), ev: arsonPublic(arsonActive) })}\n\n`);   // si hay un incendio en marcha, el recién llegado lo ve
+  if (santaActive) res.write(`event: santa\ndata: ${JSON.stringify({ type: 'start', now: Date.now(), ev: santaPublic(santaActive) })}\n\n`);   // si Papá Noel está de visita, el recién llegado lo ve
   scheduleOnlineBroadcast();                                     // y los demás, medio segundo después
   let gone = false;
   const leave = () => {
@@ -1368,9 +1368,9 @@ async function route(req, res, url) {
     requireAdmin(req);
     return adminClaimParcel(await readJson(req));
   }
-  if (req.method === 'POST' && pn === '/api/admin/arson') {   // prueba: prende un incendio ahora mismo
+  if (req.method === 'POST' && pn === '/api/admin/santa') {   // prueba: hace venir a Papá Noel ahora mismo
     requireAdmin(req);
-    return { started: await arsonStart(true) };
+    return { started: await santaStart(true) };
   }
   if (req.method === 'GET' && pn === '/api/admin/stats') return adminStats(req);
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
@@ -1395,8 +1395,8 @@ async function route(req, res, url) {
     return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country, house: r.house, level: r.level }));
   }
 
-  if (req.method === 'GET' && pn === '/api/arson') return arsonGet(req);
-  if (req.method === 'POST' && pn === '/api/arson/seen') return arsonSeen(req);
+  if (req.method === 'GET' && pn === '/api/santa') return santaGet(req);
+  if (req.method === 'POST' && pn === '/api/santa/seen') return santaSeen(req);
   if (req.method === 'GET' && pn === '/api/health') return { ok: true };   // la pantalla de carga del sitio estático pregunta aquí si ya despertó
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineClients.size };
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
@@ -1486,95 +1486,94 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
   }).catch(e => console.error('No se pudo crear la tabla del chat:', e.message));
 
 
-// ---------- El piromano ----------
-// Cada ARSON_EVERY_MIN minutos (1440 = una vez al día por defecto) un piromano prende fuego a una parcela al azar de cualquier jugador con cuenta.
-// Primero llega con su antorcha (5 s) y luego arde ARSON_BURN_SEC segundos (30) a la vista de todos los jugadores conectados; después la parcela se borra y su dueño la pierde.
-// Como compensación recibe ARSON_REWARD créditos (5 por defecto). Se le avisa con un mensaje al entrar (tabla arson_notices) y con aviso al móvil si lo tiene activado.
-// Para desactivarlo: ARSON=off. Para probarlo ya: POST /api/admin/arson con la clave de admin.
-const ARSON_ON = String(process.env.ARSON || 'on').toLowerCase() !== 'off';
-const ARSON_EVERY_MS = Math.max(60_000, Number(process.env.ARSON_EVERY_MIN || 1440) * 60_000);
-const ARSON_BURN_MS = Math.min(300_000, Math.max(5_000, Number(process.env.ARSON_BURN_SEC || 30) * 1000));
-const ARSON_REWARD = Math.max(0, Math.floor(Number(process.env.ARSON_REWARD ?? 5)));   // créditos de consuelo para el dueño (ARSON_REWARD=0 para quitarlos)
-const ARSON_WALK_MS = 5_000;   // lo que tarda el piromano en llegar a la casa antes de prenderle fuego
-let arsonActive = null;   // { id, parcelId, userId, x, y, lat, lng, owner, house, level, startedAt, endsAt }
-const arsonPublic = ev => ev && ({ id: ev.id, parcelId: ev.parcelId, x: ev.x, y: ev.y, lat: ev.lat, lng: ev.lng, owner: ev.owner, house: ev.house, level: ev.level, startedAt: ev.startedAt, igniteAt: ev.igniteAt, endsAt: ev.endsAt });
-function arsonBroadcast(type, extra) {
-  const msg = `event: arson\ndata: ${JSON.stringify({ type, now: Date.now(), ev: arsonPublic(arsonActive), ...(extra || {}) })}\n\n`;
+// ---------- Papá Noel ----------
+// Cada SANTA_EVERY_MIN minutos (60 por defecto) llega Papá Noel volando en su trineo, aterriza en la casa de un jugador con cuenta
+// elegida al azar y le deja un regalo: SANTA_REWARD créditos (1 por defecto). Lo ven todos los jugadores conectados (aviso + sonido),
+// y el dueño recibe además un mensaje al entrar (tabla santa_notices) y un aviso al móvil si lo tiene activado.
+// Para desactivarlo: SANTA=off. Para probarlo ya: POST /api/admin/santa con la clave de admin.
+const SANTA_ON = String(process.env.SANTA || 'on').toLowerCase() !== 'off';
+const SANTA_EVERY_MS = Math.max(60_000, Number(process.env.SANTA_EVERY_MIN || 60) * 60_000);
+const SANTA_REWARD = Math.max(0, Math.floor(Number(process.env.SANTA_REWARD ?? 1)));
+const SANTA_FLY_MS = 8_000;     // vuelo hasta aterrizar
+const SANTA_GIFT_MS = 2_500;    // desde que aterriza hasta que deja el regalo
+const SANTA_STAY_MS = 9_000;    // lo que se queda posado en la casa
+const SANTA_LEAVE_MS = 6_000;   // despegue y vuelo de vuelta
+let santaActive = null;   // { id, parcelId, userId, x, y, lat, lng, owner, house, startedAt, landAt, giftAt, leaveAt, endsAt }
+const santaPublic = ev => ev && ({ id: ev.id, parcelId: ev.parcelId, x: ev.x, y: ev.y, lat: ev.lat, lng: ev.lng, owner: ev.owner, house: ev.house,
+  reward: SANTA_REWARD, startedAt: ev.startedAt, landAt: ev.landAt, giftAt: ev.giftAt, leaveAt: ev.leaveAt, endsAt: ev.endsAt });
+function santaBroadcast(type, extra) {
+  const msg = `event: santa\ndata: ${JSON.stringify({ type, now: Date.now(), ev: santaPublic(santaActive), ...(extra || {}) })}\n\n`;
   for (const set of onlineClients.values()) for (const res of set) { try { res.write(msg); } catch {} }
 }
-async function arsonStart(force) {
-  if (!ARSON_ON || arsonActive) return null;
+async function santaStart(force) {
+  if (!SANTA_ON || santaActive) return null;
   if (!force) {
-    if (!onlineClients.size) return null;   // sin jugadores conectados no tiene gracia: espera
-    const last = await one('SELECT MAX(started_at) AS t FROM arson_log');
-    if (last && last.t && Date.now() - Number(last.t) < ARSON_EVERY_MS - 5000) return null;
+    if (!onlineClients.size) return null;   // sin jugadores conectados nadie lo vería: espera
+    const last = await one('SELECT MAX(started_at) AS t FROM santa_log');
+    if (last && last.t && Date.now() - Number(last.t) < SANTA_EVERY_MS - 5000) return null;
   }
-  const p = await one('SELECT id, x, y, owner, user_id, house, level FROM parcels WHERE user_id IS NOT NULL ORDER BY random() LIMIT 1');
+  const p = await one('SELECT id, x, y, owner, user_id, house FROM parcels WHERE user_id IS NOT NULL ORDER BY random() LIMIT 1');
   if (!p) return null;
   const now = Date.now();
-  const row = await one('INSERT INTO arson_log (parcel_id, x, y, owner, user_id, house, level, started_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
-    [p.id, p.x, p.y, p.owner, String(p.user_id), p.house, p.level, now]);
-  arsonActive = { id: Number(row.id), parcelId: p.id, userId: String(p.user_id), x: p.x, y: p.y,
-    lat: p.y * SIZE - 90 + SIZE / 2, lng: p.x * SIZE - 180 + SIZE / 2, owner: p.owner, house: p.house, level: p.level, startedAt: now, igniteAt: now + ARSON_WALK_MS, endsAt: now + ARSON_WALK_MS + ARSON_BURN_MS };
-  arsonBroadcast('start');
-  setTimeout(arsonFinish, ARSON_WALK_MS + ARSON_BURN_MS).unref();
-  return arsonPublic(arsonActive);
+  const row = await one('INSERT INTO santa_log (parcel_id, x, y, owner, user_id, house, started_at) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+    [p.id, p.x, p.y, p.owner, String(p.user_id), p.house, now]);
+  const landAt = now + SANTA_FLY_MS, giftAt = landAt + SANTA_GIFT_MS, leaveAt = landAt + SANTA_STAY_MS;
+  santaActive = { id: Number(row.id), parcelId: p.id, userId: String(p.user_id), x: p.x, y: p.y,
+    lat: p.y * SIZE - 90 + SIZE / 2, lng: p.x * SIZE - 180 + SIZE / 2, owner: p.owner, house: p.house,
+    startedAt: now, landAt, giftAt, leaveAt, endsAt: leaveAt + SANTA_LEAVE_MS };
+  santaBroadcast('start');
+  setTimeout(() => santaGift(santaActive && santaActive.id).catch(e => console.error('Papá Noel:', e.message)), giftAt - now).unref();
+  setTimeout(() => santaEnd(santaActive && santaActive.id), santaActive.endsAt - now).unref();
+  return santaPublic(santaActive);
 }
-async function arsonFinish() {
-  const ev = arsonActive; if (!ev) return;
-  let burned = false, reward = 0;
+// Entrega el regalo (una sola vez por visita): suma los créditos y deja el aviso para el dueño
+async function santaGift(id, evOverride) {
+  const ev = evOverride || santaActive; if (!ev || ev.id !== id) return;
+  const claim = await one('UPDATE santa_log SET gifted = TRUE WHERE id = $1 AND gifted = FALSE RETURNING id', [id]);
+  if (!claim) return;   // ya entregado
+  let paid = 0;
   try {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const del = await client.query('DELETE FROM parcels WHERE id = $1 AND user_id::text = $2 RETURNING id', [ev.parcelId, ev.userId]);
-      if (del.rowCount) {
-        burned = true;
-        let paid = 0;
-        if (ARSON_REWARD > 0) {   // recompensa: créditos para el jugador al que le queman la casa
-          const up = await client.query('UPDATE packs SET credits = credits + $1 WHERE user_id::text = $2', [ARSON_REWARD, ev.userId]);
-          if (up.rowCount) paid = ARSON_REWARD;
-        }
-        reward = paid;
-        await client.query('INSERT INTO arson_notices (user_id, parcel_id, house, created_at, reward) VALUES ($1,$2,$3,$4,$5)', [ev.userId, ev.parcelId, ev.house, Date.now(), paid]);
-      }
-      await client.query('UPDATE arson_log SET ended_at = $1 WHERE id = $2', [Date.now(), ev.id]);
-      await client.query('COMMIT');
-    } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; }
-    finally { client.release(); }
-  } catch (e) { console.error('Piromano: no se pudo quemar la parcela:', e.message); }
-  arsonActive = null;
-  arsonBroadcast('end', { ev: null, parcelId: ev.parcelId, burned });
-  if (burned) pushToUser(ev.userId, { title: '🔥 EL PIROMANO TE HA QUEMADO UNA CASA', body: reward ? `Has perdido una de tus parcelas. Te damos ${reward} créditos de compensación.` : 'Has perdido una de tus parcelas.', tag: 'arson', url: '/' }).catch(() => {});
+    if (SANTA_REWARD > 0) {
+      const up = await run('UPDATE packs SET credits = credits + $1 WHERE user_id::text = $2', [SANTA_REWARD, ev.userId]);
+      if (up && (up.rowCount === undefined || up.rowCount > 0)) paid = SANTA_REWARD;
+    }
+    await run('INSERT INTO santa_notices (user_id, parcel_id, house, created_at, reward) VALUES ($1,$2,$3,$4,$5)', [ev.userId, ev.parcelId, ev.house, Date.now(), paid]);
+  } catch (e) { console.error('Papá Noel: no se pudo entregar el regalo:', e.message); }
+  santaBroadcast('gift', { parcelId: ev.parcelId, reward: paid });
+  pushToUser(ev.userId, { title: '🎅 ¡Papá Noel ha visitado tu casa!', body: paid ? `Te ha dejado ${paid} ${paid === 1 ? 'crédito' : 'créditos'} de regalo.` : 'Te ha dejado un regalo.', tag: 'santa', url: '/' }).catch(() => {});
 }
-async function arsonResume() {   // si el servidor se reinició con un incendio a medias, se retoma (o se termina)
-  const r = await one('SELECT * FROM arson_log WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1');
+function santaEnd(id) {
+  if (!santaActive || santaActive.id !== id) return;
+  const ev = santaActive;
+  run('UPDATE santa_log SET ended_at = $1 WHERE id = $2', [Date.now(), ev.id]).catch(() => {});
+  santaActive = null;
+  santaBroadcast('end', { ev: null, parcelId: ev.parcelId });
+}
+async function santaResume() {   // si el servidor se reinició a mitad de una visita: se entrega el regalo pendiente y se cierra
+  const r = await one('SELECT * FROM santa_log WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1');
   if (!r) return;
-  const startedAt = Number(r.started_at);
-  arsonActive = { id: Number(r.id), parcelId: r.parcel_id, userId: String(r.user_id), x: r.x, y: r.y, lat: r.y * SIZE - 90 + SIZE / 2, lng: r.x * SIZE - 180 + SIZE / 2,
-    owner: r.owner, house: r.house, level: r.level, startedAt, igniteAt: startedAt + ARSON_WALK_MS, endsAt: startedAt + ARSON_WALK_MS + ARSON_BURN_MS };
-  setTimeout(arsonFinish, Math.max(0, arsonActive.endsAt - Date.now())).unref();
+  if (!r.gifted) await santaGift(Number(r.id), { id: Number(r.id), parcelId: r.parcel_id, userId: String(r.user_id), house: r.house });
+  await run('UPDATE santa_log SET ended_at = $1 WHERE id = $2', [Date.now(), r.id]);
 }
-async function arsonGet(req) {
+async function santaGet(req) {
   const user = await userFrom(req);
-  const notices = user ? (await all('SELECT id, parcel_id, house, created_at, reward FROM arson_notices WHERE user_id = $1 AND seen = FALSE ORDER BY id LIMIT 20', [user.id]))
+  const notices = user ? (await all('SELECT id, parcel_id, house, created_at, reward FROM santa_notices WHERE user_id = $1 AND seen = FALSE ORDER BY id LIMIT 20', [user.id]))
     .map(n => ({ id: Number(n.id), parcelId: n.parcel_id, house: n.house, reward: Number(n.reward) || 0, t: Number(n.created_at) })) : [];
-  return { on: ARSON_ON, now: Date.now(), active: arsonPublic(arsonActive), notices };
+  return { on: SANTA_ON, now: Date.now(), active: santaPublic(santaActive), notices };
 }
-async function arsonSeen(req) {
+async function santaSeen(req) {
   const user = await needUser(req);
-  await run('UPDATE arson_notices SET seen = TRUE WHERE user_id = $1 AND seen = FALSE', [user.id]);
+  await run('UPDATE santa_notices SET seen = TRUE WHERE user_id = $1 AND seen = FALSE', [user.id]);
   return { ok: true };
 }
 ready.then(async () => {
-  if (!ARSON_ON) return;
-  await run('CREATE TABLE IF NOT EXISTS arson_log (id BIGSERIAL PRIMARY KEY, parcel_id TEXT NOT NULL, x INT, y INT, owner TEXT, user_id TEXT, house TEXT, level SMALLINT, started_at BIGINT NOT NULL, ended_at BIGINT)');
-  await run('CREATE TABLE IF NOT EXISTS arson_notices (id BIGSERIAL PRIMARY KEY, user_id TEXT NOT NULL, parcel_id TEXT, house TEXT, created_at BIGINT NOT NULL, seen BOOLEAN NOT NULL DEFAULT FALSE)');
-  await run('ALTER TABLE arson_notices ADD COLUMN IF NOT EXISTS reward INT NOT NULL DEFAULT 0');
-  await run('CREATE INDEX IF NOT EXISTS arson_notices_user ON arson_notices (user_id, seen)');
-  await arsonResume();
-  setInterval(() => arsonStart(false).catch(e => console.error('Piromano:', e.message)), 60_000).unref();
-}).catch(e => console.error('No se pudo preparar el piromano:', e.message));
+  if (!SANTA_ON) return;
+  await run('CREATE TABLE IF NOT EXISTS santa_log (id BIGSERIAL PRIMARY KEY, parcel_id TEXT NOT NULL, x INT, y INT, owner TEXT, user_id TEXT, house TEXT, started_at BIGINT NOT NULL, gifted BOOLEAN NOT NULL DEFAULT FALSE, ended_at BIGINT)');
+  await run('CREATE TABLE IF NOT EXISTS santa_notices (id BIGSERIAL PRIMARY KEY, user_id TEXT NOT NULL, parcel_id TEXT, house TEXT, created_at BIGINT NOT NULL, reward INT NOT NULL DEFAULT 0, seen BOOLEAN NOT NULL DEFAULT FALSE)');
+  await run('CREATE INDEX IF NOT EXISTS santa_notices_user ON santa_notices (user_id, seen)');
+  await santaResume();
+  setInterval(() => santaStart(false).catch(e => console.error('Papá Noel:', e.message)), 60_000).unref();
+}).catch(e => console.error('No se pudo preparar a Papá Noel:', e.message));
 
 // Sitio estático en otro dominio: CORS_ORIGINS = direcciones permitidas, separadas por comas (p. ej. https://atlas-terrenos-web.onrender.com)
 const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(x => x.trim().replace(/\/+$/, '')).filter(Boolean);

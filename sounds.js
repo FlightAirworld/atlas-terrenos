@@ -48,6 +48,8 @@
     coin:   t => { tone(sfxBus, 'square', hz(83), t, 0.08, 0.25); tone(sfxBus, 'square', hz(88), t + 0.08, 0.35, 0.25); },
     gift:   t => { [72, 76, 79, 84, 88, 91].forEach((n, i) => tone(sfxBus, 'sine', hz(n), t + i * 0.11, 0.5, 0.5)); },
     pop:    t => tone(sfxBus, 'sine', 350, t, 0.16, 0.5, { slideTo: 900 }),
+    bells:  t => { [91, 95, 100, 95, 91, 100, 103, 100, 95, 103, 107, 103].forEach((n, i) => tone(sfxBus, 'triangle', hz(n), t + i * 0.085, 0.3, 0.32)); },
+    hohoho: t => { [0, 0.42, 0.84].forEach(d => { tone(sfxBus, 'sawtooth', 150, t + d, 0.32, 0.3, { slideTo: 105 }); tone(sfxBus, 'triangle', 300, t + d, 0.32, 0.22, { slideTo: 210 }); }); },
     error:  t => { tone(sfxBus, 'sawtooth', 220, t, 0.25, 0.3, { slideTo: 110 }); }
   };
 
