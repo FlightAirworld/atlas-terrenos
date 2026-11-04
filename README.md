@@ -104,6 +104,16 @@ Racha de 7 días: premios de cada día en `DAILY_REWARDS` (7 números separados 
 - **Colores**: las calles del mapa son blancas, así que el paso de cebra y la línea de parada van en gris oscuro (`ZEBRA` en `crossings.js`) para que se vean.
 - **Balizas de precaución**: cada paso de peatones lleva dos luces ámbar intermitentes (una en cada bordillo, parpadean alternadas; clase `.xg-c`). Con `prefers-reduced-motion` quedan fijas.
 
+## Señales de tráfico (`signs.js`)
+
+- Las señales no vienen en el mapa: se colocan por reglas junto a los cruces (zoom 16,5 o más; los 14 más cercanos al centro, 8 en móvil), al lado de la calle y no encima de la calzada.
+- **Límite de velocidad**: 50 en calles principales, secundarias y terciarias; 30 en calles pequeñas y de servicio (`LIMIT`). Los coches nunca pasan de ese límite, se vea la señal o no.
+- **Paso de peatones** (rombo amarillo): en los cruces con semáforo, antes del paso de cebra.
+- **Stop y ceda el paso**: en los cruces sin semáforo, en la calle de menos categoría. El coche frena del todo ante el stop, espera ~1,3 s y arranca cuando nadie cruza; ante el ceda el paso baja la velocidad y solo para si viene alguien. Si no ve hueco en 9 s arranca igualmente (para no bloquear el tráfico).
+- **Dirección prohibida**: en la boca de las calles de sentido único, si las teselas traen el dato `oneway`. Los coches no trazan rutas contra el sentido (`canGo` en `vehicles.js`); los peatones no se ven afectados.
+- Policía, bomberos y ambulancias no obedecen las señales (igual que los semáforos).
+- Enganche: `followLimit` (`vehicles.js`) llama a `Signs.check(v, scale, vehicles)`. `crossings.js` exporta `Xings.list()` y `Xings.near()`.
+
 ## Tren, vías y estaciones (`trains.js`)
 
 - Las **vías** son las reales de OpenStreetMap (clase `rail`, sin túneles ni apartaderos); el mapa las dibuja con balasto y traviesas (`st-rail` en `app.js`). Solo hay tren donde hay vía real: prueba por ejemplo cerca de una estación grande de tu ciudad.

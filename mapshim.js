@@ -118,8 +118,9 @@
           if (!roadsOn || !gl.getLayer('roads-q')) return [];
           const out = [];
           gl.queryRenderedFeatures({ layers: ['roads-q'] }).forEach(f => {
-            const g = f.geometry, cls = f.properties && f.properties.class;
-            const add = c => { const a = c.slice(); a.cls = cls; out.push(a); };     // cls: clase de la calle (para saber su ancho)
+            const g = f.geometry, cls = f.properties && f.properties.class, o = f.properties && f.properties.oneway;
+            const ow = (o === 1 || o === '1' || o === 'yes' || o === true) ? 1 : (o === -1 || o === '-1') ? -1 : 0;   // sentido único: 1 = en el orden de los puntos, -1 = al revés, 0 = doble sentido
+            const add = c => { const a = c.slice(); a.cls = cls; a.ow = ow; out.push(a); };     // cls: clase de la calle (para saber su ancho)
             if (g.type === 'LineString') add(g.coordinates);
             else if (g.type === 'MultiLineString') g.coordinates.forEach(add);
           });

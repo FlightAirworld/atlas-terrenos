@@ -353,6 +353,11 @@
     v.dx = (b.x - a.x) / len; v.dy = (b.y - a.y) / len;
   }
 
+  // ¿Se puede circular por la calle ln empezando por su extremo `from` (0 = primer punto, 1 = último)? Respeta los sentidos únicos.
+  // Solo lo aplican los coches; los peatones (opt.inside) van por donde quieran.
+  const canGo = (ln, from) => !ln.ow || (ln.ow === 1 ? from === 0 : from === 1);
+  window.roadCanGo = canGo;          // lo usan crossings.js y signs.js (señal de dirección prohibida)
+
   // Grafo de calles de lo que se ve ahora mismo. Se guarda un par de segundos (y se descarta en cuanto el mapa se mueve)
   // porque coches y peatones lo piden muchas veces y consultar las teselas vectoriales no es gratis.
   let graph = null, graphT = 0;
@@ -367,7 +372,7 @@
     raw.forEach(c => {
       if (c.length < 2) return;
       const pts = c.map(ll => map.project({ lat: ll[1], lng: ll[0] }, REF_Z));
-      const ln = { pts, ll: c, sc: null, cls: c.cls };
+      const ln = { pts, ll: c, sc: null, cls: c.cls, ow: c.ow || 0 };
       lines.push(ln);
       [[pts[0], 0], [pts[pts.length - 1], 1]].forEach(([p, e]) => {
         const k = Math.round(p.x / SNAP) + ',' + Math.round(p.y / SNAP);
@@ -403,6 +408,7 @@
       const sc = screenOf(ln);
       if (opt.inside) { if (sc.some(inside)) cand.push({ ln, e: Math.random() < 0.5 ? 0 : 1 }); }
       else [0, 1].forEach(e => {
+        if (!canGo(ln, e)) return;                        // calle de sentido único: solo entra por su entrada
         const c = e ? sc[sc.length - 1] : sc[0];
         if (c.x < -10 || c.y < -10 || c.x > size.x + 10 || c.y > size.y + 10) cand.push({ ln, e });
       });
@@ -420,6 +426,7 @@
         const opts = [];
         near(a).forEach(o => {
           if (used.has(o.ln)) return;
+          if (!opt.inside && !canGo(o.ln, o.end)) return;   // no entran en una calle de sentido único por su salida
           const q = o.end ? o.ln.pts.slice().reverse() : o.ln.pts;
           const turn = Math.abs(angDiff(Math.atan2(q[1].y - q[0].y, q[1].x - q[0].x), hin));
           if (turn < 2.0) opts.push({ o, q, turn });      // sin cambios de sentido bruscos
@@ -530,9 +537,11 @@
   // Frenar si hay alguien justo delante (mismo sentido, mismo carril). Devuelve la velocidad máxima permitida.
   // Velocidad máxima permitida: lo más restrictivo entre el coche de delante y un semáforo en rojo (crossings.js)
   function followLimit(v, scale) {
-    const a = followLimit0(v, scale), rem = window.Xings ? window.Xings.stopRem(v, scale) : Infinity;
-    if (rem === Infinity) return a;
-    return Math.min(a, rem <= 1 ? 0 : Math.sqrt(2 * 60 * rem) / SPD + 2);
+    let m = followLimit0(v, scale), rem = window.Xings ? window.Xings.stopRem(v, scale) : Infinity;
+    const sg = window.Signs ? window.Signs.check(v, scale, vehicles) : null;   // señales (signs.js): límite de velocidad, stop y ceda el paso
+    if (sg) { m = Math.min(m, sg.cap); rem = Math.min(rem, sg.rem); }
+    if (rem === Infinity) return m;
+    return Math.min(m, rem <= 1 ? 0 : Math.sqrt(2 * 60 * rem) / SPD + 2);
   }
   function followLimit0(v, scale) {
     const ch = Math.cos(v.h), sh = Math.sin(v.h);

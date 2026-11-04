@@ -88,7 +88,7 @@
         if (!q || !RANK[e.ln.cls]) return;
         const th = Math.atan2(q.y - p.y, q.x - p.x), dup = br.find(b => Math.abs(angDiff(b.th, th)) < 0.4);
         if (dup) { if (RANK[e.ln.cls] > RANK[dup.cls]) dup.cls = e.ln.cls; return; }
-        br.push({ th, cls: e.ln.cls });
+        br.push({ th, cls: e.ln.cls, ne: !!(window.roadCanGo && !window.roadCanGo(e.ln, e.end)) });   // ne: por esta calle no se puede salir del cruce (sentido único)
       });
       if (br.length < 3) return;
       const C = { x: sx / arr.length, y: sy / arr.length }, key = Math.round(C.x / 4) + ',' + Math.round(C.y / 4);
@@ -141,7 +141,10 @@
     return hold;
   }
 
-  window.Xings = { stopRem, pedHold };
+  // Para signs.js: cruces con semáforo activos, y si hay uno a menos de r px (de mundo) del punto C
+  const list = () => Array.from(active.values());
+  const near = (C, r) => { for (const J of active.values()) if (Math.hypot(J.C.x - C.x, J.C.y - C.y) < r) return true; return false; };
+  window.Xings = { stopRem, pedHold, list, near };
   setInterval(scan, 1200);
   setInterval(() => {
     if (!active.size || document.hidden) return;
