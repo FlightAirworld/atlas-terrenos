@@ -612,6 +612,49 @@ async function dailyClaim(req) {
   return { ok: true, code, credits: up.credits, reward: info.next, streak: up.streak, newCode: false };
 }
 
+// ---------- Ruleta diaria ----------
+// Un giro gratis al día por cuenta (día según DAILY_TZ). Premios en créditos; los de 1, 2, 5 y 10 solo pueden salir UNA vez al mes por cuenta.
+// El premio lo decide el servidor. Como los créditos (packs.credits) son enteros, los decimales se acumulan en packs.roulette_carry
+// y cada vez que suman 1 pasan a créditos enteros.
+// Se puede ajustar con variables: ROULETTE_BIG_CHANCE (prob. de premio grande por giro si aún no salió este mes, 0.10 por defecto).
+const ROULETTE_SMALL = [[0.10, 40], [0.20, 28], [0.50, 20], [0.75, 12]];   // [premio, peso]
+const ROULETTE_BIG = [[1, 60], [2, 25], [5, 12], [10, 3]];
+const ROULETTE_BIG_CHANCE = Math.min(1, Math.max(0, Number(process.env.ROULETTE_BIG_CHANCE ?? 0.10)));
+function roulettePick(table) {
+  const total = table.reduce((a, [, w]) => a + w, 0);
+  let r = crypto.randomInt(0, total * 1000) / 1000;
+  for (const [prize, w] of table) { if ((r -= w) < 0) return prize; }
+  return table[0][0];
+}
+async function rouletteGet(req) {
+  const user = await needUser(req);
+  const done = await one('SELECT 1 FROM roulette_spins WHERE user_id = $1 AND day = $2', [user.id, dayKey()]);
+  return { canSpin: !done };
+}
+async function rouletteSpin(req) {
+  const user = await needUser(req);
+  const pack = await ensureUserPack(user);
+  const today = dayKey(), month = today.slice(0, 7);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT code FROM packs WHERE code = $1 FOR UPDATE', [pack.code]);   // un giro a la vez por cuenta
+    const bigDone = (await client.query("SELECT 1 FROM roulette_spins WHERE user_id = $1 AND prize >= 1 AND to_char(day, 'YYYY-MM') = $2 LIMIT 1", [user.id, month])).rowCount > 0;
+    const prize = (!bigDone && crypto.randomInt(0, 1_000_000) / 1_000_000 < ROULETTE_BIG_CHANCE) ? roulettePick(ROULETTE_BIG) : roulettePick(ROULETTE_SMALL);
+    const ins = await client.query('INSERT INTO roulette_spins (user_id, day, prize, created_at) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING', [user.id, today, prize, Date.now()]);
+    if (!ins.rowCount) throw new HttpError(409, 'Hoy ya has girado la ruleta. ¡Vuelve mañana!');
+    const up = (await client.query(
+      `UPDATE packs SET roulette_carry = (roulette_carry + $1) - floor(roulette_carry + $1),
+                        credits = credits + floor(roulette_carry + $1)::int
+       WHERE code = $2 RETURNING credits, roulette_carry`, [prize, pack.code])).rows[0];
+    await client.query('COMMIT');
+    return { ok: true, prize, credits: Number(up.credits), carry: Number(up.roulette_carry) };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally { client.release(); }
+}
+
 // ---------- Seguridad: límite de peticiones, clave de administrador, visitas ----------
 const rateBuckets = new Map();   // clave -> { count, reset }
 function rateHit(key, windowMs) {
@@ -1425,6 +1468,8 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/pack') return { credits: (await getPack(req)).credits };
   if (req.method === 'GET' && pn === '/api/daily') return dailyGet(req);
   if (req.method === 'POST' && pn === '/api/daily/claim') return dailyClaim(req);
+  if (req.method === 'GET' && pn === '/api/roulette') return rouletteGet(req);
+  if (req.method === 'POST' && pn === '/api/roulette/spin') return rouletteSpin(req);
   if (req.method === 'POST' && pn === '/api/parcel/house') return setHouse(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/parcel/upgrade') return upgradeParcel(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/claim') return claimWithCredit(req, await readJson(req));
@@ -1588,6 +1633,11 @@ ready.then(async () => {
   await santaResume();
   setInterval(() => santaStart(false).catch(e => console.error('Papá Noel:', e.message)), 60_000).unref();
 }).catch(e => console.error('No se pudo preparar a Papá Noel:', e.message));
+
+ready.then(async () => {   // ruleta diaria: una fila por cuenta y día (la clave primaria impide girar dos veces el mismo día)
+  await run('CREATE TABLE IF NOT EXISTS roulette_spins (user_id TEXT NOT NULL, day DATE NOT NULL, prize NUMERIC(8,2) NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, day))');
+  await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS roulette_carry NUMERIC(6,2) NOT NULL DEFAULT 0');
+}).catch(e => console.error('No se pudo preparar la ruleta:', e.message));
 
 // Sitio estático en otro dominio: CORS_ORIGINS = direcciones permitidas, separadas por comas (p. ej. https://atlas-terrenos-web.onrender.com)
 const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(x => x.trim().replace(/\/+$/, '')).filter(Boolean);
