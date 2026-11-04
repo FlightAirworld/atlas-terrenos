@@ -1486,12 +1486,12 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
 
 
 // ---------- El piromano ----------
-// Cada ARSON_EVERY_MIN minutos (60 por defecto) un piromano prende fuego a una parcela al azar de cualquier jugador con cuenta.
+// Cada ARSON_EVERY_MIN minutos (1440 = una vez al día por defecto) un piromano prende fuego a una parcela al azar de cualquier jugador con cuenta.
 // Primero llega con su antorcha (5 s) y luego arde ARSON_BURN_SEC segundos (30) a la vista de todos los jugadores conectados; después la parcela se borra y su dueño la pierde.
 // Como compensación recibe ARSON_REWARD créditos (5 por defecto). Se le avisa con un mensaje al entrar (tabla arson_notices) y con aviso al móvil si lo tiene activado.
 // Para desactivarlo: ARSON=off. Para probarlo ya: POST /api/admin/arson con la clave de admin.
 const ARSON_ON = String(process.env.ARSON || 'on').toLowerCase() !== 'off';
-const ARSON_EVERY_MS = Math.max(60_000, Number(process.env.ARSON_EVERY_MIN || 60) * 60_000);
+const ARSON_EVERY_MS = Math.max(60_000, Number(process.env.ARSON_EVERY_MIN || 1440) * 60_000);
 const ARSON_BURN_MS = Math.min(300_000, Math.max(5_000, Number(process.env.ARSON_BURN_SEC || 30) * 1000));
 const ARSON_REWARD = Math.max(0, Math.floor(Number(process.env.ARSON_REWARD ?? 5)));   // créditos de consuelo para el dueño (ARSON_REWARD=0 para quitarlos)
 const ARSON_WALK_MS = 5_000;   // lo que tarda el piromano en llegar a la casa antes de prenderle fuego
