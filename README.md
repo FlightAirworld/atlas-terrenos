@@ -83,3 +83,14 @@ Avisos, por orden de prioridad: racha en peligro (desde las 18:00 hora del jugad
 Solo entre las 10:00 y las 21:00 del jugador, 6 h entre avisos (2 h para el de la racha) y se paran tras 3 avisos sin que vuelva a entrar.
 
 Racha de 7 días: premios de cada día en `DAILY_REWARDS` (7 números separados por comas; por defecto `1,1,2,2,3,3,10`, el día 7 es el premio grande).
+
+## Tráfico, peatones y helipuertos
+
+- **Coches por la calzada, peatones por la acera.** El carril de cada vehículo y la acera de cada peatón se calculan a partir del ancho
+  con el que el mapa dibuja la calle en ese zoom (`roadMetrics()` en `mapshim.js`; en modo satélite usa metros reales por tipo de calle).
+  Los coches van por su carril derecho (las bicis y patinetes, junto al bordillo) y la gente camina justo fuera del bordillo.
+  Por eso el tamaño de coches y personas también sigue al ancho de la calle (`sizes()`): al alejar el zoom se hacen más pequeños y siguen cabiendo en la calzada.
+- **Helipuertos.** El mundo se divide en celdas de ~250 m (`PAD_CELL` en `vehicles.js`) y en una de cada tres hay un helipuerto
+  (misma posición para todos los jugadores). Se coloca en el primer hueco libre de la celda: sin calle, edificio, agua ni parcela comprada
+  (si alguien compra la parcela, el helipuerto desaparece). El helicóptero (cada 3 min, con zoom 16 o más) aterriza en el helipuerto
+  más cercano al centro de la pantalla; si no hay ninguno a la vista, espera a que te acerques a uno. Para probarlo: `spawnAircraft('heli')` en la consola.

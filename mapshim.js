@@ -8,6 +8,20 @@
   const toLngLat = ll => Array.isArray(ll) ? [ll[1], ll[0]] : [ll.lng, ll.lat];
   const rad = Math.PI / 180;
 
+  // Ancho (px) con el que el estilo del mapa dibuja las calles (ver MAP_STYLE en app.js: st-road y st-road-casing)
+  const ROAD_STOPS = [[11, 0.6], [16, 11], [19, 50]], CASING_STOPS = [[11, 1], [16, 14], [19, 60]];
+  const ROAD_M = { motorway: 16, trunk: 14, primary: 12, secondary: 10, tertiary: 9, minor: 7, service: 5 };   // metros (satélite)
+  function expo(z, stops, base = 1.6) {                 // interpolación ['exponential', 1.6] de MapLibre
+    if (z <= stops[0][0]) return stops[0][1];
+    for (let i = 1; i < stops.length; i++) {
+      if (z <= stops[i][0]) {
+        const [z0, v0] = stops[i - 1], [z1, v1] = stops[i];
+        return v0 + (v1 - v0) * (Math.pow(base, z - z0) - 1) / (Math.pow(base, z1 - z0) - 1);
+      }
+    }
+    return stops[stops.length - 1][1];
+  }
+
   // ---------- Mini "L" ----------
   const L = {
     point: (x, y) => ({ x, y }),
@@ -104,12 +118,36 @@
           if (!roadsOn || !gl.getLayer('roads-q')) return [];
           const out = [];
           gl.queryRenderedFeatures({ layers: ['roads-q'] }).forEach(f => {
-            const g = f.geometry;
-            if (g.type === 'LineString') out.push(g.coordinates);
-            else if (g.type === 'MultiLineString') g.coordinates.forEach(c => out.push(c));
+            const g = f.geometry, cls = f.properties && f.properties.class;
+            const add = c => { const a = c.slice(); a.cls = cls; out.push(a); };     // cls: clase de la calle (para saber su ancho)
+            if (g.type === 'LineString') add(g.coordinates);
+            else if (g.type === 'MultiLineString') g.coordinates.forEach(add);
           });
           return out;
         } catch (e) { return []; }
+      },
+      // ---------- Ancho real de las calles en pantalla ----------
+      // Coches y peatones se colocan con esto: el carril y la acera salen del ancho con el que se DIBUJA la calle
+      // (mapa estilizado: las mismas curvas de ancho que usa el estilo; satélite: metros reales por tipo de calle).
+      pxPerM() {
+        const lat = gl.getCenter().lat * rad;
+        return Math.pow(2, api.getZoom()) * 256 / (40075016.686 * Math.max(0.05, Math.cos(lat)));
+      },
+      // { half: mitad del ancho de la calzada, curb: distancia del eje al centro de la acera } en px de pantalla
+      roadMetrics(cls) {
+        let sat = false;
+        try { sat = gl.getLayer('sat') && gl.getLayoutProperty('sat', 'visibility') === 'visible'; } catch (e) {}
+        if (sat) {
+          const m = ROAD_M[cls] || 7, k = api.pxPerM();
+          return { half: m / 2 * k, curb: (m / 2 + 1.6) * k };
+        }
+        const z = gl.getZoom();
+        return { half: expo(z, ROAD_STOPS) / 2, curb: expo(z, CASING_STOPS) / 2 + 1 };
+      },
+      // Tamaños que mantienen las proporciones: el coche ocupa ~1/3 de la calzada y el peatón crece con ella
+      sizes() {
+        const w = api.roadMetrics('minor').half * 2;
+        return { fv: Math.max(0.36, Math.min(1.5, w * 0.36 / 18)), fp: Math.max(0.5, Math.min(1.4, w / 30)) };
       },
       getBounds() {
         // Con inclinación el rectángulo visible puede ser enorme: lo limitamos alrededor del centro

@@ -1,13 +1,15 @@
 'use strict';
 // Tráfico por el mapa:
-//  - Coches, camiones y autobuses circulan todo el rato por las calles reales, por su carril, y frenan si hay otro delante.
+//  - Coches, camiones y autobuses circulan todo el rato por las calles reales, por su carril (a la derecha), y frenan si hay otro delante.
+//    Su tamaño y su carril salen del ancho con el que el mapa dibuja la calle en cada zoom (ver roadMetrics/sizes en mapshim.js).
 //  - Policía cada 5 min, bomberos cada 12 min y ambulancia cada 17 min, con luces y sirena (sintetizada, sin archivos).
 //  - Los coches siguen las calles reales (OpenStreetMap vía OpenFreeMap); si no hay calles, los taxis y las emergencias cruzan en línea recta.
 //  - Taxis que recogen o dejan gente; la luz verde del techo se enciende cuando está libre o parado en la acera.
 //  - También circulan motos, bicicletas (con pedaleo) y patinetes; las bicis y patinetes van por el borde de la calzada.
-//  - Un avión cruza el cielo cada 5 min y un helicóptero llega cada 3 min, aterriza, para el rotor, arranca y se va (con sonido).
+//  - Un avión cruza el cielo cada 5 min y un helicóptero llega cada 3 min, aterriza en un HELIPUERTO del mapa, para el rotor, arranca y se va (con sonido).
+//    Los helipuertos se reparten por el mundo en huecos libres (ni calle, ni edificio, ni agua, ni parcela comprada).
 // Para probar sin esperar, en la consola: spawnVehicle('car' | 'truck' | 'bus' | 'moto' | 'bike' | 'scooter' | 'police' | 'fire' | 'ambulance' | 'taxi')
-// y spawnAircraft('plane' | 'heli')
+// y spawnAircraft('plane' | 'heli')   (el helicóptero necesita un helipuerto a la vista; con zoom >= 16)
 (function () {
   if (typeof map === 'undefined' || !map) return;
   const KEY = 'vehiclesOn', MIN_ZOOM = 16, REF_Z = 17, MAX_TAXIS = 3;
@@ -48,6 +50,13 @@
     .pl-rot { position: absolute; }
     .pl-rot svg { position: absolute; left: 0; top: 0; }
     .pl-trail { position: absolute; height: 2.5px; width: 340px; border-radius: 2px; background: linear-gradient(to left, rgba(255,255,255,.62), rgba(255,255,255,0)); filter: blur(.6px); }
+    .pad { background: transparent !important; border: 0 !important; pointer-events: none !important; }
+    .pad-in { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+    .pad-in svg { position: absolute; left: 0; top: 0; overflow: visible; }
+    .pad-l { fill: #8a9099; }
+    .pad.on .pad-l { fill: #3df57f; animation: padBlink .7s steps(1) infinite; }
+    @keyframes padBlink { 50% { opacity: .15; } }
+    @media (prefers-reduced-motion: reduce) { .pad.on .pad-l { animation: none; } }
     .hl { background: transparent !important; border: 0 !important; pointer-events: none !important; }
     .hl-in, .hl-rot { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform-origin: 60px 22px; }
     .hl-rot svg { position: absolute; left: 0; top: 0; overflow: visible; }
@@ -55,11 +64,21 @@
   document.head.appendChild(st);
   map.createPane('vehicles'); map.getPane('vehicles').style.zIndex = 580;
   map.createPane('emergency'); map.getPane('emergency').style.zIndex = 595;
+  map.createPane('pads'); map.getPane('pads').style.zIndex = 560;            // los helipuertos van por debajo de coches y gente
   ['vehicles', 'emergency'].forEach(n => { map.getPane(n).style.pointerEvents = 'none'; });
 
   const rnd = (a, b) => a + Math.random() * (b - a);
   const pick = a => a[Math.floor(Math.random() * a.length)];
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  // Tamaño de vehículos (FV) y personas (FP) según el ancho con el que se dibuja la calle ahora mismo.
+  // SPD: los coches no van tan despacio como dicta la escala real (si no, parecerían parados): crece más despacio que FV.
+  let FV = 1, FP = 1, SPD = 1;
+  function refreshSizes() {
+    const z = map.sizes ? map.sizes() : { fv: 1, fp: 1 };
+    FV = z.fv; FP = z.fp; SPD = Math.pow(FV, 0.75);
+  }
+  refreshSizes();
 
   // ---------- Dibujos (vista cenital, mirando a la derecha) ----------
   const glow = (cls, x, y, anim, size) =>
@@ -338,7 +357,7 @@
     raw.forEach(c => {
       if (c.length < 2) return;
       const pts = c.map(ll => map.project({ lat: ll[1], lng: ll[0] }, REF_Z));
-      const ln = { pts, ll: c, sc: null };
+      const ln = { pts, ll: c, sc: null, cls: c.cls };
       lines.push(ln);
       [[pts[0], 0], [pts[pts.length - 1], 1]].forEach(([p, e]) => {
         const k = Math.round(p.x / SNAP) + ',' + Math.round(p.y / SNAP);
@@ -384,6 +403,7 @@
       const s0 = pick(cand);
       const pts = (s0.e ? s0.ln.pts.slice().reverse() : s0.ln.pts.slice());
       const used = new Set([s0.ln]);
+      const cl = pts.map(() => s0.ln.cls);               // clase de la calle de cada punto (para saber su ancho)
       let total = makePath(pts).total;
       for (let hop = 0; hop < 12 && total < target; hop++) {
         const a = pts[pts.length - 1], b = pts[pts.length - 2], hin = Math.atan2(a.y - b.y, a.x - b.x);
@@ -398,10 +418,11 @@
         opts.sort((x, y) => x.turn - y.turn);
         const ch = Math.random() < 0.75 ? opts[0] : pick(opts);   // casi siempre sigue recto; a veces gira en la esquina
         used.add(ch.o.ln);
-        for (let i = 1; i < ch.q.length; i++) pts.push(ch.q[i]);
+        for (let i = 1; i < ch.q.length; i++) { pts.push(ch.q[i]); cl.push(ch.o.ln.cls); }
         total = makePath(pts).total;
       }
       const P = makePath(pts);
+      P.cl = cl;
       if (P.total * scale < minLen) continue;
       const cs = pts.map(scr);
       if (!cs.some(inside)) continue;
@@ -436,8 +457,18 @@
   }
   //#roads-end
 
+  // Distancia (px de pantalla) del eje de la calle al centro de su carril: carril derecho, o el borde para bicis y patinetes.
+  // Las emergencias (y todo lo que no sigue una calle real) van por el centro.
+  function laneTarget(v) {
+    const cl = v.path.cl;
+    if (!cl || (!v.K.traffic && v.kind !== 'taxi')) return 0;
+    const m = map.roadMetrics(cl[Math.min(v.seg + 1, cl.length - 1)]);
+    return m.half * (v.K.outer ? 0.88 : 0.48);
+  }
+
   function spawn(kind, roadsOnly) {
     const K = KINDS[kind]; if (!K) return null;
+    refreshSizes();
     const r = pathRoute(K.L, roadsOnly); if (!r) return null;
     const P = r.path, p0 = P.pts[0], d0 = { dx: (P.pts[1].x - p0.x) / (P.cum[1] || 1), dy: (P.pts[1].y - p0.y) / (P.cum[1] || 1) };
     const look = K.look ? K.look() : null;
@@ -453,17 +484,18 @@
     const v = {
       kind, K, mk, wrap: el && el.querySelector('.vh-in'), rot, x: p0.x, y: p0.y, dx: d0.dx, dy: d0.dy, h,
       path: P, seg: 0, s: 0, total: P.total, speed: K.siren ? K.v : 0, age: 0, state: 'drive', t: 0, sirenObj: null,
-      vmax: K.v, lane: 0     // lane = separación (px de pantalla) del centro de la calle: cada uno va por su carril, a la derecha
+      vmax: K.v, lane: 0, fvA: null     // lane = separación (px de pantalla) del eje de la calle: cada uno va por su carril, a la derecha
     };
     if (K.siren) { v.sirenObj = makeSiren(); }
-    if (K.traffic) { v.vmax = K.v * rnd(0.85, 1.1); v.speed = v.vmax * 0.8; v.lane = K.lane != null ? K.lane : K.W * 0.5 + 2; }
+    if (K.traffic) { v.vmax = K.v * rnd(0.85, 1.1); v.speed = v.vmax * 0.8; }
     if (kind === 'taxi') {
       v.scenario = Math.random() < 0.5 ? 'pickup' : 'dropoff';
       v.sStop = r.focus != null ? r.focus : P.total * rnd(0.4, 0.6);
       v.speed = K.v;
-      v.lane = K.W * 0.5 + 2;
       setFree(v, v.scenario === 'pickup');
     }
+    v.lane = laneTarget(v);
+    if (v.wrap) { v.wrap.style.scale = FV.toFixed(3); v.fvA = FV; }
     vehicles.push(v);
     return v;
   }
@@ -493,33 +525,33 @@
       if (!!u.K.outer !== !!v.K.outer) continue;      // bicis y patinetes van por el borde: no frenan a los coches ni al revés
       const ux = (u.x - v.x) * scale, uy = (u.y - v.y) * scale;
       const f = ux * ch + uy * sh;
-      const bump = (v.K.L + u.K.L) / 2;
-      if (f <= 0 || f > bump + 36 || f >= bf) continue;
-      if (Math.abs(-ux * sh + uy * ch) > (v.K.W + u.K.W) / 2) continue;   // en otro carril
+      const bump = (v.K.L + u.K.L) / 2 * FV;
+      if (f <= 0 || f > bump + 36 * FV || f >= bf) continue;
+      if (Math.abs(-ux * sh + uy * ch) > (v.K.W + u.K.W) / 2 * FV) continue;   // en otro carril
       if (Math.cos(u.h - v.h) < 0.5) continue;                            // va en otro sentido o cruza
       best = { u, free: f - bump }; bf = f;
     }
     if (!best) return Infinity;
-    if (best.free < 8) return 0;
-    return Math.min(best.u.speed * 0.95, (best.free - 8) * 2.5);
+    if (best.free < 8 * FV) return 0;
+    return Math.min(best.u.speed * 0.95, (best.free - 8 * FV) * 2.5 / SPD);
   }
 
   // Pasajero de taxi (reutiliza la figura de people.js)
   function spawnPax(v, mode) {
     if (!window.personSVG) return null;
     const right = [-Math.sin(v.h), Math.cos(v.h)], fwd = [Math.cos(v.h), Math.sin(v.h)];
-    const scale = Math.pow(2, map.getZoom() - REF_Z), W2 = v.K.W / 2;
-    const off = (mode === 'in' ? 58 : W2 + 3) / scale;
+    const scale = Math.pow(2, map.getZoom() - REF_Z), W2 = v.K.W / 2 * FV;
+    const off = (mode === 'in' ? 44 * FP : W2 + 3 * FP) / scale;
     const x = v.x + right[0] * off, y = v.y + right[1] * off;
     const raining = window.weatherIntensity && window.weatherIntensity() > 0.25;
     const icon = L.divIcon({
       className: 'pw', iconSize: [20, 30], iconAnchor: [10, 28],
-      html: `<div class="pw-in${raining ? ' rain' : ''}" style="opacity:0">${window.personSVG(pick(['#e63946', '#457b9d', '#f4a261', '#2a9d8f', '#9b5de5', '#ffb703']), pick(['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac']), pick(['#2b2d42', '#3a3a3a', '#1d3557', '#5c4033']), false)}</div>`
+      html: `<div class="pw-in${raining ? ' rain' : ''}" style="opacity:0;scale:${FP.toFixed(3)}">${window.personSVG(pick(['#e63946', '#457b9d', '#f4a261', '#2a9d8f', '#9b5de5', '#ffb703']), pick(['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac']), pick(['#2b2d42', '#3a3a3a', '#1d3557', '#5c4033']), false)}</div>`
     });
     const mk = L.marker(map.unproject(L.point(x, y), REF_Z), { icon, pane: 'people', interactive: false, keyboard: false }).addTo(map);
-    const p = { mk, x, y, age: 0, el: null, flip: null, rain: !!raining, mode, taxi: v, speed: 24, life: mode === 'in' ? 20 : 6.5, h: 0 };
+    const p = { mk, x, y, age: 0, el: null, flip: null, rain: !!raining, mode, taxi: v, speed: 24 * FP, life: mode === 'in' ? 20 : 6.5, h: 0 };
     if (mode === 'in') {                      // camina hacia la puerta del taxi
-      p.tx = v.x + right[0] * (W2 + 4) / scale; p.ty = v.y + right[1] * (W2 + 4) / scale;
+      p.tx = v.x + right[0] * (W2 + 4 * FP) / scale; p.ty = v.y + right[1] * (W2 + 4 * FP) / scale;
       p.h = Math.atan2(p.ty - y, p.tx - x);
     } else {                                  // se baja y se aleja por la acera
       const a = rnd(-0.7, 0.7);
@@ -531,9 +563,9 @@
 
   // ---------- Aviones y helicóptero ----------
   //  - Un avión cruza el cielo cada 5 min (con su estela y el ruido de un reactor que pasa).
-  //  - Un helicóptero llega cada 3 min, aterriza cerca del centro de la pantalla, apaga rotor, lo arranca otra vez, despega y se va.
+  //  - Un helicóptero llega cada 3 min, aterriza en un helipuerto (el más cercano al centro de la pantalla), apaga rotor, lo arranca otra vez, despega y se va.
   //  Todo el sonido está sintetizado con Web Audio (sin archivos) y respeta el botón 🔊 (apagado = silencio).
-  const PLANE_EVERY = 5 * 60e3, HELI_EVERY = 3 * 60e3, HELI_ZOOM = 15;
+  const PLANE_EVERY = 5 * 60e3, HELI_EVERY = 3 * 60e3, HELI_ZOOM = 16;
   const T_APP = 10, T_GROUND = 8, T_TAKEOFF = 3.2, T_LEAVE = 11, ROTOR_DEG = 1400;
   const sm = x => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
   const sfxOn = () => (window.soundMode ? window.soundMode() : 2) >= 1;
@@ -683,10 +715,123 @@
     }
   }
 
-  // ---------- Helicóptero: llega, aterriza, para el rotor, lo arranca, despega y se va ----------
+  // ---------- Helipuertos ----------
+  // Se reparten por el mundo de forma fija (la misma posición para todos los jugadores): el mundo se divide en celdas de
+  // ~250 m y en una de cada tres hay un helipuerto. Dentro de la celda se prueban hasta 6 sitios, siempre en el mismo orden,
+  // y vale el primero libre (sin calle, edificio, agua ni parcela comprada); si no hay hueco, esa celda no tiene helipuerto.
+  // Solo se comprueba con el mapa cargado y el sitio entero a la vista, para que el resultado sea siempre el mismo.
+  const PAD_CELL = 0.0025, PAD_RATE = 0.34, PAD_TRIES = 6, PAD_M = 40, PAD_MIN_Z = 16, PAD_LAYERS = ['st-road', 'st-buildings', 'st-water', 'st-waterway'];
+  const pads = new Map();     // 'ix:iy' -> { ix, iy, state: 'pending' | 'ok' | 'none', k, ll, mk, el }
+  const hash3 = (a, b, c) => {
+    let h = (Math.imul(a | 0, 374761393) ^ Math.imul(b | 0, 668265263) ^ Math.imul(c | 0, 2246822519)) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+    return (h ^ (h >>> 16)) >>> 0;
+  };
+  const unit3 = (a, b, c) => hash3(a, b, c) / 4294967296;
+  const padCand = (e, k) => ({ lat: (e.iy + 0.12 + 0.76 * unit3(e.ix, e.iy, 10 + 2 * k)) * PAD_CELL - 90, lng: (e.ix + 0.12 + 0.76 * unit3(e.ix, e.iy, 11 + 2 * k)) * PAD_CELL - 180 });
+
+  // ¿Hay una parcela comprada bajo el helipuerto? (entonces ahí hay una casa y el helipuerto desaparece)
+  function padOwned(ll) {
+    try {
+      if (typeof drawn === 'undefined' || typeof cfg === 'undefined' || !cfg || !cfg.size) return false;
+      const r = PAD_M / 2 / 111320, rx = r / Math.max(0.1, Math.cos(ll.lat * Math.PI / 180)), sz = cfg.size;
+      for (const dy of [-r, 0, r]) for (const dx of [-rx, 0, rx]) {
+        if (drawn.has(Math.floor((ll.lng + dx + 180) / sz) + ':' + Math.floor((ll.lat + dy + 90) / sz))) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+  const padUsable = e => e.state === 'ok' && !padOwned(e.ll);
+  const padSVG = `
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+      <rect x="8" y="9" width="92" height="92" rx="10" fill="rgba(0,0,0,.25)"/>
+      <rect x="3" y="3" width="94" height="94" rx="10" fill="#596069" stroke="#eef1f4" stroke-width="2.4"/>
+      <circle cx="50" cy="50" r="37" fill="none" stroke="#f7c531" stroke-width="3.6"/>
+      <path d="M37 32V68M63 32V68M37 50H63" stroke="#fff" stroke-width="7.5" fill="none"/>
+      <circle class="pad-l" cx="11" cy="11" r="2.8"/><circle class="pad-l" cx="89" cy="11" r="2.8"/>
+      <circle class="pad-l" cx="11" cy="89" r="2.8"/><circle class="pad-l" cx="89" cy="89" r="2.8"/>
+    </svg>`;
+  const padScale = () => Math.pow(2, map.getZoom() - REF_Z);
+  function padShow(e) {
+    if (e.mk) return;
+    const S = PAD_M / (40075016.686 * Math.cos(e.ll.lat * Math.PI / 180) / (256 * Math.pow(2, REF_Z)));   // px a zoom de referencia
+    const icon = L.divIcon({ className: 'pad', iconSize: [S, S], iconAnchor: [S / 2, S / 2], html: `<div class="pad-in">${padSVG}</div>` });
+    e.mk = L.marker(e.ll, { icon, pane: 'pads', interactive: false, keyboard: false }).addTo(map);
+    e.el = e.mk.getElement();
+    e.inner = e.el && e.el.firstChild;
+    if (e.inner) e.inner.style.scale = padScale().toFixed(4);
+  }
+  function padHide(e) { if (e.mk) { map.removeLayer(e.mk); e.mk = e.el = e.inner = null; } }
+  function padRescale() {
+    const k = padScale().toFixed(4);
+    pads.forEach(e => { if (e.inner) e.inner.style.scale = k; });
+  }
+  map.on('zoom', padRescale);
+
+  // ¿Está libre el sitio k de la celda? true / false, o null si ahora no se puede saber (fuera de pantalla o mapa sin cargar)
+  function padCheck(e, k) {
+    const gl = map.gl, c = padCand(e, k), size = map.getSize();
+    const rpx = (PAD_M / 2 + 3) * map.pxPerM(), p = map.latLngToContainerPoint(c);
+    if (p.x - rpx < 0 || p.y - rpx < 0 || p.x + rpx > size.x || p.y + rpx > size.y || !gl.areTilesLoaded()) return null;
+    try {
+      const layers = PAD_LAYERS.filter(l => gl.getLayer(l));
+      if (!layers.length) return null;
+      return gl.queryRenderedFeatures([[p.x - rpx, p.y - rpx], [p.x + rpx, p.y + rpx]], { layers }).length === 0;
+    } catch (err) { return null; }
+  }
+  let padT = 0;
+  function padsTick(dt, z) {
+    padT -= dt;
+    if (padT > 0) return;
+    padT = 0.8;
+    if (z < PAD_MIN_Z - 0.5) { pads.forEach(padHide); return; }
+    const b = map.getBounds(), q = b.pad(0.15), keep = b.pad(0.6);
+    const x0 = Math.floor((q.getWest() + 180) / PAD_CELL), x1 = Math.floor((q.getEast() + 180) / PAD_CELL);
+    const y0 = Math.floor((q.getSouth() + 90) / PAD_CELL), y1 = Math.floor((q.getNorth() + 90) / PAD_CELL);
+    let budget = 3;
+    for (let ix = x0; ix <= x1; ix++) for (let iy = y0; iy <= y1; iy++) {
+      if (unit3(ix, iy, 1) >= PAD_RATE) continue;
+      const key = ix + ':' + iy;
+      let e = pads.get(key);
+      if (!e) pads.set(key, e = { ix, iy, state: 'pending', k: 0, ll: null, mk: null, el: null, inner: null });
+      while (e.state === 'pending' && budget > 0 && z >= PAD_MIN_Z) {     // se resuelve en orden: el sitio k solo cuenta si los anteriores ya estaban descartados
+        const r = padCheck(e, e.k);
+        if (r === null) break;
+        budget--;
+        if (r) { e.state = 'ok'; e.ll = padCand(e, e.k); }
+        else if (++e.k >= PAD_TRIES) e.state = 'none';
+      }
+      if (e.state === 'ok') { if (padUsable(e)) padShow(e); else padHide(e); }
+    }
+    pads.forEach(e => { if (e.state === 'ok' && !keep.contains(e.ll)) padHide(e); });   // fuera de la zona visible se quitan del mapa
+    if (pads.size > 1500) pads.forEach((e, key) => { if (e.state === 'none') pads.delete(key); });   // (los descartados solo se olvidan si se acumulan muchos)
+  }
+  // El helipuerto usable más cercano al centro de la pantalla (y entero a la vista)
+  function pickPad() {
+    const size = map.getSize(), cx = size.x / 2, cy = size.y / 2;
+    let best = null, bd = 1e9;
+    pads.forEach(e => {
+      if (!padUsable(e) || !e.mk) return;
+      const p = map.latLngToContainerPoint(e.ll);
+      if (p.x < size.x * 0.1 || p.x > size.x * 0.9 || p.y < size.y * 0.12 || p.y > size.y * 0.88) return;
+      const d = Math.hypot(p.x - cx, p.y - cy);
+      if (d < bd) { bd = d; best = e; }
+    });
+    return best;
+  }
+  const padLights = (e, on) => { if (e && e.el) e.el.classList.toggle('on', !!on); };
+  function clearPads() { pads.forEach(padHide); pads.clear(); }
+
+  // ---------- Helicóptero: llega, aterriza en el helipuerto, para el rotor, lo arranca, despega y se va ----------
+  // El tamaño sigue al del helipuerto (que mide PAD_M metros) para que el aparato quepa en él a cualquier zoom.
+  let HF = 1;
+  const heliScale = () => clamp(PAD_M * map.pxPerM() * 0.55 / 88, 0.22, 1.1);
   function spawnHeli() {
+    const pad = pickPad();
+    if (!pad) return null;                                   // sin helipuerto a la vista no hay dónde aterrizar
+    HF = heliScale();
     const scale = Math.pow(2, map.getZoom() - REF_Z), size = map.getSize();
-    const lz = map.project(map.containerPointToLatLng({ x: size.x * rnd(0.35, 0.65), y: size.y * rnd(0.38, 0.62) }), REF_Z);
+    const lz = map.project(pad.ll, REF_Z);
     const ang = rnd(0, Math.PI * 2), D = (Math.hypot(size.x, size.y) / 2 + 170) / scale;
     const start = { x: lz.x + Math.cos(ang) * D, y: lz.y + Math.sin(ang) * D };
     const body = pick(['#f4f6f8', '#f4f6f8', '#c8102e', '#1d6fb8']), acc = body === '#f4f6f8' ? pick(['#d62839', '#1d6fb8', '#2a9d8f']) : '#f4f6f8';
@@ -698,16 +843,18 @@
     const el = mk.getElement();
     const q = s => el && el.querySelector(s);
     const H = {
-      mk, wrap: q('.hl-in'), rot: q('.hl-rot'), rotor: q('.hl-rotor'), disc: q('.hl-disc'), dust: q('.hl-dust'),
+      mk, wrap: q('.hl-in'), rot: q('.hl-rot'), rotor: q('.hl-rotor'), disc: q('.hl-disc'), dust: q('.hl-dust'), pad,
       x: start.x, y: start.y, start, lz, h: ang + Math.PI, dep: 0, t: 0, age: 0, spin: 0, state: 'approach', snd: heliSound()
     };
     if (H.rot) H.rot.style.transform = `rotate(${H.h}rad)`;
+    padLights(pad, true);                                    // las luces del helipuerto parpadean mientras hay un helicóptero
     helis.push(H);
     return H;
   }
-  function removeHeli(i) { killSnd(helis[i].snd); map.removeLayer(helis[i].mk); helis.splice(i, 1); }
+  function removeHeli(i) { padLights(helis[i].pad, false); killSnd(helis[i].snd); map.removeLayer(helis[i].mk); helis.splice(i, 1); }
   function updateHelis(dt, scale) {
     if (!helis.length) return;
+    HF = heliScale();
     const size = map.getSize(), cx = size.x / 2, cy = size.y / 2, half = Math.hypot(cx, cy);
     for (let i = helis.length - 1; i >= 0; i--) {
       const H = helis[i];
@@ -722,19 +869,20 @@
       } else if (H.state === 'ground') {
         const t = H.t;                                                            // rotor: gira, se para, queda al ralentí, arranca
         rpm = t < 0.6 ? 1 : t < 3.2 ? 1 - 0.88 * sm((t - 0.6) / 2.6) : t < 5 ? 0.12 : t < 7.4 ? 0.12 + 0.88 * sm((t - 5) / 2.4) : 1;
+        H.x = H.lz.x; H.y = H.lz.y;                                               // posado sobre la H
         if (H.t >= T_GROUND) { H.state = 'takeoff'; H.t = 0; H.dep = rnd(0, Math.PI * 2); }
       } else if (H.state === 'takeoff') {
         const u = Math.min(1, H.t / T_TAKEOFF);
         alt = sm(u);
         H.h += clamp(angDiff(H.dep, H.h), -1.6 * dt, 1.6 * dt);                  // se orienta hacia donde se va
-        const v = 14 * alt / scale * dt;
+        const v = 14 * alt * HF / scale * dt;
         H.x += Math.cos(H.h) * v; H.y += Math.sin(H.h) * v;
-        if (u >= 1) { H.state = 'leave'; H.t = 0; }
+        if (u >= 1) { H.state = 'leave'; H.t = 0; padLights(H.pad, false); }
       } else {
         alt = 1;
         fade = clamp((T_LEAVE - H.t) / 3, 0, 1);
         H.h += clamp(angDiff(H.dep, H.h), -1.2 * dt, 1.2 * dt);
-        const v = (28 + 150 * Math.min(1, H.t / 6)) * dt / scale;
+        const v = (28 + 150 * Math.min(1, H.t / 6)) * HF * dt / scale;
         H.x += Math.cos(H.h) * v; H.y += Math.sin(H.h) * v;
         if (H.t >= T_LEAVE) { removeHeli(i); continue; }
       }
@@ -746,7 +894,7 @@
       if (H.rotor) H.rotor.style.opacity = (0.95 - 0.6 * rpm).toFixed(2);
       if (H.dust) H.dust.style.opacity = (Math.max(0, rpm - 0.15) * (1 - alt) * 0.9).toFixed(2);
       if (H.wrap) {                                                               // más alto = más grande y su sombra más lejos
-        H.wrap.style.transform = `scale(${(1 + 0.4 * alt).toFixed(3)})`;
+        H.wrap.style.transform = `scale(${(HF * (1 + 0.4 * alt)).toFixed(3)})`;
         H.wrap.style.filter = `drop-shadow(${(3 + 14 * alt).toFixed(1)}px ${(5 + 22 * alt).toFixed(1)}px ${(2 + 7 * alt).toFixed(1)}px rgba(0,0,0,${(0.4 - 0.16 * alt).toFixed(2)}))`;
       }
       if (H.snd && ac) {
@@ -774,6 +922,7 @@
     syncVol();
     if (!document.hidden && !zooming) {
       const z = map.getZoom(), scale = Math.pow(2, z - REF_Z), now = Date.now();
+      refreshSizes();
       const raining = (window.weatherIntensity ? window.weatherIntensity() : 0) > 0.25;
       const size = map.getSize(), cx = size.x / 2, cy = size.y / 2, half = Math.hypot(cx, cy);
 
@@ -792,7 +941,8 @@
       }
       // Avión (cada 5 min) y helicóptero (cada 3 min; este espera a que te acerques lo bastante)
       if (now >= nextPlane && !planes.length) { spawnPlane(); nextPlane = now + PLANE_EVERY; }
-      if (now >= nextHeli && !helis.length && z >= HELI_ZOOM) { spawnHeli(); nextHeli = now + HELI_EVERY; }
+      padsTick(dt, z);
+      if (now >= nextHeli && !helis.length && z >= HELI_ZOOM) { if (spawnHeli()) nextHeli = now + HELI_EVERY; else nextHeli = now + 1500; }   // sin helipuerto a la vista, vuelve a mirar enseguida
       updateHelis(dt, scale);
 
       // Tráfico normal: al principio llegan rápido hasta llenar la calle, luego se mantiene el flujo
@@ -810,7 +960,7 @@
         if (v.kind === 'taxi') {
           if (v.state === 'drive') {
             const rem = Math.max(0, (v.sStop - v.s) * scale);           // px de pantalla hasta la parada
-            const target = Math.min(v.K.v, Math.sqrt(2 * 60 * rem) + 4, followLimit(v, scale));
+            const target = Math.min(v.K.v, Math.sqrt(2 * 60 * rem) / SPD + 4, followLimit(v, scale));
             v.speed = approach(v.speed, target, (target > v.speed ? 50 : 180) * dt);
             if (rem <= 1.5) { v.speed = 0; v.state = 'stop'; v.t = 0; v.s = v.sStop; v.step = 0; }
           } else if (v.state === 'stop') {
@@ -841,10 +991,13 @@
           if (!v.sirenObj && ac) v.sirenObj = makeSiren();
           updateSiren(v, ac ? vol : 0, clamp((pt.x - cx) / cx, -1, 1) * 0.8);
         }
-        const step = v.speed * dt / scale;
+        const step = v.speed * SPD * dt / scale;
         v.s += step;
-        if (v.s >= v.total || v.age > 120) { removeVehicle(i); continue; }
+        if (v.s >= v.total || v.age > 120 / SPD) { removeVehicle(i); continue; }
         advance(v);
+        // tamaño según el ancho de la calle y carril según el ancho de ESA calle (cambia suave al pasar de una a otra)
+        if (v.wrap && v.fvA !== FV) { v.wrap.style.scale = FV.toFixed(3); v.fvA = FV; }
+        { const lt = laneTarget(v); v.lane += clamp(lt - v.lane, -30 * dt, 30 * dt); }
         // gira suavemente en las curvas y esquinas
         const dh = angDiff(Math.atan2(v.dy, v.dx), v.h), maxT = 6 * dt;
         v.h += Math.max(-maxT, Math.min(maxT, dh));
@@ -884,14 +1037,14 @@
   map.on('zoomend', () => { zooming = false; if (map.getZoom() < MIN_ZOOM) clearAll(); });
   // Con la pestaña oculta no hay animación: se quitan los vehículos para que no se quede la sirena sonando
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { clearAll(); clearAircraft(); }
+    if (document.hidden) { clearAll(); clearAircraft(); pads.forEach(e => padLights(e, false)); }
     else { last = performance.now(); nextPlane = Math.max(nextPlane, Date.now() + 15e3); nextHeli = Math.max(nextHeli, Date.now() + 20e3); }
   });
 
   function apply() {
     if (btn) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.style.opacity = on ? '1' : '.55'; btn.title = on ? 'Tráfico, aviones y helicóptero: activados' : 'Tráfico, aviones y helicóptero: desactivados'; }
     if (on && !running) { running = true; last = performance.now(); requestAnimationFrame(frame); }
-    if (!on) { running = false; clearAll(); clearAircraft(); if (map.setRoads) map.setRoads(false, 'v'); }
+    if (!on) { running = false; clearAll(); clearAircraft(); clearPads(); if (map.setRoads) map.setRoads(false, 'v'); }
   }
   if (btn) btn.onclick = function () {
     on = !on;
