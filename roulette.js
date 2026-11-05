@@ -106,7 +106,8 @@
     try {
       const j = await api('/api/roulette', { method: 'GET' });
       canSpin = !!j.canSpin;
-      info.textContent = canSpin ? 'Tienes un giro gratis hoy. ¡Toca la ruleta!' : 'Hoy ya has girado. ¡Vuelve mañana!';
+      const ex = j.extra || 0, exTxt = ex ? ` 🎁 Tienes ${ex} ${ex === 1 ? 'giro extra' : 'giros extra'} de los premios del mes.` : '';
+      info.textContent = (j.daily ? 'Tienes un giro gratis hoy. ¡Toca la ruleta!' : canSpin ? 'Hoy ya has hecho tu giro diario.' : 'Hoy ya has girado. ¡Vuelve mañana!') + exTxt;
       render(canSpin ? null : '⏳ Vuelve mañana');
     } catch (e) { canSpin = false; info.textContent = e.message; render(''); }
   }
@@ -138,14 +139,15 @@
     catch (e) { spinning = false; render(e.message); load(); return; }
     const k = PRIZES.findIndex(p => Math.abs(p - j.prize) < 1e-9);
     animateTo(k < 0 ? 0 : k, () => {
-      spinning = false; canSpin = false;
+      spinning = false; canSpin = (j.extra || 0) > 0;
       credits = j.credits; updateCreditUi();
+      if (window.monthlyRefresh) monthlyRefresh();
       const big = j.prize >= 1;
       winSound(big);
       win.textContent = `${big ? '🏆' : '🎉'} +${fmt(j.prize)} ${j.prize === 1 ? 'crédito' : 'créditos'}`;
       win.className = ''; void win.offsetWidth; win.className = 'pop';
-      info.textContent = 'Hoy ya has girado. ¡Vuelve mañana!' + (j.carry > 0 ? ` Llevas ${fmt(j.carry)} de 1 para tu próximo crédito entero.` : '');
-      render('⏳ Vuelve mañana');
+      info.textContent = (canSpin ? `🎁 Te quedan ${j.extra} ${j.extra === 1 ? 'giro extra' : 'giros extra'}. ¡Toca la ruleta!` : 'Hoy ya has girado. ¡Vuelve mañana!') + (j.carry > 0 ? ` Llevas ${fmt(j.carry)} de 1 para tu próximo crédito entero.` : '');
+      render(canSpin ? null : '⏳ Vuelve mañana');
     });
   }
 

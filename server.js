@@ -630,7 +630,9 @@ function roulettePick(table) {
 async function rouletteGet(req) {
   const user = await needUser(req);
   const done = await one('SELECT 1 FROM roulette_spins WHERE user_id = $1 AND day = $2', [user.id, dayKey()]);
-  return { canSpin: !done };
+  const ex = await one('SELECT free_spins FROM packs WHERE user_id = $1', [user.id]);
+  const extra = ex ? Number(ex.free_spins) || 0 : 0;     // giros extra ganados con los premios del mes
+  return { canSpin: !done || extra > 0, daily: !done, extra };
 }
 async function rouletteSpin(req) {
   const user = await needUser(req);
@@ -640,16 +642,112 @@ async function rouletteSpin(req) {
   try {
     await client.query('BEGIN');
     await client.query('SELECT code FROM packs WHERE code = $1 FOR UPDATE', [pack.code]);   // un giro a la vez por cuenta
-    const bigDone = (await client.query("SELECT 1 FROM roulette_spins WHERE user_id = $1 AND prize >= 1 AND to_char(day, 'YYYY-MM') = $2 LIMIT 1", [user.id, month])).rowCount > 0;
-    const prize = (!bigDone && crypto.randomInt(0, 1_000_000) / 1_000_000 < ROULETTE_BIG_CHANCE) ? roulettePick(ROULETTE_BIG) : roulettePick(ROULETTE_SMALL);
-    const ins = await client.query('INSERT INTO roulette_spins (user_id, day, prize, created_at) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING', [user.id, today, prize, Date.now()]);
-    if (!ins.rowCount) throw new HttpError(409, 'Hoy ya has girado la ruleta. ¡Vuelve mañana!');
+    const doneToday = (await client.query('SELECT 1 FROM roulette_spins WHERE user_id = $1 AND day = $2', [user.id, today])).rowCount > 0;
+    let prize;
+    if (!doneToday) {                                  // el giro gratis del día
+      const bigDone = (await client.query("SELECT 1 FROM roulette_spins WHERE user_id = $1 AND prize >= 1 AND to_char(day, 'YYYY-MM') = $2 LIMIT 1", [user.id, month])).rowCount > 0;
+      prize = (!bigDone && crypto.randomInt(0, 1_000_000) / 1_000_000 < ROULETTE_BIG_CHANCE) ? roulettePick(ROULETTE_BIG) : roulettePick(ROULETTE_SMALL);
+      const ins = await client.query('INSERT INTO roulette_spins (user_id, day, prize, created_at) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING', [user.id, today, prize, Date.now()]);
+      if (!ins.rowCount) throw new HttpError(409, 'Hoy ya has girado la ruleta. ¡Vuelve mañana!');
+    } else {                                           // giro extra ganado en los premios del mes: solo premios pequeños
+      const fs = await client.query('UPDATE packs SET free_spins = free_spins - 1 WHERE code = $1 AND free_spins > 0 RETURNING free_spins', [pack.code]);
+      if (!fs.rowCount) throw new HttpError(409, 'Hoy ya has girado la ruleta. ¡Vuelve mañana!');
+      prize = roulettePick(ROULETTE_SMALL);
+    }
     const up = (await client.query(
       `UPDATE packs SET roulette_carry = (roulette_carry + $1) - floor(roulette_carry + $1),
                         credits = credits + floor(roulette_carry + $1)::int
-       WHERE code = $2 RETURNING credits, roulette_carry`, [prize, pack.code])).rows[0];
+       WHERE code = $2 RETURNING credits, roulette_carry, free_spins`, [prize, pack.code])).rows[0];
     await client.query('COMMIT');
-    return { ok: true, prize, credits: Number(up.credits), carry: Number(up.roulette_carry) };
+    return { ok: true, prize, credits: Number(up.credits), carry: Number(up.roulette_carry), extra: Number(up.free_spins) || 0, usedExtra: doneToday };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally { client.release(); }
+}
+
+// ---------- Premios del mes ----------
+// Calendario de recompensas por entrar cada día (como los "desafíos mensuales" de otros juegos). Se reinicia cada mes.
+// El día 1 del mes empieza el día 1 del calendario; cada día que entras y reclamas avanzas un día. Si te saltas un día, vuelves al día 1.
+// Premios: va rotando crédito → mejora de terreno gratis → giro extra de la ruleta, y cada vez más grandes. El último día del mes: MONTHLY_LAST_PRIZE (20 créditos).
+// Variables opcionales: MONTHLY_CREDITS (lista de créditos de los días 1, 4, 7… separada por comas) y MONTHLY_LAST_PRIZE.
+const MONTHLY_LAST_PRIZE = Math.max(1, Number(process.env.MONTHLY_LAST_PRIZE || 20));
+const MONTHLY_CREDITS = (() => {
+  const a = String(process.env.MONTHLY_CREDITS || '').split(',').map(x => Number(x.trim())).filter(x => Number.isFinite(x) && x > 0);
+  return a.length ? a : [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 7, 8];
+})();
+const daysInMonth = ym => new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate();
+function monthlyReward(day, total) {
+  if (day >= total) return { type: 'credits', amount: MONTHLY_LAST_PRIZE, last: true };
+  const k = (day - 1) % 3, n = Math.floor((day - 1) / 3);
+  if (k === 0) return { type: 'credits', amount: MONTHLY_CREDITS[Math.min(n, MONTHLY_CREDITS.length - 1)] };
+  if (k === 1) return { type: 'upgrade', amount: day > 20 ? 2 : 1 };
+  return { type: 'spin', amount: day > 15 ? 2 : 1 };
+}
+function monthlyState(row, today) {
+  const month = today.slice(0, 7), total = daysInMonth(month);
+  const mine = row && row.month === month ? row : null;
+  const last = mine ? mine.last_day : null, streak = mine ? Number(mine.streak) || 0 : 0;
+  let canClaim, claimed, broken = false;
+  if (last === today) { canClaim = false; claimed = streak; }
+  else if (last && last === yesterdayKey()) { canClaim = true; claimed = streak; }
+  else { canClaim = true; claimed = 0; broken = !!last && streak > 0; }   // se saltó un día: vuelve al día 1
+  claimed = Math.min(claimed, total);
+  const nextDay = canClaim ? Math.min(total, claimed + 1) : null;
+  return { month, today, total, claimed, canClaim: canClaim && claimed < total, nextDay, broken };
+}
+const fmtCredits = n => String(n).replace('.', ',');
+function monthlyText(rw) {
+  if (rw.type === 'credits') return `${fmtCredits(rw.amount)} ${rw.amount === 1 ? 'crédito gratis' : 'créditos gratis'}${rw.last ? ' (¡premio final!)' : ''}`;
+  if (rw.type === 'spin') return rw.amount === 1 ? '1 giro extra de la ruleta' : `${rw.amount} giros extra de la ruleta`;
+  return rw.amount === 1 ? '1 mejora de terreno gratis' : `${rw.amount} mejoras de terreno gratis`;
+}
+function monthlyMsToEnd(st) {
+  let sec = 0;
+  try { const [h, m, x] = new Date().toLocaleTimeString('en-GB', { timeZone: DAILY_TZ, hour12: false }).split(':').map(Number); sec = h * 3600 + m * 60 + x; } catch (e) {}
+  const dom = Number(st.today.slice(8, 10));
+  return ((st.total - dom) * 86400 + (86400 - sec)) * 1000;
+}
+async function monthlyView(db, userId, row) {
+  const st = monthlyState(row, dayKey());
+  const pk = await db.query('SELECT free_spins, free_upgrades FROM packs WHERE user_id = $1', [userId]);
+  const p = pk.rows[0] || {};
+  const rewards = Array.from({ length: st.total }, (_, i) => ({ day: i + 1, ...monthlyReward(i + 1, st.total) }));
+  return { ...st, rewards, msToEnd: monthlyMsToEnd(st), freeSpins: Number(p.free_spins) || 0, freeUpgrades: Number(p.free_upgrades) || 0 };
+}
+async function monthlyGet(req) {
+  const user = await needUser(req);
+  const month = dayKey().slice(0, 7);
+  const r = await pool.query('SELECT month, streak, last_day FROM monthly_rewards WHERE user_id = $1 AND month = $2', [user.id, month]);
+  return monthlyView(pool, user.id, r.rows[0] || null);
+}
+async function monthlyClaim(req) {
+  const user = await needUser(req);
+  const pack = await ensureUserPack(user);
+  const today = dayKey(), month = today.slice(0, 7);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT code FROM packs WHERE code = $1 FOR UPDATE', [pack.code]);   // una reclamación a la vez por cuenta
+    const row = (await client.query('SELECT month, streak, last_day FROM monthly_rewards WHERE user_id = $1 AND month = $2 FOR UPDATE', [user.id, month])).rows[0] || null;
+    const st = monthlyState(row, today);
+    if (!st.canClaim) throw new HttpError(409, 'Ya has reclamado el premio de hoy. ¡Vuelve mañana!');
+    const day = st.nextDay, rw = monthlyReward(day, st.total);
+    await client.query(`INSERT INTO monthly_rewards (user_id, month, streak, last_day) VALUES ($1,$2,$3,$4)
+                        ON CONFLICT (user_id, month) DO UPDATE SET streak = $3, last_day = $4`, [user.id, month, day, today]);
+    let up;
+    if (rw.type === 'credits') {
+      up = (await client.query(`UPDATE packs SET roulette_carry = (roulette_carry + $1) - floor(roulette_carry + $1),
+                                  credits = credits + floor(roulette_carry + $1)::int WHERE code = $2
+                                RETURNING credits, roulette_carry, free_spins, free_upgrades`, [rw.amount, pack.code])).rows[0];
+    } else if (rw.type === 'spin') {
+      up = (await client.query('UPDATE packs SET free_spins = free_spins + $1 WHERE code = $2 RETURNING credits, roulette_carry, free_spins, free_upgrades', [rw.amount, pack.code])).rows[0];
+    } else {
+      up = (await client.query('UPDATE packs SET free_upgrades = free_upgrades + $1 WHERE code = $2 RETURNING credits, roulette_carry, free_spins, free_upgrades', [rw.amount, pack.code])).rows[0];
+    }
+    await client.query('COMMIT');
+    const view = await monthlyView(pool, user.id, { month, streak: day, last_day: today });
+    return { ok: true, day, reward: rw, credits: Number(up.credits), carry: Number(up.roulette_carry), ...view };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     throw e;
@@ -737,14 +835,19 @@ async function upgradeParcel(req, { id, from }) {
     const level = Math.max(1, Math.min(MAX_LEVEL, Number(par.level) || 1));
     if (from != null && Number(from) !== level) throw new HttpError(409, 'El nivel de este terreno ya ha cambiado');
     if (level >= MAX_LEVEL) throw new HttpError(409, 'Este terreno ya está al nivel máximo');
-    const cost = LEVEL_COSTS[level - 1];
-    // Se cobra primero (la fila del pack queda bloqueada): así la hora de la mejora es posterior a cualquier recogida en curso
-    const r = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [cost, pack.code]);
-    if (!r.rows[0]) throw new HttpError(402, 'NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.');
+    let cost = LEVEL_COSTS[level - 1], free = false, freeLeft = 0;
+    // Si tiene una mejora gratis (premio del mes) se gasta esa en vez de créditos
+    let r = await client.query('UPDATE packs SET free_upgrades = free_upgrades - 1 WHERE code = $1 AND free_upgrades > 0 RETURNING credits, free_upgrades', [pack.code]);
+    if (r.rows[0]) { free = true; cost = 0; freeLeft = Number(r.rows[0].free_upgrades) || 0; }
+    else {
+      // Se cobra primero (la fila del pack queda bloqueada): así la hora de la mejora es posterior a cualquier recogida en curso
+      r = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [cost, pack.code]);
+      if (!r.rows[0]) throw new HttpError(402, 'NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.');
+    }
     await client.query('UPDATE parcels SET level = $1, level_at = $2 WHERE id = $3', [level + 1, Date.now(), String(id)]);
     await client.query('COMMIT');
     notifyFriendsOf(user.id, 'level', level + 1);
-    return { ok: true, level: level + 1, credits: r.rows[0].credits, cost };
+    return { ok: true, level: level + 1, credits: r.rows[0].credits, cost, free, freeUpgrades: freeLeft };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     throw e;
@@ -1352,11 +1455,23 @@ async function pushRun() {
             field = 'last_prod_push'; value = now;
           }
         }
-        // 4) Regalo diario por la mañana
+        // Premio del mes (calendario mensual): qué toca hoy
+        let mon = null;
+        try {
+          const mr = (await pool.query('SELECT month, streak, last_day FROM monthly_rewards WHERE user_id = $1 AND month = $2', [u.user_id, day.slice(0, 7)])).rows[0] || null;
+          const ms = monthlyState(mr, day);
+          if (ms.canClaim) mon = { ms, text: monthlyText(monthlyReward(ms.nextDay, ms.total)) };
+        } catch (e) { /* si falla, se avisa solo del regalo diario */ }
+        // 4) Regalo diario por la mañana (con el premio del mes si también está pendiente)
         if (!payload && info.canClaim && (!st || (st.last_daily_push !== day && st.last_daily_push !== day + '!'))) {
           const s = info.streak;
-          payload = { title: '🎁 Tu regalo diario te espera', body: s > 0 ? `Llevas ${s} ${s === 1 ? 'día' : 'días'} seguidos: ¡no pierdas la racha!` : 'Entra hoy y empieza tu racha.', tag: 'daily', url: '/' };
+          payload = { title: '🎁 Tu regalo diario te espera', body: (s > 0 ? `Llevas ${s} ${s === 1 ? 'día' : 'días'} seguidos: ¡no pierdas la racha!` : 'Entra hoy y empieza tu racha.') + (mon ? ` Y en tus premios del mes (día ${mon.ms.nextDay}): ${mon.text}.` : ''), tag: 'daily', url: '/' };
           field = 'last_daily_push'; value = day;
+        }
+        // 5) Premio del mes pendiente cuando el regalo diario ya está reclamado
+        if (!payload && mon && (!st || (st.last_daily_push !== day && st.last_daily_push !== day + '!' && st.last_daily_push !== day + 'm'))) {
+          payload = { title: `🗓️ Premio del día ${mon.ms.nextDay} del mes`, body: `Hoy te toca: ${mon.text}. ${mon.ms.claimed > 0 ? `Llevas ${mon.ms.claimed} ${mon.ms.claimed === 1 ? 'día' : 'días'} seguidos: ¡no pierdas la racha!` : 'Entra cada día para llegar al premio final.'}`, tag: 'monthly', url: '/' };
+          field = 'last_daily_push'; value = day + 'm';
         }
         if (!payload) continue;
         if (await pushToUser(u.user_id, payload)) {
@@ -1501,6 +1616,8 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/daily/claim') return dailyClaim(req);
   if (req.method === 'GET' && pn === '/api/roulette') return rouletteGet(req);
   if (req.method === 'POST' && pn === '/api/roulette/spin') return rouletteSpin(req);
+  if (req.method === 'GET' && pn === '/api/monthly') return monthlyGet(req);
+  if (req.method === 'POST' && pn === '/api/monthly/claim') return monthlyClaim(req);
   if (req.method === 'POST' && pn === '/api/parcel/house') return setHouse(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/parcel/upgrade') return upgradeParcel(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/claim') return claimWithCredit(req, await readJson(req));
@@ -1668,6 +1785,10 @@ ready.then(async () => {
 ready.then(async () => {   // ruleta diaria: una fila por cuenta y día (la clave primaria impide girar dos veces el mismo día)
   await run('CREATE TABLE IF NOT EXISTS roulette_spins (user_id TEXT NOT NULL, day DATE NOT NULL, prize NUMERIC(8,2) NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, day))');
   await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS roulette_carry NUMERIC(6,2) NOT NULL DEFAULT 0');
+  // premios del mes: giros extra y mejoras gratis ganados, y el calendario de cada cuenta por mes
+  await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS free_spins INT NOT NULL DEFAULT 0');
+  await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS free_upgrades INT NOT NULL DEFAULT 0');
+  await run('CREATE TABLE IF NOT EXISTS monthly_rewards (user_id TEXT NOT NULL, month TEXT NOT NULL, streak INT NOT NULL DEFAULT 0, last_day TEXT, PRIMARY KEY (user_id, month))');
 }).catch(e => console.error('No se pudo preparar la ruleta:', e.message));
 
 // Sitio estático en otro dominio: CORS_ORIGINS = direcciones permitidas, separadas por comas (p. ej. https://atlas-terrenos-web.onrender.com)

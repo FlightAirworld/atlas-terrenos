@@ -726,7 +726,8 @@ function renderLevelBox(p) {
   if (lvl >= max) { btn.classList.add('hidden'); note.textContent = '🏆 Nivel máximo: tu terreno produce al máximo.'; return; }
   const cost = cfg.levels.costs[lvl - 1];
   btn.classList.remove('hidden');
-  btn.textContent = `⬆️ Subir a nivel ${lvl + 1} · ${cost} 🎟️`;
+  const fu = window.freeUpgrades || 0;       // mejoras gratis ganadas en los premios del mes
+  btn.textContent = fu > 0 ? `⬆️ Subir a nivel ${lvl + 1} · GRATIS 🎁 (${fu})` : `⬆️ Subir a nivel ${lvl + 1} · ${cost} 🎟️`;
   note.textContent = `Pasará a producir ×${fmtNum(multOf(lvl + 1))} (ahora ×${fmtNum(multOf(lvl))}). La mejora cuenta desde el momento en que la compras.`;
 }
 $('upgrade-btn').onclick = async () => {
@@ -734,18 +735,21 @@ $('upgrade-btn').onclick = async () => {
   const lvl = levelOf(selected);
   if (lvl >= maxLevel()) return;
   const cost = cfg.levels.costs[lvl - 1];
-  if (credits < cost) return setMsg('NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.', 'err');
-  if (!confirm(`Subir este terreno al nivel ${lvl + 1} cuesta ${cost} ${plural(cost, 'crédito', 'créditos')}. ¿Continuar?`)) return;
+  const useFree = (window.freeUpgrades || 0) > 0;
+  if (!useFree && credits < cost) return setMsg('NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.', 'err');
+  if (!confirm(useFree ? `Subir este terreno al nivel ${lvl + 1} gratis, con una de tus mejoras de los premios del mes. ¿Continuar?` : `Subir este terreno al nivel ${lvl + 1} cuesta ${cost} ${plural(cost, 'crédito', 'créditos')}. ¿Continuar?`)) return;
   const btn = $('upgrade-btn');
   btn.disabled = true;
   try {
     const j = await api('/api/parcel/upgrade', { method: 'POST', body: { id: selected.id, from: lvl } });
     credits = j.credits; updateCreditUi();
+    if (j.free) window.freeUpgrades = j.freeUpgrades || 0;
     selected.level = j.level;
     showPanel(selected);
     drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house, level: j.level });
     sfx('claim');
-    setMsg(`⭐ ¡Nivel ${j.level}! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
+    setMsg(j.free ? `⭐ ¡Nivel ${j.level} GRATIS! Te quedan ${window.freeUpgrades} ${window.freeUpgrades === 1 ? 'mejora gratis' : 'mejoras gratis'}` : `⭐ ¡Nivel ${j.level}! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
+    if (window.monthlyRefresh) monthlyRefresh();
     loadProduction();
   } catch (e) { setMsg(e.message, 'err'); sfx('error'); refreshCredits(); }
   finally { btn.disabled = false; }
