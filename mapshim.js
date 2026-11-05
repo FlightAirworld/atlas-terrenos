@@ -67,6 +67,45 @@
     let roadsOn = false;
     const roadUsers = new Set();
     const worldPx = z => 256 * Math.pow(2, z);
+    function withSynth(out) {
+      if (!window.synthRoadLines) return out;
+      let synth;
+      try {
+        const b = gl.getBounds(), pl = (b.getEast() - b.getWest()) * 0.5, pa = (b.getNorth() - b.getSouth()) * 0.5;
+        synth = window.synthRoadLines(b.getWest() - pl, b.getEast() + pl, b.getSouth() - pa, b.getNorth() + pa);
+      } catch (e) { return out; }
+      if (!synth.length) return out;
+      const sy = synth.map(l => ({ lat: l[0][1], w: l[0][0], e: l[1][0], xs: [] })), res = [];
+      out.forEach(c => {
+        const cuts = [];
+        for (let i = 0; i + 1 < c.length; i++) {
+          const a = c[i], b = c[i + 1];
+          for (const s of sy) {
+            if ((a[1] - s.lat) * (b[1] - s.lat) < 0) {
+              const t = (s.lat - a[1]) / (b[1] - a[1]), x = a[0] + (b[0] - a[0]) * t;
+              if (x >= s.w && x <= s.e) { cuts.push({ i, t, x, lat: s.lat }); s.xs.push(x); }
+            }
+          }
+        }
+        if (!cuts.length) { res.push(c); return; }
+        cuts.sort((p, q) => p.i - q.i || p.t - q.t);
+        const keep = part => { if (part.length >= 2) { part.cls = c.cls; part.ow = c.ow; res.push(part); } };
+        let cur = [c[0]], k = 0;
+        for (let i = 0; i + 1 < c.length; i++) {
+          while (k < cuts.length && cuts[k].i === i) { const pt = [cuts[k].x, cuts[k].lat]; cur.push(pt); keep(cur); cur = [pt]; k++; }
+          cur.push(c[i + 1]);
+        }
+        keep(cur);
+      });
+      sy.forEach(s => {
+        const xs = [s.w, ...s.xs.sort((p, q) => p - q), s.e];
+        for (let i = 0; i + 1 < xs.length; i++) {
+          if (xs[i + 1] - xs[i] < 1e-9) continue;
+          const seg = [[xs[i], s.lat], [xs[i + 1], s.lat]]; seg.cls = 'minor'; seg.ow = 0; res.push(seg);
+        }
+      });
+      return res;
+    }
     const api = {
       gl,
       getContainer: () => gl.getContainer(),
@@ -124,7 +163,7 @@
             if (g.type === 'LineString') add(g.coordinates);
             else if (g.type === 'MultiLineString') g.coordinates.forEach(add);
           });
-          return out;
+          return withSynth(out);
         } catch (e) { return []; }
       },
       // ---------- Ancho real de las calles en pantalla ----------

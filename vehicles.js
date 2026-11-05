@@ -494,7 +494,7 @@
       const used = new Set([s0.ln]);
       const cl = pts.map(() => s0.ln.cls);               // clase de la calle de cada punto (para saber su ancho)
       let total = makePath(pts).total;
-      for (let hop = 0; hop < 12 && total < target; hop++) {
+      for (let hop = 0; hop < 60 && total < target; hop++) {   // 60: las calles reales se parten en cada cruce con una horizontal
         const a = pts[pts.length - 1], b = pts[pts.length - 2], hin = Math.atan2(a.y - b.y, a.x - b.x);
         const opts = [];
         near(a).forEach(o => {

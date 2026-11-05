@@ -25,8 +25,8 @@ const MAP_STYLE = {
       tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
       attribution: 'Imágenes © Esri, Maxar, Earthstar Geographics'
     },
-    roads: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
-    synth: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },   // calles horizontales del juego (ver SYNTH_*)   // solo para que los coches sigan las calles
+    roads: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },   // solo para que los coches sigan las calles
+    synth: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },   // calles horizontales del juego (ver SYNTH_*)
     dem: {
       type: 'raster-dem', tileSize: 256, maxzoom: 15, encoding: 'terrarium',
       tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
@@ -45,17 +45,16 @@ const MAP_STYLE = {
       filter: ['all', ['!=', ['get', 'brunnel'], 'tunnel'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service']]]],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 1, 16, 14, 19, 60] } },
+    { id: 'st-sy-casing', type: 'line', source: 'synth', minzoom: 15,
+      layout: { 'line-cap': 'butt' },
+      paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 1, 16, 14, 19, 60] } },
     { id: 'st-road', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
       filter: ['all', ['!=', ['get', 'brunnel'], 'tunnel'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service']]]],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': ['match', ['get', 'class'], 'motorway', '#f6c76b', 'trunk', '#f6c76b', 'primary', '#fbe29a', '#ffffff'], 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.6, 16, 11, 19, 50] } },
-    // Calles horizontales entre filas de casas (generadas por el juego, no vienen del mapa real)
-    { id: 'sy-road-casing', type: 'line', source: 'synth', minzoom: 15,
+    { id: 'st-sy-road', type: 'line', source: 'synth', minzoom: 15,
       layout: { 'line-cap': 'butt' },
-      paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 15, 6, 16, 14, 19, 60] } },
-    { id: 'sy-road', type: 'line', source: 'synth', minzoom: 15,
-      layout: { 'line-cap': 'butt' },
-      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 15, 4.5, 16, 11, 19, 50] } },
+      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.6, 16, 11, 19, 50] } },
     // Vías del tren (solo líneas principales, sin túneles ni apartaderos): trains.js hace circular el tren por ellas
     { id: 'st-rail-bed', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
       filter: ['all', ['==', ['get', 'class'], 'rail'], ['!=', ['get', 'brunnel'], 'tunnel'], ['!', ['has', 'service']]],
@@ -64,6 +63,13 @@ const MAP_STYLE = {
       filter: ['all', ['==', ['get', 'class'], 'rail'], ['!=', ['get', 'brunnel'], 'tunnel'], ['!', ['has', 'service']]],
       paint: { 'line-color': '#f4f1ea', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.4, 16, 3.4, 19, 15], 'line-dasharray': [1, 1.3] } },
     { id: 'sat', type: 'raster', source: 'sat', layout: { visibility: baseMode === 'satelite' ? 'visible' : 'none' } },
+    // Calles horizontales del juego sobre el satélite (solo se ven con el mapa de satélite; en el estilizado van intercaladas con las reales)
+    { id: 'sy-sat-casing', type: 'line', source: 'synth', minzoom: 15,
+      layout: { 'line-cap': 'butt', visibility: baseMode === 'satelite' ? 'visible' : 'none' },
+      paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 1, 16, 14, 19, 60] } },
+    { id: 'sy-sat-road', type: 'line', source: 'synth', minzoom: 15,
+      layout: { 'line-cap': 'butt', visibility: baseMode === 'satelite' ? 'visible' : 'none' },
+      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.6, 16, 11, 19, 50] } },
     // Capa invisible: solo sirve para consultar la geometría de las calles (coches). Apagada hasta que se necesita.
     {
       id: 'roads-q', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 15,
@@ -240,6 +246,7 @@ function queueSynth() {
   synthQueued = true;
   setTimeout(() => { synthQueued = false; try { updateSynth(); } catch (e) {} }, 120);
 }
+window.synthRoadLines = synthLines;     // mapshim.queryRoads() las une a las calles reales para que circulen coches y peatones
 gl.on('moveend', queueSynth);
 gl.on('load', queueSynth);
 
@@ -488,6 +495,7 @@ function applyBaseMode() {
   const sat = baseMode === 'satelite';
   gl.setLayoutProperty('sat', 'visibility', sat ? 'visible' : 'none');
   for (const l of gl.getStyle().layers) if (l.id.startsWith('st-')) gl.setLayoutProperty(l.id, 'visibility', sat ? 'none' : 'visible');
+  for (const id of ['sy-sat-casing', 'sy-sat-road']) if (gl.getLayer(id)) gl.setLayoutProperty(id, 'visibility', sat ? 'visible' : 'none');
   const b = document.getElementById('base-btn');
   if (b) { b.setAttribute('aria-pressed', sat ? 'true' : 'false'); b.title = sat ? 'Mapa: satélite' : 'Mapa: estilizado'; b.textContent = sat ? '🛰️' : '🎨'; }
 }
