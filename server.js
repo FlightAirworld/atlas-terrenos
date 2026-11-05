@@ -466,6 +466,22 @@ async function settledOrder(orderId) {
 
 // Entrega el pack de un pedido ya cobrado y reservado (status PROCESSING). Todo en una transacción: o se suman los créditos y se marca PAID, o no pasa nada.
 // Si falla, el pedido vuelve a CREATED para poder reintentarlo (otra petición, o el reintento automático del webhook).
+
+// ---------- Avisos al móvil del dueño (Telegram, gratis) ----------
+// 1) En Telegram habla con @BotFather, escribe /newbot y copia el token. 2) Escribe cualquier cosa a tu bot nuevo.
+// 3) Abre https://api.telegram.org/bot<TOKEN>/getUpdates y copia el número de "chat":{"id":...}.
+// Pon TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en Render > Environment. Sin ellas no se envía nada.
+const TG_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim(), TG_CHAT = (process.env.TELEGRAM_CHAT_ID || '').trim();
+function ownerNotify(title, body) {
+  if (!TG_TOKEN || !TG_CHAT) return;
+  fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: TG_CHAT, text: body ? `${title}\n${body}` : String(title), disable_web_page_preview: true })
+  }).catch(() => {});   // nunca debe romper el juego
+}
+const seenNotified = new Map();   // cid -> última vez que se avisó de su conexión
+
 async function deliverPack(orderId, packCredits, user, captureId) {
   const client = await pool.connect();
   try {
@@ -484,6 +500,7 @@ async function deliverPack(orderId, packCredits, user, captureId) {
     const done = await client.query("UPDATE pack_orders SET status = 'PAID', code = $1, capture_id = $3 WHERE order_id = $2 AND status = 'PROCESSING' RETURNING order_id", [code, orderId, captureId || null]);
     if (!done.rows[0]) throw new Error('El pedido ya no estaba reservado');
     await client.query('COMMIT');
+    try { const pk = PACKS.find(p => p.credits === packCredits); ownerNotify('💰 Nueva compra', `Pack de ${packCredits} créditos${pk ? ' · ' + pk.price + ' ' + (process.env.CURRENCY || 'EUR') : ''}${user ? '' : ' (sin cuenta)'}`); } catch {}
     return { code, credits };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -1200,7 +1217,15 @@ function onlineStream(req, res, url) {
     'X-Content-Type-Options': 'nosniff'
   });
   let set = onlineClients.get(cid);
-  if (!set) { set = new Set(); onlineClients.set(cid, set); }
+  if (!set) {
+    set = new Set(); onlineClients.set(cid, set);
+    const last = seenNotified.get(cid) || 0;   // un aviso por jugador como mucho cada 6 h
+    if (Date.now() - last > 6 * 3600_000) {
+      seenNotified.set(cid, Date.now());
+      if (seenNotified.size > 5000) seenNotified.clear();
+      ownerNotify('👋 Alguien se ha conectado', `Jugadores reales conectados: ${onlineClients.size}`);
+    }
+  }
   set.add(res);
   onlineByIp.set(ip, (onlineByIp.get(ip) || 0) + 1);
   res.write(`retry: 3000\n\ndata: ${onlineShown()}\n\n`);   // el recién llegado ve el número al instante

@@ -182,3 +182,11 @@ Las posiciones de bancos, colas, puertas y chimeneas dentro de cada parcela son 
 - Con `OWNER_USER_ID` el ingreso se hace solo el día 1 de cada mes aunque no abras el juego (revisa cada hora). Con solo `OWNER_EMAIL` se ingresa la primera vez que entras cada mes. Si este mes aún no se ha ingresado, entra la primera vez que arranque con la variable puesta.
 - La clave primaria `(user_id, mes)` de `owner_grants` garantiza que no se puede cobrar dos veces en el mismo mes, aunque se reinicie el servidor.
 - `OWNER_MONTHLY_CREDITS=0` lo desactiva.
+
+## Avisos al móvil del dueño (compras y conexiones, por Telegram)
+
+1. En Telegram habla con **@BotFather**, escribe `/newbot`, elige nombre y copia el **token**.
+2. Abre tu bot nuevo y escríbele cualquier mensaje (por ejemplo "hola").
+3. Abre en el navegador `https://api.telegram.org/bot<TOKEN>/getUpdates` y copia el número de `"chat":{"id":...}`.
+4. En Render > Environment añade `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` y guarda.
+5. Recibirás un mensaje por cada compra y cuando un jugador se conecte (máx. uno por jugador cada 6 h).
