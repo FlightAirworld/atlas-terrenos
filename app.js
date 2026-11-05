@@ -216,7 +216,11 @@ function flushOwned() {
 
 // Para ir fluido, la foto del suelo y la etiqueta con el nombre solo existen en las parcelas más cercanas al centro.
 // El volumen 3D (una sola capa para todas) se mantiene siempre.
-const MAX_DETAIL = 40;
+const MAX_DETAIL = 40;   // (antiguo) ya no se usa: ver DETAIL_LOAD / DETAIL_KEEP
+// Histéresis: las fotos se cargan en las parcelas más cercanas al centro (LOAD) pero solo se quitan cuando quedan
+// bastante lejos (KEEP). Así no desaparecen y vuelven a cargar al mover un poco el mapa. A más zoom las fotos pesan
+// más (128, 256 o 512 px), por eso se guardan menos.
+const DETAIL_LOAD = { t: 80, s: 60, m: 40 }, DETAIL_KEEP = { t: 220, s: 140, m: 90 };
 let detailQueued = false;
 // ---------- Casas recortadas por las calles ----------
 // Las calles reales (teselas de OpenFreeMap) se restan de cada parcela: la casa queda cortada por la carretera.
@@ -451,10 +455,12 @@ function updateDetail() {
     const c = gl.getCenter();
     all.forEach(ex => { const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y); ex.d = Math.hypot((s + n) / 2 - c.lat, (w + e) / 2 - c.lng); });
     all.sort((a, b) => a.d - b.d);
-    all.forEach((ex, i) => i < MAX_DETAIL ? addDetail(ex) : dropDetail(ex));
+    const r = resOf(), load = DETAIL_LOAD[r], keep = DETAIL_KEEP[r];
+    all.forEach((ex, i) => { if (i < load) addDetail(ex); else if (i >= keep) dropDetail(ex); });   // entre LOAD y KEEP: se queda como está
   });
 }
 gl.on('moveend', updateDetail);
+{ let moveT = 0; gl.on('move', () => { const t = Date.now(); if (t - moveT > 400) { moveT = t; updateDetail(); } }); }   // también mientras se arrastra: las fotos llegan antes que tú
 
 function drawOwned(p) {
   if (!glReady) { pendingParcels.set(p.id, p); return; }
@@ -858,7 +864,7 @@ function buildHousePicker(box, onPick, withRandom) {
     b.append(content); b.onclick = () => onPick(value); box.appendChild(b);
   };
   if (withRandom) add(null, '🎲', 'Al azar');
-  HOUSES.forEach(h => {
+  [...HOUSES].reverse().forEach(h => {   // las más nuevas (al final de HOUSES) salen primero
     const i = document.createElement('img');
     i.src = sizedUrl(h, 't'); i.alt = ''; i.loading = 'lazy';
     i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;display:block';
