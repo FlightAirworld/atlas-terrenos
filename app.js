@@ -338,14 +338,14 @@ function applyCut(ex, cut) {
   refreshPhoto(ex);                                                      // foto con la calle borrada
 }
 
-// Miniaturas: de lejos (zoom bajo) la parcela se ve pequeña, así que basta la versión -t.webp (128 px) y se descarga mucho menos
-const THUMB_ZOOM = 17.5;
-const useThumb = () => map.getZoom() < THUMB_ZOOM;
-const thumbOf = u => String(u).replace(/\.webp$/i, '-t.webp');
-const srcUrl = (ex, th = useThumb()) => th ? thumbOf(ex.url) : ex.url;
-function updateRes() {      // al acercar o alejar el zoom, cambia entre miniatura y foto completa
+// Tres tamaños según el zoom (la parcela se ve más grande al acercar): -t 128 px, -s 256 px y -m 512 px (el original de 768 px ya no se descarga)
+const THUMB_ZOOM = 17.5, SMALL_ZOOM = 18.5;
+const resOf = () => { const z = map.getZoom(); return z < THUMB_ZOOM ? 't' : z < SMALL_ZOOM ? 's' : 'm'; };
+const sizedUrl = (u, r) => String(u).replace(/\.webp$/i, '-' + r + '.webp');
+const srcUrl = (ex, r = resOf()) => sizedUrl(ex.url, r);
+function updateRes() {      // al acercar o alejar el zoom, cambia de tamaño de foto (128, 256 o 512 px)
   if (!glReady) return;
-  const th = useThumb();
+  const th = resOf();
   for (const ex of drawn.values()) if (ex.hasDetail && ex.res !== th) refreshPhoto(ex);
 }
 gl.on('moveend', updateRes);
@@ -384,7 +384,7 @@ function freeBlob(ex) {
 // Pone en la parcela la foto que toca: recortada si tiene calle, la normal si no
 async function refreshPhoto(ex) {
   if (!ex.hasDetail) return;
-  const th = useThumb();
+  const th = resOf();
   const tok = ex.tok = (ex.tok || 0) + 1, url = srcUrl(ex, th), cut = roadCut.get(ex.p.id);
   let u = url, blob = null;
   if (cut && cut.road) { try { blob = await clippedPhoto(url, ex.p, cut.road); u = blob; } catch (e) {} }
@@ -431,7 +431,7 @@ function mountDetail(ex, imgUrl, blob) {
     interactive: false, keyboard: false
   }).addTo(map);
   ex.hasDetail = true;
-  ex.res = useThumb();
+  ex.res = resOf();
 }
 function dropDetail(ex) {
   ex.want = false;
@@ -578,18 +578,36 @@ function setSelected(p) {
     : { type: 'FeatureCollection', features: [] });
 }
 
-let loadSeq = 0;
+// Parcelas por teselas fijas de TILE×TILE casillas (las mismas que el servidor): cada tesela se guarda en el cliente TILE_TTL_MS
+// y, al mover el mapa, solo se piden las que faltan. Antes se pedía todo el recuadro visible en cada movimiento.
+const TILE = 16, TILE_TTL_MS = 60_000, MAX_TILES_PER_LOAD = 36, TILE_PARALLEL = 6;   // TILE debe coincidir con server.js
+const tileCache = new Map();   // "tx,ty" -> { at, busy }
+function invalidateTile(x, y) { tileCache.delete(Math.floor(x / TILE) + ',' + Math.floor(y / TILE)); }   // p. ej. tras comprar una parcela
+async function loadTile(tx, ty) {
+  const key = tx + ',' + ty, ent = tileCache.get(key);
+  if (ent && (ent.busy || Date.now() - ent.at < TILE_TTL_MS)) return;
+  tileCache.set(key, { at: ent ? ent.at : 0, busy: true });
+  try {
+    const list = await api('/api/parcels/tile?tx=' + tx + '&ty=' + ty);
+    list.forEach(drawOwned);
+    tileCache.set(key, { at: Date.now(), busy: false });
+  } catch { if (ent) tileCache.set(key, { at: ent.at, busy: false }); else tileCache.delete(key); }   // si falla, se reintenta en el próximo movimiento
+}
 async function loadParcels() {
   if (!cfg || map.getZoom() < MIN_ZOOM_PARCELS) return;
-  const b = map.getBounds(), seq = ++loadSeq;
-  const qs = new URLSearchParams({
-    south: Math.max(-90, b.getSouth()), north: Math.min(90, b.getNorth()),
-    west: Math.max(-180, b.getWest()), east: Math.min(180, b.getEast())
-  });
-  try {
-    const list = await api('/api/parcels?' + qs);
-    if (seq === loadSeq) list.forEach(drawOwned);
-  } catch {}
+  const b = map.getBounds(), s = cfg.size;
+  const maxX = Math.round(360 / s) - 1, maxY = Math.round(180 / s) - 1;
+  const cell = (v, off, max) => Math.max(0, Math.min(max, Math.floor((v + off) / s)));
+  const tx0 = Math.floor(cell(b.getWest(), 180, maxX) / TILE), tx1 = Math.floor(cell(b.getEast(), 180, maxX) / TILE);
+  const ty0 = Math.floor(cell(b.getSouth(), 90, maxY) / TILE), ty1 = Math.floor(cell(b.getNorth(), 90, maxY) / TILE);
+  const c = map.getCenter(), ctx = Math.floor(cell(c.lng, 180, maxX) / TILE), cty = Math.floor(cell(c.lat, 90, maxY) / TILE);
+  const todo = [];
+  for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) todo.push([tx, ty]);
+  todo.sort((a, b) => Math.hypot(a[0] - ctx, a[1] - cty) - Math.hypot(b[0] - ctx, b[1] - cty));   // primero las del centro
+  const queue = todo.slice(0, MAX_TILES_PER_LOAD);
+  await Promise.all(Array.from({ length: Math.min(TILE_PARALLEL, queue.length) }, async () => {
+    for (let t; (t = queue.shift());) await loadTile(t[0], t[1]);
+  }));
 }
 map.on('moveend', loadParcels);
 
@@ -710,6 +728,7 @@ function setupAdminControls() {
         house: selected.house
       });
 
+      invalidateTile(selected.x, selected.y);
       loadStats();
       loadParcels();
 
@@ -842,7 +861,7 @@ function buildHousePicker(box, onPick, withRandom) {
   if (withRandom) add(null, '🎲', 'Al azar');
   HOUSES.forEach(h => {
     const i = document.createElement('img');
-    i.src = h; i.alt = ''; i.loading = 'lazy';
+    i.src = sizedUrl(h, 't'); i.alt = ''; i.loading = 'lazy';
     i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;display:block';
     add(h, i, houseName(h));
   });
@@ -966,6 +985,7 @@ $('use-credit').onclick = async () => {
     showPanel(selected);
     setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉` + (j.referralBonus ? ` 👫 (incluye +${j.referralBonus} de regalo por venir invitado)` : ''), 'ok'); sfx('claim');
     drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house });
+    invalidateTile(selected.x, selected.y);
     loadStats(); loadParcels(); loadProduction();
   } catch (e) {
     setMsg(e.message, 'err'); sfx('error');

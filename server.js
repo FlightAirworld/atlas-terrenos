@@ -1709,6 +1709,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS city TEXT');          // ranking por ciudades
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS city_try BIGINT');
     await run('CREATE INDEX IF NOT EXISTS parcels_country_city ON parcels (country, city)');
+    await run('CREATE INDEX IF NOT EXISTS parcels_x_y ON parcels (x, y)');   // el mapa pide parcelas por recuadro (x e y): sin este índice recorría toda la tabla
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_credits INT');   // qué pack se pidió en cada pedido
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_price TEXT');
   }).catch(e => console.error('No se pudieron añadir las columnas nuevas (niveles / packs):', e.message))
@@ -1869,10 +1870,33 @@ function sendStatic(req, res, file) {
   res.writeHead(200, headers); res.end(body);
 }
 
+// ---------- Parcelas por teselas fijas de TILE×TILE casillas ----------
+// El cliente pide teselas alineadas (siempre las mismas) y las guarda: así mover el mapa casi nunca repite peticiones.
+// ETag + 304: si la tesela no cambió, solo viaja la cabecera. Una tesela tiene como mucho TILE*TILE parcelas, así que LIMIT 3000 ya no corta nada.
+const TILE = 16;   // debe coincidir con TILE de app.js
+const TILE_TTL_MS = 10_000;
+const tileCache = new Map();   // "tx,ty" -> { at, body, etag }
+async function sendTile(req, res, url, send) {
+  const tx = Number(url.searchParams.get('tx')), ty = Number(url.searchParams.get('ty'));
+  if (!Number.isInteger(tx) || !Number.isInteger(ty) || tx < 0 || ty < 0 || tx * TILE >= MAX_X || ty * TILE >= MAX_Y) throw new HttpError(400, 'Tesela no válida');
+  const key = tx + ',' + ty;
+  let ent = tileCache.get(key);
+  if (!ent || Date.now() - ent.at > TILE_TTL_MS) {
+    const rows = await q.parcelsInBox(tx * TILE, tx * TILE + TILE - 1, ty * TILE, ty * TILE + TILE - 1);
+    const body = JSON.stringify(rows.map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country, house: r.house, level: r.level })));
+    ent = { at: Date.now(), body, etag: '"' + require('node:crypto').createHash('md5').update(body).digest('hex').slice(0, 20) + '"' };
+    if (tileCache.size > 2000) tileCache.clear();
+    tileCache.set(key, ent);
+  }
+  const extra = { 'ETag': ent.etag, 'Cache-Control': 'no-cache' };
+  if (req.headers['if-none-match'] === ent.etag) { res.writeHead(304, { ...extra, 'X-Content-Type-Options': 'nosniff' }); return res.end(); }
+  return send(200, ent.body, undefined, extra);
+}
+
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  const send = (status, body, type = 'application/json; charset=utf-8') => {
-    const h = { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000', 'Vary': 'Accept-Encoding' };
+  const send = (status, body, type = 'application/json; charset=utf-8', extra = {}) => {
+    const h = { ...extra, 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000', 'Vary': 'Accept-Encoding' };
     const plain = () => { res.writeHead(status, h); res.end(body); };
     // Respuestas grandes (JSON de parcelas, ranking…): comprimidas con gzip si el navegador lo admite (ahorra ancho de banda)
     if (typeof body === 'string' && body.length > 1024 && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) {
@@ -1898,8 +1922,10 @@ http.createServer(async (req, res) => {
     await ready;
     if (req.method === 'GET' && url.pathname === '/api/online') return onlineStream(req, res, url);
     if (req.method === 'GET' && url.pathname === '/api/chat/stream') return chatStream(req, res, url);   // conexión larga (SSE) del chat   // conexión larga (SSE): no pasa por route()
+    if (req.method === 'GET' && url.pathname === '/api/parcels/tile') return await sendTile(req, res, url, send);   // await: así un error 400 lo recoge el catch de abajo
     if (url.pathname.startsWith('/api/')) {
       const out = await route(req, res, url);
+      if (req.method !== 'GET') tileCache.clear();   // una compra, mejora o cambio de casa ya está guardado: las teselas en memoria se vuelven a leer
       return send(200, JSON.stringify(out));
     }
     let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname));
