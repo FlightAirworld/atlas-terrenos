@@ -25,7 +25,8 @@ const MAP_STYLE = {
       tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
       attribution: 'Imágenes © Esri, Maxar, Earthstar Geographics'
     },
-    roads: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },   // solo para que los coches sigan las calles
+    roads: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
+    synth: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },   // calles horizontales del juego (ver SYNTH_*)   // solo para que los coches sigan las calles
     dem: {
       type: 'raster-dem', tileSize: 256, maxzoom: 15, encoding: 'terrarium',
       tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
@@ -48,6 +49,13 @@ const MAP_STYLE = {
       filter: ['all', ['!=', ['get', 'brunnel'], 'tunnel'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service']]]],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': ['match', ['get', 'class'], 'motorway', '#f6c76b', 'trunk', '#f6c76b', 'primary', '#fbe29a', '#ffffff'], 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.6, 16, 11, 19, 50] } },
+    // Calles horizontales entre filas de casas (generadas por el juego, no vienen del mapa real)
+    { id: 'sy-road-casing', type: 'line', source: 'synth', minzoom: 15,
+      layout: { 'line-cap': 'butt' },
+      paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 15, 6, 16, 14, 19, 60] } },
+    { id: 'sy-road', type: 'line', source: 'synth', minzoom: 15,
+      layout: { 'line-cap': 'butt' },
+      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 15, 4.5, 16, 11, 19, 50] } },
     // Vías del tren (solo líneas principales, sin túneles ni apartaderos): trains.js hace circular el tren por ellas
     { id: 'st-rail-bed', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
       filter: ['all', ['==', ['get', 'class'], 'rail'], ['!=', ['get', 'brunnel'], 'tunnel'], ['!', ['has', 'service']]],
@@ -201,6 +209,40 @@ let detailQueued = false;
 // - Foto: se borra la franja de la calle en un canvas y se usa ese resultado como imagen de la parcela.
 // Solo se calcula para parcelas que se ven enteras y cerca del centro (ahí las teselas tienen todo su detalle).
 const ROAD_WIDTH = { motorway: 16, trunk: 14, primary: 12, secondary: 10, tertiary: 9, minor: 7 };   // ancho total, en metros
+// ---------- Calles horizontales entre filas de casas ----------
+// Cada SYNTH_EVERY filas de parcelas se traza una calle horizontal justo en la frontera entre dos filas.
+// SYNTH_EVERY = 1 → una calle entre cada fila; 2 → una cada dos filas; 0 → desactivadas.
+const SYNTH_EVERY = 1, SYNTH_HALF_M = 3.5, SYNTH_MIN_Z = 15, SYNTH_MAX_LINES = 150;
+function synthLat(y) { return y * cfg.size - 90; }
+function synthLines(w, e, s, n) {
+  const out = [];
+  if (!SYNTH_EVERY || !cfg) return out;
+  const y0 = Math.ceil((s + 90) / cfg.size), y1 = Math.floor((n + 90) / cfg.size);
+  for (let y = y0; y <= y1 && out.length < SYNTH_MAX_LINES; y++) {
+    if (y % SYNTH_EVERY === 0) out.push([[w, synthLat(y)], [e, synthLat(y)]]);
+  }
+  return out;
+}
+let synthQueued = false;
+function updateSynth() {
+  if (!glReady || !cfg) return;
+  const src = gl.getSource('synth'); if (!src) return;
+  let feats = [];
+  if (SYNTH_EVERY && map.getZoom() - 1 >= SYNTH_MIN_Z) {
+    const b = gl.getBounds(), padLng = (b.getEast() - b.getWest()) * 0.5, padLat = (b.getNorth() - b.getSouth()) * 0.5;
+    feats = synthLines(b.getWest() - padLng, b.getEast() + padLng, b.getSouth() - padLat, b.getNorth() + padLat)
+      .map(l => ({ type: 'Feature', properties: { class: 'minor' }, geometry: { type: 'LineString', coordinates: l } }));
+  }
+  src.setData({ type: 'FeatureCollection', features: feats });
+}
+function queueSynth() {
+  if (synthQueued) return;
+  synthQueued = true;
+  setTimeout(() => { synthQueued = false; try { updateSynth(); } catch (e) {} }, 120);
+}
+gl.on('moveend', queueSynth);
+gl.on('load', queueSynth);
+
 const roadCut = new Map();       // id -> { road: Feature|null (zona de calle), rest: Feature|null (parcela sin calle) }
 const CUT_MAX_D = 0.004;         // grados (~400 m) alrededor del centro
 const CUT_PER_PASS = 6;          // parcelas por pasada (turf pesa un poco)
@@ -252,9 +294,16 @@ function roadAreaFor(p) {
   if (!(x0 >= 0 && y0 >= 0 && x1 <= W && y1 <= H)) return undefined;
   const feats = gl.queryRenderedFeatures([[x0, y0], [x1, y1]], { layers: ['roads-q'] });
   const none = { road: null, rest: null };
-  if (!feats.length) return none;
   const pad = cfg.size * 0.3, box = [w - pad, s - pad, e + pad, n + pad];
+  const sy = synthLines(w - pad, e + pad, s - 1e-9, n + 1e-9);           // calles horizontales que pasan por los bordes de esta parcela
+  if (!feats.length && !sy.length) return none;
   let area = null;
+  for (const l of sy) {
+    try {
+      const bf = turf.buffer(turf.lineString(l), SYNTH_HALF_M, { units: 'meters', steps: 2 });
+      if (bf) area = area ? turf.union(area, bf) : bf;
+    } catch (err) {}
+  }
   for (const f of feats) {
     const g = f.geometry; if (!g) continue;
     const lines = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
