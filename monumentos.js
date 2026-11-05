@@ -1,5 +1,6 @@
 'use strict';
 // MONUMENTOS: monumentos famosos dibujados a color, FIJOS en su sitio real del mapa (mismas coordenadas para todos los jugadores).
+//  - Se pintan dentro del mapa como capas de símbolos de MapLibre (no como HTML encima), para que no parpadeen.
 //  - Cada monumento es un dibujo SVG (visto de frente) con la base clavada en su latitud/longitud: Sagrada Família en Barcelona,
 //    Torre Eiffel en París, Coliseo en Roma…  No se mueven ni salen al azar.
 //  - Se ven con zoom >= 12 (vista de ciudad). Con zoom lejos mantienen un tamaño mínimo legible y al acercarse crecen con el mapa.
@@ -7,7 +8,7 @@
 //  - Botón 🏛️ del menú para ocultarlos / mostrarlos (se recuerda en el móvil).
 //  - Para añadir uno nuevo: añade su dibujo a ART y una línea a LIST (id, nombre, lugar, lat, lng, ancho en metros, tamaño del dibujo).
 (function () {
-  if (typeof map === 'undefined' || !map || !map.gl || !window.L) return;
+  if (typeof map === 'undefined' || !map || !map.gl) return;
   const KEY = 'monumentsOn', MIN_Z = 12, LABEL_Z = 14.5, MIN_H = 38, MAX_W = 900;
   const btn = document.getElementById('mon-btn');
   let on = true;
@@ -378,18 +379,62 @@
   ];
 
   // ---------- Dibujo en el mapa ----------
+  // Los monumentos se pintan DENTRO del mapa (capas de símbolos de MapLibre), no como elementos HTML encima: así van
+  // pegados al mapa en cada fotograma (sin desfases ni parpadeos al mover o hacer zoom) y nunca los oculta el colocador de etiquetas.
+  const gl = map.gl, SRC = 'monumentos-src', IMG_W = 384, ZMIN = MIN_Z - 1;          // ZMIN en zoom de MapLibre (= zoom del juego - 1)
+  const pxm = (z, lat) => Math.pow(2, z + 1) * 256 / (40075016.686 * Math.max(0.05, Math.cos(lat * Math.PI / 180)));   // px por metro
+  let uid = 0;
+  const svg = (m, W, H, px) => `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax meet"${px ? ` width="${px[0]}" height="${px[1]}"` : ''}>` +
+    `<ellipse cx="${W / 2}" cy="${H - 2.5}" rx="${f(W * .46)}" ry="3.2" fill="#000" opacity=".16"/>${ART[m](('mn' + (uid++)))}</svg>`;
+  const items = LIST.map(([id, name, place, lat, lng, w, vb]) => ({ id, name, place, lat, lng, w, vb }));
+
+  const raster = (str, w, h) => new Promise(res => {
+    const im = new Image();
+    im.onload = () => { try { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.drawImage(im, 0, 0, w, h); res(x.getImageData(0, 0, w, h)); } catch (e) { res(null); } };
+    im.onerror = () => res(null);
+    im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(str);
+  });
+  function labelImage(text) {
+    const c = document.createElement('canvas'), x = c.getContext('2d'), fs = 22, pad = 14;
+    x.font = '700 ' + fs + 'px system-ui, sans-serif';
+    const w = Math.ceil(x.measureText(text).width) + pad * 2, h = fs + 12;
+    c.width = w; c.height = h; x.font = '700 ' + fs + 'px system-ui, sans-serif';
+    x.fillStyle = 'rgba(30,40,60,.78)'; x.beginPath();
+    if (x.roundRect) x.roundRect(0, 0, w, h, h / 2); else x.rect(0, 0, w, h);
+    x.fill(); x.fillStyle = '#fff'; x.textBaseline = 'middle'; x.fillText(text, pad, h / 2 + 1);
+    return x.getImageData(0, 0, w, h);
+  }
+  const ids = () => items.map(m => 'mn-' + m.id);
+  const setVis = () => ids().concat(items.map(m => 'mnl-' + m.id)).forEach(l => { try { if (gl.getLayer(l)) gl.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'); } catch (e) {} });
+
+  let built = false;
+  async function build() {
+    if (built) return; built = true;
+    const imgs = await Promise.all(items.map(M => { const h = Math.round(IMG_W * M.vb[1] / M.vb[0]); M.ih = h; return raster(svg(M.id, M.vb[0], M.vb[1], [IMG_W, h]), IMG_W, h); }));
+    items.forEach((M, i) => { if (imgs[i]) { gl.addImage('mn-' + M.id, imgs[i], { pixelRatio: 1 }); M.ok = true; } gl.addImage('mnl-' + M.id, labelImage(M.name), { pixelRatio: 2 }); });
+    gl.addSource(SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: items.map(M => ({ type: 'Feature', properties: { id: M.id }, geometry: { type: 'Point', coordinates: [M.lng, M.lat] } })) } });
+    const vis = on ? 'visible' : 'none', stay = { 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-pitch-alignment': 'viewport', visibility: vis };
+    items.forEach(M => {
+      if (!M.ok) return;
+      const minW = MIN_H * M.vb[0] / M.vb[1], stops = [];
+      for (let z = ZMIN; z <= 20; z++) stops.push(z, Math.min(MAX_W, Math.max(M.w * pxm(z, M.lat), minW)) / IMG_W);
+      gl.addLayer({ id: 'mn-' + M.id, type: 'symbol', source: SRC, minzoom: ZMIN, filter: ['==', ['get', 'id'], M.id],
+        layout: { ...stay, 'icon-image': 'mn-' + M.id, 'icon-anchor': 'bottom', 'icon-size': ['interpolate', ['exponential', 2], ['zoom'], ...stops] } });
+    });
+    items.forEach(M => gl.addLayer({ id: 'mnl-' + M.id, type: 'symbol', source: SRC, minzoom: LABEL_Z - 1, filter: ['==', ['get', 'id'], M.id],
+      layout: { ...stay, 'icon-image': 'mnl-' + M.id, 'icon-anchor': 'top', 'icon-offset': [0, 3], 'icon-size': 1 } }));
+  }
+  const start = () => { build().catch(e => { built = false; console.warn('monumentos:', e); }); };
+  if (gl.isStyleLoaded && gl.isStyleLoaded()) start(); else gl.once('load', start);
+
+  // ---------- Ficha al tocar un monumento ----------
   const css = document.createElement('style');
-  css.textContent = `.mn { background: transparent !important; border: 0 !important; pointer-events: none !important; }
-    .mn-i { position: absolute; pointer-events: auto; cursor: pointer; display: none; will-change: transform; contain: layout style; }
-    .mn-i svg { display: block; width: 100%; height: 100%; overflow: visible; }
-    .mn-l { display: none; position: absolute; left: 50%; top: 100%; transform: translate(-50%, 3px); white-space: nowrap; font: 700 11px/1.2 system-ui, sans-serif;
-      color: #fff; background: rgba(30,40,60,.74); padding: 2px 7px; border-radius: 9px; text-shadow: none; }
-    .mn-i.lb .mn-l { display: block; }
-    #mn-card { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); z-index: 900; background: #fff; color: #1d2433; border-radius: 14px; padding: 10px 14px 10px 12px;
+  css.textContent = `#mn-card { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); z-index: 900; background: #fff; color: #1d2433; border-radius: 14px; padding: 10px 14px 10px 12px;
       box-shadow: 0 4px 18px rgba(0,0,0,.3); display: none; align-items: center; gap: 10px; max-width: 88vw; font: 14px/1.3 system-ui, sans-serif; }
     #mn-card.show { display: flex; }
     #mn-card b { display: block; font-size: 15px; } #mn-card small { color: #667; }
     #mn-card button { border: 0; background: #eef0f4; border-radius: 10px; padding: 6px 10px; font: inherit; cursor: pointer; }`;
+  document.head.appendChild(css);
   const card = document.createElement('div'); card.id = 'mn-card'; card.setAttribute('role', 'status');
   card.innerHTML = '<span style="font-size:26px">🏛️</span><div><b></b><small></small></div><button type="button">Ir</button>';
   document.body.appendChild(card);
@@ -400,53 +445,18 @@
     card.classList.add('show'); clearTimeout(cardT); cardT = setTimeout(hideCard, 5000);
   }
   card.querySelector('button').addEventListener('click', () => { const M = items.find(m => m.id === cardId); if (M) map.flyTo([M.lat, M.lng], Math.max(map.getZoom(), 17)); hideCard(); });
-  document.head.appendChild(css);
-  map.createPane('monumentos'); map.getPane('monumentos').style.zIndex = 553;      // por encima de las plazas, por debajo de señales y coches
-  map.getPane('monumentos').style.pointerEvents = 'none';
-
-  let uid = 0;
-  const svg = (m, W, H) => `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax meet">` +
-    `<ellipse cx="${W / 2}" cy="${H - 2.5}" rx="${f(W * .46)}" ry="3.2" fill="#000" opacity=".16"/>${ART[m](('mn' + (uid++)))}</svg>`;
-  const items = LIST.map(([id, name, place, lat, lng, w, vb]) => {
-    const box = document.createElement('div'); box.className = 'mn-i';
-    box.innerHTML = svg(id, vb[0], vb[1]) + '<div class="mn-l"></div>';
-    box.lastChild.textContent = name;
-    box.addEventListener('click', e => { e.stopPropagation(); const M = items.find(m => m.id === id); if (M) showCard(M); });
-    const ll = { lat, lng };
-    const mk = L.marker(ll, { icon: L.divIcon({ className: 'mn', iconSize: [0, 0], iconAnchor: [0, 0], html: box }), pane: 'monumentos', interactive: false, keyboard: false }).addTo(map);
-    return { id, name, place, lat, lng, w, vb, ll, box, mk };
+  gl.on('click', e => {
+    if (!on || !built) return;
+    try {
+      const hit = gl.queryRenderedFeatures(e.point, { layers: ids().filter(l => gl.getLayer(l)) });
+      const M = hit.length && items.find(m => m.id === hit[0].properties.id);
+      if (M) showCard(M);
+    } catch (err) {}
   });
-
-  // Solo se toca el DOM cuando algo cambia de verdad (tamaño, visibilidad o etiqueta): así no hay repintados por fotograma.
-  let pending = 0, lastZ = null, lastShow = null;
-  function update() {
-    pending = 0;
-    const z = map.getZoom(), show = on && z >= MIN_Z;
-    if (!show) { if (lastShow !== false) items.forEach(M => { M.box.style.display = 'none'; M.vis = false; }); lastShow = false; return; }
-    const zoomChanged = lastShow !== true || Math.abs(z - lastZ) > 0.002;
-    lastShow = true; lastZ = z;
-    const size = map.getSize(), k = map.pxPerM(), lab = z >= LABEL_Z;
-    items.forEach(M => {
-      if (zoomChanged || M.wpx == null) {
-        const wpx = Math.round(Math.min(MAX_W, Math.max(M.w * k, MIN_H * M.vb[0] / M.vb[1])) * 2) / 2, hpx = wpx * M.vb[1] / M.vb[0];
-        if (wpx !== M.wpx) {
-          const s = M.box.style; M.wpx = wpx; M.hpx = hpx;
-          s.width = wpx + 'px'; s.height = f(hpx) + 'px'; s.left = (-wpx / 2) + 'px'; s.top = f(-hpx) + 'px';
-        }
-        if (lab !== M.lab) { M.lab = lab; M.box.classList.toggle('lb', lab); }
-      }
-      const c = map.latLngToContainerPoint(M.ll), m = 300;
-      const vis = !(c.x < -M.wpx - m || c.x > size.x + M.wpx + m || c.y < -M.hpx - m || c.y > size.y + M.hpx + m);
-      if (vis !== M.vis) { M.vis = vis; M.box.style.display = vis ? 'block' : 'none'; }
-    });
-  }
-  const schedule = () => { if (!pending) pending = requestAnimationFrame(update); };
-  map.on('move', schedule); map.on('zoom', schedule); map.on('resize', schedule);
-  if (map.gl.loaded && !map.gl.loaded()) map.gl.once('load', update);
 
   function apply() {
     if (btn) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.style.opacity = on ? '1' : '.55'; btn.title = on ? 'Monumentos: visibles' : 'Monumentos: ocultos'; btn.dataset.label = 'Monumentos: ' + (on ? 'sí' : 'no'); }
-    lastShow = null; update();
+    setVis(); if (!on) hideCard();
   }
   if (btn) btn.addEventListener('click', () => {
     on = !on;
