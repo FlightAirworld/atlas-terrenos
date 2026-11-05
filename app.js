@@ -418,19 +418,7 @@ function mountDetail(ex, imgUrl, blob) {
   const cutNow = roadCut.get(ex.p.id), k = (cutNow && cutNow.road) ? 0 : 0.004, dw = (e - w) * k, dh = (n - s) * k;
   gl.addSource(ex.srcId, { type: 'image', url: imgUrl, coordinates: [[w - dw, n + dh], [e + dw, n + dh], [e + dw, s - dh], [w - dw, s - dh]] });
   gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
-  const pill = document.createElement('span');
-  pill.className = 'owner-pill';
-  pill.textContent = labelOf(ex.p);          // textContent: sin HTML
-  const stars = document.createElement('span');
-  stars.className = 'owner-stars';
-  stars.textContent = starsOf(ex.level);
-  ex.starsEl = stars;
-  const wrap = document.createElement('span');
-  wrap.append(stars, pill);
-  ex.label = L.marker([(s + n) / 2, (w + e) / 2], {   // en el centro de la parcela, dentro de la casa
-    icon: L.divIcon({ className: 'owner-label', html: wrap, iconSize: [0, 0] }),
-    interactive: false, keyboard: false
-  }).addTo(map);
+  // sin nombre ni estrellas en el mapa: el dueño y el nivel se ven al tocar la parcela
   ex.hasDetail = true;
   ex.res = resOf();
 }
