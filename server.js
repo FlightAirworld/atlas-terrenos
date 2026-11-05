@@ -475,7 +475,7 @@ async function deliverPack(orderId, packCredits, user, captureId) {
       await client.query('INSERT INTO packs (code, credits, created_at) VALUES ($1,$2,$3)', [code, packCredits, Date.now()]);
       credits = packCredits;
     }
-    const done = await client.query("UPDATE pack_orders SET status = 'PAID', code = $1 WHERE order_id = $2 AND status = 'PROCESSING' RETURNING order_id", [code, orderId]);
+    const done = await client.query("UPDATE pack_orders SET status = 'PAID', code = $1, capture_id = $3 WHERE order_id = $2 AND status = 'PROCESSING' RETURNING order_id", [code, orderId, captureId || null]);
     if (!done.rows[0]) throw new Error('El pedido ya no estaba reservado');
     await client.query('COMMIT');
     return { code, credits };
@@ -522,10 +522,70 @@ async function fulfillFromWebhook(orderId, captureId, source) {
   await deliverPack(orderId, ord.pack_credits ?? PACKS[0].credits, ord.user_id ? { id: ord.user_id } : null, captureId);
   console.log(`Pack entregado por webhook ${source}:`, orderId, ord.user_id ? 'cuenta' : 'sin cuenta');
 }
+// ---------- Reembolsos y disputas: se retiran los créditos de ese pedido ----------
+// Se retiran en proporción a lo devuelto (un reembolso del 100 % quita todo el pack). Si el jugador ya los gastó, el saldo queda en negativo
+// y no podrá comprar ni gastar hasta cubrirlo: todos los gastos exigen saldo suficiente. Cada aviso se aplica una sola vez (tabla refund_events).
+async function applyClawback(eventId, orderId, change) {   // change(ord) -> { refunded_cents, disputed_cents }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const dup = await client.query('INSERT INTO refund_events (event_id, order_id, created_at) VALUES ($1,$2,$3) ON CONFLICT (event_id) DO NOTHING RETURNING event_id', [eventId, orderId, Date.now()]);
+    if (!dup.rows[0]) { await client.query('ROLLBACK'); return 'repetido'; }
+    const ord = (await client.query('SELECT * FROM pack_orders WHERE order_id = $1 FOR UPDATE', [orderId])).rows[0];
+    if (!ord || ord.status !== 'PAID' || !ord.code) { await client.query('ROLLBACK'); console.error('WEBHOOK: reembolso de un pedido sin entregar o desconocido, REVISAR', orderId, eventId); return 'ignorado'; }
+    const next = change(ord);
+    const price = cents(ord.pack_price ?? PACKS[0].price), credits = ord.pack_credits ?? PACKS[0].credits;
+    const owed = Math.min(price, Math.max(0, next.refunded_cents) + Math.max(0, next.disputed_cents));
+    const target = owed >= price ? credits : Math.floor(credits * owed / price);
+    const delta = target - (ord.clawed_credits || 0);   // positivo: retirar; negativo: devolver (disputa ganada)
+    if (delta !== 0) {
+      await client.query('SAVEPOINT claw');
+      try { await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2', [delta, ord.code]); }
+      catch (e) {   // por si la tabla no admite saldos negativos: se deja a 0 y queda anotado
+        await client.query('ROLLBACK TO SAVEPOINT claw');
+        await client.query('UPDATE packs SET credits = GREATEST(0, credits - $1) WHERE code = $2', [delta, ord.code]);
+        console.error('REEMBOLSO: no se admite saldo negativo, se dejó a 0. Créditos pendientes de cobrar:', delta, 'pack', ord.code, 'pedido', orderId);
+      }
+    }
+    await client.query('UPDATE pack_orders SET refunded_cents = $1, disputed_cents = $2, clawed_credits = $3 WHERE order_id = $4', [next.refunded_cents, next.disputed_cents, target, orderId]);
+    await client.query('COMMIT');
+    console.log(`Reembolso/disputa aplicado (${eventId}): pedido ${orderId}, créditos ${delta > 0 ? 'retirados' : 'devueltos'}: ${Math.abs(delta)}`);
+    return 'aplicado';
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+// Pedido a partir del id del cobro de Stripe (pi_...). Los pedidos antiguos no lo tienen guardado: se pregunta a Stripe por la sesión.
+async function orderIdFromStripePayment(pi) {
+  if (typeof pi !== 'string' || !pi) return null;
+  const o = await one('SELECT order_id FROM pack_orders WHERE capture_id = $1', [pi]);
+  if (o) return o.order_id;
+  const l = await stripe('GET', `/v1/checkout/sessions?payment_intent=${encodeURIComponent(pi)}&limit=1`).catch(() => null);
+  const id = l && l.data && l.data[0] && l.data[0].id;
+  return typeof id === 'string' && id.startsWith('cs_') ? id : null;
+}
+async function stripeRefundEvent(ev) {
+  const o = ev.data && ev.data.object || {};
+  const pi = typeof o.payment_intent === 'string' ? o.payment_intent : o.payment_intent && o.payment_intent.id;
+  const orderId = await orderIdFromStripePayment(pi);
+  if (!orderId) { console.error('WEBHOOK STRIPE: reembolso/disputa de un cobro sin pedido, REVISAR', ev.type, pi || o.id); return; }
+  if (String(o.currency || '').toUpperCase() !== CURRENCY) { console.error('WEBHOOK STRIPE: moneda distinta en un reembolso, REVISAR', orderId); return; }
+  if (ev.type === 'charge.refunded') {   // amount_refunded es el total acumulado: no se pisa nunca con uno menor (los avisos pueden llegar desordenados)
+    await applyClawback(ev.id, orderId, ord => ({ refunded_cents: Math.max(ord.refunded_cents || 0, Number(o.amount_refunded) || 0), disputed_cents: ord.disputed_cents || 0 }));
+  } else if (ev.type === 'charge.dispute.created') {
+    await applyClawback(ev.id, orderId, ord => ({ refunded_cents: ord.refunded_cents || 0, disputed_cents: Number(o.amount) || 0 }));
+  } else if (ev.type === 'charge.dispute.closed' && o.status === 'won') {   // disputa ganada: el dinero vuelve, también los créditos
+    await applyClawback(ev.id, orderId, ord => ({ refunded_cents: ord.refunded_cents || 0, disputed_cents: 0 }));
+  }
+}
 async function stripeWebhook(req) {
   const raw = await readRaw(req);
   if (!verifyStripeSignature(raw, req.headers['stripe-signature'])) throw new HttpError(400, 'Firma no válida');
   let ev; try { ev = JSON.parse(raw.toString()); } catch { throw new HttpError(400, 'JSON no válido'); }
+  if (/^charge\.(refunded|dispute\.(created|closed))$/.test(ev.type)) { await stripeRefundEvent(ev); return { received: true }; }
   if (ev.type !== 'checkout.session.completed' && ev.type !== 'checkout.session.async_payment_succeeded') return { received: true };
   const id = ev.data && ev.data.object && ev.data.object.id;
   if (typeof id !== 'string' || !id.startsWith('cs_')) return { received: true };
@@ -565,6 +625,17 @@ async function paypalWebhook(req) {
     if (!ord) { console.error('WEBHOOK PAYPAL: pago de un pedido que no existe, REVISAR', orderId, r.id); return { received: true }; }
     if (!r.amount || r.amount.value !== Number(ord.pack_price ?? PACKS[0].price).toFixed(2) || r.amount.currency_code !== CURRENCY) { console.error('WEBHOOK PAYPAL: importe incorrecto, REVISAR', orderId, r.id); return { received: true }; }
     await fulfillFromWebhook(orderId, r.id, 'PAYPAL');
+  }
+  if (ev.event_type === 'PAYMENT.CAPTURE.REFUNDED' || ev.event_type === 'PAYMENT.CAPTURE.REVERSED') {
+    const rel = r.supplementary_data && r.supplementary_data.related_ids || {};
+    let orderId = typeof rel.order_id === 'string' ? rel.order_id : null;
+    const capId = ev.event_type === 'PAYMENT.CAPTURE.REVERSED' ? r.id : (rel.capture_id || null);
+    if (!orderId && capId) { const o = await one('SELECT order_id FROM pack_orders WHERE capture_id = $1', [capId]); orderId = o && o.order_id; }
+    if (!orderId) { console.error('WEBHOOK PAYPAL: reembolso/reversión de un cobro sin pedido, REVISAR', ev.event_type, r.id); return { received: true }; }
+    if (!r.amount || r.amount.currency_code !== CURRENCY) { console.error('WEBHOOK PAYPAL: moneda distinta en un reembolso, REVISAR', orderId); return { received: true }; }
+    const amount = cents(r.amount.value);
+    if (ev.event_type === 'PAYMENT.CAPTURE.REFUNDED') await applyClawback(ev.id, orderId, ord => ({ refunded_cents: (ord.refunded_cents || 0) + amount, disputed_cents: ord.disputed_cents || 0 }));   // cada reembolso se suma (el aviso repetido se descarta por su id)
+    else await applyClawback(ev.id, orderId, ord => ({ refunded_cents: ord.refunded_cents || 0, disputed_cents: amount }));   // contracontabilización: se retira el pack entero
   }
   return { received: true };
 }
@@ -1823,6 +1894,12 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_credits INT');   // qué pack se pidió en cada pedido
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_price TEXT');
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS user_id TEXT');   // a quién entregar el pack si el pago se confirma por webhook
+    await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS capture_id TEXT');   // id del cobro en Stripe (pi_...) o PayPal: así se encuentra el pedido en un reembolso
+    await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS refunded_cents INT NOT NULL DEFAULT 0');   // reembolsos y disputas: se retiran créditos en proporción
+    await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS disputed_cents INT NOT NULL DEFAULT 0');
+    await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS clawed_credits INT NOT NULL DEFAULT 0');
+    await run('CREATE INDEX IF NOT EXISTS pack_orders_capture ON pack_orders (capture_id)');
+    await run('CREATE TABLE IF NOT EXISTS refund_events (event_id TEXT PRIMARY KEY, order_id TEXT, created_at BIGINT NOT NULL)');   // cada aviso se aplica una sola vez
   }).catch(e => console.error('No se pudieron añadir las columnas nuevas (niveles / packs):', e.message))
   .then(async () => {   // regalo de bienvenida (una fila por cuenta: así solo se cobra una vez)
     await run('CREATE TABLE IF NOT EXISTS welcome_gifts (user_id TEXT PRIMARY KEY, credits INT NOT NULL, created_at BIGINT NOT NULL)');
