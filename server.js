@@ -14,6 +14,8 @@ const PORT = Number(process.env.PORT || 3000);
 const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID || '';
 const PAYPAL_SECRET = process.env.PAYPAL_SECRET || '';
 const PAYPAL_ENV = (process.env.PAYPAL_ENV || 'sandbox').toLowerCase(); // sandbox | live
+const PAYPAL_WEBHOOK_ID = process.env.PAYPAL_WEBHOOK_ID || '';          // ID del webhook creado en developer.paypal.com (para comprobar la firma)
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';   // whsec_... del endpoint creado en Stripe → Developers → Webhooks
 const PAYPAL_BASE = PAYPAL_ENV === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
 const PRICE = (process.env.PRICE || '1.00');              // precio por parcela
 const CURRENCY = (process.env.CURRENCY || 'EUR').toUpperCase();
@@ -29,6 +31,8 @@ if (DEMO && IS_PROD && process.env.DEMO !== '1') {
 }
 if (DEMO && IS_PROD) console.warn('AVISO: modo DEMO activo en producción. No se cobra dinero real.');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+if (!DEMO && HAS_STRIPE && !STRIPE_WEBHOOK_SECRET) console.warn('AVISO: falta STRIPE_WEBHOOK_SECRET. Sin webhook, si un jugador paga y cierra la pestaña antes de volver, no recibe el pack.');
+if (!DEMO && HAS_PAYPAL && !PAYPAL_WEBHOOK_ID) console.warn('AVISO: falta PAYPAL_WEBHOOK_ID. Sin webhook, si un jugador aprueba el pago y cierra la pestaña antes de volver, no recibe el pack.');
 const RESERVE_MINUTES = 10;                               // tiempo que se reserva una parcela mientras se paga
 const PACK_SIZE = Math.max(1, Number(process.env.PACK_SIZE || 50));   // (ya no se usa para vender: ver PACKS)
 // Packs a la venta: lista "créditos:precio" separada por comas, p. ej. PACKS="50:1,150:2,300:3,500:4" (sustituye a PRICE y PACK_SIZE)
@@ -348,7 +352,7 @@ async function linkAccount(req) {
 }
 
 async function createPackOrder(req, body) {
-  if (REQUIRE_LOGIN) await needUser(req);
+  const user = REQUIRE_LOGIN ? await needUser(req) : await userFrom(req);   // se guarda en el pedido: el webhook lo necesita para saber a quién entregar el pack
   const now = Date.now();
   const want = body && body.pack != null ? Number(body.pack) : PACKS[0].credits;   // sin indicar pack: el primero (clientes antiguos)
   const pack = PACKS.find(p => p.credits === want);
@@ -375,7 +379,6 @@ async function createPackOrder(req, body) {
       cancel_url: base + '?pay=cancel',
       'metadata[pack_credits]': String(pack.credits),
     };
-    const user = await userFrom(req);
     if (user) form.client_reference_id = user.id;
     if (user && user.email) form.customer_email = user.email;
     const o = await stripe('POST', '/v1/checkout/sessions', form);
@@ -403,7 +406,7 @@ async function createPackOrder(req, body) {
     const l = (o.links || []).find(x => x.rel === 'payer-action') || (o.links || []).find(x => x.rel === 'approve');
     approveUrl = l ? l.href : null;
   }
-  await run('INSERT INTO pack_orders (order_id, status, created_at, pack_credits, pack_price) VALUES ($1,$2,$3,$4,$5)', [orderId, 'CREATED', now, pack.credits, pack.price]);
+  await run('INSERT INTO pack_orders (order_id, status, created_at, pack_credits, pack_price, user_id) VALUES ($1,$2,$3,$4,$5,$6)', [orderId, 'CREATED', now, pack.credits, pack.price, user ? user.id : null]);
   return { orderId, size: pack.credits, price: pack.price, currency: CURRENCY, approveUrl };
 }
 
@@ -414,6 +417,7 @@ async function capturePackOrder(req, orderId) {
     const p = await one('SELECT code, credits FROM packs WHERE code = $1', [ord.code]);
     return { ok: true, code: p.code, credits: p.credits };
   }
+  if (ord.status === 'PROCESSING') throw new HttpError(409, 'Este pago ya se está procesando. Espera unos segundos y recarga');
   if (ord.status !== 'CREATED') throw new HttpError(409, 'Pedido no válido');
   const packCredits = ord.pack_credits ?? PACKS[0].credits, packPrice = ord.pack_price ?? PACKS[0].price;   // el pack que se pidió al crear el pedido
 
@@ -438,25 +442,131 @@ async function capturePackOrder(req, orderId) {
     captureId = c.id;
   }
 
-  let code, credits;
+  if (DEMO || !isStripeOrder) {   // el pedido de Stripe ya se reservó arriba; el de PayPal (ya cobrado) y el demo se reservan aquí
+    const claimed = await one("UPDATE pack_orders SET status = 'PROCESSING' WHERE order_id = $1 AND status = 'CREATED' RETURNING order_id", [orderId]);
+    if (!claimed) return settledOrder(orderId);   // el webhook se adelantó y ya lo entregó (o lo está entregando)
+  }
+  const { code, credits } = await deliverPack(orderId, packCredits, user, captureId);
+  return { ok: true, code, credits };
+}
+
+// Resultado de un pedido que otra vía (el webhook) ya entregó
+async function settledOrder(orderId) {
+  const o = await one('SELECT status, code FROM pack_orders WHERE order_id = $1', [orderId]);
+  const p = o && o.status === 'PAID' && await one('SELECT code, credits FROM packs WHERE code = $1', [o.code]);
+  if (!p) throw new HttpError(409, 'Este pago ya se está procesando. Espera unos segundos y recarga');
+  return { ok: true, code: p.code, credits: p.credits };
+}
+
+// Entrega el pack de un pedido ya cobrado y reservado (status PROCESSING). Todo en una transacción: o se suman los créditos y se marca PAID, o no pasa nada.
+// Si falla, el pedido vuelve a CREATED para poder reintentarlo (otra petición, o el reintento automático del webhook).
+async function deliverPack(orderId, packCredits, user, captureId) {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+    let code, credits;
     if (user) {
       // Con cuenta: los terrenos se suman al pack de la cuenta
       const row = await ensureUserPack(user);
-      const up = await one('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING code, credits', [packCredits, row.code]);
+      const up = (await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING code, credits', [packCredits, row.code])).rows[0];
       code = up.code; credits = up.credits;
     } else {
       code = newPackCode();
-      await run('INSERT INTO packs (code, credits, created_at) VALUES ($1,$2,$3)', [code, packCredits, Date.now()]);
+      await client.query('INSERT INTO packs (code, credits, created_at) VALUES ($1,$2,$3)', [code, packCredits, Date.now()]);
       credits = packCredits;
     }
-    await run("UPDATE pack_orders SET status = 'PAID', code = $1 WHERE order_id = $2", [code, orderId]);
+    const done = await client.query("UPDATE pack_orders SET status = 'PAID', code = $1 WHERE order_id = $2 AND status = 'PROCESSING' RETURNING order_id", [code, orderId]);
+    if (!done.rows[0]) throw new Error('El pedido ya no estaba reservado');
+    await client.query('COMMIT');
+    return { code, credits };
   } catch (e) {
-    if (isStripeOrder) await run("UPDATE pack_orders SET status = 'CREATED' WHERE order_id = $1 AND status = 'PROCESSING'", [orderId]).catch(() => {});
+    await client.query('ROLLBACK').catch(() => {});
+    await run("UPDATE pack_orders SET status = 'CREATED' WHERE order_id = $1 AND status = 'PROCESSING'", [orderId]).catch(() => {});
     if (captureId) console.error('PAGO CAPTURADO PERO PACK NO GUARDADO, REVISAR', captureId, orderId, e.message);
     throw e;
+  } finally {
+    client.release();
   }
-  return { ok: true, code, credits };
+}
+
+// ---------- Webhooks de Stripe y PayPal ----------
+// Si el jugador paga y cierra la pestaña antes de volver, el navegador nunca llama a /capture. El proveedor avisa aquí, con firma, y se entrega el pack.
+// Responder con error (409/500) hace que Stripe y PayPal reintenten solos más tarde.
+function readRaw(req, max = 262144) {
+  return new Promise((resolve, reject) => {
+    let size = 0; const chunks = [];
+    req.on('data', c => { size += c.length; if (size > max) { reject(new HttpError(413, 'Petición demasiado grande')); req.destroy(); } else chunks.push(c); });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+function verifyStripeSignature(raw, header) {
+  if (!STRIPE_WEBHOOK_SECRET) return false;
+  let t = null; const v1 = [];
+  for (const kv of String(header || '').split(',')) {
+    const i = kv.indexOf('='); if (i < 0) continue;
+    const k = kv.slice(0, i).trim(), v = kv.slice(i + 1).trim();
+    if (k === 't') t = v; else if (k === 'v1') v1.push(v);
+  }
+  if (!t || !v1.length || !(Math.abs(Date.now() / 1000 - Number(t)) <= 300)) return false;   // firma ausente o demasiado antigua (anti-repetición)
+  const exp = crypto.createHmac('sha256', STRIPE_WEBHOOK_SECRET).update(t + '.').update(raw).digest('hex');
+  return v1.some(sig => sig.length === exp.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(exp)));
+}
+// Entrega el pack de un pedido pagado y ya comprobado por el que llama (importe y moneda)
+async function fulfillFromWebhook(orderId, captureId, source) {
+  const ord = await one('SELECT * FROM pack_orders WHERE order_id = $1', [orderId]);
+  if (!ord) { console.error(`WEBHOOK ${source}: pago de un pedido que no existe, REVISAR`, orderId, captureId); return; }
+  if (ord.status === 'PAID') return;   // ya entregado (por el navegador o por un aviso anterior)
+  const claimed = await one("UPDATE pack_orders SET status = 'PROCESSING' WHERE order_id = $1 AND status = 'CREATED' RETURNING order_id", [orderId]);
+  if (!claimed) throw new HttpError(409, 'Pedido en proceso');   // otra petición lo está entregando: que el proveedor vuelva a avisar
+  await deliverPack(orderId, ord.pack_credits ?? PACKS[0].credits, ord.user_id ? { id: ord.user_id } : null, captureId);
+  console.log(`Pack entregado por webhook ${source}:`, orderId, ord.user_id ? 'cuenta' : 'sin cuenta');
+}
+async function stripeWebhook(req) {
+  const raw = await readRaw(req);
+  if (!verifyStripeSignature(raw, req.headers['stripe-signature'])) throw new HttpError(400, 'Firma no válida');
+  let ev; try { ev = JSON.parse(raw.toString()); } catch { throw new HttpError(400, 'JSON no válido'); }
+  if (ev.type !== 'checkout.session.completed' && ev.type !== 'checkout.session.async_payment_succeeded') return { received: true };
+  const id = ev.data && ev.data.object && ev.data.object.id;
+  if (typeof id !== 'string' || !id.startsWith('cs_')) return { received: true };
+  const ord = await one('SELECT pack_price FROM pack_orders WHERE order_id = $1', [id]);
+  if (!ord) { console.error('WEBHOOK STRIPE: pago de un pedido que no existe, REVISAR', id); return { received: true }; }
+  const ses = await stripe('GET', `/v1/checkout/sessions/${encodeURIComponent(id)}`);   // se consulta a Stripe: no nos fiamos ni del cuerpo del aviso
+  if (ses.payment_status !== 'paid') return { received: true };   // pago diferido: llegará async_payment_succeeded
+  if (ses.amount_total !== cents(ord.pack_price ?? PACKS[0].price) || String(ses.currency).toUpperCase() !== CURRENCY) { console.error('WEBHOOK STRIPE: importe incorrecto, REVISAR', id); return { received: true }; }
+  const pi = typeof ses.payment_intent === 'string' ? ses.payment_intent : (ses.payment_intent && ses.payment_intent.id) || ses.id;
+  await fulfillFromWebhook(id, pi, 'STRIPE');
+  return { received: true };
+}
+async function paypalWebhookValid(req, raw) {
+  const h = n => String(req.headers[n] || '');
+  if (!PAYPAL_WEBHOOK_ID || !h('paypal-transmission-id') || !h('paypal-transmission-sig')) return false;
+  const body = `{"auth_algo":${JSON.stringify(h('paypal-auth-algo'))},"cert_url":${JSON.stringify(h('paypal-cert-url'))},"transmission_id":${JSON.stringify(h('paypal-transmission-id'))},` +
+    `"transmission_sig":${JSON.stringify(h('paypal-transmission-sig'))},"transmission_time":${JSON.stringify(h('paypal-transmission-time'))},"webhook_id":${JSON.stringify(PAYPAL_WEBHOOK_ID)},"webhook_event":${raw.toString()}}`;   // el evento va tal cual llegó (sin volver a serializarlo)
+  const r = await fetch(PAYPAL_BASE + '/v1/notifications/verify-webhook-signature', { method: 'POST', headers: { Authorization: 'Bearer ' + (await paypalToken()), 'Content-Type': 'application/json' }, body });
+  const j = await r.json().catch(() => ({}));
+  return r.ok && j.verification_status === 'SUCCESS';
+}
+async function paypalWebhook(req) {
+  const raw = await readRaw(req);
+  if (!(await paypalWebhookValid(req, raw))) throw new HttpError(400, 'Firma no válida');
+  let ev; try { ev = JSON.parse(raw.toString()); } catch { throw new HttpError(400, 'JSON no válido'); }
+  const r = ev.resource || {};
+  if (ev.event_type === 'CHECKOUT.ORDER.APPROVED' && typeof r.id === 'string') {
+    // El jugador aprobó el pago pero quizá cerró la pestaña antes de volver: se cobra aquí. El pack se entrega al llegar PAYMENT.CAPTURE.COMPLETED.
+    const ord = await one('SELECT status FROM pack_orders WHERE order_id = $1', [r.id]);
+    if (ord && ord.status === 'CREATED') await paypal('POST', `/v2/checkout/orders/${encodeURIComponent(r.id)}/capture`).catch(e => console.warn('WEBHOOK PAYPAL: no se pudo cobrar el pedido aprobado (puede que ya lo cobrara el navegador):', r.id, e.message));
+    return { received: true };
+  }
+  if (ev.event_type === 'PAYMENT.CAPTURE.COMPLETED') {
+    const orderId = r.supplementary_data && r.supplementary_data.related_ids && r.supplementary_data.related_ids.order_id;
+    if (typeof orderId !== 'string' || r.status !== 'COMPLETED') return { received: true };
+    const ord = await one('SELECT pack_price FROM pack_orders WHERE order_id = $1', [orderId]);
+    if (!ord) { console.error('WEBHOOK PAYPAL: pago de un pedido que no existe, REVISAR', orderId, r.id); return { received: true }; }
+    if (!r.amount || r.amount.value !== Number(ord.pack_price ?? PACKS[0].price).toFixed(2) || r.amount.currency_code !== CURRENCY) { console.error('WEBHOOK PAYPAL: importe incorrecto, REVISAR', orderId, r.id); return { received: true }; }
+    await fulfillFromWebhook(orderId, r.id, 'PAYPAL');
+  }
+  return { received: true };
 }
 
 async function claimWithCredit(req, { lat, lng, owner, avatar, country, house }) {
@@ -1712,6 +1822,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE INDEX IF NOT EXISTS parcels_x_y ON parcels (x, y)');   // el mapa pide parcelas por recuadro (x e y): sin este índice recorría toda la tabla
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_credits INT');   // qué pack se pidió en cada pedido
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_price TEXT');
+    await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS user_id TEXT');   // a quién entregar el pack si el pago se confirma por webhook
   }).catch(e => console.error('No se pudieron añadir las columnas nuevas (niveles / packs):', e.message))
   .then(async () => {   // regalo de bienvenida (una fila por cuenta: así solo se cobra una vez)
     await run('CREATE TABLE IF NOT EXISTS welcome_gifts (user_id TEXT PRIMARY KEY, credits INT NOT NULL, created_at BIGINT NOT NULL)');
@@ -1922,6 +2033,8 @@ http.createServer(async (req, res) => {
     await ready;
     if (req.method === 'GET' && url.pathname === '/api/online') return onlineStream(req, res, url);
     if (req.method === 'GET' && url.pathname === '/api/chat/stream') return chatStream(req, res, url);   // conexión larga (SSE) del chat   // conexión larga (SSE): no pasa por route()
+    if (req.method === 'POST' && url.pathname === '/api/webhooks/stripe') return send(200, JSON.stringify(await stripeWebhook(req)));   // antes de route(): necesitan el cuerpo sin tocar para comprobar la firma
+    if (req.method === 'POST' && url.pathname === '/api/webhooks/paypal') return send(200, JSON.stringify(await paypalWebhook(req)));
     if (req.method === 'GET' && url.pathname === '/api/parcels/tile') return await sendTile(req, res, url, send);   // await: así un error 400 lo recoge el catch de abajo
     if (url.pathname.startsWith('/api/')) {
       const out = await route(req, res, url);
