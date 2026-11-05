@@ -779,6 +779,7 @@ function showPanel(p) {
     $('p-owner-icon').textContent = p.avatar || '👤';
     $('p-photo').src = houseFor(p.id, p.house);
     $('house-edit').classList.toggle('hidden', !p.mine);
+    $('gift-owner-btn').classList.toggle('hidden', !!p.mine || !p.giftable);   // solo en terrenos de otros jugadores con cuenta
     $('house-pick-wrap').classList.add('hidden');
     { const c = cfg.houseCost ?? 1; $('house-change-btn').textContent = '🏠 CAMBIAR CASA' + (c > 0 ? ` (${c} 🎟️)` : ' (gratis)'); }
     if (p.mine) markHouse($('house-pick-edit'), p.house && String(p.house).replace(/\.png$/i, '.webp'));
@@ -790,6 +791,7 @@ function showPanel(p) {
   }
 }
 $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; };
+$('gift-owner-btn').onclick = () => { if (selected && selected.owner && window.openGift) openGift(selected.owner); };
 
 // ---------- Nivel del terreno y botón de mejora ----------
 function renderLevelBox(p) {

@@ -1944,7 +1944,7 @@ async function route(req, res, url) {
     const row = await q.parcelById(p.id);
     const user = row && row.user_id ? await userFrom(req) : null;
     return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null, avatar: row ? row.avatar : null, country: row ? row.country : null,
-      house: row ? row.house : null, level: row ? row.level : null, mine: !!(user && row && row.user_id === user.id) };
+      house: row ? row.house : null, level: row ? row.level : null, mine: !!(user && row && row.user_id === user.id), giftable: !!(row && row.user_id) };
   }
 
   if (req.method === 'GET' && pn === '/api/parcels') {
