@@ -1957,6 +1957,8 @@ async function route(req, res, url) {
 
   if (req.method === 'GET' && pn === '/api/santa') return santaGet(req);
   if (req.method === 'POST' && pn === '/api/santa/seen') return santaSeen(req);
+  // Para UptimeRobot: toca la base de datos (Supabase gratis se pausa tras 1 semana sin actividad) y mantiene Render despierto
+  if (req.method === 'GET' && pn === '/api/ping-db') { try { await run('SELECT 1 FROM parcels LIMIT 1'); return { ok: true, db: true }; } catch (e) { return { ok: false, db: false }; } }
   if (req.method === 'GET' && pn === '/api/health') return { ok: true };   // la pantalla de carga del sitio estático pregunta aquí si ya despertó
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineShown() };
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
