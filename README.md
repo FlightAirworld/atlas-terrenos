@@ -143,9 +143,9 @@ Racha de 7 días: premios de cada día en `DAILY_REWARDS` (7 números separados 
 
 ## Monumentos famosos (`monumentos.js`)
 
-- 26 monumentos dibujados **a color** y **fijos** en su sitio real (mismas coordenadas para todos los jugadores, nada al azar): Sagrada Família (Barcelona), Alhambra, Giralda, Puerta de Alcalá, Palacio Real, Acueducto de Segovia, Mezquita de Córdoba, Torre de Hércules, Peñón de Gibraltar, Catedral de Santiago, Ciudad de las Artes, Guggenheim, Torre Eiffel, Coliseo, Big Ben, Estatua de la Libertad, Taj Mahal, Pirámides de Giza, Cristo Redentor, Torre de Pisa, Puerta de Brandeburgo, Ópera de Sídney, San Basilio, Partenón, Golden Gate y Burj Khalifa.
+- 32 monumentos dibujados **a color** y **fijos** en su sitio real (mismas coordenadas para todos los jugadores, nada al azar): Sagrada Família (Barcelona), Alhambra, Giralda, Puerta de Alcalá, Palacio Real, Acueducto de Segovia, Mezquita de Córdoba, Torre de Hércules, Peñón de Gibraltar, Catedral de Santiago, Ciudad de las Artes, Guggenheim, Torre Eiffel, Coliseo, Big Ben, Estatua de la Libertad, Taj Mahal, Pirámides de Giza, Cristo Redentor, Torre de Pisa, Puerta de Brandeburgo, Ópera de Sídney, San Basilio, Partenón, Golden Gate, Burj Khalifa, Arco del Triunfo, Duomo de Milán, Atomium, Machu Picchu, Chichén Itzá y Torre de Belém.
 - Cada dibujo es un SVG visto de frente con la **base clavada en su latitud/longitud**. Se ven con zoom >= 12, con un tamaño mínimo legible, y crecen con el mapa al acercarte. El nombre sale debajo con zoom >= 14,5.
-- No interceptan clics (`pointer-events: none`): se puede seguir comprando el terreno que hay debajo.
+- Al tocar un monumento sale una ficha (nombre, lugar y botón "Ir"). Solo el dibujo recibe el toque; el resto del terreno se compra como siempre.
 - Botón 🏛️ del menú para ocultarlos o mostrarlos (se recuerda en el móvil).
 - **Añadir uno nuevo:** crea su dibujo en `ART` (una función que devuelve el SVG dentro de su `viewBox`) y añade una línea a `LIST`: `[id, nombre, lugar, lat, lng, ancho en metros, [ancho, alto del viewBox]]`.
 - Consola: `Monumentos.list()` y `Monumentos.goto('sagrada')` (vuela hasta él).

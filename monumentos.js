@@ -3,7 +3,7 @@
 //  - Cada monumento es un dibujo SVG (visto de frente) con la base clavada en su latitud/longitud: Sagrada Família en Barcelona,
 //    Torre Eiffel en París, Coliseo en Roma…  No se mueven ni salen al azar.
 //  - Se ven con zoom >= 12 (vista de ciudad). Con zoom lejos mantienen un tamaño mínimo legible y al acercarse crecen con el mapa.
-//  - El nombre aparece debajo con zoom >= 14,5. No interceptan clics: se puede comprar el terreno que hay debajo.
+//  - El nombre aparece debajo con zoom >= 14,5. Al tocar un monumento sale una ficha con su nombre y lugar (y un botón "Ir" para acercarse).
 //  - Botón 🏛️ del menú para ocultarlos / mostrarlos (se recuerda en el móvil).
 //  - Para añadir uno nuevo: añade su dibujo a ART y una línea a LIST (id, nombre, lugar, lat, lng, ancho en metros, tamaño del dibujo).
 (function () {
@@ -289,6 +289,48 @@
       s += cab(30, 72, 12, 12, 38);
       return s;
     },
+    arco() {
+      const st = '#dcd2b8', sh = '#bfb293', dk = '#5c5240';
+      let s = R(4, 8, 72, 82, st) + R(40, 8, 36, 82, sh, 'opacity=".3"') + R(2, 4, 76, 5, sh) + R(4, 14, 72, 7, '#cfc3a4') + rep(12, i => C(8 + i * 6, 17.5, 1.8, sh));
+      s += arch(24, 90, 32, 62, dk) + R(8, 40, 13, 38, '#cfc3a4') + R(59, 40, 13, 38, '#cfc3a4') + rep(2, i => E(14.5 + i * 51, 58, 4, 9, sh, 'opacity=".7"'));
+      s += R(20, 24, 40, 4, sh, 'opacity=".6"') + R(2, 88, 76, 4, sh);
+      return s;
+    },
+    duomo() {
+      const w = '#f5efe6', sh = '#d9cdbb', dk = '#6a5a4a';
+      let s = rep(9, i => P(`${11 + i * 9.5},52 ${13.4 + i * 9.5},${26 + (i % 3) * 5} ${15.8 + i * 9.5},52`, '#efe7db') + C(13.4 + i * 9.5, 25 + (i % 3) * 5, 1, '#d9a93a'));
+      s += R(8, 50, 84, 40, w) + R(50, 50, 42, 40, sh, 'opacity=".3"') + P('26,50 50,30 74,50', '#efe7db');
+      s += P('46,32 50,4 54,32', '#f0e8dc') + P('50,4 54,32 50,32', sh, 'opacity=".5"') + C(50, 3, 1.8, '#d9a93a');
+      s += rep(5, i => arch(14 + i * 16, 90, 7, 26, dk)) + rep(5, i => R(16 + i * 16, 54, 3, 12, sh, 'opacity=".8"')) + arch(44, 90, 12, 34, dk) + R(8, 88, 84, 3, sh);
+      return s;
+    },
+    atomium() {
+      const T = (x1, y1, x2, y2) => Ln(x1, y1, x2, y2, '#9aa5b1', 4.2);
+      const pts = { t: [40, 12], a: [16, 32], b: [64, 32], c: [16, 74], d: [64, 74], m: [40, 53], u: [40, 94] };
+      let s = [['t', 'a'], ['t', 'b'], ['a', 'b'], ['a', 'c'], ['b', 'd'], ['c', 'd'], ['m', 'a'], ['m', 'b'], ['m', 'c'], ['m', 'd'], ['u', 'c'], ['u', 'd']].map(([p, q]) => T(...pts[p], ...pts[q])).join('');
+      s += Object.values(pts).map(([x, y]) => C(x, y, 9, '#c9d1da') + C(x - 3, y - 3, 3.2, '#fff', 'opacity=".7"') + C(x + 2, y + 3, 6, '#a9b3be', 'opacity=".35"')).join('');
+      return s;
+    },
+    machu() {
+      let s = P('0,60 22,28 46,60', '#5f9a58') + P('46,60 64,6 80,60', '#4f8f4a') + P('64,6 80,60 64,60', '#3f7a3e', 'opacity=".6"') + P('74,60 90,32 100,44 100,60', '#6aa55e');
+      s += R(0, 56, 100, 14, '#8fc06a') + rep(5, i => R(0, 53 + i * 3.4, 100, 1.2, '#b9b39a', 'opacity=".8"') + R(0, 54.2 + i * 3.4, 100, 2.2, i % 2 ? '#9acb74' : '#86b862'));
+      s += rep(6, i => R(14 + i * 11, 46 + (i % 2) * 3, 7, 5, '#c9c2ad') + P(`${13 + i * 11},46 ${17.5 + i * 11},41 ${22 + i * 11},46`, '#b59a5a'));
+      return s;
+    },
+    chichen() {
+      let s = E(14, 56, 16, 12, '#4c9a4a') + E(88, 56, 16, 12, '#3f8a42') + R(0, 56, 100, 14, '#c9d68e');
+      s += rep(9, i => R(10 + i * 4, 56 - (i + 1) * 4.4, 80 - i * 8, 4.6, i % 2 ? '#c4b58f' : '#d6c9a6'));
+      s += R(44, 16, 12, 40, '#e8dcb9') + rep(8, i => Ln(44, 20 + i * 4.5, 56, 20 + i * 4.5, '#b9a97d', .6)) + R(36, 8, 28, 8.5, '#d6c9a6') + R(46, 10, 8, 6.5, '#4f3d28') + R(34, 6.5, 32, 2.5, '#bfae86');
+      return s;
+    },
+    belem() {
+      const w = '#efe3c6', sh = '#cdbf9b', dk = '#5c503a';
+      let s = R(0, 62, 100, 18, '#5bb0d6') + R(6, 52, 88, 12, '#eadfc0') + rep(11, i => R(8 + i * 7.6, 49, 4.4, 4, '#eadfc0')) + rep(7, i => arch(12 + i * 11.5, 64, 4.6, 9, dk));
+      s += R(36, 14, 30, 40, w) + R(51, 14, 15, 40, sh, 'opacity=".3"') + rep(6, i => R(36 + i * 5.2, 10.5, 3.4, 4, w)) + R(33, 14, 36, 3, sh);
+      s += rep(3, i => arch(40 + i * 9, 40, 5, 12, dk)) + rep(3, i => arch(40 + i * 9, 28, 5, 9, dk)) + R(36, 42, 30, 2, sh);
+      s += rep(2, i => R(30 + i * 40, 24, 6, 28, w) + D(`M${29 + i * 40} 24Q${33 + i * 40} 14 ${37 + i * 40} 24Z`, '#d9b76a') + C(33 + i * 40, 14.6, .9, '#c9a23a'));
+      return s;
+    },
     burj() {
       const b = '#b9d4ea', sh = '#8fb2d0', hi = '#e4f1fb';
       let s = R(2, 110, 36, 6, '#d9d3c3');
@@ -326,17 +368,38 @@
     ['sanbasilio', 'Catedral de San Basilio', 'Moscú, Rusia', 55.7525, 37.6231, 70, [70, 100]],
     ['partenon', 'Partenón', 'Atenas, Grecia', 37.9715, 23.7257, 120, [100, 70]],
     ['goldengate', 'Golden Gate', 'San Francisco, EE. UU.', 37.8199, -122.4783, 260, [100, 70]],
-    ['burj', 'Burj Khalifa', 'Dubái, Emiratos Árabes', 25.1972, 55.2744, 60, [40, 120]]
+    ['burj', 'Burj Khalifa', 'Dubái, Emiratos Árabes', 25.1972, 55.2744, 60, [40, 120]],
+    ['arco', 'Arco del Triunfo', 'París, Francia', 48.8738, 2.2950, 60, [80, 90]],
+    ['duomo', 'Duomo de Milán', 'Milán, Italia', 45.4642, 9.1919, 100, [100, 90]],
+    ['atomium', 'Atomium', 'Bruselas, Bélgica', 50.8949, 4.3415, 60, [80, 100]],
+    ['machu', 'Machu Picchu', 'Cusco, Perú', -13.1631, -72.5450, 200, [100, 70]],
+    ['chichen', 'Chichén Itzá', 'Yucatán, México', 20.6829, -88.5686, 110, [100, 70]],
+    ['belem', 'Torre de Belém', 'Lisboa, Portugal', 38.6916, -9.2160, 70, [100, 80]]
   ];
 
   // ---------- Dibujo en el mapa ----------
   const css = document.createElement('style');
   css.textContent = `.mn { background: transparent !important; border: 0 !important; pointer-events: none !important; }
-    .mn-i { position: absolute; pointer-events: none; display: none; filter: drop-shadow(0 2px 2px rgba(0,0,0,.35)); }
+    .mn-i { position: absolute; pointer-events: auto; cursor: pointer; display: none; will-change: transform; contain: layout style; }
     .mn-i svg { display: block; width: 100%; height: 100%; overflow: visible; }
     .mn-l { display: none; position: absolute; left: 50%; top: 100%; transform: translate(-50%, 3px); white-space: nowrap; font: 700 11px/1.2 system-ui, sans-serif;
       color: #fff; background: rgba(30,40,60,.74); padding: 2px 7px; border-radius: 9px; text-shadow: none; }
-    .mn-i.lb .mn-l { display: block; }`;
+    .mn-i.lb .mn-l { display: block; }
+    #mn-card { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); z-index: 900; background: #fff; color: #1d2433; border-radius: 14px; padding: 10px 14px 10px 12px;
+      box-shadow: 0 4px 18px rgba(0,0,0,.3); display: none; align-items: center; gap: 10px; max-width: 88vw; font: 14px/1.3 system-ui, sans-serif; }
+    #mn-card.show { display: flex; }
+    #mn-card b { display: block; font-size: 15px; } #mn-card small { color: #667; }
+    #mn-card button { border: 0; background: #eef0f4; border-radius: 10px; padding: 6px 10px; font: inherit; cursor: pointer; }`;
+  const card = document.createElement('div'); card.id = 'mn-card'; card.setAttribute('role', 'status');
+  card.innerHTML = '<span style="font-size:26px">🏛️</span><div><b></b><small></small></div><button type="button">Ir</button>';
+  document.body.appendChild(card);
+  let cardT = 0, cardId = null;
+  const hideCard = () => card.classList.remove('show');
+  function showCard(M) {
+    cardId = M.id; card.querySelector('b').textContent = M.name; card.querySelector('small').textContent = M.place;
+    card.classList.add('show'); clearTimeout(cardT); cardT = setTimeout(hideCard, 5000);
+  }
+  card.querySelector('button').addEventListener('click', () => { const M = items.find(m => m.id === cardId); if (M) map.flyTo([M.lat, M.lng], Math.max(map.getZoom(), 17)); hideCard(); });
   document.head.appendChild(css);
   map.createPane('monumentos'); map.getPane('monumentos').style.zIndex = 553;      // por encima de las plazas, por debajo de señales y coches
   map.getPane('monumentos').style.pointerEvents = 'none';
@@ -348,23 +411,33 @@
     const box = document.createElement('div'); box.className = 'mn-i';
     box.innerHTML = svg(id, vb[0], vb[1]) + '<div class="mn-l"></div>';
     box.lastChild.textContent = name;
+    box.addEventListener('click', e => { e.stopPropagation(); const M = items.find(m => m.id === id); if (M) showCard(M); });
     const ll = { lat, lng };
     const mk = L.marker(ll, { icon: L.divIcon({ className: 'mn', iconSize: [0, 0], iconAnchor: [0, 0], html: box }), pane: 'monumentos', interactive: false, keyboard: false }).addTo(map);
     return { id, name, place, lat, lng, w, vb, ll, box, mk };
   });
 
-  let pending = 0;
+  // Solo se toca el DOM cuando algo cambia de verdad (tamaño, visibilidad o etiqueta): así no hay repintados por fotograma.
+  let pending = 0, lastZ = null, lastShow = null;
   function update() {
     pending = 0;
     const z = map.getZoom(), show = on && z >= MIN_Z;
-    if (!show) { items.forEach(M => { M.box.style.display = 'none'; }); return; }
+    if (!show) { if (lastShow !== false) items.forEach(M => { M.box.style.display = 'none'; M.vis = false; }); lastShow = false; return; }
+    const zoomChanged = lastShow !== true || Math.abs(z - lastZ) > 0.002;
+    lastShow = true; lastZ = z;
     const size = map.getSize(), k = map.pxPerM(), lab = z >= LABEL_Z;
     items.forEach(M => {
-      const wpx = Math.min(MAX_W, Math.max(M.w * k, MIN_H * M.vb[0] / M.vb[1])), hpx = wpx * M.vb[1] / M.vb[0];
-      const c = map.latLngToContainerPoint(M.ll), s = M.box.style;
-      if (c.x < -wpx - 120 || c.x > size.x + wpx + 120 || c.y < -40 || c.y > size.y + hpx + 120) { s.display = 'none'; return; }
-      s.display = 'block'; s.width = f(wpx) + 'px'; s.height = f(hpx) + 'px'; s.left = f(-wpx / 2) + 'px'; s.top = f(-hpx) + 'px';
-      M.box.classList.toggle('lb', lab);
+      if (zoomChanged || M.wpx == null) {
+        const wpx = Math.round(Math.min(MAX_W, Math.max(M.w * k, MIN_H * M.vb[0] / M.vb[1])) * 2) / 2, hpx = wpx * M.vb[1] / M.vb[0];
+        if (wpx !== M.wpx) {
+          const s = M.box.style; M.wpx = wpx; M.hpx = hpx;
+          s.width = wpx + 'px'; s.height = f(hpx) + 'px'; s.left = (-wpx / 2) + 'px'; s.top = f(-hpx) + 'px';
+        }
+        if (lab !== M.lab) { M.lab = lab; M.box.classList.toggle('lb', lab); }
+      }
+      const c = map.latLngToContainerPoint(M.ll), m = 300;
+      const vis = !(c.x < -M.wpx - m || c.x > size.x + M.wpx + m || c.y < -M.hpx - m || c.y > size.y + M.hpx + m);
+      if (vis !== M.vis) { M.vis = vis; M.box.style.display = vis ? 'block' : 'none'; }
     });
   }
   const schedule = () => { if (!pending) pending = requestAnimationFrame(update); };
@@ -373,7 +446,7 @@
 
   function apply() {
     if (btn) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.style.opacity = on ? '1' : '.55'; btn.title = on ? 'Monumentos: visibles' : 'Monumentos: ocultos'; btn.dataset.label = 'Monumentos: ' + (on ? 'sí' : 'no'); }
-    update();
+    lastShow = null; update();
   }
   if (btn) btn.addEventListener('click', () => {
     on = !on;
