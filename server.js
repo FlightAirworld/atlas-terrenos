@@ -1320,6 +1320,51 @@ async function rankCities(url) {
   return { country, cities: groupCities(rows), other };
 }
 
+// ---------- Población del juego por pueblos ----------
+// Cada terreno aporta habitantes (POP_PER_PARCEL, 4 por defecto) y cada nivel de mejora suma POP_PER_LEVEL (2). La población de un pueblo
+// es la suma de sus terrenos, así que crece sola cada vez que alguien reclama o mejora uno. El nombre real del pueblo sale de la ciudad
+// que ya se averigua por geocodificación (reverseCity) a partir de las coordenadas del terreno. La categoría depende de la población.
+const POP_PER_PARCEL = Math.max(0, Number(process.env.POP_PER_PARCEL || 4));
+const POP_PER_LEVEL = Math.max(0, Number(process.env.POP_PER_LEVEL || 2));
+const TOWN_TIERS = [[0, 'Aldea'], [50, 'Pueblo'], [300, 'Villa'], [1000, 'Ciudad'], [5000, 'Gran ciudad']];
+function townTier(pop) {
+  let i = 0;
+  while (i + 1 < TOWN_TIERS.length && pop >= TOWN_TIERS[i + 1][0]) i++;
+  const next = TOWN_TIERS[i + 1] || null;
+  return { tier: TOWN_TIERS[i][1], from: TOWN_TIERS[i][0], next: next ? next[0] : null, nextName: next ? next[1] : null };
+}
+function townRow(r) {
+  const pop = Number(r.pop) || 0;
+  return {
+    city: r.city, country: r.country || null, parcels: Number(r.n) || 0, pop, today: Number(r.recent) || 0, ...townTier(pop),
+    lat: r.ay == null ? null : Number(r.ay) * SIZE - 90 + SIZE / 2, lng: r.ax == null ? null : Number(r.ax) * SIZE - 180 + SIZE / 2
+  };
+}
+const TOWN_COLS = 'COUNT(*) AS n, SUM($1::int + (COALESCE(level, 1) - 1) * $2::int) AS pop, COUNT(*) FILTER (WHERE created_at > $3) AS recent, AVG(x) AS ax, AVG(y) AS ay';
+let townsCache = { t: 0, rows: null };
+async function townsGet(url) {
+  const since = Date.now() - 86_400_000;
+  if (!townsCache.rows || Date.now() - townsCache.t > 15_000) {
+    const rows = await all(`SELECT city, (ARRAY_AGG(country ORDER BY created_at DESC) FILTER (WHERE country IS NOT NULL))[1] AS country, ${TOWN_COLS}
+      FROM parcels WHERE city IS NOT NULL AND city <> $4 GROUP BY city, country ORDER BY pop DESC, city LIMIT 40`, [POP_PER_PARCEL, POP_PER_LEVEL, since, CITY_NONE]);
+    townsCache = { t: Date.now(), rows: rows.map(townRow) };
+  }
+  const total = await one('SELECT COUNT(*) AS n, SUM($1::int + (COALESCE(level, 1) - 1) * $2::int) AS pop FROM parcels', [POP_PER_PARCEL, POP_PER_LEVEL]);
+  const out = { towns: townsCache.rows, total: { parcels: Number(total.n) || 0, pop: Number(total.pop) || 0 }, here: null, tiers: TOWN_TIERS.map(t => ({ from: t[0], name: t[1] })) };
+  // "Aquí": el pueblo real del centro del mapa (aunque todavía no tenga terrenos: sale con 0 habitantes)
+  const lat = Number(url.searchParams.get('lat')), lng = Number(url.searchParams.get('lng'));
+  if (CITY_GEOCODE && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+    try {
+      const name = (await reverseCity(lat, lng)).name;
+      if (name && name !== CITY_NONE) {
+        const r = await one(`SELECT $4::text AS city, NULL AS country, ${TOWN_COLS} FROM parcels WHERE city = $4`, [POP_PER_PARCEL, POP_PER_LEVEL, since, name]);
+        out.here = townRow({ ...r, city: name, pop: r.pop || 0 });
+      }
+    } catch { /* sin geocodificación ahora mismo: simplemente no sale "Aquí" */ }
+  }
+  return out;
+}
+
 // ---------- Avisos al móvil (notificaciones push) ----------
 // Hace falta el paquete "web-push" y un par de claves VAPID (npx web-push generate-vapid-keys) en las variables
 // VAPID_PUBLIC_KEY y VAPID_PRIVATE_KEY (y VAPID_SUBJECT, p. ej. mailto:tu@correo.com). Sin ellas, los avisos quedan desactivados.
@@ -1605,6 +1650,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/rank/cities') return rankCities(url);
+  if (req.method === 'GET' && pn === '/api/towns') return townsGet(url);
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };
 
