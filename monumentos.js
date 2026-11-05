@@ -374,6 +374,25 @@
     pyramid() {
       return P('8 100 50 24 92 100', '#d8b878') + P('50 24 92 100 50 100', '#b8955a') + rep(5, i => Ln(8 + i * 5.5, 100 - i * 15, 92 - i * 5.5, 100 - i * 15, '#a07f48', .6, 'opacity=".6"')) + R(44, 86, 12, 14, '#4a3a22');
     }
+    ,
+    port() {
+      const cols = ['#d9534f', '#3b82c4', '#f0ad4e', '#5cb85c', '#8e6bbf'];
+      return R(0, 54, 100, 16, '#4b9fd0') + R(0, 48, 100, 7, '#8c939d') + rep(5, i => R(5 + i * 8.5, 39, 7.5, 9, cols[i % 5])) + rep(3, i => R(9 + i * 8.5, 30, 7.5, 9, cols[(i + 2) % 5])) +
+        R(72, 10, 3, 38, '#e8a33a') + R(50, 10, 42, 3, '#e8a33a') + Ln(73.5, 10, 58, 30, '#c98a22', .8) + R(56, 13, 2, 10, '#555') +
+        P('46 57 98 57 91 66 52 66', '#33415c') + R(62, 49, 22, 8, '#e9edf2') + R(72, 43, 6, 6, '#e8533c');
+    },
+    church() {
+      const tw = x => R(x, 30, 16, 70, '#d9caa9') + P(`${x - 2} 30 ${x + 8} 4 ${x + 18} 30`, '#7c8a99') + arch(x + 5, 56, 6, 14, '#5b4c38');
+      return R(28, 50, 44, 50, '#e3d6bc') + P('28 50 50 32 72 50', '#a9553f') + tw(10) + tw(74) + C(50, 64, 6.5, '#7fb4e3') + arch(43, 100, 14, 24, '#4a3d2c');
+    },
+    lighthouse() {
+      return R(34, 94, 32, 6, '#8a8f98') + P('40 94 44 24 56 24 60 94', '#f2f2f2') + P('41.3 78 58.7 78 59.2 66 40.8 66', '#d9534f') + P('42.8 54 57.2 54 56.6 42 43.4 42', '#d9534f') +
+        R(41, 20, 18, 4, '#444') + R(44, 10, 12, 10, '#ffe27a') + P('42 10 50 2 58 10', '#d9534f') + R(10, 12, 30, 1.5, '#ffe27a', 'opacity=".5"') + R(60, 12, 30, 1.5, '#ffe27a', 'opacity=".5"');
+    },
+    bridge() {
+      return R(0, 52, 100, 18, '#4b9fd0') + R(0, 46, 100, 3.5, '#8a8f98') + R(23, 12, 4, 38, '#c0392b') + R(73, 12, 4, 38, '#c0392b') +
+        D('M0 44Q13 44 25 14Q38 42 50 43Q62 42 75 14Q87 44 100 44', 'none', 'stroke="#c0392b" stroke-width="1.3"') + rep(10, i => Ln(30 + i * 4, 44, 30 + i * 4, 30 + Math.abs(i - 4.5) * 2.6, '#c0392b', .5));
+    }
   };
 
   // id, nombre, lugar, lat, lng, ancho en metros del dibujo, tamaño del dibujo (viewBox)
@@ -495,7 +514,153 @@
     ['m-louvre', 'Pirámide del Louvre', 'París, Francia', 48.8611, 2.3364, 70, 'pyramid'],
     ['m-angkor', 'Angkor Wat', 'Siem Riep, Camboya', 13.4125, 103.8670, 220, 'pyramid'],
     ['m-teotihuacan', 'Pirámide del Sol', 'Teotihuacán, México', 19.6925, -98.8438, 150, 'pyramid'],
-    ['m-petra', 'El Tesoro de Petra', 'Petra, Jordania', 30.3285, 35.4444, 60, 'pyramid']
+    ['m-petra', 'El Tesoro de Petra', 'Petra, Jordania', 30.3285, 35.4444, 60, 'pyramid'],
+    // ---- Ampliación: puertos, campos, iglesias, castillos, faros, puentes… ----
+    ['p-bcn', 'Puerto de Barcelona', 'Barcelona, España', 41.3515, 2.163, 320, 'port'],
+    ['p-vlc', 'Puerto de Valencia', 'Valencia, España', 39.4428, -0.32, 320, 'port'],
+    ['p-alg', 'Puerto de Algeciras', 'Algeciras, España', 36.137, -5.439, 320, 'port'],
+    ['p-bio', 'Puerto de Bilbao', 'Bilbao, España', 43.345, -3.03, 320, 'port'],
+    ['p-lpa', 'Puerto de La Luz', 'Las Palmas, España', 28.14, -15.42, 320, 'port'],
+    ['p-rtm', 'Puerto de Róterdam', 'Róterdam, Países Bajos', 51.949, 4.12, 320, 'port'],
+    ['p-anr', 'Puerto de Amberes', 'Amberes, Bélgica', 51.275, 4.32, 320, 'port'],
+    ['p-ham', 'Puerto de Hamburgo', 'Hamburgo, Alemania', 53.54, 9.969, 320, 'port'],
+    ['p-mrs', 'Puerto de Marsella', 'Marsella, Francia', 43.32, 5.35, 320, 'port'],
+    ['p-goa', 'Puerto de Génova', 'Génova, Italia', 44.41, 8.92, 320, 'port'],
+    ['p-pir', 'Puerto del Pireo', 'Atenas, Grecia', 37.94, 23.64, 320, 'port'],
+    ['p-sou', 'Puerto de Southampton', 'Southampton, Reino Unido', 50.896, -1.41, 320, 'port'],
+    ['p-ewr', 'Puerto de Nueva York y Nueva Jersey', 'Nueva Jersey, EE. UU.', 40.685, -74.15, 320, 'port'],
+    ['p-lax', 'Puerto de Los Ángeles', 'Los Ángeles, EE. UU.', 33.73, -118.26, 320, 'port'],
+    ['p-lgb', 'Puerto de Long Beach', 'Long Beach, EE. UU.', 33.75, -118.21, 320, 'port'],
+    ['p-hou', 'Puerto de Houston', 'Houston, EE. UU.', 29.73, -95.27, 320, 'port'],
+    ['p-yvr', 'Puerto de Vancouver', 'Vancouver, Canadá', 49.29, -123.11, 320, 'port'],
+    ['p-ssz', 'Puerto de Santos', 'Santos, Brasil', -23.97, -46.3, 320, 'port'],
+    ['p-bue', 'Puerto de Buenos Aires', 'Buenos Aires, Argentina', -34.61, -58.36, 320, 'port'],
+    ['p-clo', 'Puerto del Callao', 'Lima, Perú', -12.05, -77.15, 320, 'port'],
+    ['p-pan', 'Canal de Panamá (Miraflores)', 'Panamá', 8.996, -79.59, 320, 'port'],
+    ['p-sin', 'Puerto de Singapur', 'Singapur', 1.265, 103.847, 320, 'port'],
+    ['p-sha', 'Puerto de Shanghái (Yangshan)', 'Shanghái, China', 30.62, 122.06, 320, 'port'],
+    ['p-szx', 'Puerto de Yantian', 'Shenzhen, China', 22.57, 114.28, 320, 'port'],
+    ['p-hkg', 'Puerto de Kwai Chung', 'Hong Kong', 22.33, 114.12, 320, 'port'],
+    ['p-pus', 'Puerto de Busan', 'Busan, Corea del Sur', 35.1, 129.04, 320, 'port'],
+    ['p-yok', 'Puerto de Yokohama', 'Yokohama, Japón', 35.45, 139.65, 320, 'port'],
+    ['p-jea', 'Puerto de Jebel Ali', 'Dubái, Emiratos Árabes', 25.01, 55.06, 320, 'port'],
+    ['p-psd', 'Puerto Said', 'Puerto Said, Egipto', 31.26, 32.31, 320, 'port'],
+    ['p-dur', 'Puerto de Durban', 'Durban, Sudáfrica', -29.87, 31.02, 320, 'port'],
+    ['p-syd', 'Puerto Botany', 'Sídney, Australia', -33.97, 151.21, 320, 'port'],
+    ['p-cpt', 'Puerto de Ciudad del Cabo', 'Ciudad del Cabo, Sudáfrica', -33.91, 18.44, 320, 'port'],
+    ['p-amb', 'Puerto de Ambarlı', 'Estambul, Turquía', 40.97, 28.69, 320, 'port'],
+    ['p-nsa', 'Puerto Nhava Sheva', 'Bombay, India', 18.95, 72.95, 320, 'port'],
+    ['s-stamford', 'Stamford Bridge', 'Londres, Reino Unido', 51.4817, -0.191, 220, 'stadium'],
+    ['s-spurs', 'Tottenham Hotspur Stadium', 'Londres, Reino Unido', 51.6043, -0.0664, 220, 'stadium'],
+    ['s-villapark', 'Villa Park', 'Birmingham, Reino Unido', 52.509, -1.8847, 220, 'stadium'],
+    ['s-stjames', 'St James Park', 'Newcastle, Reino Unido', 54.9756, -1.6217, 220, 'stadium'],
+    ['s-celtic', 'Celtic Park', 'Glasgow, Reino Unido', 55.8497, -4.2056, 220, 'stadium'],
+    ['s-ibrox', 'Ibrox', 'Glasgow, Reino Unido', 55.8531, -4.3092, 220, 'stadium'],
+    ['s-hampden', 'Hampden Park', 'Glasgow, Reino Unido', 55.8259, -4.252, 220, 'stadium'],
+    ['s-riazor', 'Riazor', 'A Coruña, España', 43.3687, -8.4177, 220, 'stadium'],
+    ['s-balaidos', 'Balaídos', 'Vigo, España', 42.2118, -8.7396, 220, 'stadium'],
+    ['s-anoeta', 'Reale Arena (Anoeta)', 'San Sebastián, España', 43.3014, -1.9737, 220, 'stadium'],
+    ['s-sadar', 'El Sadar', 'Pamplona, España', 42.7966, -1.6369, 220, 'stadium'],
+    ['s-rosaleda', 'La Rosaleda', 'Málaga, España', 36.7344, -4.4264, 220, 'stadium'],
+    ['s-montjuic', 'Estadi Olímpic de Montjuïc', 'Barcelona, España', 41.3646, 2.1556, 220, 'stadium'],
+    ['s-cornella', 'RCDE Stadium', 'Cornellà, España', 41.3478, 2.0757, 220, 'stadium'],
+    ['s-veltins', 'Veltins-Arena', 'Gelsenkirchen, Alemania', 51.5546, 7.0679, 220, 'stadium'],
+    ['s-volksparkh', 'Volksparkstadion', 'Hamburgo, Alemania', 53.5871, 9.8987, 220, 'stadium'],
+    ['s-olympberlin', 'Olympiastadion', 'Berlín, Alemania', 52.5147, 13.2395, 220, 'stadium'],
+    ['s-maradona', 'Estadio Diego Armando Maradona', 'Nápoles, Italia', 40.828, 14.1931, 220, 'stadium'],
+    ['s-ferraris', 'Luigi Ferraris', 'Génova, Italia', 44.4165, 8.9523, 220, 'stadium'],
+    ['s-franchi', 'Artemio Franchi', 'Florencia, Italia', 43.7808, 11.2824, 220, 'stadium'],
+    ['s-velodrome', 'Orange Vélodrome', 'Marsella, Francia', 43.2699, 5.3959, 220, 'stadium'],
+    ['s-groupama', 'Groupama Stadium', 'Lyon, Francia', 45.7653, 4.9822, 220, 'stadium'],
+    ['s-alvalade', 'Estádio José Alvalade', 'Lisboa, Portugal', 38.7614, -9.1608, 220, 'stadium'],
+    ['s-philips', 'Philips Stadion', 'Eindhoven, Países Bajos', 51.4417, 5.4674, 220, 'stadium'],
+    ['s-kuip', 'De Kuip', 'Róterdam, Países Bajos', 51.8939, 4.5232, 220, 'stadium'],
+    ['s-luzhniki', 'Luzhnikí', 'Moscú, Rusia', 55.7158, 37.5535, 220, 'stadium'],
+    ['s-vodafone', 'Vodafone Park', 'Estambul, Turquía', 41.0391, 28.9946, 220, 'stadium'],
+    ['s-morumbi', 'Morumbi', 'São Paulo, Brasil', -23.6001, -46.72, 220, 'stadium'],
+    ['s-mineirao', 'Mineirão', 'Belo Horizonte, Brasil', -19.8659, -43.971, 220, 'stadium'],
+    ['s-nacionalperu', 'Estadio Nacional del Perú', 'Lima, Perú', -12.0672, -77.0337, 220, 'stadium'],
+    ['s-nacionalcl', 'Estadio Nacional', 'Santiago, Chile', -33.4639, -70.6103, 220, 'stadium'],
+    ['s-campin', 'El Campín', 'Bogotá, Colombia', 4.6459, -74.0782, 220, 'stadium'],
+    ['s-atanasio', 'Atanasio Girardot', 'Medellín, Colombia', 6.2564, -75.5905, 220, 'stadium'],
+    ['s-bbva', 'Estadio BBVA', 'Monterrey, México', 25.6692, -100.244, 220, 'stadium'],
+    ['s-akron', 'Estadio Akron', 'Guadalajara, México', 20.6817, -103.4627, 220, 'stadium'],
+    ['s-olimpicounam', 'Estadio Olímpico Universitario', 'Ciudad de México, México', 19.3322, -99.1923, 220, 'stadium'],
+    ['s-yankee', 'Yankee Stadium', 'Nueva York, EE. UU.', 40.8296, -73.9262, 220, 'stadium'],
+    ['s-fenway', 'Fenway Park', 'Boston, EE. UU.', 42.3467, -71.0972, 220, 'stadium'],
+    ['s-wrigley', 'Wrigley Field', 'Chicago, EE. UU.', 41.9484, -87.6553, 220, 'stadium'],
+    ['s-dodger', 'Dodger Stadium', 'Los Ángeles, EE. UU.', 34.0739, -118.24, 220, 'stadium'],
+    ['s-att', 'AT&T Stadium', 'Arlington, EE. UU.', 32.7473, -97.0945, 220, 'stadium'],
+    ['s-mercedes', 'Mercedes-Benz Stadium', 'Atlanta, EE. UU.', 33.7554, -84.401, 220, 'stadium'],
+    ['s-msg', 'Madison Square Garden', 'Nueva York, EE. UU.', 40.7505, -73.9934, 220, 'stadium'],
+    ['s-twick', 'Twickenham', 'Londres, Reino Unido', 51.4559, -0.3415, 220, 'stadium'],
+    ['s-murray', 'Murrayfield', 'Edimburgo, Reino Unido', 55.9422, -3.2409, 220, 'stadium'],
+    ['s-cardiff', 'Principality Stadium', 'Cardiff, Reino Unido', 51.4782, -3.1826, 220, 'stadium'],
+    ['s-lords', 'Lord\'s', 'Londres, Reino Unido', 51.5294, -0.1727, 220, 'stadium'],
+    ['s-edenpark', 'Eden Park', 'Auckland, Nueva Zelanda', -36.8749, 174.7449, 220, 'stadium'],
+    ['s-edengardens', 'Eden Gardens', 'Calcuta, India', 22.5646, 88.3433, 220, 'stadium'],
+    ['s-wankhede', 'Wankhede', 'Bombay, India', 18.9389, 72.8258, 220, 'stadium'],
+    ['s-modi', 'Narendra Modi Stadium', 'Ahmedabad, India', 23.0919, 72.5975, 220, 'stadium'],
+    ['s-seoul', 'Estadio del Mundial', 'Seúl, Corea del Sur', 37.5683, 126.8973, 220, 'stadium'],
+    ['s-azadi', 'Azadi', 'Teherán, Irán', 35.7237, 51.2753, 220, 'stadium'],
+    ['s-monza', 'Autódromo de Monza', 'Monza, Italia', 45.6156, 9.2811, 300, 'stadium'],
+    ['s-silverstone', 'Silverstone', 'Reino Unido', 52.0786, -1.0169, 300, 'stadium'],
+    ['s-catalunya', 'Circuit de Barcelona-Catalunya', 'Montmeló, España', 41.57, 2.2611, 300, 'stadium'],
+    ['s-interlagos', 'Interlagos', 'São Paulo, Brasil', -23.7036, -46.6997, 300, 'stadium'],
+    ['c-colonia', 'Catedral de Colonia', 'Colonia, Alemania', 50.9413, 6.9583, 90, 'church'],
+    ['c-burgos', 'Catedral de Burgos', 'Burgos, España', 42.3407, -3.7047, 90, 'church'],
+    ['c-toledo', 'Catedral de Toledo', 'Toledo, España', 39.8568, -4.0243, 90, 'church'],
+    ['c-bcn', 'Catedral de Barcelona', 'Barcelona, España', 41.384, 2.1764, 80, 'church'],
+    ['c-sanmarcos', 'Basílica de San Marcos', 'Venecia, Italia', 45.4345, 12.3396, 90, 'church'],
+    ['c-florencia', 'Santa Maria del Fiore', 'Florencia, Italia', 43.7731, 11.256, 100, 'church'],
+    ['c-stpauls', 'Catedral de San Pablo', 'Londres, Reino Unido', 51.5138, -0.0984, 90, 'church'],
+    ['c-westminster', 'Abadía de Westminster', 'Londres, Reino Unido', 51.4993, -0.1273, 90, 'church'],
+    ['c-sacrecoeur', 'Sacré-Cœur', 'París, Francia', 48.8867, 2.3431, 80, 'church'],
+    ['c-reims', 'Catedral de Reims', 'Reims, Francia', 49.2535, 4.034, 90, 'church'],
+    ['c-guadalupe', 'Basílica de Guadalupe', 'Ciudad de México, México', 19.4845, -99.117, 90, 'church'],
+    ['c-stpatrick', 'Catedral de San Patricio', 'Nueva York, EE. UU.', 40.7585, -73.976, 80, 'church'],
+    ['c-cristosalvador', 'Catedral de Cristo Salvador', 'Moscú, Rusia', 55.7448, 37.6054, 90, 'church'],
+    ['k-escorial', 'Monasterio de El Escorial', 'San Lorenzo de El Escorial, España', 40.5892, -4.1477, 180, 'castle'],
+    ['k-versalles', 'Palacio de Versalles', 'Versalles, Francia', 48.8049, 2.1204, 260, 'castle'],
+    ['k-alcazarsg', 'Alcázar de Segovia', 'Segovia, España', 40.9523, -4.1317, 110, 'castle'],
+    ['k-alcazaba', 'Alcazaba de Málaga', 'Málaga, España', 36.7213, -4.4157, 140, 'castle'],
+    ['k-edimburgo', 'Castillo de Edimburgo', 'Edimburgo, Reino Unido', 55.9486, -3.1999, 140, 'castle'],
+    ['k-torrelondres', 'Torre de Londres', 'Londres, Reino Unido', 51.5081, -0.0759, 130, 'castle'],
+    ['k-buckingham', 'Palacio de Buckingham', 'Londres, Reino Unido', 51.5014, -0.1419, 150, 'castle'],
+    ['k-kremlin', 'Kremlin de Moscú', 'Moscú, Rusia', 55.752, 37.6175, 200, 'castle'],
+    ['k-potala', 'Palacio de Potala', 'Lhasa, China', 29.6575, 91.117, 160, 'castle'],
+    ['k-fuerterojo', 'Fuerte Rojo', 'Delhi, India', 28.6562, 77.241, 200, 'castle'],
+    ['k-himeji', 'Castillo de Himeji', 'Himeji, Japón', 34.8394, 134.6939, 110, 'castle'],
+    ['d-templocielo', 'Templo del Cielo', 'Pekín, China', 39.8822, 116.4066, 100, 'dome'],
+    ['d-panteon', 'Panteón de Agripa', 'Roma, Italia', 41.8986, 12.4769, 80, 'dome'],
+    ['d-roca', 'Cúpula de la Roca', 'Jerusalén', 31.778, 35.2354, 90, 'dome'],
+    ['t-pearl', 'Torre Perla Oriental', 'Shanghái, China', 31.2397, 121.4998, 50, 'tower'],
+    ['t-shanghai', 'Torre de Shanghái', 'Shanghái, China', 31.2335, 121.5055, 50, 'tower'],
+    ['t-burjarab', 'Burj Al Arab', 'Dubái, Emiratos Árabes', 25.1412, 55.1853, 50, 'tower'],
+    ['t-skytower', 'Sky Tower', 'Auckland, Nueva Zelanda', -36.8485, 174.7622, 50, 'tower'],
+    ['t-collserola', 'Torre de Collserola', 'Barcelona, España', 41.4175, 2.1138, 50, 'tower'],
+    ['t-fernseh', 'Torre de Televisión', 'Berlín, Alemania', 52.5208, 13.4094, 50, 'tower'],
+    ['t-oro', 'Torre del Oro', 'Sevilla, España', 37.3825, -5.9964, 40, 'tower'],
+    ['o-bsas', 'Obelisco de Buenos Aires', 'Buenos Aires, Argentina', -34.6037, -58.3816, 30, 'obelisk'],
+    ['o-concordia', 'Obelisco de la Concordia', 'París, Francia', 48.8656, 2.3212, 30, 'obelisk'],
+    ['o-trajano', 'Columna de Trajano', 'Roma, Italia', 41.8958, 12.4842, 30, 'obelisk'],
+    ['o-nelson', 'Columna de Nelson', 'Londres, Reino Unido', 51.5077, -0.128, 30, 'obelisk'],
+    ['f-finisterre', 'Faro de Finisterre', 'A Coruña, España', 42.8827, -9.2726, 40, 'lighthouse'],
+    ['f-vilan', 'Faro de Cabo Vilán', 'A Coruña, España', 43.1558, -9.2074, 40, 'lighthouse'],
+    ['f-maspalomas', 'Faro de Maspalomas', 'Gran Canaria, España', 27.7413, -15.5859, 40, 'lighthouse'],
+    ['f-chipiona', 'Faro de Chipiona', 'Cádiz, España', 36.737, -6.441, 40, 'lighthouse'],
+    ['f-palos', 'Faro de Cabo de Palos', 'Murcia, España', 37.6337, -0.6959, 40, 'lighthouse'],
+    ['f-cabomayor', 'Faro de Cabo Mayor', 'Santander, España', 43.4944, -3.7867, 40, 'lighthouse'],
+    ['f-gata', 'Faro de Cabo de Gata', 'Almería, España', 36.7219, -2.1928, 40, 'lighthouse'],
+    ['b-brooklyn', 'Puente de Brooklyn', 'Nueva York, EE. UU.', 40.7061, -73.9969, 220, 'bridge'],
+    ['b-25abril', 'Puente 25 de Abril', 'Lisboa, Portugal', 38.6897, -9.1773, 220, 'bridge'],
+    ['b-bizkaia', 'Puente de Bizkaia', 'Portugalete, España', 43.3234, -3.0179, 220, 'bridge'],
+    ['b-rialto', 'Puente de Rialto', 'Venecia, Italia', 45.438, 12.3359, 220, 'bridge'],
+    ['b-carlos', 'Puente de Carlos', 'Praga, Chequia', 50.0865, 14.4114, 220, 'bridge'],
+    ['b-sidneyh', 'Puente de la Bahía de Sídney', 'Sídney, Australia', -33.8523, 151.2108, 220, 'bridge'],
+    ['b-akashi', 'Puente Akashi Kaikyō', 'Kobe, Japón', 34.6167, 135.0214, 220, 'bridge'],
+    ['b-ronda', 'Puente Nuevo', 'Ronda, España', 36.7413, -5.1671, 220, 'bridge'],
+    ['b-mostar', 'Puente Viejo de Mostar', 'Mostar, Bosnia', 43.3375, 17.815, 220, 'bridge']
   ];
 
   // ---------- Dibujo en el mapa ----------
@@ -506,7 +671,7 @@
   let uid = 0;
   const svg = (m, W, H, px) => `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax meet"${px ? ` width="${px[0]}" height="${px[1]}"` : ''}>` +
     `<ellipse cx="${W / 2}" cy="${H - 2.5}" rx="${f(W * .46)}" ry="3.2" fill="#000" opacity=".16"/>${ART[m](('mn' + (uid++)))}</svg>`;
-  const GEN = { stadium: [100, 70], airport: [100, 70], tower: [100, 100], dome: [100, 100], obelisk: [100, 100], castle: [100, 100], pyramid: [100, 100] };
+  const GEN = { stadium: [100, 70], airport: [100, 70], tower: [100, 100], dome: [100, 100], obelisk: [100, 100], castle: [100, 100], pyramid: [100, 100], port: [100, 70], church: [100, 100], lighthouse: [100, 100], bridge: [100, 70] };
   const items = LIST.map(([id, name, place, lat, lng, w, vb]) => { const g = typeof vb === 'string'; return { id, name, place, lat, lng, w, art: g ? vb : id, vb: g ? GEN[vb] : vb }; });
 
   const raster = (str, w, h) => new Promise(res => {
