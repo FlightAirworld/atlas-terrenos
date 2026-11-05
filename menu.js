@@ -50,22 +50,67 @@
   }
 })();
 
-// Botón "Compartir" (dentro de Extras): comparte el enlace del juego; si el móvil no puede compartir, lo copia.
+// Botón "Compartir" (dentro de Extras): comparte la pantalla. Captura lo que se ve ahora y lo manda por la hoja de compartir
+// (en el ordenador, si no se puede compartir, se descarga la imagen). Si el navegador no permite capturar pantalla (casi todos los
+// móviles), comparte el enlace del juego como antes.
 (function () {
   const btn = document.getElementById('share-app-btn');
   if (!btn) return;
+  const TITLE = 'Redecora El Mundo', TEXT = 'Reclama terrenos virtuales en el mapa del mundo y ponles tu nombre.';
   function note(text) {                                       // mismo aviso emergente (#toast) que usa el resto de la app
     let t = document.getElementById('toast');
     if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
     t.textContent = text; t.classList.add('show');
     clearTimeout(note.t); note.t = setTimeout(() => t.classList.remove('show'), 2500);
   }
-  btn.addEventListener('click', async () => {
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+
+  // Pide la pantalla al navegador y se queda con un solo fotograma (PNG)
+  async function grabScreen() {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false, preferCurrentTab: true });
+    try {
+      const v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.srcObject = stream;
+      await v.play();
+      await wait(450);                                        // deja que desaparezca el selector del navegador antes de capturar
+      const cv = document.createElement('canvas');
+      cv.width = v.videoWidth; cv.height = v.videoHeight;
+      cv.getContext('2d').drawImage(v, 0, 0);
+      const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+      if (!blob) throw new Error('canvas');
+      return new File([blob], 'redecora-el-mundo.png', { type: 'image/png' });
+    } finally { stream.getTracks().forEach(t => t.stop()); }
+  }
+
+  function download(file) {
+    const a = document.createElement('a'), u = URL.createObjectURL(file);
+    a.href = u; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 4000);
+    note('📸 Captura guardada');
+  }
+
+  async function shareLink() {                                // alternativa cuando no hay captura de pantalla
     const url = location.origin + '/';
-    const data = { title: 'Redecora El Mundo', text: 'Reclama terrenos virtuales en el mapa del mundo y ponles tu nombre.', url };
-    try { if (navigator.share) { await navigator.share(data); return; } }
+    try { if (navigator.share) { await navigator.share({ title: TITLE, text: TEXT, url }); return; } }
     catch (e) { if (e && e.name === 'AbortError') return; }   // cerró la hoja de compartir: no hacemos nada
     try { await navigator.clipboard.writeText(url); note('🔗 Enlace copiado'); }
     catch (e) { window.prompt('Copia este enlace:', url); }
+  }
+
+  btn.addEventListener('click', async () => {
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)) { shareLink(); return; }
+    let file;
+    try { file = await grabScreen(); }
+    catch (e) {
+      if (e && (e.name === 'NotAllowedError' || e.name === 'AbortError')) return;   // canceló el selector de pantalla
+      shareLink(); return;
+    }
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: TITLE, text: TEXT + ' ' + location.origin + '/' });
+        return;
+      }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    download(file);
   });
 })();
