@@ -5,7 +5,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { Pool, types } = require('pg');
-const telegram = require('./telegram');   // avisos al dueño por Telegram (TELEGRAM_TOKEN y TELEGRAM_CHAT_ID)
 const ambient = require('./ambient');   // jugadores y mensajes de chat simulados (AMBIENT=off para apagarlo)
 
 types.setTypeParser(20, Number);   // BIGINT (created_at, COUNT) -> número, no texto
@@ -112,7 +111,8 @@ const HOUSES = [
   'images/aurgi.webp',
   'images/burrito-blanco.webp',
   'images/arcobaleno.webp',
-  'images/la-cruilla.webp'
+  'images/la-cruilla.webp',
+  'images/cesped.webp'
 ];
 const cleanHouse = h => { h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h; return HOUSES.includes(h) ? h : null; };   // null = al azar (como hasta ahora)
 const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
@@ -295,7 +295,6 @@ async function profileSet(req, { nickname }) {
     if (await getProfile(user.id)) throw new HttpError(409, 'Tu apodo ya está fijado y no se puede cambiar');
     throw new HttpError(409, 'Ese apodo ya está en uso. Elige otro');
   }
-  telegram.notify(`👤 Nuevo jugador: ${name}`);
   return { ok: true, nickname: name };
 }
 
@@ -486,7 +485,6 @@ async function deliverPack(orderId, packCredits, user, captureId) {
     const done = await client.query("UPDATE pack_orders SET status = 'PAID', code = $1, capture_id = $3 WHERE order_id = $2 AND status = 'PROCESSING' RETURNING order_id", [code, orderId, captureId || null]);
     if (!done.rows[0]) throw new Error('El pedido ya no estaba reservado');
     await client.query('COMMIT');
-    telegram.notify(`💰 Compra: +${packCredits} terrenos por ${(PACKS.find(x => x.credits === packCredits) || {}).price || '?'} ${CURRENCY} (${user ? 'cuenta' : 'sin cuenta'}${DEMO ? ', DEMO' : ''})`);
     return { code, credits };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -559,7 +557,6 @@ async function applyClawback(eventId, orderId, change) {   // change(ord) -> { r
     await client.query('UPDATE pack_orders SET refunded_cents = $1, disputed_cents = $2, clawed_credits = $3 WHERE order_id = $4', [next.refunded_cents, next.disputed_cents, target, orderId]);
     await client.query('COMMIT');
     console.log(`Reembolso/disputa aplicado (${eventId}): pedido ${orderId}, créditos ${delta > 0 ? 'retirados' : 'devueltos'}: ${Math.abs(delta)}`);
-    telegram.notify(`↩️ Reembolso/disputa: pedido ${orderId}, créditos ${delta > 0 ? 'retirados' : 'devueltos'}: ${Math.abs(delta)}`);
     return 'aplicado';
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -1376,7 +1373,6 @@ async function chatSend(req, body) {
     [zone, user.id, prof.nickname, avatar, country, text, now, at.lat, at.lng]);
   const msg = { id: Number(row.id), nick: prof.nickname, avatar, country, text, t: now, r: {}, mine: null };
   chatPublish(at, msg);
-  telegram.chat(zone, prof.nickname, text);
   return { ok: true, message: msg };
 }
 // Reaccionar con un emoji (uno por persona y mensaje; tocar el mismo otra vez lo quita)
@@ -2276,6 +2272,5 @@ http.createServer(async (req, res) => {
     send(status, JSON.stringify({ error: status === 500 ? 'Error interno' : e.message }));
   }
 }).listen(PORT, () => {
-  telegram.start('Redecora El Mundo');
   console.log(`Redecora El Mundo en http://localhost:${PORT}  [${DEMO ? 'MODO DEMO (sin cobro real)' : [HAS_STRIPE ? 'Stripe ' + (STRIPE_SECRET_KEY.includes('_live_') ? 'LIVE' : 'test') : null, HAS_PAYPAL ? 'PayPal ' + PAYPAL_ENV : null].filter(Boolean).join(' + ')}]  packs ${PACKS.map(p => p.credits + '=' + p.price).join(', ')} ${CURRENCY}`);
 });

@@ -176,7 +176,7 @@
   function kindOf(k) {
     if (/^(casa|choza)/.test(k)) return 'home';
     if (k === 'parque-infantil') return 'play';
-    if (/^(parque|jardin|bosque)$/.test(k)) return 'park';
+    if (/^(parque|jardin|bosque|cesped)$/.test(k)) return 'park';
     if (/^(farmacia|supermercado|condis)$/.test(k)) return 'shop';
     if (/^(mcdonald|burgerking)$/.test(k)) return 'drive';
     if (/^(cepsa|gasolinera)$/.test(k)) return 'gas';
