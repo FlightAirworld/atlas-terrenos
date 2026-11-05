@@ -163,7 +163,7 @@ const HOUSES = [
   'images/burrito-blanco.webp',
   'images/arcobaleno.webp',
   'images/la-cruilla.webp',
-  'images/cesped.webp'
+  'images/cesped-2.webp'
 ];
 
 function houseFor(id, house) {
@@ -177,7 +177,7 @@ function houseFor(id, house) {
 }
 // Altura aproximada (en metros) de cada tipo de edificio: da volumen 3D a las parcelas
 const HOUSE_HEIGHT = {
-  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'condis': 9, 'cepsa': 7, 'aurgi': 8, 'burrito-blanco': 8, 'arcobaleno': 8, 'la-cruilla': 8, 'cesped': 1
+  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'condis': 9, 'cepsa': 7, 'aurgi': 8, 'burrito-blanco': 8, 'arcobaleno': 8, 'la-cruilla': 8, 'cesped-2': 1
 };
 // Nivel del terreno (1 a 5): más estrellas junto al nombre y un edificio más alto
 const maxLevel = () => (cfg && cfg.levels && cfg.levels.mults.length) || 5;
