@@ -340,6 +340,40 @@
       s += R(19.3, 0, 1.4, 14, '#d7e3ee') + rep(8, i => Ln(8, 94 + i * 2.6, 32, 94 + i * 2.6, '#fff', .35, 'opacity=".5"'));
       return s;
     }
+    ,
+    // ---- Dibujos genéricos por tipo (los usan estadios, aeropuertos y monumentos nuevos) ----
+    stadium() {
+      return E(50, 52, 46, 14, '#c9ced6') + E(50, 48, 40, 10, '#8a93a0') + E(50, 50, 30, 6.5, '#3f9d4a') +
+        R(30, 49, 40, 1, '#fff', 'opacity=".7"') + C(50, 50, 3, 'none', 'stroke="#fff" stroke-width=".8"') +
+        D('M4 52Q4 36 50 36Q96 36 96 52L96 58Q50 70 4 58Z', '#e4e7ec') + D('M4 52Q50 62 96 52L96 58Q50 70 4 58Z', '#b9bfc9') +
+        rep(6, i => R(12 + i * 14, 56, 5, 3, '#6b7482', 'opacity=".6"')) + R(48, 28, 1.2, 10, '#98a1ad') + P('49.2 28 58 31 49.2 34', '#e8533c');
+    },
+    airport() {
+      return R(0, 56, 100, 14, '#6e7480') + rep(7, i => R(6 + i * 14, 62.5, 8, 1.4, '#fff')) +
+        R(10, 40, 62, 14, '#dfe5ee') + R(10, 40, 62, 3, '#3b82c4') + rep(8, i => R(14 + i * 7.4, 46, 4.4, 4, '#7fb4e3')) +
+        R(80, 22, 7, 32, '#cfd6e0') + R(76, 16, 15, 7, '#7fb4e3') + R(75, 14, 17, 2.4, '#8892a0') +
+        P('30 38 36 30 40 30 38 38', '#fff') + R(32, 30, 5, 1.6, '#e8533c');
+    },
+    tower() {
+      return P('46 100 48.6 30 51.4 30 54 100', '#9aa4b2') + P('50 30 54 100 50 100', '#7e8896', 'opacity=".5"') +
+        E(50, 24, 14, 4.2, '#c9d1dc') + R(36, 19, 28, 5, '#e6ebf2') + R(49.3, 2, 1.4, 17, '#7e8896') + R(43, 60, 14, 2.2, '#c9d1dc');
+    },
+    dome() {
+      return R(10, 66, 80, 34, '#ebdcc0') + R(10, 66, 80, 3, '#c9b48c') + rep(7, i => arch(15 + i * 10.5, 100, 6, 20, '#8b7a58')) +
+        R(26, 54, 48, 14, '#e2d1b0') + D('M26 54Q26 18 50 18Q74 18 74 54Z', '#9fb8c9') + D('M50 18Q74 18 74 54H50Z', '#7c98ad', 'opacity=".55"') +
+        R(49.2, 4, 1.6, 15, '#c9a23a') + C(50, 5, 2, '#e9c25a');
+    },
+    obelisk() {
+      return R(34, 90, 32, 10, '#c4c9d1') + R(40, 84, 20, 6, '#d8dce2') + P('43 84 47.5 10 52.5 10 57 84', '#e9ecf1') +
+        P('50 10 57 84 50 84', '#c3c9d3', 'opacity=".7"') + P('47.5 10 50 2 52.5 10', '#d4a53a');
+    },
+    castle() {
+      const t = (x, h) => R(x, 100 - h, 14, h, '#cdbfa6') + P(`${x - 2} ${100 - h} ${x + 7} ${100 - h - 14} ${x + 16} ${100 - h}`, '#a94f3e') + R(x + 5, 100 - h + 8, 4, 7, '#5b4c38');
+      return R(8, 62, 84, 38, '#d8cbb2') + rep(9, i => R(10 + i * 9.4, 57, 5, 5, '#d8cbb2')) + t(2, 58) + t(84, 58) + t(43, 82) + arch(41, 100, 18, 22, '#4a3d2c');
+    },
+    pyramid() {
+      return P('8 100 50 24 92 100', '#d8b878') + P('50 24 92 100 50 100', '#b8955a') + rep(5, i => Ln(8 + i * 5.5, 100 - i * 15, 92 - i * 5.5, 100 - i * 15, '#a07f48', .6, 'opacity=".6"')) + R(44, 86, 12, 14, '#4a3a22');
+    }
   };
 
   // id, nombre, lugar, lat, lng, ancho en metros del dibujo, tamaño del dibujo (viewBox)
@@ -375,7 +409,93 @@
     ['atomium', 'Atomium', 'Bruselas, Bélgica', 50.8949, 4.3415, 60, [80, 100]],
     ['machu', 'Machu Picchu', 'Cusco, Perú', -13.1631, -72.5450, 200, [100, 70]],
     ['chichen', 'Chichén Itzá', 'Yucatán, México', 20.6829, -88.5686, 110, [100, 70]],
-    ['belem', 'Torre de Belém', 'Lisboa, Portugal', 38.6916, -9.2160, 70, [100, 80]]
+    ['belem', 'Torre de Belém', 'Lisboa, Portugal', 38.6916, -9.2160, 70, [100, 80]],
+    // ---- Estadios (icono genérico 'stadium') ----
+    ['s-campnou', 'Camp Nou', 'Barcelona, España', 41.3809, 2.1228, 260, 'stadium'],
+    ['s-bernabeu', 'Santiago Bernabéu', 'Madrid, España', 40.4531, -3.6883, 230, 'stadium'],
+    ['s-metropolitano', 'Cívitas Metropolitano', 'Madrid, España', 40.4362, -3.5995, 230, 'stadium'],
+    ['s-mestalla', 'Mestalla', 'Valencia, España', 39.4747, -0.3583, 190, 'stadium'],
+    ['s-sanmames', 'San Mamés', 'Bilbao, España', 43.2642, -2.9495, 210, 'stadium'],
+    ['s-villamarin', 'Benito Villamarín', 'Sevilla, España', 37.3565, -5.9817, 200, 'stadium'],
+    ['s-pizjuan', 'Ramón Sánchez-Pizjuán', 'Sevilla, España', 37.3840, -5.9706, 200, 'stadium'],
+    ['s-oldtrafford', 'Old Trafford', 'Mánchester, Reino Unido', 53.4631, -2.2913, 220, 'stadium'],
+    ['s-anfield', 'Anfield', 'Liverpool, Reino Unido', 53.4308, -2.9608, 200, 'stadium'],
+    ['s-wembley', 'Estadio de Wembley', 'Londres, Reino Unido', 51.5560, -0.2796, 260, 'stadium'],
+    ['s-emirates', 'Emirates Stadium', 'Londres, Reino Unido', 51.5549, -0.1084, 220, 'stadium'],
+    ['s-etihad', 'Etihad Stadium', 'Mánchester, Reino Unido', 53.4831, -2.2004, 230, 'stadium'],
+    ['s-allianz', 'Allianz Arena', 'Múnich, Alemania', 48.2188, 11.6247, 250, 'stadium'],
+    ['s-dortmund', 'Signal Iduna Park', 'Dortmund, Alemania', 51.4926, 7.4519, 230, 'stadium'],
+    ['s-sansiro', 'San Siro', 'Milán, Italia', 45.4781, 9.1240, 260, 'stadium'],
+    ['s-juventus', 'Allianz Stadium', 'Turín, Italia', 45.1096, 7.6412, 200, 'stadium'],
+    ['s-olimpico', 'Estadio Olímpico', 'Roma, Italia', 41.9341, 12.4547, 240, 'stadium'],
+    ['s-parcprinces', 'Parque de los Príncipes', 'París, Francia', 48.8414, 2.2530, 200, 'stadium'],
+    ['s-stadefrance', 'Stade de France', 'Saint-Denis, Francia', 48.9245, 2.3601, 250, 'stadium'],
+    ['s-luz', 'Estádio da Luz', 'Lisboa, Portugal', 38.7527, -9.1847, 220, 'stadium'],
+    ['s-dragao', 'Estádio do Dragão', 'Oporto, Portugal', 41.1618, -8.5833, 210, 'stadium'],
+    ['s-cruyff', 'Johan Cruyff Arena', 'Ámsterdam, Países Bajos', 52.3143, 4.9419, 210, 'stadium'],
+    ['s-maracana', 'Maracanã', 'Río de Janeiro, Brasil', -22.9121, -43.2302, 260, 'stadium'],
+    ['s-bombonera', 'La Bombonera', 'Buenos Aires, Argentina', -34.6356, -58.3647, 170, 'stadium'],
+    ['s-monumental', 'Estadio Monumental', 'Buenos Aires, Argentina', -34.5454, -58.4498, 240, 'stadium'],
+    ['s-centenario', 'Estadio Centenario', 'Montevideo, Uruguay', -34.8944, -56.1527, 200, 'stadium'],
+    ['s-azteca', 'Estadio Azteca', 'Ciudad de México, México', 19.3029, -99.1505, 260, 'stadium'],
+    ['s-metlife', 'MetLife Stadium', 'Nueva Jersey, EE. UU.', 40.8135, -74.0745, 250, 'stadium'],
+    ['s-rosebowl', 'Rose Bowl', 'Pasadena, EE. UU.', 34.1613, -118.1676, 240, 'stadium'],
+    ['s-sofi', 'SoFi Stadium', 'Los Ángeles, EE. UU.', 33.9535, -118.3392, 260, 'stadium'],
+    ['s-mcg', 'Melbourne Cricket Ground', 'Melbourne, Australia', -37.8200, 144.9834, 250, 'stadium'],
+    ['s-tokio', 'Estadio Nacional', 'Tokio, Japón', 35.6778, 139.7145, 240, 'stadium'],
+    ['s-nido', 'Nido de Pájaro', 'Pekín, China', 39.9929, 116.3964, 260, 'stadium'],
+    ['s-lusail', 'Estadio de Lusail', 'Lusail, Catar', 25.4210, 51.4900, 250, 'stadium'],
+    ['s-soccercity', 'FNB Stadium', 'Johannesburgo, Sudáfrica', -26.2347, 27.9826, 240, 'stadium'],
+    // ---- Aeropuertos (icono genérico 'airport') ----
+    ['a-mad', 'Aeropuerto Madrid-Barajas', 'Madrid, España', 40.4936, -3.5668, 700, 'airport'],
+    ['a-bcn', 'Aeropuerto de Barcelona-El Prat', 'Barcelona, España', 41.2974, 2.0833, 700, 'airport'],
+    ['a-pmi', 'Aeropuerto de Palma', 'Palma, España', 39.5517, 2.7388, 600, 'airport'],
+    ['a-agp', 'Aeropuerto de Málaga', 'Málaga, España', 36.6749, -4.4991, 600, 'airport'],
+    ['a-lhr', 'Aeropuerto de Heathrow', 'Londres, Reino Unido', 51.4700, -0.4543, 800, 'airport'],
+    ['a-cdg', 'Aeropuerto Charles de Gaulle', 'París, Francia', 49.0097, 2.5479, 800, 'airport'],
+    ['a-fra', 'Aeropuerto de Fráncfort', 'Fráncfort, Alemania', 50.0379, 8.5622, 750, 'airport'],
+    ['a-ams', 'Aeropuerto de Schiphol', 'Ámsterdam, Países Bajos', 52.3105, 4.7683, 750, 'airport'],
+    ['a-fco', 'Aeropuerto de Fiumicino', 'Roma, Italia', 41.8003, 12.2389, 700, 'airport'],
+    ['a-lis', 'Aeropuerto de Lisboa', 'Lisboa, Portugal', 38.7742, -9.1342, 600, 'airport'],
+    ['a-ist', 'Aeropuerto de Estambul', 'Estambul, Turquía', 41.2753, 28.7519, 850, 'airport'],
+    ['a-jfk', 'Aeropuerto JFK', 'Nueva York, EE. UU.', 40.6413, -73.7781, 800, 'airport'],
+    ['a-lax', 'Aeropuerto LAX', 'Los Ángeles, EE. UU.', 33.9416, -118.4085, 800, 'airport'],
+    ['a-ord', 'Aeropuerto O\'Hare', 'Chicago, EE. UU.', 41.9742, -87.9073, 850, 'airport'],
+    ['a-atl', 'Aeropuerto de Atlanta', 'Atlanta, EE. UU.', 33.6407, -84.4277, 850, 'airport'],
+    ['a-mex', 'Aeropuerto de Ciudad de México', 'Ciudad de México, México', 19.4361, -99.0719, 700, 'airport'],
+    ['a-gru', 'Aeropuerto de Guarulhos', 'São Paulo, Brasil', -23.4356, -46.4731, 750, 'airport'],
+    ['a-eze', 'Aeropuerto de Ezeiza', 'Buenos Aires, Argentina', -34.8222, -58.5358, 700, 'airport'],
+    ['a-dxb', 'Aeropuerto de Dubái', 'Dubái, Emiratos Árabes', 25.2532, 55.3657, 850, 'airport'],
+    ['a-sin', 'Aeropuerto de Changi', 'Singapur', 1.3644, 103.9915, 800, 'airport'],
+    ['a-hnd', 'Aeropuerto de Haneda', 'Tokio, Japón', 35.5494, 139.7798, 750, 'airport'],
+    ['a-hkg', 'Aeropuerto de Hong Kong', 'Hong Kong', 22.3080, 113.9185, 800, 'airport'],
+    ['a-pek', 'Aeropuerto de Pekín Capital', 'Pekín, China', 40.0799, 116.6031, 850, 'airport'],
+    ['a-syd', 'Aeropuerto de Sídney', 'Sídney, Australia', -33.9399, 151.1753, 700, 'airport'],
+    ['a-cai', 'Aeropuerto de El Cairo', 'El Cairo, Egipto', 30.1219, 31.4056, 700, 'airport'],
+    ['a-jnb', 'Aeropuerto OR Tambo', 'Johannesburgo, Sudáfrica', -26.1392, 28.2460, 700, 'airport'],
+    // ---- Más monumentos (iconos genéricos por tipo) ----
+    ['m-empire', 'Empire State Building', 'Nueva York, EE. UU.', 40.7484, -73.9857, 50, 'tower'],
+    ['m-cntower', 'Torre CN', 'Toronto, Canadá', 43.6426, -79.3871, 50, 'tower'],
+    ['m-space', 'Space Needle', 'Seattle, EE. UU.', 47.6205, -122.3493, 50, 'tower'],
+    ['m-tokyotower', 'Torre de Tokio', 'Tokio, Japón', 35.6586, 139.7454, 50, 'tower'],
+    ['m-petronas', 'Torres Petronas', 'Kuala Lumpur, Malasia', 3.1579, 101.7116, 70, 'tower'],
+    ['m-washington', 'Monumento a Washington', 'Washington D. C., EE. UU.', 38.8895, -77.0353, 40, 'obelisk'],
+    ['m-moai', 'Moáis de Ahu Tongariki', 'Isla de Pascua, Chile', -27.1256, -109.2770, 50, 'obelisk'],
+    ['m-capitolio', 'Capitolio de EE. UU.', 'Washington D. C., EE. UU.', 38.8899, -77.0091, 140, 'dome'],
+    ['m-sanpedro', 'Basílica de San Pedro', 'Ciudad del Vaticano', 41.9022, 12.4539, 140, 'dome'],
+    ['m-santasofia', 'Santa Sofía', 'Estambul, Turquía', 41.0086, 28.9802, 120, 'dome'],
+    ['m-mezquitaazul', 'Mezquita Azul', 'Estambul, Turquía', 41.0054, 28.9768, 120, 'dome'],
+    ['m-zayed', 'Gran Mezquita Sheikh Zayed', 'Abu Dabi, Emiratos Árabes', 24.4128, 54.4750, 180, 'dome'],
+    ['m-neuschwanstein', 'Castillo de Neuschwanstein', 'Baviera, Alemania', 47.5576, 10.7498, 120, 'castle'],
+    ['m-montsaintmichel', 'Mont Saint-Michel', 'Normandía, Francia', 48.6361, -1.5115, 160, 'castle'],
+    ['m-towerbridge', 'Tower Bridge', 'Londres, Reino Unido', 51.5055, -0.0754, 120, 'castle'],
+    ['m-ciudadprohibida', 'Ciudad Prohibida', 'Pekín, China', 39.9163, 116.3972, 200, 'castle'],
+    ['m-muralla', 'Gran Muralla (Badaling)', 'Pekín, China', 40.3587, 116.0204, 200, 'castle'],
+    ['m-notredame', 'Notre-Dame', 'París, Francia', 48.8530, 2.3499, 100, 'castle'],
+    ['m-louvre', 'Pirámide del Louvre', 'París, Francia', 48.8611, 2.3364, 70, 'pyramid'],
+    ['m-angkor', 'Angkor Wat', 'Siem Riep, Camboya', 13.4125, 103.8670, 220, 'pyramid'],
+    ['m-teotihuacan', 'Pirámide del Sol', 'Teotihuacán, México', 19.6925, -98.8438, 150, 'pyramid'],
+    ['m-petra', 'El Tesoro de Petra', 'Petra, Jordania', 30.3285, 35.4444, 60, 'pyramid']
   ];
 
   // ---------- Dibujo en el mapa ----------
@@ -386,7 +506,8 @@
   let uid = 0;
   const svg = (m, W, H, px) => `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMax meet"${px ? ` width="${px[0]}" height="${px[1]}"` : ''}>` +
     `<ellipse cx="${W / 2}" cy="${H - 2.5}" rx="${f(W * .46)}" ry="3.2" fill="#000" opacity=".16"/>${ART[m](('mn' + (uid++)))}</svg>`;
-  const items = LIST.map(([id, name, place, lat, lng, w, vb]) => ({ id, name, place, lat, lng, w, vb }));
+  const GEN = { stadium: [100, 70], airport: [100, 70], tower: [100, 100], dome: [100, 100], obelisk: [100, 100], castle: [100, 100], pyramid: [100, 100] };
+  const items = LIST.map(([id, name, place, lat, lng, w, vb]) => { const g = typeof vb === 'string'; return { id, name, place, lat, lng, w, art: g ? vb : id, vb: g ? GEN[vb] : vb }; });
 
   const raster = (str, w, h) => new Promise(res => {
     const im = new Image();
@@ -404,25 +525,31 @@
     x.fill(); x.fillStyle = '#fff'; x.textBaseline = 'middle'; x.fillText(text, pad, h / 2 + 1);
     return x.getImageData(0, 0, w, h);
   }
-  const ids = () => items.map(m => 'mn-' + m.id);
-  const setVis = () => ids().concat(items.map(m => 'mnl-' + m.id)).forEach(l => { try { if (gl.getLayer(l)) gl.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'); } catch (e) {} });
+  const gids = [];   // capas de iconos (una por tipo+tamaño+franja de latitud, no una por monumento)
+  const ids = () => gids;
+  const setVis = () => gids.concat(['mnl']).forEach(l => { try { if (gl.getLayer(l)) gl.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'); } catch (e) {} });
 
   let built = false;
   async function build() {
     if (built) return; built = true;
-    const imgs = await Promise.all(items.map(M => { const h = Math.round(IMG_W * M.vb[1] / M.vb[0]); M.ih = h; return raster(svg(M.id, M.vb[0], M.vb[1], [IMG_W, h]), IMG_W, h); }));
-    items.forEach((M, i) => { if (imgs[i]) { gl.addImage('mn-' + M.id, imgs[i], { pixelRatio: 1 }); M.ok = true; } gl.addImage('mnl-' + M.id, labelImage(M.name), { pixelRatio: 2 }); });
+    const arts = []; items.forEach(M => { if (!arts.find(a => a.art === M.art)) arts.push(M); });   // un dibujo por tipo, compartido
+    const imgs = await Promise.all(arts.map(M => { const h = Math.round(IMG_W * M.vb[1] / M.vb[0]); return raster(svg(M.art, M.vb[0], M.vb[1], [IMG_W, h]), IMG_W, h); }));
+    const okArt = {};
+    arts.forEach((M, i) => { if (imgs[i]) { gl.addImage('mn-' + M.art, imgs[i], { pixelRatio: 1 }); okArt[M.art] = 1; } });
+    items.forEach(M => { M.ok = !!okArt[M.art]; gl.addImage('mnl-' + M.id, labelImage(M.name), { pixelRatio: 2 }); });
     gl.addSource(SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: items.map(M => ({ type: 'Feature', properties: { id: M.id }, geometry: { type: 'Point', coordinates: [M.lng, M.lat] } })) } });
     const vis = on ? 'visible' : 'none', stay = { 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-pitch-alignment': 'viewport', visibility: vis };
-    items.forEach(M => {
-      if (!M.ok) return;
-      const minW = MIN_H * M.vb[0] / M.vb[1], stops = [];
+    const groups = {};
+    items.forEach(M => { if (M.ok) (groups[M.art + '|' + M.w + '|' + Math.round(M.lat / 10)] = groups[M.art + '|' + M.w + '|' + Math.round(M.lat / 10)] || []).push(M); });
+    Object.keys(groups).forEach((k, gi) => {
+      const g = groups[k], M = g[0], minW = MIN_H * M.vb[0] / M.vb[1], stops = [];
       for (let z = ZMIN; z <= 20; z++) stops.push(z, Math.min(MAX_W, Math.max(M.w * pxm(z, M.lat), minW)) / IMG_W);
-      gl.addLayer({ id: 'mn-' + M.id, type: 'symbol', source: SRC, minzoom: ZMIN, filter: ['==', ['get', 'id'], M.id],
-        layout: { ...stay, 'icon-image': 'mn-' + M.id, 'icon-anchor': 'bottom', 'icon-size': ['interpolate', ['exponential', 2], ['zoom'], ...stops] } });
+      const id = 'mn-g' + gi; gids.push(id);
+      gl.addLayer({ id, type: 'symbol', source: SRC, minzoom: ZMIN, filter: ['match', ['get', 'id'], g.map(m => m.id), true, false],
+        layout: { ...stay, 'icon-image': 'mn-' + M.art, 'icon-anchor': 'bottom', 'icon-size': ['interpolate', ['exponential', 2], ['zoom'], ...stops] } });
     });
-    items.forEach(M => gl.addLayer({ id: 'mnl-' + M.id, type: 'symbol', source: SRC, minzoom: LABEL_Z - 1, filter: ['==', ['get', 'id'], M.id],
-      layout: { ...stay, 'icon-image': 'mnl-' + M.id, 'icon-anchor': 'top', 'icon-offset': [0, 3], 'icon-size': 1 } }));
+    gl.addLayer({ id: 'mnl', type: 'symbol', source: SRC, minzoom: LABEL_Z - 1,
+      layout: { ...stay, 'icon-image': ['concat', 'mnl-', ['get', 'id']], 'icon-anchor': 'top', 'icon-offset': [0, 3], 'icon-size': 1 } });
   }
   const start = () => { build().catch(e => { built = false; console.warn('monumentos:', e); }); };
   if (gl.isStyleLoaded && gl.isStyleLoaded()) start(); else gl.once('load', start);
