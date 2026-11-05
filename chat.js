@@ -162,7 +162,9 @@
       } catch (err) { say(err.message, 'err'); addBtn.disabled = false; }
     };
     const x = document.createElement('button'); x.type = 'button'; x.textContent = 'Cancelar'; x.onclick = () => card.classList.add('hidden');
-    const row = document.createElement('div'); row.className = 'chat-card-btns'; row.append(addBtn, x);
+    const giftBtn = document.createElement('button'); giftBtn.type = 'button'; giftBtn.textContent = '💝 Regalar créditos';
+    giftBtn.onclick = () => { close(); if (window.openGift) openGift(m.nick); };
+    const row = document.createElement('div'); row.className = 'chat-card-btns'; row.append(addBtn, giftBtn, x);
     card.append(t, row); card.classList.remove('hidden'); say('');
   }
   function renderFriends() {
@@ -183,6 +185,9 @@
         go.onclick = () => { close(); map.flyTo({ lat: f.lat, lng: f.lng }, 18); };
         row.append(go);
       }
+      const gift = document.createElement('button'); gift.type = 'button'; gift.textContent = '💝'; gift.title = 'Regalar créditos';
+      gift.onclick = () => { close(); if (window.openGift) openGift(f.nick); };
+      row.append(gift);
       const del = document.createElement('button'); del.type = 'button'; del.textContent = '✖'; del.title = 'Quitar de amigos';
       del.onclick = async () => {
         try { await api('/api/friends/remove', { method: 'POST', body: { nick: f.nick } }); await loadFriends(); renderFriends(); }

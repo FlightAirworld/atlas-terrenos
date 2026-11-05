@@ -251,7 +251,7 @@ async function userFrom(req) {
     if (!r.ok) return null;
     const j = await r.json();
     if (!j || !j.id) return null;
-    const user = { id: j.id, email: j.email || null };
+    const user = { id: j.id, email: j.email || null, confirmed: !!(j.email_confirmed_at || j.confirmed_at) };
     if (authCache.size > 500) authCache.clear();
     authCache.set(t, { user, exp: Date.now() + 60_000 });
     return user;
@@ -340,8 +340,14 @@ async function linkAccount(req) {
       }
     }
     await client.query('COMMIT');
+    // Paga mensual del dueño (una vez por mes; no hace nada para el resto de jugadores)
+    let ownerBonus = 0;
+    if (isOwner(user)) {
+      ownerBonus = await grantOwnerMonthly(user.id);
+      if (ownerBonus) mine.credits = (await one('SELECT credits FROM packs WHERE code = $1', [mine.code])).credits;
+    }
     const prof = await getProfile(user.id);
-    return { ok: true, code: mine.code, credits: mine.credits, email: user.email, nickname: prof ? prof.nickname : null, welcomeBonus };
+    return { ok: true, code: mine.code, credits: mine.credits, email: user.email, nickname: prof ? prof.nickname : null, welcomeBonus, ownerBonus };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Inténtalo de nuevo');
@@ -1442,6 +1448,131 @@ async function friendsRemove(req, body) {
   return { ok: true };
 }
 
+// ---------- Paga mensual del dueño ----------
+// El dueño del juego recibe OWNER_MONTHLY_CREDITS créditos (10.000 por defecto) el primer día de cada mes (hora de DAILY_TZ),
+// o en cuanto entra con su cuenta si ese mes aún no los había cobrado. La tabla owner_grants (clave user_id + mes) garantiza que solo se pagan una vez al mes.
+// Identifica al dueño con OWNER_USER_ID (el UUID de tu usuario en Supabase → Authentication → Users) y/o OWNER_EMAIL (solo vale si el correo está confirmado).
+// Con OWNER_USER_ID el pago se hace solo el día 1 aunque no abras el juego. OWNER_MONTHLY_CREDITS=0 lo desactiva.
+const OWNER_USER_ID = (process.env.OWNER_USER_ID || '').trim();
+const OWNER_EMAIL = (process.env.OWNER_EMAIL || '').trim().toLowerCase();
+const OWNER_MONTHLY = Math.max(0, Math.min(100_000_000, Math.floor(Number(process.env.OWNER_MONTHLY_CREDITS ?? 10000)) || 0));
+const isOwner = user => !!user && (
+  (OWNER_USER_ID !== '' && String(user.id) === OWNER_USER_ID) ||
+  (OWNER_EMAIL !== '' && !!user.email && !!user.confirmed && user.email.toLowerCase() === OWNER_EMAIL));
+
+async function grantOwnerMonthly(userId) {
+  if (!OWNER_MONTHLY) return 0;
+  const month = dayKey().slice(0, 7);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const g = await client.query('INSERT INTO owner_grants (user_id, month, credits, created_at) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, month) DO NOTHING RETURNING user_id',
+      [String(userId), month, OWNER_MONTHLY, Date.now()]);
+    if (!g.rows[0]) { await client.query('ROLLBACK'); return 0; }   // este mes ya cobrado
+    const up = await client.query('UPDATE packs SET credits = credits + $1 WHERE user_id = $2 RETURNING credits', [OWNER_MONTHLY, userId]);
+    if (!up.rows[0]) { await client.query('ROLLBACK'); return 0; }   // aún no tiene pack: se paga cuando entre por primera vez
+    await client.query('COMMIT');
+    console.log(`Paga mensual ${month}: +${OWNER_MONTHLY} créditos para el dueño`);
+    return OWNER_MONTHLY;
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('No se pudo pagar la paga mensual del dueño:', e.message);
+    return 0;
+  } finally { client.release(); }
+}
+async function ownerTick() {   // cada hora: si ya es otro mes, ingresa la paga aunque el dueño no haya entrado
+  if (!OWNER_MONTHLY || !OWNER_USER_ID) return;
+  try {
+    const got = await grantOwnerMonthly(OWNER_USER_ID);
+    if (got && PUSH_ON) pushSocial(OWNER_USER_ID, { title: '👑 Paga mensual', body: `Ya tienes tus ${got.toLocaleString('es-ES')} créditos de este mes.`, tag: 'owner-grant', url: '/' }).catch(() => {});
+  } catch (e) { console.error('ownerTick:', e.message); }
+}
+
+// ---------- Regalar créditos entre jugadores ----------
+// Un jugador con cuenta y apodo puede regalar créditos a otro por su apodo. Todo ocurre en una transacción: se bloquean las dos cuentas,
+// se descuenta al que regala (solo si le alcanza), se ingresa al que recibe y se apunta en la tabla gifts. Nadie puede quedarse en negativo
+// ni duplicar créditos aunque pulse dos veces o lo haga desde dos móviles.
+// Contra el abuso (crear cuentas nuevas para pasarse los regalos de bienvenida): hace falta que la cuenta tenga GIFT_MIN_AGE_HOURS horas,
+// hay un máximo por regalo (GIFT_MAX) y un máximo por cada 24 h (GIFT_DAILY_MAX). El dueño no tiene ninguno de esos límites.
+// Variables: GIFT=off (apaga los regalos), GIFT_MAX (500), GIFT_DAILY_MAX (1000), GIFT_MIN_AGE_HOURS (24).
+const GIFT_ON = String(process.env.GIFT || 'on').toLowerCase() !== 'off';
+const GIFT_MAX = Math.max(1, Math.floor(numEnv('GIFT_MAX', 500)));
+const GIFT_DAILY_MAX = Math.max(GIFT_MAX, Math.floor(numEnv('GIFT_DAILY_MAX', 1000)));
+const GIFT_MIN_AGE_H = numEnv('GIFT_MIN_AGE_HOURS', 24);
+const cleanNote = raw => typeof raw === 'string' ? raw.normalize('NFC').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+
+async function giftSend(req, body) {
+  if (!GIFT_ON) throw new HttpError(403, 'Los regalos están desactivados');
+  const user = await needUser(req);
+  if (rateHit('gift:' + user.id, 60_000) > 8) throw new HttpError(429, 'Vas muy rápido. Espera un minuto');
+  const owner = isOwner(user);
+  const amount = Math.floor(Number(body && body.credits));
+  if (!Number.isFinite(amount) || amount < 1) throw new HttpError(400, 'Indica cuántos créditos quieres regalar (un número entero)');
+  if (amount > 100_000_000) throw new HttpError(400, 'Cantidad demasiado grande');
+  if (!owner && amount > GIFT_MAX) throw new HttpError(400, `Máximo ${GIFT_MAX} créditos por regalo`);
+  const toNick = cleanName(body && body.nick);
+  if (!toNick) throw new HttpError(400, 'Escribe el apodo del jugador');
+  const note = cleanNote(body && body.note);
+  const me = await getProfile(user.id);
+  if (!me) throw new HttpError(403, 'Elige tu apodo antes de regalar créditos');
+  const found = await all('SELECT user_id::text AS uid, nickname FROM profiles WHERE lower(nickname) = lower($1) LIMIT 2', [toNick]);
+  const to = found.find(r => r.nickname === toNick) || (found.length === 1 ? found[0] : null);
+  if (!to) throw new HttpError(404, 'No existe ningún jugador con ese apodo');
+  if (to.uid === String(user.id)) throw new HttpError(400, 'No puedes regalarte créditos a ti mismo 🙂');
+
+  const client = await pool.connect();
+  let balance;
+  try {
+    await client.query('BEGIN');
+    const a = (await client.query('SELECT code FROM packs WHERE user_id = $1', [user.id])).rows[0];
+    const b = (await client.query('SELECT code FROM packs WHERE user_id = $1', [to.uid])).rows[0];
+    if (!a) throw new HttpError(409, 'Aún no tienes créditos para regalar');
+    if (!b) throw new HttpError(404, 'Ese jugador todavía no ha activado su cuenta');
+    // Se bloquean siempre en el mismo orden (por código) para que dos regalos cruzados no se queden esperando el uno al otro
+    const locked = (await client.query('SELECT code, credits, created_at FROM packs WHERE code = ANY($1::text[]) ORDER BY code FOR UPDATE', [[a.code, b.code]])).rows;
+    const sender = locked.find(r => r.code === a.code);
+    if (!owner) {
+      if (GIFT_MIN_AGE_H > 0 && Date.now() - Number(sender.created_at || 0) < GIFT_MIN_AGE_H * HOUR_MS)
+        throw new HttpError(403, `Tu cuenta debe tener al menos ${GIFT_MIN_AGE_H} h para poder regalar créditos`);
+      const sent = Number((await client.query('SELECT COALESCE(SUM(credits), 0) AS n FROM gifts WHERE from_user = $1 AND created_at > $2', [String(user.id), Date.now() - 24 * HOUR_MS])).rows[0].n);
+      if (sent + amount > GIFT_DAILY_MAX)
+        throw new HttpError(429, `Límite diario: solo puedes regalar ${GIFT_DAILY_MAX} créditos cada 24 h (te quedan ${Math.max(0, GIFT_DAILY_MAX - sent)})`);
+    }
+    const d = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [amount, a.code]);
+    if (!d.rows[0]) throw new HttpError(409, `No tienes suficientes créditos (tienes ${sender.credits})`);
+    balance = d.rows[0].credits;
+    await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2', [amount, b.code]);
+    await client.query('INSERT INTO gifts (from_user, to_user, from_nick, to_nick, credits, note, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [String(user.id), to.uid, me.nickname, to.nickname, amount, note || null, Date.now()]);
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally { client.release(); }
+  if (PUSH_ON) pushSocial(to.uid, { title: '💝 ¡Te han hecho un regalo!', body: `${me.nickname} te ha regalado ${amount.toLocaleString('es-ES')} ${amount === 1 ? 'crédito' : 'créditos'}.`, tag: 'gift', url: '/' }).catch(() => {});
+  return { ok: true, credits: balance, to: to.nickname, amount };
+}
+
+async function giftsGet(req, sp) {
+  const user = await needUser(req);
+  const id = String(user.id);
+  const fresh = await all('SELECT id, from_nick, credits, note, created_at FROM gifts WHERE to_user = $1 AND seen_at IS NULL ORDER BY id DESC LIMIT 5', [id]);
+  const unseen = Number((await one('SELECT COUNT(*) AS n FROM gifts WHERE to_user = $1 AND seen_at IS NULL', [id])).n);
+  if (sp && sp.get('brief') === '1') return { unseen, fresh };   // el móvil pregunta esto cada minuto: solo lo imprescindible
+  const received = await all('SELECT id, from_nick, credits, note, created_at FROM gifts WHERE to_user = $1 ORDER BY id DESC LIMIT 20', [id]);
+  const sent = await all('SELECT id, to_nick, credits, note, created_at FROM gifts WHERE from_user = $1 ORDER BY id DESC LIMIT 20', [id]);
+  const sentToday = Number((await one('SELECT COALESCE(SUM(credits), 0) AS n FROM gifts WHERE from_user = $1 AND created_at > $2', [id, Date.now() - 24 * HOUR_MS])).n);
+  const pack = await one('SELECT credits FROM packs WHERE user_id = $1', [user.id]);
+  const owner = isOwner(user);
+  return { unseen, fresh, received, sent, credits: pack ? pack.credits : 0, owner,
+    limits: { on: GIFT_ON, max: owner ? null : GIFT_MAX, daily: owner ? null : GIFT_DAILY_MAX, sentToday, minAgeHours: owner ? 0 : GIFT_MIN_AGE_H } };
+}
+async function giftsSeen(req) {
+  const user = await needUser(req);
+  await run('UPDATE gifts SET seen_at = $2 WHERE to_user = $1 AND seen_at IS NULL', [String(user.id), Date.now()]);
+  return { ok: true };
+}
+
 // ---------- Ranking por ciudades ----------
 // El país lo elige el jugador al reclamar, pero la ciudad se averigua sola a partir de las coordenadas del terreno
 // (geocodificación inversa con Nominatim, como mucho 1 consulta por segundo). Los terrenos antiguos se van rellenando
@@ -1805,7 +1936,7 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
     return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, demo: DEMO, stripe: !DEMO && HAS_STRIPE, paypal: !DEMO && HAS_PAYPAL, clientId: (DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, packSize: PACKS[0].credits, packs: PACKS,
-      maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
+      maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')));
@@ -1856,6 +1987,9 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/friends') return friendsList(req);
   if (req.method === 'POST' && pn === '/api/friends/add') return friendsAdd(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/friends/remove') return friendsRemove(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/gifts') return giftsGet(req, sp);
+  if (req.method === 'POST' && pn === '/api/gifts/send') return giftSend(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/gifts/seen') return giftsSeen(req);
   if (req.method === 'GET' && pn === '/api/chat') return chatList(req, url);
   if (req.method === 'GET' && pn === '/api/chat/unread') return chatUnread(url);
   if (req.method === 'POST' && pn === '/api/chat/send') return chatSend(req, await readJson(req));
@@ -1904,6 +2038,13 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
   .then(async () => {   // regalo de bienvenida (una fila por cuenta: así solo se cobra una vez)
     await run('CREATE TABLE IF NOT EXISTS welcome_gifts (user_id TEXT PRIMARY KEY, credits INT NOT NULL, created_at BIGINT NOT NULL)');
   }).catch(e => console.error('No se pudo crear la tabla welcome_gifts:', e.message))
+  .then(async () => {   // regalos entre jugadores y paga mensual del dueño (no hacen nada si ya existen)
+    await run('CREATE TABLE IF NOT EXISTS gifts (id BIGSERIAL PRIMARY KEY, from_user TEXT NOT NULL, to_user TEXT NOT NULL, from_nick TEXT NOT NULL, to_nick TEXT NOT NULL, credits INT NOT NULL CHECK (credits > 0), note TEXT, created_at BIGINT NOT NULL, seen_at BIGINT)');
+    await run('CREATE INDEX IF NOT EXISTS gifts_to ON gifts (to_user, id)');
+    await run('CREATE INDEX IF NOT EXISTS gifts_from ON gifts (from_user, created_at)');
+    await run('CREATE TABLE IF NOT EXISTS owner_grants (user_id TEXT NOT NULL, month TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, month))');
+    if (OWNER_MONTHLY && OWNER_USER_ID) { setTimeout(ownerTick, 20_000).unref(); setInterval(ownerTick, HOUR_MS).unref(); }
+  }).catch(e => console.error('No se pudieron crear las tablas de regalos / paga mensual:', e.message))
   .then(async () => {   // tablas de "Invita y gana" (no hacen nada si ya existen)
     await run('CREATE TABLE IF NOT EXISTS ref_codes (code TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, created_at BIGINT NOT NULL, last_ip TEXT)');
     await run('CREATE TABLE IF NOT EXISTS referrals (invitee_id TEXT PRIMARY KEY, inviter_id TEXT NOT NULL, created_at BIGINT NOT NULL, ip_hash TEXT, rewarded_at BIGINT, inviter_credits INT NOT NULL DEFAULT 0)');

@@ -1323,6 +1323,7 @@ async function linkAccountOnServer() {
     }
     loadDaily(); loadProduction();
     if (j.welcomeBonus > 0) showWelcomeGift(j.welcomeBonus);   // regalo de bienvenida (solo la primera vez)
+    if (j.ownerBonus > 0 && window.giftToast) giftToast(`👑 ¡Paga del mes! Te han ingresado ${Number(j.ownerBonus).toLocaleString('es-ES')} créditos.`);
     if (window.inviteAfterLink) inviteAfterLink();      // Invita y gana: apunta de quién viene
   } catch (e) { linkedFor = null; setLoginMsg(e.message, 'err'); }
 }

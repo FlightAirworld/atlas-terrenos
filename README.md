@@ -157,3 +157,19 @@ Racha de 7 días: premios de cada día en `DAILY_REWARDS` (7 números separados 
 
 Para probar sin esperar, en la consola: `cityEvent('works' | 'parade' | 'wedding' | 'ambulance' | 'steam' | 'bubble' | 'tram' | 'garbage' | 'van' | 'driving')` y `citySeason('autumn' | 'winter' | 'spring' | 'summer' | 'auto')`.
 Las posiciones de bancos, colas, puertas y chimeneas dentro de cada parcela son aproximadas (constantes `P_(sc, u, v)` en `INIT`/`TICK` de `ciudad.js`): se ajustan viendo cada edificio.
+
+## Regalar créditos entre jugadores (`gifts.js`)
+
+- Botón 💝 en **Extras**, y también en la tarjeta que sale al tocar un apodo en el chat y en la lista de amigos. Se regala por **apodo** (no distingue mayúsculas).
+- Hace falta cuenta con apodo. El servidor lo hace todo en **una transacción** (`giftSend` en `server.js`): bloquea las dos cuentas, descuenta solo si hay saldo y lo ingresa al otro. Nadie queda en negativo ni se duplican créditos aunque se pulse dos veces o se mande desde dos móviles.
+- El que recibe ve un aviso al entrar (y cada minuto mientras juega), más un aviso al móvil si tiene los 🔔 activados. En 💝 hay historial de recibidos y enviados.
+- Límites contra abuso (cuentas falsas pasándose los regalos de bienvenida): `GIFT_MAX` (500 por regalo), `GIFT_DAILY_MAX` (1000 cada 24 h), `GIFT_MIN_AGE_HOURS` (la cuenta debe tener 24 h) y 8 regalos por minuto. `GIFT=off` apaga los regalos. **El dueño no tiene ninguno de estos límites.**
+- Tablas nuevas (se crean solas al arrancar; `migration-gifts.sql` es lo mismo por si prefieres ejecutarlo a mano): `gifts` y `owner_grants`.
+
+## Paga mensual del dueño
+
+- El dueño recibe `OWNER_MONTHLY_CREDITS` créditos (**10.000** por defecto) una vez al mes (el mes cambia según `DAILY_TZ`).
+- Se identifica con `OWNER_USER_ID` (tu UUID en Supabase → Authentication → Users → columna *User UID*) y/o `OWNER_EMAIL` (solo vale si ese correo está confirmado en Supabase).
+- Con `OWNER_USER_ID` el ingreso se hace solo el día 1 de cada mes aunque no abras el juego (revisa cada hora). Con solo `OWNER_EMAIL` se ingresa la primera vez que entras cada mes. Si este mes aún no se ha ingresado, entra la primera vez que arranque con la variable puesta.
+- La clave primaria `(user_id, mes)` de `owner_grants` garantiza que no se puede cobrar dos veces en el mismo mes, aunque se reinicie el servidor.
+- `OWNER_MONTHLY_CREDITS=0` lo desactiva.
