@@ -10,6 +10,9 @@
 //    Los helipuertos se reparten por el mundo en huecos libres (ni calle, ni edificio, ni agua, ni parcela comprada).
 //  - AEROPUERTO: en las afueras y descampados (recintos libres de calles y edificios) hay aeropuertos pequeños con pista, calles de rodaje, plataforma,
 //    terminal, torre y hangares. Cada ~100 s un avión aterriza, rueda hasta la terminal, espera, retrocede, rueda a la cabecera y despega (con sonido).
+//  - VIDA URBANA (ver ciudad.js): los autobuses paran en paradas y recogen/dejan gente; camión de la basura que va parando; furgonetas de reparto en doble fila
+//    con las luces de emergencia; coche de autoescuela que se cala; tranvía por las calles con paradas; bodas con coches decorados; ambulancia que sale de un hospital.
+//    Las obras (conos) desvían el tráfico y los desfiles lo frenan (CityLife.zones y CityLife.blockers).
 // Para probar sin esperar, en la consola: spawnVehicle('car' | 'truck' | 'bus' | 'moto' | 'bike' | 'scooter' | 'police' | 'fire' | 'ambulance' | 'taxi')
 // spawnAircraft('plane' | 'heli' | 'airliner')   (helicóptero y avión de línea necesitan un helipuerto / aeropuerto a la vista)
 // y spawnAirport()   (coloca un aeropuerto de prueba en el centro de la pantalla, en cualquier sitio, y hace aterrizar un avión)
@@ -37,6 +40,7 @@
     .tl { fill: #6b6b6b; transition: fill .3s; }
     .free .tl { fill: #3df57f; }
     .free .g-g { opacity: 1; }
+    .hz { position: absolute; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: #ffa31a; box-shadow: 0 0 6px 2px rgba(255,163,26,.9); pointer-events: none; }
     @keyframes vhA { 0%, 45% { opacity: 1; } 55%, 100% { opacity: .08; } }
     @keyframes vhB { 0%, 45% { opacity: .08; } 55%, 100% { opacity: 1; } }
     .la { animation: vhA .5s linear infinite; }
@@ -198,7 +202,7 @@
       }
     },
     bus: {
-      L: 86, W: 24, v: 48, siren: false, traffic: true, pane: 'vehicles',
+      L: 86, W: 24, v: 48, siren: false, traffic: true, pane: 'vehicles', stops: { n: [1, 2], dwell: [4, 6], kind: 'bus' },
       look: () => pick(BUSES),
       html: c => `
         <svg width="86" height="24" viewBox="0 0 86 24">
@@ -209,6 +213,75 @@
           <rect x="73.5" y="2.5" width="3" height="19" rx="1" fill="rgba(0,0,0,.25)"/>
           <path d="M76.5 3L83.5 5V19L76.5 21Z" fill="#26364f"/>
           ${headlights(86, 24)}${taillights(24)}
+        </svg>`
+    },
+
+    // ----- Vida urbana: basura, reparto, autoescuela, boda y tranvía (ver ciudad.js) -----
+    garbage: {
+      L: 66, W: 23, v: 38, siren: false, traffic: true, pane: 'vehicles', stops: { n: [2, 3], dwell: [3, 4.5], kind: 'garbage' },
+      html: () => `
+        <svg width="66" height="23" viewBox="0 0 66 23">
+          <rect x="1.5" y="2.5" width="65" height="21" rx="4" fill="rgba(0,0,0,.28)"/>
+          <rect x=".5" y=".8" width="47" height="21.4" rx="3" fill="#2f8f5b" stroke="rgba(0,0,0,.45)"/>
+          <rect x="1.5" y="3" width="7" height="17" rx="1.5" fill="#1f6b42"/><path d="M12 3V20M20 3V20M28 3V20M36 3V20" stroke="rgba(0,0,0,.16)" fill="none"/>
+          <rect x="47" y="1.5" width="18" height="20" rx="4.5" fill="#f4f6f8" stroke="rgba(0,0,0,.5)"/>
+          <rect x="49" y="3.5" width="7" height="16" rx="2" fill="rgba(0,0,0,.14)"/><path d="M58 4L63.5 6V17L58 19Z" fill="#26364f"/>
+          <circle class="la" cx="52" cy="11.5" r="2.3" fill="#ffa31a"/><circle class="lb" cx="52" cy="11.5" r="2.3" fill="#ffd27a"/>
+          ${headlights(66, 23)}${taillights(23)}
+        </svg>`
+    },
+    van: {
+      L: 46, W: 20, v: 56, siren: false, traffic: true, pane: 'vehicles', stops: { n: [1, 1], dwell: [8, 11], kind: 'van', haz: true },
+      look: () => ({ b: pick(['#f4f6f8', '#f4f6f8', '#fff3d6']), s: pick(['#1d6fb8', '#d62839', '#2a9d8f', '#f5b800', '#7b4fc9']) }),
+      html: c => `
+        <svg width="46" height="20" viewBox="0 0 46 20">
+          <rect x="1.5" y="2.5" width="45" height="18" rx="4" fill="rgba(0,0,0,.28)"/>
+          <rect x=".5" y=".5" width="45" height="19" rx="4" fill="${c.b}" stroke="rgba(0,0,0,.5)"/>
+          <rect x="3" y="7.5" width="26" height="5" fill="${c.s}"/>
+          <rect x="31" y="2.5" width="4" height="15" rx="1.5" fill="rgba(0,0,0,.14)"/><path d="M36 3.5L41.5 5.5V14.5L36 16.5Z" fill="#26364f"/>
+          ${headlights(46, 20)}${taillights(20)}
+        </svg>`
+    },
+    driving: {
+      L: 38, W: 18, v: 40, siren: false, traffic: true, pane: 'vehicles', stops: { n: [2, 3], dwell: [1.2, 2.2], kind: 'stall' },
+      html: () => `
+        <svg width="38" height="18" viewBox="0 0 38 18">
+          <rect x="1.5" y="2.5" width="37" height="16" rx="5" fill="rgba(0,0,0,.28)"/>
+          <rect x=".5" y=".5" width="37" height="17" rx="5" fill="#f4f6f8" stroke="rgba(0,0,0,.5)"/>
+          <path d="M26 3L31 4.8V13.2L26 15Z" fill="#26364f"/><path d="M10 3.5L7 5V13L10 14.5Z" fill="#26364f"/>
+          <rect x="10" y="3.5" width="16" height="11" rx="2" fill="rgba(255,255,255,.35)" stroke="rgba(0,0,0,.25)" stroke-width=".6"/>
+          <rect x="14" y="5.2" width="8" height="7.6" rx="1.3" fill="#2f9e44" stroke="#fff" stroke-width=".8"/>
+          <path d="M16.6 6.6V11H20" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          ${headlights(38, 18)}${taillights(18)}
+        </svg>`
+    },
+    wedcar: {
+      L: 40, W: 18, v: 50, siren: false, traffic: true, pane: 'vehicles',
+      look: () => pick(['#f8f4ec', '#fff', '#1f2430', '#f8f4ec']),
+      html: c => `
+        <svg width="40" height="18" viewBox="0 0 40 18">
+          <path d="M1 9H-9" stroke="#777" stroke-width=".6" fill="none"/><rect x="-12" y="7.4" width="3" height="3.2" rx=".6" fill="#b8bec6"/><rect x="-7" y="7.4" width="3" height="3.2" rx=".6" fill="#b8bec6"/>
+          <rect x="1.5" y="2.5" width="39" height="16" rx="5" fill="rgba(0,0,0,.28)"/>
+          <rect x=".5" y=".5" width="39" height="17" rx="5" fill="${c}" stroke="rgba(0,0,0,.5)"/>
+          <path d="M27 3L32 4.8V13.2L27 15Z" fill="#26364f"/><path d="M10 3.5L7 5V13L10 14.5Z" fill="#26364f"/>
+          <rect x="10" y="3.5" width="17" height="11" rx="2" fill="rgba(255,255,255,.3)" stroke="rgba(0,0,0,.25)" stroke-width=".6"/>
+          <path d="M33 .8V17.2M24 .8L33 9L24 17.2" stroke="#ff6b9a" stroke-width="1.6" fill="none"/>
+          <circle cx="33" cy="9" r="2" fill="#ff6b9a"/>
+          ${headlights(40, 18)}${taillights(18)}
+        </svg>`
+    },
+    tram: {
+      L: 112, W: 22, v: 38, siren: false, traffic: true, center: true, pane: 'vehicles', stops: { n: [2, 3], dwell: [5, 7], kind: 'tram' },
+      html: () => `
+        <svg width="112" height="22" viewBox="0 0 112 22">
+          <rect x="1.5" y="2.5" width="111" height="20" rx="4" fill="rgba(0,0,0,.28)"/>
+          <rect x=".5" y=".5" width="54" height="21" rx="4" fill="#f4f6f8" stroke="rgba(0,0,0,.45)"/><rect x="57.5" y=".5" width="54" height="21" rx="4" fill="#f4f6f8" stroke="rgba(0,0,0,.45)"/>
+          <rect x="54" y="6" width="4" height="10" fill="#333"/>
+          <rect x="1" y="9" width="53" height="4" fill="#d62839"/><rect x="58" y="9" width="53" height="4" fill="#d62839"/>
+          <path d="M6 3H50M6 19H50M62 3H106M62 19H106" stroke="#26364f" stroke-width="3" stroke-linecap="round"/>
+          <path d="M104 3.5L110 5.5V16.5L104 18.5Z" fill="#26364f"/>
+          <path d="M30 11H80" stroke="#444" stroke-width="1" opacity=".5"/>
+          ${headlights(112, 22)}${taillights(22)}
         </svg>`
     },
 
@@ -480,14 +553,15 @@
   function laneTarget(v) {
     const cl = v.path.cl;
     if (!cl || (!v.K.traffic && v.kind !== 'taxi')) return 0;
+    if (v.K.center || zoneFor(v)) return 0;                // el tranvía va por el centro; con obras delante, el tráfico se desvía hacia el centro
     const m = map.roadMetrics(cl[Math.min(v.seg + 1, cl.length - 1)]);
     return m.half * (v.K.outer ? 0.88 : 0.48);
   }
 
-  function spawn(kind, roadsOnly) {
+  function spawn(kind, roadsOnly, rOverride) {
     const K = KINDS[kind]; if (!K) return null;
     refreshSizes();
-    const r = pathRoute(K.L, roadsOnly || !!K.siren || kind === 'taxi', !!K.siren); if (!r) return null;   // emergencias y taxis SOLO van por calles (si no hay ruta, no salen y lo reintentan)
+    const r = rOverride || pathRoute(K.L, roadsOnly || !!K.siren || kind === 'taxi', !!K.siren); if (!r) return null;   // emergencias y taxis SOLO van por calles (si no hay ruta, no salen y lo reintentan)
     const P = r.path, p0 = P.pts[0], d0 = { dx: (P.pts[1].x - p0.x) / (P.cum[1] || 1), dy: (P.pts[1].y - p0.y) / (P.cum[1] || 1) };
     const look = K.look ? K.look() : null;
     const icon = L.divIcon({
@@ -512,6 +586,9 @@
       v.speed = K.v;
       setFree(v, v.scenario === 'pickup');
     }
+    if (K.stops && CLife() && P.cl) makeStops(v, K.stops);
+    if (kind === 'garbage') haz(v, true);                  // el girofaro naranja del camión de la basura va siempre encendido
+    if (kind === 'wedcar') v.honk = rnd(0.5, 2);
     v.lane = laneTarget(v);
     if (v.wrap) { v.wrap.style.scale = FV.toFixed(3); v.fvA = FV; }
     vehicles.push(v);
@@ -536,8 +613,69 @@
 
   // Frenar si hay alguien justo delante (mismo sentido, mismo carril). Devuelve la velocidad máxima permitida.
   // Velocidad máxima permitida: lo más restrictivo entre el coche de delante y un semáforo en rojo (crossings.js)
+  // ---------- Vida urbana: obras, desfiles y paradas ----------
+  const CLife = () => window.CityLife && window.CityLife.on ? window.CityLife : null;
+  function zoneFor(v) {                                  // obra delante en el mismo sentido (ciudad.js crea CityLife.zones)
+    const cl = CLife(); if (!cl || !cl.zones.length || v.K.siren) return null;
+    for (const z of cl.zones) if ((v.x - z.x) * (v.x - z.x) + (v.y - z.y) * (v.y - z.y) < z.r * z.r && v.dx * z.dx + v.dy * z.dy > 0.4) return z;
+    return null;
+  }
+  function blockLimit(v, scale) {                        // gente de un desfile en la calzada: frenan antes de llegar
+    const cl = CLife(); if (!cl || !cl.blockers.length) return Infinity;
+    const ch = Math.cos(v.h), sh = Math.sin(v.h); let m = Infinity;
+    for (const b of cl.blockers) {
+      const ux = (b.x - v.x) * scale, uy = (b.y - v.y) * scale, f = ux * ch + uy * sh;
+      if (f <= 0 || f > 70 * FV) continue;
+      if (Math.abs(-ux * sh + uy * ch) > v.K.W / 2 * FV + 9 * FP) continue;
+      const free = f - v.K.L / 2 * FV - 6;
+      m = Math.min(m, free < 6 ? 0 : free * 2.5 / SPD);
+    }
+    return m;
+  }
+  function haz(v, on) {                                  // luces de emergencia (cuatro intermitentes naranjas)
+    if (!v.rot) return;
+    if (on && !v.hzEls) {
+      v.hzEls = [[3, 3], [3, v.K.W - 3], [v.K.L - 3, 3], [v.K.L - 3, v.K.W - 3]].map(([x, y]) => {
+        const e = document.createElement('i'); e.className = 'hz ' + (x < v.K.L / 2 ? 'la' : 'lb'); e.style.left = x + 'px'; e.style.top = y + 'px'; v.rot.appendChild(e); return e;
+      });
+    } else if (!on && v.hzEls) { v.hzEls.forEach(e => e.remove()); v.hzEls = null; }
+  }
+  function makeStops(v, spec) {
+    const P = v.path, sc = Math.pow(2, map.getZoom() - REF_Z), lo = 70 / sc, hi = P.total - 100 / sc, n = Math.round(rnd(spec.n[0], spec.n[1]));
+    if (hi < lo + 60 / sc) return;
+    v.stops = []; v.stopI = 0;
+    const seg = (hi - lo) / n;
+    for (let i = 0; i < n; i++) {
+      const st = { s: lo + seg * (i + rnd(0.2, 0.8)), dwell: rnd(spec.dwell[0], spec.dwell[1]), kind: spec.kind, haz: !!spec.haz, did: false };
+      v.stops.push(st);
+      if ((spec.kind === 'bus' || spec.kind === 'tram') && window.CityLife) window.CityLife.shelter(P, st.s, P.cl ? P.cl[Math.min(P.pts.length - 1, 1)] : 'minor', spec.kind);
+    }
+  }
+  function stopAct(v, st) {
+    const alive = () => vehicles.indexOf(v) >= 0, later = (fn, ms) => setTimeout(() => { if (alive()) fn(); }, ms);
+    if (st.kind === 'bus' || st.kind === 'tram') {
+      spawnPax(v, 'out'); if (Math.random() < 0.6) later(() => spawnPax(v, 'out'), 500);
+      for (let i = 0, n = 1 + Math.floor(rnd(0, 3)); i < n; i++) later(() => spawnPax(v, 'in'), 900 + i * 600);
+    } else if (st.kind === 'garbage') spawnPax(v, 'out');
+    else if (st.kind === 'van') { spawnPax(v, 'out'); later(() => spawnPax(v, 'in'), Math.max(1000, (st.dwell - 3.2) * 1000)); }
+  }
+  // Velocidad máxima que permite la siguiente parada (0 si ya está parado en ella)
+  function stopCap(v, scale, dt) {
+    if (!v.stops || v.stopI >= v.stops.length) return Infinity;
+    const st = v.stops[v.stopI];
+    if (v.state === 'stop') {
+      v.speed = 0; v.t += dt;
+      if (!st.did && v.t > 0.5) { st.did = true; stopAct(v, st); }
+      if (v.t >= st.dwell) { v.state = 'drive'; v.stopI++; haz(v, false); return Infinity; }
+      return 0;
+    }
+    const rem = Math.max(0, (st.s - v.s) * scale);
+    if (rem <= 1.5) { v.speed = 0; v.state = 'stop'; v.t = 0; if (st.haz) haz(v, true); return 0; }
+    return Math.sqrt(2 * 60 * rem) / SPD + 3;
+  }
+
   function followLimit(v, scale) {
-    let m = followLimit0(v, scale), rem = window.Xings ? window.Xings.stopRem(v, scale) : Infinity;
+    let m = Math.min(followLimit0(v, scale), blockLimit(v, scale)), rem = window.Xings ? window.Xings.stopRem(v, scale) : Infinity;
     const sg = window.Signs ? window.Signs.check(v, scale, vehicles) : null;   // señales (signs.js): límite de velocidad, stop y ceda el paso
     if (sg) { m = Math.min(m, sg.cap); rem = Math.min(rem, sg.rem); }
     if (rem === Infinity) return m;
@@ -1234,8 +1372,9 @@
       if (nextTraffic <= 0) {
         const n = trafficCount();
         let ok = true;
-        if (z >= MIN_ZOOM && n < (raining ? Math.round(MAX_TRAFFIC * 0.7) : MAX_TRAFFIC)) ok = !!spawn(pickTraffic(), true);
-        nextTraffic = !ok ? 1 : (n < MAX_TRAFFIC * 0.7 ? rnd(0.3, 0.7) : rnd(0.7, 1.5));
+        const maxT = Math.max(6, Math.round(MAX_TRAFFIC * (window.CityLife ? window.CityLife.mult() : 1)));   // más tráfico en el centro, menos en las afueras
+        if (z >= MIN_ZOOM && n < (raining ? Math.round(maxT * 0.7) : maxT)) ok = !!spawn(pickTraffic(), true);
+        nextTraffic = !ok ? 1 : (n < maxT * 0.7 ? rnd(0.3, 0.7) : rnd(0.7, 1.5));
       }
 
       for (let i = vehicles.length - 1; i >= 0; i--) {
@@ -1264,8 +1403,15 @@
             v.speed = approach(v.speed, v.K.v, 70 * dt);
           }
         } else if (v.K.traffic) {
-          const target = Math.min(v.vmax, followLimit(v, scale));
+          let target = Math.min(v.vmax, followLimit(v, scale));
+          const sCap = stopCap(v, scale, dt); if (sCap < target) target = sCap;      // paradas (autobús, basura, reparto…)
+          if (zoneFor(v)) target = Math.min(target, 22);                              // pasando junto a unas obras
           v.speed = approach(v.speed, target, (target > v.speed ? 40 : 170) * dt);
+          if (v.state === 'stop') v.speed = 0;
+          if (v.honk != null && window.cityAudio) {                                   // los coches de la boda tocan el claxon
+            v.honk -= dt;
+            if (v.honk <= 0) { v.honk = rnd(1.2, 3.4); const pt = map.latLngToContainerPoint(v.mk.getLatLng()); window.cityAudio.horn(clamp(1.1 - Math.hypot(pt.x - cx, pt.y - cy) / half, 0.1, 0.8), true); }
+          }
         } else {
           // Sirena: más fuerte cuanto más cerca del centro de la pantalla
           const pt = map.latLngToContainerPoint(v.mk.getLatLng());
@@ -1339,6 +1485,33 @@
   window.spawnAircraft = kind => { if (!on) return false; initAudio(); if (kind === 'plane') return !!spawnPlane(); if (kind === 'heli') return !!spawnHeli(); if (kind === 'airliner') return !!spawnAirliner(); return false; };
   // Aeropuerto de prueba en el centro de la pantalla (sin mirar si hay calles debajo) y un avión que aterriza enseguida
   window.spawnAirport = () => { if (!on) return false; initAudio(); forceAirport(); setTimeout(spawnAirliner, 1200); return true; };
+  // API para ciudad.js (eventos de vida urbana)
+  window.CityVeh = {
+    spawn(kind) { if (!on || map.getZoom() < MIN_ZOOM || !KINDS[kind]) return null; initAudio(); return spawn(kind, true) || null; },
+    // Sale desde un punto concreto (p. ej. un hospital): la ambulancia recorre el tramo hasta la calle más cercana y sigue por ella
+    spawnFrom(kind, x, y) {
+      if (!on || map.getZoom() < MIN_ZOOM || !KINDS[kind]) return null;
+      refreshSizes(); const scale = Math.pow(2, map.getZoom() - REF_Z);
+      for (let t = 0; t < 6; t++) {
+        const rr = roadRoute({ anyWay: true, len: 900, minLen: 320 }); if (!rr) continue;
+        const P = rr.path; let bi = -1, bd = 260 * 260;
+        P.pts.forEach((p, i) => { const d = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y); if (d < bd && i < P.pts.length - 2) { bd = d; bi = i; } });
+        if (bi < 0) continue;
+        const pts = [{ x, y }, ...P.pts.slice(bi)], Q = makePath(pts); Q.cl = pts.map(() => 'minor');
+        if (Q.total * scale < 260) continue;
+        initAudio(); const v = spawn(kind, true, { path: Q, focus: null }); if (v) return v;
+      }
+      return null;
+    },
+    // Boda: 4 coches decorados por la misma ruta, tocando el claxon
+    convoy() {
+      if (!on || map.getZoom() < MIN_ZOOM) return false;
+      refreshSizes(); const r = pathRoute(40, true, false); if (!r) return false;
+      initAudio(); let k = 0; const n = SMALL ? 3 : 4;
+      const go = () => { if (!on) return; spawn('wedcar', true, r); if (++k < n) setTimeout(go, 1700); };
+      go(); return true;
+    }
+  };
   window.spawnVehicle = kind => { if (on && KINDS[kind]) { initAudio(); return !!spawn(kind); } return false; };
   apply();
 })();

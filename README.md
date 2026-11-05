@@ -140,3 +140,20 @@ Racha de 7 días: premios de cada día en `DAILY_REWARDS` (7 números separados 
 - En la isleta central se dibuja, al azar, una de estas decoraciones: **fuente con agua animada, estatua sobre pedestal, arboleda, palmeras, jardín de flores o monumento con setos** (`BUILD` en `rotondas.js`: para añadir una nueva, crea otra función ahí).
 - "Al azar" sale de un hash de la posición del centro: cada rotonda tiene siempre la misma para todos los jugadores.
 - Solo se pintan las 10 más cercanas al centro de la pantalla (6 en móvil) y con zoom >= 16,5. Cubre solo la isleta: los coches siguen rodeándola.
+
+## Vida urbana (botón 🏙️ del menú)
+
+`ciudad.js` añade todo lo que da densidad al mapa; se apaga con el botón 🏙️ si el móvil va justo. Los vehículos nuevos están en `vehicles.js`.
+
+- **Humo y vapor:** chimeneas en algunas casas, vapor en bares/restaurantes y de alcantarilla en las calles.
+- **Vehículos:** camión de la basura que va parando, furgonetas de reparto en doble fila con luces de emergencia, autobuses que paran en paradas y recogen gente, coche de autoescuela que se cala y tranvía por las calles con paradas.
+- **Eventos:** boda con coches decorados (claxon), desfile o manifestación pequeña (frenan el tráfico) y ambulancia que sale de un hospital fijo del mundo (aparece en solares libres).
+- **Gente con actividad:** sentados en bancos y terrazas, colas en farmacia/supermercado, niños en el parque infantil, gente entrando y saliendo de los negocios, coches en el autoservicio y en la gasolinera, y algunos peatones paseando al perro.
+- **Globos de texto** sobre los peatones (cambian con la lluvia y la noche).
+- **Obras:** conos, excavadora y operarios; el tráfico se desvía hacia el centro y reduce la velocidad.
+- **Barrios:** más tráfico y gente donde hay muchos edificios (centro), menos en las afueras.
+- **Sonido ambiente** según el zoom (murmullo, bocinazos lejanos, campanas a las horas en punto); respeta el botón 🔊.
+- **Estaciones:** hojas en otoño, nieve en invierno y pétalos en primavera (según el mes y el hemisferio); en verano y en el trópico no hay partículas.
+
+Para probar sin esperar, en la consola: `cityEvent('works' | 'parade' | 'wedding' | 'ambulance' | 'steam' | 'bubble' | 'tram' | 'garbage' | 'van' | 'driving')` y `citySeason('autumn' | 'winter' | 'spring' | 'summer' | 'auto')`.
+Las posiciones de bancos, colas, puertas y chimeneas dentro de cada parcela son aproximadas (constantes `P_(sc, u, v)` en `INIT`/`TICK` de `ciudad.js`): se ajustan viendo cada edificio.

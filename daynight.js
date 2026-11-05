@@ -193,6 +193,7 @@
     apply(true);
   }
   window.setDayNight = setMode;
+  window.cityDark = () => { try { return sun().nd; } catch (e) { return 0; } };   // 0 = día, 1 = noche (lo usa ciudad.js)
   if (btn) btn.addEventListener('click', () => setMode(MODES[(MODES.indexOf(mode) + 1) % MODES.length]));
   resize();
   setMode(mode, false);

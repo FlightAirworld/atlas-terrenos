@@ -117,10 +117,11 @@
       const storm = window.weatherIntensity ? window.weatherIntensity() : 0;
       const raining = storm > 0.25;                             // con lluvia, todos salen con paraguas
       if (nextSpawn <= 0) {
-        const cap = storm > 0.6 ? Math.round(MAX * 0.65) : MAX;
+        const dm = window.CityLife ? window.CityLife.mult() : 1;       // más gente en el centro, menos en las afueras (ciudad.js)
+        const cap = Math.round(MAX * dm * (storm > 0.6 ? 0.65 : 1));
         let ok = true;
         if (z >= MIN_ZOOM && walkers.length < cap) ok = spawn();
-        nextSpawn = !ok ? 1 : (walkers.length < MAX * 0.4 ? rnd(0.25, 0.6) : rnd(0.4, 1.1)) * (storm > 0.6 ? 1.5 : 1);
+        nextSpawn = !ok ? 1 : (walkers.length < cap * 0.4 ? rnd(0.25, 0.6) : rnd(0.4, 1.1)) * (storm > 0.6 ? 1.5 : 1);
       }
       const view = map.getBounds().pad(0.4);
       for (let i = walkers.length - 1; i >= 0; i--) {

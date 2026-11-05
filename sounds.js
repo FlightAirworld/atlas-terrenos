@@ -130,6 +130,48 @@
     play(b.classList.contains('close') ? 'click' : 'open');
   }, true);
 
+  // ---------- Ambiente de ciudad (lo maneja ciudad.js según el zoom) ----------
+  // Murmullo y tráfico lejano (ruido filtrado), bocinazos lejanos y campanas. Todo sintetizado; respeta el botón 🔊 (apagado = silencio).
+  let amb = null, far = null;
+  function noiseBuf(sec) {
+    const n = Math.floor(ctx.sampleRate * sec), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
+    let last = 0; for (let i = 0; i < n; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.5; }
+    return b;
+  }
+  function ambStart() {
+    if (amb || !ctx) return;
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf(3); src.loop = true;
+    const g = ctx.createGain(); g.gain.value = 0; g.connect(master);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+    const rg = ctx.createGain(); rg.gain.value = 0.9; src.connect(lp); lp.connect(rg); rg.connect(g);                 // tráfico lejano
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7;
+    const mg = ctx.createGain(); mg.gain.value = 0.35; src.connect(bp); bp.connect(mg); mg.connect(g);               // murmullo de gente
+    const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.23; lg.gain.value = 0.25; lfo.connect(lg); lg.connect(mg.gain);
+    src.start(); lfo.start();
+    amb = { g };
+  }
+  function farBus() { if (!far) { far = ctx.createBiquadFilter(); far.type = 'lowpass'; far.frequency.value = 1500; far.connect(sfxBus); } return far; }
+  window.cityAudio = {
+    level(v) {
+      if (!ctx) return;
+      if (mode < 1 || ctx.state !== 'running') { if (amb) amb.g.gain.setTargetAtTime(0, ctx.currentTime, 0.4); return; }
+      ambStart(); amb.g.gain.setTargetAtTime(Math.max(0, Math.min(1, v)) * 0.16, ctx.currentTime, 0.8);
+    },
+    horn(vol, close) {
+      if (!ctx || mode < 1 || ctx.state !== 'running') return;
+      const t = ctx.currentTime + 0.02, bus = close ? sfxBus : farBus(), d = 0.2 + Math.random() * 0.2;
+      tone(bus, 'square', 415, t, d, 0.2 * vol); tone(bus, 'square', 523, t, d, 0.16 * vol);
+      if (Math.random() < 0.5) { tone(bus, 'square', 415, t + d + 0.12, d, 0.2 * vol); tone(bus, 'square', 523, t + d + 0.12, d, 0.16 * vol); }
+    },
+    bells(n, vol) {
+      if (!ctx || mode < 1 || ctx.state !== 'running') return;
+      for (let i = 0; i < Math.min(12, n); i++) {
+        const t = ctx.currentTime + 0.1 + i * 1.7;
+        [[196, 1], [392, 0.5], [588, 0.3], [1180, 0.12]].forEach(([f, a]) => tone(farBus(), 'sine', f, t, 2.6, 0.5 * a * (vol || 1), { attack: 0.005 }));
+      }
+    }
+  };
+
   window.sfx = play;
   window.soundMode = () => mode;   // 0 = silencio, 1 = solo efectos, 2 = música y efectos (lo usa vehicles.js para aviones y sirenas)
 })();
