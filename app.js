@@ -812,8 +812,16 @@ function renderAytoPromo(p) {
     const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'primary'; btn.style.cssText = 'margin-top:6px;width:100%;padding:8px';
     const c = (cfg.buildings && cfg.buildings[AYTO] && cfg.buildings[AYTO].cost) ?? cfg.houseCost ?? 1;
     btn.textContent = `🏛️ CONSTRUIR AYUNTAMIENTO${c > 0 ? ` (${c} 🎟️)` : ''}`;
-    btn.onclick = () => { const h = [...$('house-pick-edit').children].find(x => x.dataset.house === AYTO); if (h) h.click(); };
-    txt.appendChild(btn);
+    txt.appendChild(btn);   // el clic lo gestiona todo el cuadro amarillo (box.onclick)
+  }
+  // Al pulsar el cuadro amarillo: pone el Ayuntamiento directamente en este terreno (si eres presidente de su pueblo)
+  if (owned) {
+    box.style.cursor = 'pointer';
+    box.onclick = () => {
+      if (!here) return setMsg(`🏛️ Este terreno no está en ${aytoTowns.slice(0, 2).join(' ni en ')}${aytoTowns.length > 2 ? '…' : ''}. Elige uno de tus terrenos de ese pueblo.`, 'err');
+      const h = [...$('house-pick-edit').children].find(x => x.dataset.house === AYTO);
+      if (h) h.click();   // usa el mismo flujo de CAMBIAR CASA (confirma coste y lo construye)
+    };
   }
   box.append(img, txt);
   if (owned) $('p-owned').insertBefore(box, $('house-edit')); else $('p-free').insertBefore(box, $('p-free').children[1] || null);
