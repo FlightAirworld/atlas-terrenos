@@ -172,10 +172,22 @@ const HOUSES = [
   'images/parque-futbol.webp',
   'images/mar.webp',
   'images/mar-peces.webp',
-  'images/ayuntamiento.webp'
+  'images/ayuntamiento.webp',
+  'images/banco.webp',
+  'images/hospital.webp',
+  'images/bomberos.webp',
+  'images/fabrica.webp',
+  'images/puerto.webp'
 ];
 // Casas especiales: no salen al azar ni al reclamar (el ayuntamiento es solo para el presidente del pueblo)
-const SPECIAL_HOUSES = ['images/ayuntamiento.webp'];
+const SPECIAL_HOUSES = ['images/ayuntamiento.webp', 'images/banco.webp', 'images/hospital.webp', 'images/bomberos.webp', 'images/fabrica.webp', 'images/puerto.webp'];
+const BUILDING_ICON = { ayuntamiento: '🏛️', banco: '🏦', hospital: '🏥', bomberos: '🚒', fabrica: '🏭', puerto: '⚓' };
+// Nombre y función de un edificio especial (los textos vienen del servidor: cfg.buildings)
+function buildingText(h) {
+  const b = h && cfg && cfg.buildings && cfg.buildings[h]; if (!b) return '';
+  const k = String(h).split('/').pop().replace(/\.webp$/i, '');
+  return `${BUILDING_ICON[k] || '🏢'} ${b.name}: ${b.desc}`;
+}
 const RANDOM_HOUSES = HOUSES.filter(h => !SPECIAL_HOUSES.includes(h));
 
 function houseFor(id, house) {
@@ -189,7 +201,7 @@ function houseFor(id, house) {
 }
 // Altura aproximada (en metros) de cada tipo de edificio: da volumen 3D a las parcelas
 const HOUSE_HEIGHT = {
-  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'condis': 9, 'cepsa': 7, 'aurgi': 8, 'burrito-blanco': 8, 'arcobaleno': 8, 'la-cruilla': 8, 'cesped-2': 1, 'parque-picnic': 1, 'desierto-1': 1, 'desierto-2': 1, 'prado': 1, 'claro-bosque': 1, 'parque-futbol': 1, 'mar': 1, 'mar-peces': 1, 'ayuntamiento': 18
+  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'condis': 9, 'cepsa': 7, 'aurgi': 8, 'burrito-blanco': 8, 'arcobaleno': 8, 'la-cruilla': 8, 'cesped-2': 1, 'parque-picnic': 1, 'desierto-1': 1, 'desierto-2': 1, 'prado': 1, 'claro-bosque': 1, 'parque-futbol': 1, 'mar': 1, 'mar-peces': 1, 'ayuntamiento': 18, 'banco': 16, 'hospital': 20, 'bomberos': 12, 'fabrica': 16, 'puerto': 8
 };
 // Nivel del terreno (1 a 5): más estrellas junto al nombre y un edificio más alto
 const maxLevel = () => (cfg && cfg.levels && cfg.levels.mults.length) || 5;
@@ -801,15 +813,16 @@ $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(nul
 $('gift-owner-btn').onclick = () => { if (selected && selected.owner && window.openGift) openGift(selected.owner); };
 
 // ---------- Nivel del terreno y botón de mejora ----------
+const upCost = (lvl, p) => { const c = cfg.levels.costs[lvl - 1], d = p && p.lvlDiscount; return d ? Math.max(1, Math.round(c * (1 - d))) : c; };   // igual que en el servidor (descuento de los bomberos)
 function renderLevelBox(p) {
   if (!cfg || !cfg.levels) { $('p-level').textContent = ''; $('level-edit').classList.add('hidden'); return; }
   const lvl = levelOf(p), max = maxLevel();
-  $('p-level').textContent = `${'⭐'.repeat(tierOf(lvl))} Nivel ${lvl} de ${max} · produce ×${fmtNum(multOf(lvl))}`;
+  $('p-level').textContent = `${'⭐'.repeat(tierOf(lvl))} Nivel ${lvl} de ${max} · produce ×${fmtNum(multOf(lvl))}` + (SPECIAL_HOUSES.includes(p.house) ? `\n${buildingText(p.house)}` : '');
   $('level-edit').classList.toggle('hidden', !p.mine);
   if (!p.mine) return;
   const btn = $('upgrade-btn'), note = $('level-note');
   if (lvl >= max) { btn.classList.add('hidden'); note.textContent = '🏆 Nivel máximo: tu terreno produce al máximo.'; return; }
-  const cost = cfg.levels.costs[lvl - 1];
+  const cost = upCost(lvl, p);
   btn.classList.remove('hidden');
   const fu = window.freeUpgrades || 0;       // mejoras gratis ganadas en los premios del mes
   btn.textContent = fu > 0 ? `⬆️ Subir a nivel ${lvl + 1} · GRATIS 🎁 (${fu})` : `⬆️ Subir a nivel ${lvl + 1} · ${cost} 🎟️`;
@@ -819,7 +832,7 @@ $('upgrade-btn').onclick = async () => {
   if (!selected || !selected.mine || !cfg || !cfg.levels) return;
   const lvl = levelOf(selected);
   if (lvl >= maxLevel()) return;
-  const cost = cfg.levels.costs[lvl - 1];
+  const cost = upCost(lvl, selected);
   const useFree = (window.freeUpgrades || 0) > 0;
   if (!useFree && credits < cost) return setMsg('NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.', 'err');
   if (!confirm(useFree ? `Subir este terreno al nivel ${lvl + 1} gratis, con una de tus mejoras de los premios del mes. ¿Continuar?` : `Subir este terreno al nivel ${lvl + 1} cuesta ${cost} ${plural(cost, 'crédito', 'créditos')}. ¿Continuar?`)) return;
@@ -873,7 +886,7 @@ function buildHousePicker(box, onPick, withRandom) {
     const i = document.createElement('img');
     i.src = sizedUrl(h, 't'); i.alt = ''; i.loading = 'lazy';
     i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;display:block';
-    add(h, i, SPECIAL_HOUSES.includes(h) ? '🏛️ Ayuntamiento (solo el presidente del pueblo)' : houseName(h));
+    add(h, i, SPECIAL_HOUSES.includes(h) ? (buildingText(h) || houseName(h)) : houseName(h));
   });
 }
 function markHouse(box, current) {
@@ -885,10 +898,10 @@ function markHouse(box, current) {
   markHouse(freeBox, null);
   buildHousePicker(editBox, async h => {
     if (!selected || !selected.mine || h === selected.house) return;
-    const cost = cfg.houseCost ?? 1;
+    const cost = (cfg.buildings && cfg.buildings[h] && cfg.buildings[h].cost != null) ? cfg.buildings[h].cost : (cfg.houseCost ?? 1);
     if (cost > 0) {
       if (credits < cost) return setMsg('NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.', 'err');
-      if (!confirm(`Cambiar la casa cuesta ${cost} ${plural(cost, 'crédito', 'créditos')}. ¿Continuar?`)) return;
+      if (!confirm(`${SPECIAL_HOUSES.includes(h) ? 'Construir este edificio' : 'Cambiar la casa'} cuesta ${cost} ${plural(cost, 'crédito', 'créditos')}. ¿Continuar?`)) return;
     }
     try {
       const j = await api('/api/parcel/house', { method: 'POST', body: { id: selected.id, house: h } });
@@ -899,6 +912,10 @@ function markHouse(box, current) {
       drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: j.house, level: selected.level });
       sfx('claim');
       $('house-pick-wrap').classList.add('hidden');
+      try {   // refresca el panel: descuento de bomberos y texto del edificio
+        const fresh = await api(`/api/parcel?lat=${selected.south + cfg.size / 2}&lng=${selected.west + cfg.size / 2}`, { method: 'GET' });
+        selected.lvlDiscount = fresh.lvlDiscount || 0; showPanel(selected);
+      } catch (e) {}
       setMsg(`🏠 ¡Casa cambiada! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
     } catch (e) { setMsg(e.message, 'err'); }
   }, false);

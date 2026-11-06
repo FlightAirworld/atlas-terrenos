@@ -121,11 +121,17 @@ const HOUSES = [
   'images/parque-futbol.webp',
   'images/mar.webp',
   'images/mar-peces.webp',
-  'images/ayuntamiento.webp'
+  'images/ayuntamiento.webp',
+  'images/banco.webp',
+  'images/hospital.webp',
+  'images/bomberos.webp',
+  'images/fabrica.webp',
+  'images/puerto.webp'
 ];
 // Casas especiales: no salen al azar ni se pueden elegir al reclamar; tienen sus propias reglas (ver setHouse)
 const AYUNTAMIENTO = 'images/ayuntamiento.webp';
-const SPECIAL_HOUSES = [AYUNTAMIENTO];
+const BANCO = 'images/banco.webp', HOSPITAL = 'images/hospital.webp', BOMBEROS = 'images/bomberos.webp', FABRICA = 'images/fabrica.webp', PUERTO = 'images/puerto.webp';
+const SPECIAL_HOUSES = [AYUNTAMIENTO, BANCO, HOSPITAL, BOMBEROS, FABRICA, PUERTO];
 const cleanHouse = (h, allowSpecial = false) => { h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h; return HOUSES.includes(h) && (allowSpecial || !SPECIAL_HOUSES.includes(h)) ? h : null; };   // null = al azar (como hasta ahora)
 const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
 
@@ -716,6 +722,17 @@ async function setHouse(req, { id, house }) {
     await client.query('SELECT code FROM packs WHERE code = $1 FOR UPDATE', [pack.code]);   // una operación a la vez por cuenta
     const par = (await client.query('SELECT house, city FROM parcels WHERE id = $1 AND user_id = $2 FOR UPDATE', [String(id), user.id])).rows[0];
     if (!par) throw new HttpError(403, 'Este terreno no es tuyo');
+    const bd = BUILDINGS[h];
+    if (bd && par.house !== h) {   // banco, fábrica, puerto, hospital, bomberos: exigen pueblo y respetan su límite
+      if (!par.city || par.city === CITY_NONE) throw new HttpError(400, 'Este terreno aún no tiene pueblo');
+      const other = (await client.query(bd.unique === 'town'
+        ? 'SELECT id, user_id FROM parcels WHERE city = $1 AND house = $2 AND id <> $3 LIMIT 1 FOR UPDATE'
+        : 'SELECT id, user_id FROM parcels WHERE city = $1 AND house = $2 AND id <> $3 AND user_id = $4 LIMIT 1 FOR UPDATE',
+        bd.unique === 'town' ? [par.city, h, String(id)] : [par.city, h, String(id), user.id])).rows[0];
+      if (other) throw new HttpError(409, bd.unique === 'town'
+        ? (String(other.user_id) === String(user.id) ? `Ya tienes el ${bd.name.toLowerCase()} de este pueblo en otro de tus terrenos` : `Este pueblo ya tiene ${bd.name.toLowerCase()}`)
+        : `Ya tienes un ${bd.name.toLowerCase()} en este pueblo`);
+    }
     if (h === AYUNTAMIENTO && par.house !== AYUNTAMIENTO) {
       // Ayuntamiento: solo el presidente del pueblo, y solo uno por pueblo
       if (!par.city || par.city === CITY_NONE) throw new HttpError(400, 'Este terreno aún no tiene pueblo');
@@ -731,10 +748,11 @@ async function setHouse(req, { id, house }) {
     if (par.house === h) {   // ya tiene esa casa: no se cobra nada
       credits = (await client.query('SELECT credits FROM packs WHERE code = $1', [pack.code])).rows[0].credits;
     } else {
-      const r = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [HOUSE_COST, pack.code]);
+      const houseCost = bd ? bd.cost : HOUSE_COST;
+      const r = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [houseCost, pack.code]);
       if (!r.rows[0]) throw new HttpError(402, 'NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.');
       credits = r.rows[0].credits;
-      await client.query('UPDATE parcels SET house = $1 WHERE id = $2', [h, String(id)]);
+      await client.query('UPDATE parcels SET house = $1, house_prev = $3, house_at = $4 WHERE id = $2', [h, String(id), par.house, Date.now()]);
     }
     await client.query('COMMIT');
     return { ok: true, house: h, credits };
@@ -1024,6 +1042,34 @@ const HOUR_MS = 3600000;
 // Variables opcionales: LEVEL_MAX, LEVEL_STEP, LEVEL_COST_K, o listas completas LEVEL_MULTS / LEVEL_COSTS (separadas por comas) que mandan sobre la fórmula.
 const numEnv = (name, def) => { const v = String(process.env[name] ?? '').trim(); const n = v === '' ? NaN : Number(v); return Number.isFinite(n) && n >= 0 ? n : def; };
 const numList = (s, def) => { const a = String(s || '').split(',').map(x => x.trim()).filter(x => x !== '').map(Number).filter(x => Number.isFinite(x) && x >= 0); return a.length ? a : def; };
+// ---------- Edificios con función propia ----------
+// Se construyen cambiando la casa de un terreno propio (cuesta "cost" créditos) y exigen que el terreno tenga pueblo.
+//   mult: multiplicador de producción de ese terreno · flat: créditos por hora fijos (el hospital: HOSPITAL_PER_DAY al día)
+//   discount: descuento al mejorar de nivel los terrenos del dueño en el mismo pueblo (bomberos)
+//   unique: 'owner' = uno por jugador y pueblo · 'town' = uno por pueblo
+// Variables opcionales: BUILDING_COST (3), BANCO_MULT (1.25), FABRICA_MULT (2), PUERTO_MULT (1.5), HOSPITAL_PER_DAY (1), BOMBEROS_DISCOUNT (0.2)
+const BUILDING_COST = Math.floor(numEnv('BUILDING_COST', 3));
+const BUILDINGS = {
+  [BANCO]:    { name: 'Banco',    mult: numEnv('BANCO_MULT', 1.25), flat: 0, cost: BUILDING_COST,     unique: 'owner' },
+  [FABRICA]:  { name: 'Fábrica',  mult: numEnv('FABRICA_MULT', 2),  flat: 0, cost: BUILDING_COST + 2, unique: 'owner' },
+  [PUERTO]:   { name: 'Puerto',   mult: numEnv('PUERTO_MULT', 1.5), flat: 0, cost: BUILDING_COST,     unique: 'town' },
+  [HOSPITAL]: { name: 'Hospital', mult: 1, flat: numEnv('HOSPITAL_PER_DAY', 1) / 24, cost: BUILDING_COST, unique: 'owner' },
+  [BOMBEROS]: { name: 'Bomberos', mult: 1, flat: 0, discount: Math.min(0.9, numEnv('BOMBEROS_DISCOUNT', 0.2)), cost: BUILDING_COST, unique: 'owner' }
+};
+const fmtN = n => Number(n).toLocaleString('es-ES', { maximumFractionDigits: 2 });
+const BUILDINGS_PUBLIC = (() => {
+  const o = { [AYUNTAMIENTO]: { name: 'Ayuntamiento', cost: HOUSE_COST, desc: 'Solo el presidente del pueblo; uno por pueblo.' } };
+  for (const [h, b] of Object.entries(BUILDINGS)) {
+    const d = [];
+    if (b.mult !== 1) d.push(`produce ×${fmtN(b.mult)}`);
+    if (b.flat) d.push(`+${fmtN(b.flat * 24)} 🎟️ al día`);
+    if (b.discount) d.push(`-${Math.round(b.discount * 100)}% al mejorar tus terrenos de este pueblo`);
+    d.push(b.unique === 'town' ? 'uno por pueblo' : 'uno por jugador y pueblo');
+    o[h] = { name: b.name, cost: b.cost, desc: d.join(' · ') };
+  }
+  return o;
+})();
+const upgradeCostFor = (base, discount) => discount ? Math.max(1, Math.round(base * (1 - discount))) : base;
 const LEVEL_MAX = Math.max(1, Math.min(200, Math.floor(numEnv('LEVEL_MAX', 50))));
 const LEVEL_STEP = numEnv('LEVEL_STEP', 0.5);
 const LEVEL_COST_K = numEnv('LEVEL_COST_K', 0.75);
@@ -1035,6 +1081,12 @@ const LEVEL_COSTS = (() => {                                                  //
   return c.slice(0, Math.max(0, MAX_LEVEL - 1));
 })();
 
+// Descuento al mejorar: si el jugador tiene unos bomberos en ese mismo pueblo
+async function bomberosDiscount(db, userId, city) {
+  if (!city || city === CITY_NONE || !BUILDINGS[BOMBEROS].discount) return 0;
+  const r = await db.query('SELECT 1 FROM parcels WHERE user_id = $1 AND city = $2 AND house = $3 LIMIT 1', [userId, city, BOMBEROS]);
+  return r.rows[0] ? BUILDINGS[BOMBEROS].discount : 0;
+}
 // Subir un terreno propio al siguiente nivel. "from" (opcional) es el nivel que ve el jugador: evita cobrar dos veces por un doble toque.
 async function upgradeParcel(req, { id, from }) {
   const user = await needUser(req);
@@ -1042,12 +1094,12 @@ async function upgradeParcel(req, { id, from }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const par = (await client.query('SELECT level FROM parcels WHERE id = $1 AND user_id = $2 FOR UPDATE', [String(id), user.id])).rows[0];
+    const par = (await client.query('SELECT level, city FROM parcels WHERE id = $1 AND user_id = $2 FOR UPDATE', [String(id), user.id])).rows[0];
     if (!par) throw new HttpError(403, 'Este terreno no es tuyo');
     const level = Math.max(1, Math.min(MAX_LEVEL, Number(par.level) || 1));
     if (from != null && Number(from) !== level) throw new HttpError(409, 'El nivel de este terreno ya ha cambiado');
     if (level >= MAX_LEVEL) throw new HttpError(409, 'Este terreno ya está al nivel máximo');
-    let cost = LEVEL_COSTS[level - 1], free = false, freeLeft = 0;
+    let cost = upgradeCostFor(LEVEL_COSTS[level - 1], await bomberosDiscount(client, user.id, par.city)), free = false, freeLeft = 0;
     // Si tiene una mejora gratis (premio del mes) se gasta esa en vez de créditos
     let r = await client.query('UPDATE packs SET free_upgrades = free_upgrades - 1 WHERE code = $1 AND free_upgrades > 0 RETURNING credits, free_upgrades', [pack.code]);
     if (r.rows[0]) { free = true; cost = 0; freeLeft = Number(r.rows[0].free_upgrades) || 0; }
@@ -1072,28 +1124,44 @@ async function upgradeParcel(req, { id, from }) {
 // Cada terreno produce según su nivel. Si subió de nivel dentro del periodo que se está acumulando, el tiempo anterior a la
 // mejora cuenta con el multiplicador del nivel anterior y el posterior con el nuevo: la mejora solo vale desde que se hace,
 // así que subir de nivel justo antes de recoger no da créditos de más.
+const BN_NAMES = Object.keys(BUILDINGS), BN_MULTS = BN_NAMES.map(h => BUILDINGS[h].mult), BN_FLATS = BN_NAMES.map(h => BUILDINGS[h].flat);
 async function prodCompute(db, userId, lastCollect, carry, now) {
+  // Dos momentos de cambio por terreno: level_at (subió de nivel) y house_at (cambió de edificio). Antes de cada uno vale el valor anterior
+  // (nivel-1 / house_prev) y después el actual, así ninguna mejora ni cambio da créditos de más por el tiempo ya acumulado.
   const r = (await db.query(
     `SELECT COUNT(*) AS n,
             COALESCE(SUM(wms), 0) AS wms,
-            COALESCE(SUM(mc), 0) AS mult,
+            COALESCE(SUM(fms), 0) AS fms,
+            COALESCE(SUM(mc * bc), 0) AS mult,
+            COALESCE(SUM(fc), 0) AS flat,
             COUNT(*) FILTER (WHERE e < $4::bigint) AS active,
-            COALESCE(SUM(mc) FILTER (WHERE e < $4::bigint), 0) AS active_mult,
+            COALESCE(SUM(mc * bc) FILTER (WHERE e < $4::bigint), 0) AS active_mult,
+            COALESCE(SUM(fc) FILTER (WHERE e < $4::bigint), 0) AS active_flat,
             MIN($4::bigint - e) FILTER (WHERE e < $4::bigint) AS next_cap
-       FROM (SELECT e, mc,
-                    LEAST(o, LEAST(e, $4::bigint)) * mp + (LEAST(e, $4::bigint) - LEAST(o, LEAST(e, $4::bigint))) * mc AS wms
-               FROM (SELECT GREATEST($2::bigint - GREATEST(created_at, $3::bigint), 0) AS e,
-                            GREATEST(COALESCE(level_at, 0) - GREATEST(created_at, $3::bigint), 0) AS o,
-                            ($5::float8[])[LEAST(GREATEST(level, 1), ${MAX_LEVEL})] AS mc,
-                            ($5::float8[])[LEAST(GREATEST(level - 1, 1), ${MAX_LEVEL})] AS mp
-                       FROM parcels WHERE user_id = $1) a) s`,
-    [userId, now, lastCollect || 0, Math.round(PROD_CAP_HOURS * HOUR_MS), LEVEL_MULTS])).rows[0];
+       FROM (SELECT e, mc, bc, fc,
+                    lo * mp * bp + (hi - lo) * (CASE WHEN a1 <= a2 THEN mc * bp ELSE mp * bc END) + (d - hi) * mc * bc AS wms,
+                    a2 * fp + (d - a2) * fc AS fms
+               FROM (SELECT e, d, mc, mp, bc, bp, fc, fp, a1, a2, LEAST(a1, a2) AS lo, GREATEST(a1, a2) AS hi
+                       FROM (SELECT e, d, mc, mp, bc, bp, fc, fp, LEAST(o1, d) AS a1, LEAST(o2, d) AS a2
+                               FROM (SELECT e, LEAST(e, $4::bigint) AS d, o1, o2, mc, mp,
+                                            COALESCE(($6::float8[])[array_position($8::text[], house)], 1) AS bc,
+                                            COALESCE(($6::float8[])[array_position($8::text[], house_prev)], 1) AS bp,
+                                            COALESCE(($7::float8[])[array_position($8::text[], house)], 0) AS fc,
+                                            COALESCE(($7::float8[])[array_position($8::text[], house_prev)], 0) AS fp
+                                       FROM (SELECT house, house_prev,
+                                                    GREATEST($2::bigint - GREATEST(created_at, $3::bigint), 0) AS e,
+                                                    GREATEST(COALESCE(level_at, 0) - GREATEST(created_at, $3::bigint), 0) AS o1,
+                                                    GREATEST(COALESCE(house_at, 0) - GREATEST(created_at, $3::bigint), 0) AS o2,
+                                                    ($5::float8[])[LEAST(GREATEST(level, 1), ${MAX_LEVEL})] AS mc,
+                                                    ($5::float8[])[LEAST(GREATEST(level - 1, 1), ${MAX_LEVEL})] AS mp
+                                               FROM parcels WHERE user_id = $1) a) b2) b3) b4) s`,
+    [userId, now, lastCollect || 0, Math.round(PROD_CAP_HOURS * HOUR_MS), LEVEL_MULTS, BN_MULTS, BN_FLATS, BN_NAMES])).rows[0];
   const n = Number(r.n);
-  const total = (Number(carry) || 0) + (Number(r.wms) / HOUR_MS) * PROD_RATE;
+  const total = (Number(carry) || 0) + (Number(r.wms) / HOUR_MS) * PROD_RATE + Number(r.fms) / HOUR_MS;
   // active = terrenos que aún no han llegado al tope y siguen produciendo (activeMult: suma de sus multiplicadores);
   // next_cap = ms hasta que el primero llegue al tope
-  return { parcels: n, perHour: Number(r.mult) * PROD_RATE, total, ready: Math.floor(total + 1e-9), active: Number(r.active),
-    activeMult: Number(r.active_mult), nextCap: r.next_cap == null ? null : Number(r.next_cap) };
+  return { parcels: n, perHour: Number(r.mult) * PROD_RATE + Number(r.flat), total, ready: Math.floor(total + 1e-9), active: Number(r.active),
+    activeMult: Number(r.active_mult), activeFlat: Number(r.active_flat), nextCap: r.next_cap == null ? null : Number(r.next_cap) };
 }
 
 async function myParcels(req) {
@@ -1109,7 +1177,7 @@ async function productionGet(req) {
   const p = await one('SELECT last_collect, prod_carry FROM packs WHERE code = $1', [pack.code]);
   const st = await prodCompute(pool, user.id, p && p.last_collect, p && p.prod_carry, Date.now());
   return { parcels: st.parcels, perHour: Math.round(st.perHour * 10000) / 10000, ready: st.ready, capHours: PROD_CAP_HOURS, rate: PROD_RATE,
-    total: Math.round(st.total * 1e6) / 1e6, activeRate: st.activeMult * PROD_RATE, nextCapMs: st.nextCap };
+    total: Math.round(st.total * 1e6) / 1e6, activeRate: st.activeMult * PROD_RATE + st.activeFlat, nextCapMs: st.nextCap };
 }
 
 async function productionCollect(req) {
@@ -2055,15 +2123,17 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
     return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, demo: DEMO, stripe: !DEMO && HAS_STRIPE, paypal: !DEMO && HAS_PAYPAL, clientId: (DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, packSize: PACKS[0].credits, packs: PACKS,
-      maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
+      maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, buildings: BUILDINGS_PUBLIC, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')));
     if (!p) throw new HttpError(400, 'Coordenadas no válidas');
     const row = await q.parcelById(p.id);
     const user = row && row.user_id ? await userFrom(req) : null;
+    const mine = !!(user && row && row.user_id === user.id);
     return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null, avatar: row ? row.avatar : null, country: row ? row.country : null,
-      house: row ? row.house : null, level: row ? row.level : null, mine: !!(user && row && row.user_id === user.id), giftable: !!(row && row.user_id) };
+      house: row ? row.house : null, level: row ? row.level : null, mine, giftable: !!(row && row.user_id),
+      lvlDiscount: mine ? await bomberosDiscount(pool, user.id, row.city) : 0 };
   }
 
   if (req.method === 'GET' && pn === '/api/parcels') {
@@ -2143,6 +2213,8 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
   .then(async () => {   // niveles de terreno (no hacen nada si las columnas ya existen)
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level SMALLINT NOT NULL DEFAULT 1');
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level_at BIGINT');
+    await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house_at BIGINT');      // cuándo se cambió de edificio (para no dar créditos de más)
+    await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house_prev TEXT');     // edificio anterior
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS city TEXT');          // ranking por ciudades
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS city_try BIGINT');
     await run('CREATE INDEX IF NOT EXISTS parcels_country_city ON parcels (country, city)');

@@ -61,6 +61,13 @@ Cada terreno tiene una columna `house` (ruta de la imagen). Si está vacía se u
 El dueño con cuenta puede cambiarla desde el panel del terreno (`POST /api/parcel/house`). Cuesta 1 crédito (variable `HOUSE_COST`; pon 0 para que sea gratis). Elegir la casa al reclamar es gratis.
 El servidor añade la columna solo al arrancar (`migration-house.sql` es el mismo comando por si prefieres ejecutarlo a mano).
 🏛️ **Ayuntamiento** (`images/ayuntamiento.webp`): casa especial, solo la puede poner en uno de sus terrenos el presidente del pueblo (el que más terrenos tiene allí) y solo hay uno por pueblo. No sale al azar ni se elige al reclamar. Si otro jugador pasa a ser presidente y construye el suyo, el ayuntamiento anterior pasa a casa al azar.
+**Edificios con función propia** (se construyen cambiando la casa de un terreno propio que ya tenga pueblo; cuestan `BUILDING_COST` créditos, 3 por defecto, y la fábrica 2 más):
+- 🏦 Banco: ese terreno produce ×`BANCO_MULT` (1,25). Uno por jugador y pueblo.
+- 🏭 Fábrica: produce ×`FABRICA_MULT` (2). Uno por jugador y pueblo.
+- ⚓ Puerto: produce ×`PUERTO_MULT` (1,5). Uno por pueblo.
+- 🏥 Hospital: da `HOSPITAL_PER_DAY` créditos al día (1), sumados a la producción y con el mismo tope de horas. Uno por jugador y pueblo.
+- 🚒 Bomberos: `BOMBEROS_DISCOUNT` (0,2 = 20 %) de descuento al subir de nivel los terrenos del dueño en ese pueblo. Uno por jugador y pueblo.
+El bonus cuenta desde el momento del cambio (columnas `house_at` y `house_prev` de `parcels`, que el servidor crea solo), igual que los niveles.
 Para añadir casas nuevas, ponlas al FINAL de `HOUSES` en `app.js` y en `server.js` (así no cambian las casas al azar ya existentes).
 
 ## Niveles de terreno
