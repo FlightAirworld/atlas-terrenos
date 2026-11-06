@@ -792,6 +792,45 @@ async function refreshAyto(force) {
   if (!force && Date.now() - aytoAt < 30000) return;
   try { const j = await api('/api/town/president/ayuntamiento', { method: 'GET' }); aytoTowns = j.towns || []; aytoSpots = j.spots || {}; aytoAt = Date.now(); } catch (e) {}
 }
+// Lleva el mapa a un terreno tuyo del pueblo y lo selecciona (con openPicker abre además la lista de casas para poner el Ayuntamiento)
+async function gotoAytoSpot(town, openPicker) {
+  const sp = aytoSpots[town];
+  if (!sp) { setMsg(`🏛️ Elige en el mapa uno de tus terrenos de ${town || 'ese pueblo'}.`, 'err'); return; }
+  const bb = boundsOf(sp.x, sp.y);
+  const ll = L.latLng((bb[0][0] + bb[1][0]) / 2, (bb[0][1] + bb[1][1]) / 2);
+  map.flyTo(ll, 18);
+  await new Promise(res => map.once('moveend', res));
+  await selectAt(ll);   // al llegar, el cuadro pasa a "Construye aquí el Ayuntamiento"
+  if (openPicker && selected && selected.mine) $('house-pick-wrap').classList.remove('hidden');
+}
+// Aviso verde al entrar al juego: eres presidente de un pueblo y aún no tienes el Ayuntamiento
+let aytoBannerShown = false;
+async function showPresidentBanner() {
+  if (aytoBannerShown || !authToken) return;
+  await refreshAyto(true);
+  if (!aytoTowns.length) return;
+  aytoBannerShown = true;
+  const old = $('ayto-banner'); if (old) old.remove();
+  const bar = document.createElement('div'); bar.id = 'ayto-banner'; bar.setAttribute('role', 'button'); bar.tabIndex = 0;
+  const ico = document.createElement('span'); ico.textContent = '🏛️'; ico.style.cssText = 'font-size:30px;line-height:1';
+  const txt = document.createElement('div'); txt.style.cssText = 'flex:1;line-height:1.3';
+  const b = document.createElement('b'); b.textContent = `¡Eres presidente de ${aytoTowns.slice(0, 2).join(' y ')}${aytoTowns.length > 2 ? '…' : ''}!`;
+  const sm = document.createElement('div'); sm.style.cssText = 'font-size:13px;opacity:.95';
+  sm.textContent = 'Toca aquí: te llevo a uno de tus terrenos para poner el Ayuntamiento.';
+  txt.append(b, sm);
+  const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', 'Cerrar');
+  x.style.cssText = 'border:0;background:transparent;color:#fff;font-size:24px;line-height:1;padding:2px 8px;align-self:flex-start';
+  x.onclick = e => { e.stopPropagation(); bar.remove(); };
+  const go = async () => {
+    bar.remove();
+    await refreshAyto(true);
+    const town = aytoTowns[0];
+    if (town) gotoAytoSpot(town, true);
+  };
+  bar.onclick = go; bar.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
+  bar.append(ico, txt, x);
+  document.body.appendChild(bar);
+}
 function renderAytoPromo(p) {
   const old = $('ayto-promo'); if (old) old.remove();
   const AYTO = 'images/ayuntamiento.webp';
@@ -822,13 +861,7 @@ function renderAytoPromo(p) {
       if (h) h.click();   // mismo flujo de CAMBIAR CASA (confirma coste y lo construye)
       return;
     }
-    const town = (p.city && aytoTowns.includes(p.city)) ? p.city : aytoTowns[0];
-    const sp = aytoSpots[town];
-    if (!sp) return setMsg(`🏛️ Elige en el mapa uno de tus terrenos de ${town || 'ese pueblo'}.`, 'err');
-    const bb = boundsOf(sp.x, sp.y);
-    const ll = L.latLng((bb[0][0] + bb[1][0]) / 2, (bb[0][1] + bb[1][1]) / 2);
-    map.flyTo(ll, 18);
-    map.once('moveend', () => selectAt(ll));   // al llegar, el cuadro pasa a "Construye aquí el Ayuntamiento"
+    gotoAytoSpot((p.city && aytoTowns.includes(p.city)) ? p.city : aytoTowns[0], false);
   };
   box.append(img, txt);
   if (owned) $('p-owned').insertBefore(box, $('house-edit')); else $('p-free').insertBefore(box, $('p-free').children[1] || null);
@@ -1399,6 +1432,7 @@ async function linkAccountOnServer() {
       $('login').classList.add('hidden');
     }
     loadDaily(); loadProduction();
+    showPresidentBanner();   // aviso: eres presidente de un pueblo
     if (j.welcomeBonus > 0) showWelcomeGift(j.welcomeBonus);   // regalo de bienvenida (solo la primera vez)
     if (j.ownerBonus > 0 && window.giftToast) giftToast(`👑 ¡Paga del mes! Te han ingresado ${Number(j.ownerBonus).toLocaleString('es-ES')} créditos.`);
     if (window.inviteAfterLink) inviteAfterLink();      // Invita y gana: apunta de quién viene
