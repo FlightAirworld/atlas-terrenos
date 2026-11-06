@@ -9,8 +9,8 @@ const drawn = new Map();       // id -> { srcId, url, label }
 
 // ---------- Mapa 3D (MapLibre GL): globo + satélite + relieve ----------
 // Vista plana (tipo Atlas Earth): cámara cenital, sin inclinación y sin volúmenes 3D. Por defecto activada.
-let flatView = true;
-try { flatView = localStorage.getItem('flatView') !== '0'; } catch (e) {}
+let flatView = true;   // el mapa es siempre plano
+try { localStorage.removeItem('flatView'); } catch (e) {}
 // Mapa base: 'estilizado' (dibujo limpio tipo Atlas Earth, vectorial) o 'satelite'
 let baseMode = 'estilizado';
 try { baseMode = localStorage.getItem('baseMode') === 'satelite' ? 'satelite' : 'estilizado'; } catch (e) {}

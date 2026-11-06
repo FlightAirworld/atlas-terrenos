@@ -401,36 +401,9 @@ body.mp-z1 .ts-pd{opacity:0 !important;pointer-events:none !important}`;
     list.insertBefore(b, document.getElementById('account-btn') || null);   // justo antes de "Cuenta"
     return b;
   }
-  const btn3d = makeBtn('view3d-btn', '🏙️', 'Vista 3D', 'Inclinar el mapa y ver los edificios en 3D');
   const btnLight = makeBtn('light-btn', '🌗', 'Luz del día', 'Luz y sombras según la hora');
 
-  // ---------- Vista 3D ----------
-  let on3d = store('mp3d') === '1';
-  function apply3d(anim) {
-    try {
-      if (typeof gl === 'undefined' || !gl) return false;
-      // La vista plana (app.js) bloquea la inclinación (maxPitch 0) y oculta los volúmenes: hay que desactivarla para poder inclinar.
-      if (typeof flatView !== 'undefined' && typeof applyViewMode === 'function') {
-        flatView = !on3d;
-        try { localStorage.setItem('flatView', flatView ? '1' : '0'); } catch (e) {}
-        applyViewMode(!!anim);
-      }
-      if (gl.getLayer('owned-3d')) {
-        gl.setPaintProperty('owned-3d', 'fill-extrusion-opacity', on3d ? 0.55 : 0.35);
-        gl.setPaintProperty('owned-3d', 'fill-extrusion-vertical-gradient', on3d);
-        gl.setPaintProperty('owned-3d', 'fill-extrusion-color', on3d ? '#e8e1d2' : '#f1ede4');
-      }
-      gl.easeTo({ pitch: on3d ? 55 : 0, duration: anim ? 700 : 0 });
-      btn3d.setAttribute('aria-pressed', on3d ? 'true' : 'false');
-      btn3d.style.fontWeight = on3d ? '800' : '';
-      return true;
-    } catch (e) { return false; }
-  }
-  btn3d.addEventListener('click', () => { on3d = !on3d; store('mp3d', on3d ? '1' : '0'); apply3d(true); });
-  if (on3d) {                                     // recuerda la elección de la última vez
-    let n = 0;
-    const t = setInterval(() => { if (++n > 150 || (typeof gl !== 'undefined' && gl && gl.getLayer && gl.getLayer('owned-3d') && apply3d(false))) clearInterval(t); }, 200);
-  }
+  try { localStorage.removeItem('mp3d'); } catch (e) {}   // la vista 3D se quitó: el mapa es siempre plano
 
   // ---------- Luz del día ----------
   // Capa de color por encima del mapa (no recibe toques). Hora local del jugador; cambia poco a poco.
