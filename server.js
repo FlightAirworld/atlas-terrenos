@@ -2511,7 +2511,7 @@ const BUILD_ID = String(process.env.RENDER_GIT_COMMIT || 'dev').slice(0, 8);   /
 const CSP_ENFORCED = "object-src 'none'; base-uri 'self'";
 const CSP_REPORT = "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://www.paypal.com https://js.stripe.com; " +
   "style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; " +
-  "connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org https://tiles.openfreemap.org https://server.arcgisonline.com https://*.paypal.com https://api.stripe.com https://atlas-terrenos.onrender.com; " +
+  "connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org https://tiles.openfreemap.org https://server.arcgisonline.com https://s3.amazonaws.com https://*.paypal.com https://api.stripe.com https://atlas-terrenos.onrender.com; " +
   "frame-src https://www.youtube.com https://www.youtube-nocookie.com https://*.paypal.com https://js.stripe.com https://checkout.stripe.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; report-uri /api/csp-report";
 function sendStatic(req, res, file) {
   const type = MIME[path.extname(file)] || 'application/octet-stream';
