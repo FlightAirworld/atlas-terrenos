@@ -126,12 +126,21 @@ const HOUSES = [
   'images/hospital.webp',
   'images/bomberos.webp',
   'images/fabrica.webp',
-  'images/puerto.webp'
+  'images/puerto.webp',
+  'images/parque-atracciones.webp',
+  'images/estadio.webp',
+  'images/iglesia.webp',
+  'images/estacion.webp',
+  'images/aeropuerto.webp',
+  'images/navidad.webp',
+  'images/halloween.webp'
 ];
 // Casas especiales: no salen al azar ni se pueden elegir al reclamar; tienen sus propias reglas (ver setHouse)
 const AYUNTAMIENTO = 'images/ayuntamiento.webp';
 const BANCO = 'images/banco.webp', HOSPITAL = 'images/hospital.webp', BOMBEROS = 'images/bomberos.webp', FABRICA = 'images/fabrica.webp', PUERTO = 'images/puerto.webp';
-const SPECIAL_HOUSES = [AYUNTAMIENTO, BANCO, HOSPITAL, BOMBEROS, FABRICA, PUERTO];
+const ATRACCIONES = 'images/parque-atracciones.webp', ESTADIO = 'images/estadio.webp', IGLESIA = 'images/iglesia.webp', ESTACION = 'images/estacion.webp', AEROPUERTO = 'images/aeropuerto.webp';
+const NAVIDAD = 'images/navidad.webp', HALLOWEEN = 'images/halloween.webp';   // de temporada
+const SPECIAL_HOUSES = [AYUNTAMIENTO, BANCO, HOSPITAL, BOMBEROS, FABRICA, PUERTO, ATRACCIONES, ESTADIO, IGLESIA, ESTACION, AEROPUERTO, NAVIDAD, HALLOWEEN];
 const cleanHouse = (h, allowSpecial = false) => { h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h; return HOUSES.includes(h) && (allowSpecial || !SPECIAL_HOUSES.includes(h)) ? h : null; };   // null = al azar (como hasta ahora)
 const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
 
@@ -717,7 +726,7 @@ async function setHouse(req, { id, house }) {
   if (!h) throw new HttpError(400, 'Casa no válida');
   const pack = await ensureUserPack(user);
   // Edificios especiales: si el terreno aún no tiene pueblo, lo averiguamos ahora mismo (sin esperar al proceso de fondo)
-  if (CITY_GEOCODE && (BUILDINGS[h] || h === AYUNTAMIENTO)) {
+  if (CITY_GEOCODE && (BUILDINGS[h] || (AMBIENT[h] && AMBIENT[h].city) || h === AYUNTAMIENTO)) {
     const cur = await one('SELECT x, y, city FROM parcels WHERE id = $1 AND user_id = $2', [String(id), user.id]);
     if (cur && (!cur.city || cur.city === CITY_NONE)) {
       try {
@@ -732,16 +741,17 @@ async function setHouse(req, { id, house }) {
     await client.query('SELECT code FROM packs WHERE code = $1 FOR UPDATE', [pack.code]);   // una operación a la vez por cuenta
     const par = (await client.query('SELECT house, city FROM parcels WHERE id = $1 AND user_id = $2 FOR UPDATE', [String(id), user.id])).rows[0];
     if (!par) throw new HttpError(403, 'Este terreno no es tuyo');
-    const bd = BUILDINGS[h];
-    if (bd && par.house !== h) {   // banco, fábrica, puerto, hospital, bomberos: exigen pueblo y respetan su límite
-      if (!par.city || par.city === CITY_NONE) throw new HttpError(400, 'Este terreno aún no tiene pueblo');
-      const other = (await client.query(bd.unique === 'town'
+    const bd = BUILDINGS[h] || AMBIENT[h];
+    if (bd && par.house !== h) {   // edificios con función, de ambiente o de temporada: respetan su límite (y exigen pueblo salvo los de temporada)
+      if (bd.season && !inSeason(bd.season)) throw new HttpError(403, `${bd.name}: solo se puede construir del ${fmtMD(bd.season.from)} al ${fmtMD(bd.season.to)}`);
+      if (bd.city !== false && (!par.city || par.city === CITY_NONE)) throw new HttpError(400, 'Este terreno aún no tiene pueblo');
+      const other = bd.unique ? (await client.query(bd.unique === 'town'
         ? 'SELECT id, user_id FROM parcels WHERE city = $1 AND house = $2 AND id <> $3 LIMIT 1 FOR UPDATE'
         : 'SELECT id, user_id FROM parcels WHERE city = $1 AND house = $2 AND id <> $3 AND user_id = $4 LIMIT 1 FOR UPDATE',
-        bd.unique === 'town' ? [par.city, h, String(id)] : [par.city, h, String(id), user.id])).rows[0];
+        bd.unique === 'town' ? [par.city, h, String(id)] : [par.city, h, String(id), user.id])).rows[0] : null;
       if (other) throw new HttpError(409, bd.unique === 'town'
-        ? (String(other.user_id) === String(user.id) ? `Ya tienes el ${bd.name.toLowerCase()} de este pueblo en otro de tus terrenos` : `Este pueblo ya tiene ${bd.name.toLowerCase()}`)
-        : `Ya tienes un ${bd.name.toLowerCase()} en este pueblo`);
+        ? (String(other.user_id) === String(user.id) ? `Ya tienes ${bd.name.toLowerCase()} de este pueblo en otro de tus terrenos` : `Este pueblo ya tiene ${bd.name.toLowerCase()}`)
+        : `Ya tienes ${bd.name.toLowerCase()} en este pueblo`);
     }
     if (h === AYUNTAMIENTO && par.house !== AYUNTAMIENTO) {
       // Ayuntamiento: solo el presidente del pueblo, y solo uno por pueblo
@@ -1066,6 +1076,28 @@ const BUILDINGS = {
   [HOSPITAL]: { name: 'Hospital', mult: 1, flat: numEnv('HOSPITAL_PER_DAY', 1) / 24, cost: BUILDING_COST, unique: 'owner' },
   [BOMBEROS]: { name: 'Bomberos', mult: 1, flat: 0, discount: Math.min(0.9, numEnv('BOMBEROS_DISCOUNT', 0.2)), cost: BUILDING_COST, unique: 'owner' }
 };
+// ---------- Edificios de ambiente y de temporada ----------
+// No cambian la producción: son para decorar y coleccionar. Se ponen igual que el resto (CAMBIAR CASA en un terreno propio).
+//   unique: 'town' = uno por pueblo (escasos) · 'owner' = uno por jugador y pueblo · null = sin límite
+//   city: false = no hace falta que el terreno tenga pueblo
+//   season: ventana anual 'MM-DD..MM-DD' en la que se puede construir (la que ya tengas puesta se queda para siempre)
+// Variables opcionales: AMBIENT_COST (5), SEASON_NAVIDAD (12-01..01-06), SEASON_HALLOWEEN (10-15..11-02)
+const AMBIENT_COST = Math.floor(numEnv('AMBIENT_COST', 5));
+const parseSeason = (v, def) => { const m = String(v || def).match(/^(\d\d)-(\d\d)\.\.(\d\d)-(\d\d)$/); const w = m || def.match(/^(\d\d)-(\d\d)\.\.(\d\d)-(\d\d)$/); return { from: `${w[1]}-${w[2]}`, to: `${w[3]}-${w[4]}` }; };
+const SEASON_NAVIDAD = parseSeason(process.env.SEASON_NAVIDAD, '12-01..01-06');
+const SEASON_HALLOWEEN = parseSeason(process.env.SEASON_HALLOWEEN, '10-15..11-02');
+const inSeason = w => { const md = dayKey().slice(5); return w.from <= w.to ? (md >= w.from && md <= w.to) : (md >= w.from || md <= w.to); };
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const fmtMD = md => `${Number(md.slice(3))} ${MESES[Number(md.slice(0, 2)) - 1]}`;
+const AMBIENT = {
+  [IGLESIA]:     { name: 'Iglesia',            cost: BUILDING_COST,     unique: 'owner', city: true,  desc: 'decoración' },
+  [ESTACION]:    { name: 'Estación',           cost: AMBIENT_COST,      unique: 'town',  city: true,  desc: 'decoración' },
+  [ATRACCIONES]: { name: 'Parque de atracciones', cost: AMBIENT_COST + 1, unique: 'town', city: true,  desc: 'decoración' },
+  [ESTADIO]:     { name: 'Estadio',            cost: AMBIENT_COST + 1,  unique: 'town',  city: true,  desc: 'decoración' },
+  [AEROPUERTO]:  { name: 'Aeropuerto',         cost: AMBIENT_COST + 3,  unique: 'town',  city: true,  desc: 'decoración' },
+  [NAVIDAD]:     { name: 'Terreno navideño',   cost: BUILDING_COST,     unique: null,    city: false, desc: 'edición limitada', season: SEASON_NAVIDAD },
+  [HALLOWEEN]:   { name: 'Terreno de Halloween', cost: BUILDING_COST,   unique: null,    city: false, desc: 'edición limitada', season: SEASON_HALLOWEEN }
+};
 const fmtN = n => Number(n).toLocaleString('es-ES', { maximumFractionDigits: 2 });
 const BUILDINGS_PUBLIC = (() => {
   const o = { [AYUNTAMIENTO]: { name: 'Ayuntamiento', cost: HOUSE_COST, desc: 'Solo el presidente del pueblo; uno por pueblo.' } };
@@ -1076,6 +1108,12 @@ const BUILDINGS_PUBLIC = (() => {
     if (b.discount) d.push(`-${Math.round(b.discount * 100)}% al mejorar tus terrenos de este pueblo`);
     d.push(b.unique === 'town' ? 'uno por pueblo' : 'uno por jugador y pueblo');
     o[h] = { name: b.name, cost: b.cost, desc: d.join(' · ') };
+  }
+  for (const [h, b] of Object.entries(AMBIENT)) {
+    const d = [b.desc];
+    if (b.unique) d.push(b.unique === 'town' ? 'uno por pueblo' : 'uno por jugador y pueblo');
+    if (b.season) d.push(`del ${fmtMD(b.season.from)} al ${fmtMD(b.season.to)} · se queda para siempre`);
+    o[h] = { name: b.name, cost: b.cost, desc: d.join(' · '), ...(b.season ? { season: { active: inSeason(b.season), from: b.season.from, to: b.season.to } } : {}) };
   }
   return o;
 })();

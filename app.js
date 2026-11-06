@@ -177,11 +177,20 @@ const HOUSES = [
   'images/hospital.webp',
   'images/bomberos.webp',
   'images/fabrica.webp',
-  'images/puerto.webp'
+  'images/puerto.webp',
+  'images/parque-atracciones.webp',
+  'images/estadio.webp',
+  'images/iglesia.webp',
+  'images/estacion.webp',
+  'images/aeropuerto.webp',
+  'images/navidad.webp',
+  'images/halloween.webp'
 ];
 // Casas especiales: no salen al azar ni al reclamar (el ayuntamiento es solo para el presidente del pueblo)
-const SPECIAL_HOUSES = ['images/ayuntamiento.webp', 'images/banco.webp', 'images/hospital.webp', 'images/bomberos.webp', 'images/fabrica.webp', 'images/puerto.webp'];
-const BUILDING_ICON = { ayuntamiento: '🏛️', banco: '🏦', hospital: '🏥', bomberos: '🚒', fabrica: '🏭', puerto: '⚓' };
+const SPECIAL_HOUSES = ['images/ayuntamiento.webp', 'images/banco.webp', 'images/hospital.webp', 'images/bomberos.webp', 'images/fabrica.webp', 'images/puerto.webp',
+  'images/parque-atracciones.webp', 'images/estadio.webp', 'images/iglesia.webp', 'images/estacion.webp', 'images/aeropuerto.webp', 'images/navidad.webp', 'images/halloween.webp'];
+const BUILDING_ICON = { ayuntamiento: '🏛️', banco: '🏦', hospital: '🏥', bomberos: '🚒', fabrica: '🏭', puerto: '⚓',
+  'parque-atracciones': '🎡', estadio: '🏟️', iglesia: '⛪', estacion: '🚉', aeropuerto: '✈️', navidad: '🎄', halloween: '🎃' };
 // Nombre y función de un edificio especial (los textos vienen del servidor: cfg.buildings)
 function buildingText(h) {
   const b = h && cfg && cfg.buildings && cfg.buildings[h]; if (!b) return '';
@@ -883,7 +892,7 @@ function showPanel(p) {
     $('gift-owner-btn').classList.toggle('hidden', !!p.mine || !p.giftable);   // solo en terrenos de otros jugadores con cuenta
     $('house-pick-wrap').classList.add('hidden');
     { const c = cfg.houseCost ?? 1; $('house-change-btn').textContent = '🏠 CAMBIAR CASA' + (c > 0 ? ` (${c} 🎟️)` : ' (gratis)'); }
-    if (p.mine) markHouse($('house-pick-edit'), p.house && String(p.house).replace(/\.png$/i, '.webp'));
+    if (p.mine) { if (window.rebuildEditPicker) rebuildEditPicker(p.house && String(p.house).replace(/\.png$/i, '.webp')); markHouse($('house-pick-edit'), p.house && String(p.house).replace(/\.png$/i, '.webp')); }
     $('p-avatar').textContent = p.avatar || '';
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
     renderLevelBox(p);
@@ -955,7 +964,7 @@ try { const s = localStorage.getItem('avatar'); if (AVATARS.includes(s)) avatar 
 // ---------- Elegir casa ----------
 let chosenHouse = null;   // casa elegida para el terreno que vas a reclamar (null = al azar)
 const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '').replace(/[-_]/g, ' ');
-function buildHousePicker(box, onPick, withRandom) {
+function buildHousePicker(box, onPick, withRandom, current) {
   box.replaceChildren();
   const add = (value, content, label) => {
     const b = document.createElement('button');
@@ -966,6 +975,8 @@ function buildHousePicker(box, onPick, withRandom) {
   if (withRandom) add(null, '🎲', 'Al azar');
   [...HOUSES].reverse().forEach(h => {   // las más nuevas (al final de HOUSES) salen primero
     if (withRandom && SPECIAL_HOUSES.includes(h)) return;   // las especiales no se eligen al reclamar
+    const sb = cfg && cfg.buildings && cfg.buildings[h];
+    if (sb && sb.season && !sb.season.active && h !== current) return;   // de temporada: solo se ofrecen en sus fechas
     const i = document.createElement('img');
     i.src = sizedUrl(h, 't'); i.alt = ''; i.loading = 'lazy';
     i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;display:block';
@@ -979,7 +990,7 @@ function markHouse(box, current) {
   const freeBox = $('house-pick-free'), editBox = $('house-pick-edit');
   buildHousePicker(freeBox, h => { chosenHouse = h; markHouse(freeBox, h); }, true);
   markHouse(freeBox, null);
-  buildHousePicker(editBox, async h => {
+  const editHandler = async h => {
     if (!selected || !selected.mine || h === selected.house) return;
     const cost = (cfg.buildings && cfg.buildings[h] && cfg.buildings[h].cost != null) ? cfg.buildings[h].cost : (cfg.houseCost ?? 1);
     if (cost > 0) {
@@ -1001,7 +1012,9 @@ function markHouse(box, current) {
       } catch (e) {}
       setMsg(`🏠 ¡Casa cambiada! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
     } catch (e) { setMsg(e.message, 'err'); }
-  }, false);
+  };
+  window.rebuildEditPicker = cur => { buildHousePicker(editBox, editHandler, false, cur); };   // se reconstruye al abrir un terreno (ya conocemos las fechas de temporada)
+  rebuildEditPicker(null);
   $('house-change-btn').onclick = () => $('house-pick-wrap').classList.toggle('hidden');
 })();
 

@@ -67,6 +67,8 @@ El servidor añade la columna solo al arrancar (`migration-house.sql` es el mism
 - ⚓ Puerto: produce ×`PUERTO_MULT` (1,5). Uno por pueblo.
 - 🏥 Hospital: da `HOSPITAL_PER_DAY` créditos al día (1), sumados a la producción y con el mismo tope de horas. Uno por jugador y pueblo.
 - 🚒 Bomberos: `BOMBEROS_DISCOUNT` (0,2 = 20 %) de descuento al subir de nivel los terrenos del dueño en ese pueblo. Uno por jugador y pueblo.
+**Edificios de ambiente** (decoran y se coleccionan, no cambian la producción; se ponen con CAMBIAR CASA): ⛪ Iglesia (`BUILDING_COST`, una por jugador y pueblo), 🚉 Estación (`AMBIENT_COST`, 5 por defecto), 🎡 Parque de atracciones y 🏟️ Estadio (`AMBIENT_COST`+1), ✈️ Aeropuerto (`AMBIENT_COST`+3). Estación, parque, estadio y aeropuerto: uno por pueblo. Todos exigen que el terreno tenga pueblo.
+**De temporada** (`BUILDING_COST`, sin límite ni pueblo): 🎄 Terreno navideño (`SEASON_NAVIDAD`, por defecto `12-01..01-06`) y 🎃 Terreno de Halloween (`SEASON_HALLOWEEN`, `10-15..11-02`). Solo se pueden construir dentro de su ventana anual (formato `MM-DD..MM-DD`), pero el que ya tienes puesto se queda para siempre.
 El bonus cuenta desde el momento del cambio (columnas `house_at` y `house_prev` de `parcels`, que el servidor crea solo), igual que los niveles.
 Para añadir casas nuevas, ponlas al FINAL de `HOUSES` en `app.js` y en `server.js` (así no cambian las casas al azar ya existentes).
 
