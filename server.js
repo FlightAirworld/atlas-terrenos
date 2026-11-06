@@ -716,6 +716,16 @@ async function setHouse(req, { id, house }) {
   const h = cleanHouse(house, true);
   if (!h) throw new HttpError(400, 'Casa no válida');
   const pack = await ensureUserPack(user);
+  // Edificios especiales: si el terreno aún no tiene pueblo, lo averiguamos ahora mismo (sin esperar al proceso de fondo)
+  if (CITY_GEOCODE && (BUILDINGS[h] || h === AYUNTAMIENTO)) {
+    const cur = await one('SELECT x, y, city FROM parcels WHERE id = $1 AND user_id = $2', [String(id), user.id]);
+    if (cur && (!cur.city || cur.city === CITY_NONE)) {
+      try {
+        const { name } = await reverseCity(cur.y * SIZE - 90 + SIZE / 2, cur.x * SIZE - 180 + SIZE / 2, true);
+        if (name !== CITY_NONE || !cur.city) await run('UPDATE parcels SET city = $1 WHERE id = $2', [name, String(id)]);
+      } catch (e) { /* si falla, saldrá el aviso de "aún no tiene pueblo" y se reintenta */ }
+    }
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1703,9 +1713,9 @@ const CITY_GEOCODE = process.env.CITY_GEOCODE !== '0';
 const CITY_NONE = 'Sin ciudad';
 const cityCache = new Map();   // celda de ~500 m -> nombre de la ciudad
 const sleepMs = ms => new Promise(r => setTimeout(r, ms));
-async function reverseCity(lat, lng) {
+async function reverseCity(lat, lng, force) {
   const key = Math.round(lat / 0.005) + ',' + Math.round(lng / 0.005);
-  if (cityCache.has(key)) return { name: cityCache.get(key), cached: true };
+  if (!force && cityCache.has(key)) return { name: cityCache.get(key), cached: true };
   const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=es&lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}`,
     { headers: { 'User-Agent': 'atlas-terrenos/1.0 (' + (process.env.CITY_CONTACT || 'https://atlas-terrenos.onrender.com') + ')' }, signal: AbortSignal.timeout(10_000) });
   if (!r.ok) throw new Error('Nominatim ' + r.status);
