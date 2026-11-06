@@ -1215,7 +1215,7 @@ async function loadStats() {
     const s = await api('/api/stats');
     $('stats').textContent = `${s.sold} terrenos vendidos`;
     const ol = $('rank-list'); ol.replaceChildren();
-    s.top.forEach(t => { const li = document.createElement('li'); li.textContent = `${flagOf(t.country) ? flagOf(t.country) + ' ' : ''}${t.owner} — ${t.n}`; ol.appendChild(li); });
+    s.top.forEach((t, i) => { const li = document.createElement('li'); li.textContent = `${i === 0 ? '🏛️ ' : ''}${flagOf(t.country) ? flagOf(t.country) + ' ' : ''}${t.owner} — ${t.n}${i === 0 ? ' · Presidente' : ''}`; if (i === 0) li.style.fontWeight = '800'; ol.appendChild(li); });
     if (!s.top.length) ol.textContent = 'Aún no hay propietarios. ¡Sé el primero!';
     const oc = $('rank-countries'); oc.replaceChildren();
     (s.countries || []).forEach(c => { const li = document.createElement('li'); li.className = 'rank-link'; li.tabIndex = 0; li.setAttribute('role', 'button'); li.textContent = `${flagOf(c.country)} ${countryName(c.country)} — ${c.n}`; li.onclick = () => showCities(c.country); li.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showCities(c.country); } }; oc.appendChild(li); });

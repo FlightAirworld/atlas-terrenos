@@ -23,6 +23,13 @@
     .tw-bar { height:6px; border-radius:99px; background:rgba(0,0,0,.1); margin-top:6px; overflow:hidden; }
     .tw-bar i { display:block; height:100%; background:#2a9d8f; border-radius:99px; transition:width .6s; }
     .tw-up { color:#2a9d8f; font-weight:700; }
+    .tw-pres { display:flex; align-items:center; gap:10px; margin:0 0 12px; padding:10px 12px; border-radius:14px; border:2px solid #e9c46a; background:rgba(233,196,106,.18); }
+    .tw-presrow { font-size:12px; margin:4px 6px 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .tw-claim { border:none; background:#e9c46a; color:#1d3557; font-weight:800; border-radius:99px; padding:6px 12px; cursor:pointer; font:inherit; font-weight:800; }
+    .tw-claim:disabled { opacity:.6; }
+    .tw-pres-ico { font-size:28px; line-height:1; }
+    .tw-pres small { display:block; opacity:.75; }
+    .tw-pres b { font-size:18px; }
   `;
   document.head.appendChild(st);
 
@@ -68,17 +75,51 @@
     return root;
   }
 
-  function render(j) {
+  // Presidente del pueblo (el que más terrenos tiene allí). Si eres tú, puedes cobrar sus créditos del mes.
+  function presRow(t) {
+    if (!t.president) return null;
+    const d = el('div', 'tw-presrow');
+    d.appendChild(el('span', null, `🏛️ Presidente: ${t.president.owner} · ${t.president.n} terreno${t.president.n === 1 ? '' : 's'}`));
+    if (t.mine) {
+      if (t.canClaim) {
+        const b = el('button', 'tw-claim', `🎁 Cobrar ${t.prize} créditos`); b.type = 'button';
+        b.addEventListener('click', async () => {
+          b.disabled = true;
+          try {
+            const j = await api('/api/town/president/claim', { method: 'POST', body: { city: t.city } });
+            if (typeof credits !== 'undefined') { credits = j.credits; if (typeof updateCreditUi === 'function') updateCreditUi(); }
+            if (window.sfx) sfx('claim');
+            b.replaceWith(el('span', 'tw-up', `🎉 +${j.amount} créditos`));
+          } catch (e) { b.disabled = false; b.replaceWith(el('span', null, e.message)); }
+        });
+        d.appendChild(b);
+      } else if (t.claimed) d.appendChild(el('span', 'tw-up', '✅ Premio de este mes cobrado'));
+    }
+    return d;
+  }
+
+  function render(j, president) {
     body.replaceChildren();
     const tot = el('div', 'tw-total');
     [[fmt(j.total.pop), 'habitantes en el juego'], [fmt(j.total.parcels), 'terrenos']].forEach(([a, b]) => {
       const d = el('div'); d.append(el('b', null, a), el('small', null, b)); tot.appendChild(d);
     });
     body.appendChild(tot);
+    if (president && president.owner) {   // el jugador con más terrenos es el presidente
+      const pr = el('div', 'tw-pres');
+      pr.appendChild(el('span', 'tw-pres-ico', '🏛️'));
+      const txt = el('div');
+      txt.appendChild(el('small', null, 'Presidente del juego'));
+      txt.appendChild(el('b', null, flag(president.country) + president.owner));
+      txt.appendChild(el('small', null, `${fmt(president.n)} terreno${president.n === 1 ? '' : 's'}`));
+      pr.appendChild(txt);
+      body.appendChild(pr);
+    }
     if (j.here) {
       const h = el('div', 'tw-here');
       h.appendChild(el('div', 'tw-sub', '📍 Donde estás mirando'));
       h.appendChild(card(j.here, 'div'));
+      { const pr = presRow(j.here); if (pr) h.appendChild(pr); }
       if (!j.here.parcels) h.appendChild(el('div', 'tw-sub', 'Aún nadie vive aquí: reclama un terreno y nacerá la población.'));
       body.appendChild(h);
     }
@@ -87,7 +128,7 @@
       body.appendChild(el('p', 'muted', 'Aún no hay pueblos. Los nombres se calculan solos a partir de la ubicación de cada terreno; vuelve en un rato.'));
     } else {
       const ul = el('ul', 'tw-list');
-      j.towns.forEach(t => { const li = el('li'); li.appendChild(card(t)); ul.appendChild(li); });
+      j.towns.forEach(t => { const li = el('li'); li.appendChild(card(t)); const pr = presRow(t); if (pr) li.appendChild(pr); ul.appendChild(li); });
       body.appendChild(ul);
     }
     const tiers = (j.tiers || []).map(t => `${t.name} (${fmt(t.from)}+)`).join(' → ');
@@ -98,7 +139,8 @@
     try {
       const c = typeof map !== 'undefined' && map.getCenter ? map.getCenter() : null;
       const q = c ? `?lat=${c.lat.toFixed(5)}&lng=${c.lng.toFixed(5)}` : '';
-      render(await api('/api/towns' + q));
+      const [towns, stats] = await Promise.all([api('/api/towns' + q), api('/api/stats').catch(() => null)]);
+      render(towns, stats && stats.top && stats.top[0]);
     } catch (e) {
       if (!body.firstChild || body.textContent === 'Cargando…') body.textContent = 'No se pudo cargar la población: ' + e.message;
     }

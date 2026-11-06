@@ -1663,7 +1663,7 @@ function townRow(r) {
 }
 const TOWN_COLS = 'COUNT(*) AS n, SUM($1::int + (COALESCE(level, 1) - 1) * $2::int) AS pop, COUNT(*) FILTER (WHERE created_at > $3) AS recent, AVG(x) AS ax, AVG(y) AS ay';
 let townsCache = { t: 0, rows: null };
-async function townsGet(url) {
+async function townsGet(url, req) {
   const since = Date.now() - 86_400_000;
   if (!townsCache.rows || Date.now() - townsCache.t > 15_000) {
     const rows = await all(`SELECT city, (ARRAY_AGG(country ORDER BY created_at DESC) FILTER (WHERE country IS NOT NULL))[1] AS country, ${TOWN_COLS}
@@ -1683,7 +1683,72 @@ async function townsGet(url) {
       }
     } catch { /* sin geocodificación ahora mismo: simplemente no sale "Aquí" */ }
   }
+  // Presidente de cada pueblo: el jugador (con cuenta) con más terrenos allí. Cobra PRESIDENT_CREDITS créditos al mes.
+  try {
+    const user = req ? await userFrom(req).catch(() => null) : null;
+    out.towns = await withPresidents(out.towns, user);
+    if (out.here) out.here = (await withPresidents([out.here], user))[0];
+  } catch (e) { console.error('Presidentes de pueblos:', e.message); }
   return out;
+}
+
+// ---------- Presidente de cada pueblo: 10 créditos gratis al mes ----------
+// Presidente = el jugador con cuenta que más terrenos tiene en ese pueblo (si hay empate, el que llegó antes).
+// La tabla president_grants (clave pueblo + mes) garantiza que el premio de cada pueblo se paga una sola vez al mes.
+// Variables opcionales: PRESIDENT_CREDITS (por defecto 10; 0 lo desactiva) y PRESIDENT_MIN_PARCELS (terrenos mínimos para ser presidente, por defecto 1).
+const PRESIDENT_CREDITS = Math.max(0, Math.min(1000, Math.floor(Number(process.env.PRESIDENT_CREDITS ?? 10)) || 0));
+const PRESIDENT_MIN_PARCELS = Math.max(1, Math.floor(Number(process.env.PRESIDENT_MIN_PARCELS || 1)) || 1);
+async function townPresidents(cities) {
+  const out = new Map();
+  if (!cities.length) return out;
+  const rows = await all(`SELECT DISTINCT ON (city) city, user_id, owner, n FROM (
+      SELECT city, user_id, (ARRAY_AGG(owner ORDER BY created_at DESC))[1] AS owner, COUNT(*) AS n, MIN(created_at) AS first
+      FROM parcels WHERE city = ANY($1::text[]) AND user_id IS NOT NULL GROUP BY city, user_id) t
+    WHERE n >= $2 ORDER BY city, n DESC, first ASC`, [cities, PRESIDENT_MIN_PARCELS]);
+  rows.forEach(r => out.set(r.city, { user_id: String(r.user_id), owner: r.owner, n: Number(r.n) || 0 }));
+  return out;
+}
+async function withPresidents(towns, user) {
+  const list = towns.filter(t => t && t.city);
+  const pres = await townPresidents([...new Set(list.map(t => t.city))]);
+  const month = dayKey().slice(0, 7);
+  const uid = user ? String(user.id) : null;
+  const mine = list.filter(t => uid && pres.get(t.city) && pres.get(t.city).user_id === uid).map(t => t.city);
+  const paid = new Set();
+  if (mine.length) (await all('SELECT city FROM president_grants WHERE month = $1 AND city = ANY($2::text[])', [month, mine])).forEach(r => paid.add(r.city));
+  return towns.map(t => {
+    const p = t && pres.get(t.city);
+    if (!p) return t;
+    const isMine = !!uid && p.user_id === uid;
+    return { ...t, president: { owner: p.owner, n: p.n }, mine: isMine, prize: PRESIDENT_CREDITS,
+             canClaim: isMine && PRESIDENT_CREDITS > 0 && !paid.has(t.city), claimed: isMine && paid.has(t.city) };
+  });
+}
+async function presidentClaim(req, body) {
+  const user = await needUser(req);
+  if (!PRESIDENT_CREDITS) throw new HttpError(404, 'Este premio está desactivado');
+  const city = String((body && body.city) || '').trim().slice(0, 200);
+  if (!city || city === CITY_NONE) throw new HttpError(400, 'Falta el pueblo');
+  const pack = await ensureUserPack(user);
+  const month = dayKey().slice(0, 7);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT code FROM packs WHERE code = $1 FOR UPDATE', [pack.code]);   // una reclamación a la vez por cuenta
+    const top = (await client.query(`SELECT user_id, COUNT(*) AS n, MIN(created_at) AS first FROM parcels
+      WHERE city = $1 AND user_id IS NOT NULL GROUP BY user_id ORDER BY n DESC, first ASC LIMIT 1`, [city])).rows[0];
+    if (!top || String(top.user_id) !== String(user.id) || Number(top.n) < PRESIDENT_MIN_PARCELS)
+      throw new HttpError(403, 'Solo el presidente de este pueblo puede cobrar el premio');
+    const g = await client.query('INSERT INTO president_grants (city, month, user_id, credits, created_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (city, month) DO NOTHING RETURNING city',
+      [city, month, String(user.id), PRESIDENT_CREDITS, Date.now()]);
+    if (!g.rows[0]) throw new HttpError(409, `El premio de ${city} ya se ha cobrado este mes. ¡Vuelve el mes que viene!`);
+    const up = (await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING credits', [PRESIDENT_CREDITS, pack.code])).rows[0];
+    await client.query('COMMIT');
+    return { ok: true, city, amount: PRESIDENT_CREDITS, credits: Number(up.credits) };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally { client.release(); }
 }
 
 // ---------- Avisos al móvil (notificaciones push) ----------
@@ -1973,7 +2038,8 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/rank/cities') return rankCities(url);
-  if (req.method === 'GET' && pn === '/api/towns') return townsGet(url);
+  if (req.method === 'GET' && pn === '/api/towns') return townsGet(url, req);
+  if (req.method === 'POST' && pn === '/api/town/president/claim') return presidentClaim(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };
 
@@ -2176,6 +2242,7 @@ ready.then(async () => {   // ruleta diaria: una fila por cuenta y día (la clav
   await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS free_spins INT NOT NULL DEFAULT 0');
   await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS free_upgrades INT NOT NULL DEFAULT 0');
   await run('CREATE TABLE IF NOT EXISTS monthly_rewards (user_id TEXT NOT NULL, month TEXT NOT NULL, streak INT NOT NULL DEFAULT 0, last_day TEXT, PRIMARY KEY (user_id, month))');
+  await run('CREATE TABLE IF NOT EXISTS president_grants (city TEXT NOT NULL, month TEXT NOT NULL, user_id TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (city, month))');
 }).catch(e => console.error('No se pudo preparar la ruleta:', e.message));
 
 // Sitio estático en otro dominio: CORS_ORIGINS = direcciones permitidas, separadas por comas (p. ej. https://atlas-terrenos-web.onrender.com)
