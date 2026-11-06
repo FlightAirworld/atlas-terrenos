@@ -786,11 +786,11 @@ function setupAdminControls() {
   $('p-free').appendChild(box);
 }
 // ---------- Aviso al presidente: poner el ayuntamiento ----------
-let aytoTowns = [], aytoAt = 0;
+let aytoTowns = [], aytoSpots = {}, aytoAt = 0;
 async function refreshAyto(force) {
-  if (typeof authToken === 'undefined' || !authToken) { aytoTowns = []; return; }
+  if (typeof authToken === 'undefined' || !authToken) { aytoTowns = []; aytoSpots = {}; return; }
   if (!force && Date.now() - aytoAt < 30000) return;
-  try { aytoTowns = (await api('/api/town/president/ayuntamiento', { method: 'GET' })).towns || []; aytoAt = Date.now(); } catch (e) {}
+  try { const j = await api('/api/town/president/ayuntamiento', { method: 'GET' }); aytoTowns = j.towns || []; aytoSpots = j.spots || {}; aytoAt = Date.now(); } catch (e) {}
 }
 function renderAytoPromo(p) {
   const old = $('ayto-promo'); if (old) old.remove();
@@ -806,7 +806,7 @@ function renderAytoPromo(p) {
   const txt = document.createElement('div'); txt.style.cssText = 'font-size:13px;line-height:1.3';
   const b = document.createElement('b'); b.textContent = here ? `🏛️ ¡Eres el presidente de ${p.city}!` : `🏛️ ¡Eres presidente de ${aytoTowns.slice(0, 2).join(' y ')}${aytoTowns.length > 2 ? '…' : ''}!`;
   const sm = document.createElement('div');
-  sm.textContent = here ? 'Construye aquí el Ayuntamiento de tu pueblo.' : (owned ? 'Tu Ayuntamiento va en un terreno de ese pueblo: elígelo en el mapa.' : 'Pon el Ayuntamiento en uno de tus terrenos de ese pueblo: elígelo en el mapa y pulsa CAMBIAR CASA.');
+  sm.textContent = here ? 'Construye aquí el Ayuntamiento de tu pueblo.' : 'Toca aquí y te llevo a uno de tus terrenos de ese pueblo para poner el Ayuntamiento.';
   txt.append(b, sm);
   if (here) {
     const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'primary'; btn.style.cssText = 'margin-top:6px;width:100%;padding:8px';
@@ -814,15 +814,22 @@ function renderAytoPromo(p) {
     btn.textContent = `🏛️ CONSTRUIR AYUNTAMIENTO${c > 0 ? ` (${c} 🎟️)` : ''}`;
     txt.appendChild(btn);   // el clic lo gestiona todo el cuadro amarillo (box.onclick)
   }
-  // Al pulsar el cuadro amarillo: pone el Ayuntamiento directamente en este terreno (si eres presidente de su pueblo)
-  if (owned) {
-    box.style.cursor = 'pointer';
-    box.onclick = () => {
-      if (!here) return setMsg(`🏛️ Este terreno no está en ${aytoTowns.slice(0, 2).join(' ni en ')}${aytoTowns.length > 2 ? '…' : ''}. Elige uno de tus terrenos de ese pueblo.`, 'err');
+  // Al pulsar el cuadro amarillo: si ya estás en un terreno tuyo del pueblo, construye el Ayuntamiento; si no, te lleva a uno
+  box.style.cursor = 'pointer';
+  box.onclick = () => {
+    if (here) {
       const h = [...$('house-pick-edit').children].find(x => x.dataset.house === AYTO);
-      if (h) h.click();   // usa el mismo flujo de CAMBIAR CASA (confirma coste y lo construye)
-    };
-  }
+      if (h) h.click();   // mismo flujo de CAMBIAR CASA (confirma coste y lo construye)
+      return;
+    }
+    const town = (p.city && aytoTowns.includes(p.city)) ? p.city : aytoTowns[0];
+    const sp = aytoSpots[town];
+    if (!sp) return setMsg(`🏛️ Elige en el mapa uno de tus terrenos de ${town || 'ese pueblo'}.`, 'err');
+    const bb = boundsOf(sp.x, sp.y);
+    const ll = L.latLng((bb[0][0] + bb[1][0]) / 2, (bb[0][1] + bb[1][1]) / 2);
+    map.flyTo(ll, 18);
+    map.once('moveend', () => selectAt(ll));   // al llegar, el cuadro pasa a "Construye aquí el Ayuntamiento"
+  };
   box.append(img, txt);
   if (owned) $('p-owned').insertBefore(box, $('house-edit')); else $('p-free').insertBefore(box, $('p-free').children[1] || null);
 }

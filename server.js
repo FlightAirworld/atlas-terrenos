@@ -2167,7 +2167,17 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/rank/cities') return rankCities(url);
   if (req.method === 'GET' && pn === '/api/towns') return townsGet(url, req);
-  if (req.method === 'GET' && pn === '/api/town/president/ayuntamiento') { const u = await needUser(req); return { towns: await presidentAytoPending(u.id), cost: HOUSE_COST }; }
+  if (req.method === 'GET' && pn === '/api/town/president/ayuntamiento') {
+    const u = await needUser(req);
+    const towns = await presidentAytoPending(u.id);
+    // Un terreno tuyo de cada pueblo (para llevarte allí desde el cuadro del Ayuntamiento)
+    const spots = {};
+    if (towns.length) {
+      const rows = await all('SELECT DISTINCT ON (city) city, x, y FROM parcels WHERE user_id::text = $1 AND city = ANY($2::text[]) ORDER BY city, created_at', [String(u.id), towns]);
+      rows.forEach(r => { spots[r.city] = { x: r.x, y: r.y }; });
+    }
+    return { towns, spots, cost: HOUSE_COST };
+  }
   if (req.method === 'POST' && pn === '/api/town/president/claim') return presidentClaim(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };
