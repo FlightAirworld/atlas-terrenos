@@ -120,9 +120,13 @@ const HOUSES = [
   'images/claro-bosque.webp',
   'images/parque-futbol.webp',
   'images/mar.webp',
-  'images/mar-peces.webp'
+  'images/mar-peces.webp',
+  'images/ayuntamiento.webp'
 ];
-const cleanHouse = h => { h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h; return HOUSES.includes(h) ? h : null; };   // null = al azar (como hasta ahora)
+// Casas especiales: no salen al azar ni se pueden elegir al reclamar; tienen sus propias reglas (ver setHouse)
+const AYUNTAMIENTO = 'images/ayuntamiento.webp';
+const SPECIAL_HOUSES = [AYUNTAMIENTO];
+const cleanHouse = (h, allowSpecial = false) => { h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h; return HOUSES.includes(h) && (allowSpecial || !SPECIAL_HOUSES.includes(h)) ? h : null; };   // null = al azar (como hasta ahora)
 const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
 
 // ---------- Seguridad de administrador ----------
@@ -703,14 +707,26 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house })
 const HOUSE_COST = Math.max(0, Math.floor(Number(process.env.HOUSE_COST ?? 1)));
 async function setHouse(req, { id, house }) {
   const user = await needUser(req);
-  const h = cleanHouse(house);
+  const h = cleanHouse(house, true);
   if (!h) throw new HttpError(400, 'Casa no válida');
   const pack = await ensureUserPack(user);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const par = (await client.query('SELECT house FROM parcels WHERE id = $1 AND user_id = $2 FOR UPDATE', [String(id), user.id])).rows[0];
+    await client.query('SELECT code FROM packs WHERE code = $1 FOR UPDATE', [pack.code]);   // una operación a la vez por cuenta
+    const par = (await client.query('SELECT house, city FROM parcels WHERE id = $1 AND user_id = $2 FOR UPDATE', [String(id), user.id])).rows[0];
     if (!par) throw new HttpError(403, 'Este terreno no es tuyo');
+    if (h === AYUNTAMIENTO && par.house !== AYUNTAMIENTO) {
+      // Ayuntamiento: solo el presidente del pueblo, y solo uno por pueblo
+      if (!par.city || par.city === CITY_NONE) throw new HttpError(400, 'Este terreno aún no tiene pueblo');
+      const top = (await client.query(`SELECT user_id, COUNT(*) AS n, MIN(created_at) AS first FROM parcels
+        WHERE city = $1 AND user_id IS NOT NULL GROUP BY user_id ORDER BY n DESC, first ASC LIMIT 1`, [par.city])).rows[0];
+      if (!top || String(top.user_id) !== String(user.id) || Number(top.n) < PRESIDENT_MIN_PARCELS)
+        throw new HttpError(403, `Solo el presidente de ${par.city} puede construir el ayuntamiento`);
+      const other = (await client.query('SELECT id, user_id FROM parcels WHERE city = $1 AND house = $2 AND id <> $3 FOR UPDATE', [par.city, AYUNTAMIENTO, String(id)])).rows[0];
+      if (other && String(other.user_id) === String(user.id)) throw new HttpError(409, 'Ya tienes el ayuntamiento de este pueblo en otro de tus terrenos');
+      if (other) await client.query('UPDATE parcels SET house = NULL WHERE id = $1', [other.id]);   // era de un presidente anterior: pasa al nuevo
+    }
     let credits;
     if (par.house === h) {   // ya tiene esa casa: no se cobra nada
       credits = (await client.query('SELECT credits FROM packs WHERE code = $1', [pack.code])).rows[0].credits;

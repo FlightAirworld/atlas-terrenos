@@ -171,8 +171,12 @@ const HOUSES = [
   'images/claro-bosque.webp',
   'images/parque-futbol.webp',
   'images/mar.webp',
-  'images/mar-peces.webp'
+  'images/mar-peces.webp',
+  'images/ayuntamiento.webp'
 ];
+// Casas especiales: no salen al azar ni al reclamar (el ayuntamiento es solo para el presidente del pueblo)
+const SPECIAL_HOUSES = ['images/ayuntamiento.webp'];
+const RANDOM_HOUSES = HOUSES.filter(h => !SPECIAL_HOUSES.includes(h));
 
 function houseFor(id, house) {
   if (house) house = String(house).replace(/\.png$/i, '.webp');   // terrenos guardados antes del cambio a webp
@@ -181,11 +185,11 @@ function houseFor(id, house) {
   for (const c of id) {
     h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
   }
-  return HOUSES[(h >>> 16) % HOUSES.length];
+  return RANDOM_HOUSES[(h >>> 16) % RANDOM_HOUSES.length];
 }
 // Altura aproximada (en metros) de cada tipo de edificio: da volumen 3D a las parcelas
 const HOUSE_HEIGHT = {
-  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'condis': 9, 'cepsa': 7, 'aurgi': 8, 'burrito-blanco': 8, 'arcobaleno': 8, 'la-cruilla': 8, 'cesped-2': 1, 'parque-picnic': 1, 'desierto-1': 1, 'desierto-2': 1, 'prado': 1, 'claro-bosque': 1, 'parque-futbol': 1, 'mar': 1, 'mar-peces': 1
+  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'condis': 9, 'cepsa': 7, 'aurgi': 8, 'burrito-blanco': 8, 'arcobaleno': 8, 'la-cruilla': 8, 'cesped-2': 1, 'parque-picnic': 1, 'desierto-1': 1, 'desierto-2': 1, 'prado': 1, 'claro-bosque': 1, 'parque-futbol': 1, 'mar': 1, 'mar-peces': 1, 'ayuntamiento': 18
 };
 // Nivel del terreno (1 a 5): más estrellas junto al nombre y un edificio más alto
 const maxLevel = () => (cfg && cfg.levels && cfg.levels.mults.length) || 5;
@@ -865,10 +869,11 @@ function buildHousePicker(box, onPick, withRandom) {
   };
   if (withRandom) add(null, '🎲', 'Al azar');
   [...HOUSES].reverse().forEach(h => {   // las más nuevas (al final de HOUSES) salen primero
+    if (withRandom && SPECIAL_HOUSES.includes(h)) return;   // las especiales no se eligen al reclamar
     const i = document.createElement('img');
     i.src = sizedUrl(h, 't'); i.alt = ''; i.loading = 'lazy';
     i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;display:block';
-    add(h, i, houseName(h));
+    add(h, i, SPECIAL_HOUSES.includes(h) ? '🏛️ Ayuntamiento (solo el presidente del pueblo)' : houseName(h));
   });
 }
 function markHouse(box, current) {
