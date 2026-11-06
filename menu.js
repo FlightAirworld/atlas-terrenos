@@ -117,24 +117,25 @@ html body #credit-pill{max-width:calc(100vw - 330px) !important}
   html body #map-controls #top-row #menu-btn .mp-l{display:none}
   html body #map-controls #top-row #menu-btn{padding:0 !important;width:44px}
 }
-/* Mundos: botón redondo abajo a la izquierda, con el globo en el centro y el nombre dando la vuelta por dentro del círculo */
+/* Mundos: mismo botón que Extras y Menú (44 px de alto). En pantallas anchas va dentro de la barra; en móvil, justo debajo del contador de créditos */
 html body #mundos-btn{
-  position:fixed !important;left:calc(10px + env(safe-area-inset-left,0px)) !important;bottom:calc(14px + env(safe-area-inset-bottom,0px)) !important;z-index:1000;
-  width:76px !important;height:76px !important;min-width:0;box-sizing:border-box;padding:0 !important;margin:0 !important;
-  border-radius:50% !important;
+  height:44px !important;min-width:44px;box-sizing:border-box;
+  padding:0 14px 0 11px !important;margin:0 !important;gap:8px !important;
+  border-radius:14px !important;
   background:var(--mp-bg) !important;
   border:1px solid var(--mp-bd) !important;
   box-shadow:0 1px 2px rgba(0,0,0,.08),0 8px 22px rgba(0,0,0,.16) !important;
   -webkit-backdrop-filter:blur(14px) saturate(1.5);backdrop-filter:blur(14px) saturate(1.5);
   color:var(--mp-ink) !important;
-  display:flex !important;align-items:center;justify-content:center;
+  font:700 14px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif !important;
+  letter-spacing:.01em;white-space:nowrap;
+  display:inline-flex !important;align-items:center;justify-content:center;flex-direction:row !important;
   cursor:pointer;-webkit-tap-highlight-color:transparent;
   transition:transform .12s ease,box-shadow .15s ease,background .15s ease;
 }
-html body #mundos-btn .mundos-ring{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;overflow:visible}
-html body #mundos-btn .mundos-ring text{font:800 9.5px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;fill:currentColor;letter-spacing:.02em}
-html body #mundos-btn .mundos-globe{position:relative;font-size:27px;line-height:1;pointer-events:none}
-html body #mundos-btn:active{transform:scale(.94)}
+html body #mundos-btn.floating{position:fixed !important;left:calc(10px + env(safe-area-inset-left,0px)) !important;top:calc(10px + 44px + 8px + env(safe-area-inset-top,0px)) !important;z-index:1000}
+html body #mundos-btn .mundos-globe{font-size:20px;line-height:1;pointer-events:none}
+html body #mundos-btn:active{transform:scale(.96)}
 @media (hover:hover){html body #mundos-btn:hover{transform:translateY(-1px);box-shadow:0 2px 4px rgba(0,0,0,.1),0 12px 26px rgba(0,0,0,.2) !important}}
 html body #mundos-btn:focus-visible{outline:2px solid var(--mp-acc);outline-offset:2px}
 

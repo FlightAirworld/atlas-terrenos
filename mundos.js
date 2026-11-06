@@ -49,11 +49,11 @@
     .mundo .mundo-pin i { width: 12px; height: 12px; border-radius: 50%; background: #ffd23f; border: 2px solid #fff; box-shadow: 0 0 8px rgba(255,210,63,.9); }
     .mundo .mundo-pin span { margin-top: 3px; font: 700 11px/1 system-ui, sans-serif; color: #fff; text-shadow: 0 1px 3px #000, 0 0 6px #000; white-space: nowrap; }
     .mundo .maplibregl-ctrl-attrib { font-size: 10px; }
-    #mundos-menu { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(14px + 76px + 8px + env(safe-area-inset-bottom, 0px)); z-index: 1001; display: none; flex-direction: column; gap: 2px; min-width: 190px; padding: 6px;
+    #mundos-menu { position: fixed; left: 10px; top: 120px; z-index: 1001; display: none; flex-direction: column; gap: 2px; min-width: 190px; padding: 6px;
       border-radius: 16px; background: var(--mp-bg, #fff); border: 1px solid var(--mp-bd, rgba(0,0,0,.14)); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 14px 34px rgba(0,0,0,.22);
-      -webkit-backdrop-filter: blur(14px) saturate(1.5); backdrop-filter: blur(14px) saturate(1.5); transform-origin: bottom left; }
+      -webkit-backdrop-filter: blur(14px) saturate(1.5); backdrop-filter: blur(14px) saturate(1.5); transform-origin: top left; }
     #mundos-menu.open { display: flex; animation: mundosIn .17s cubic-bezier(.2,.85,.25,1) both; }
-    @keyframes mundosIn { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
+    @keyframes mundosIn { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
     #mundos-menu button { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; border-radius: 12px; padding: 9px 12px 9px 9px; background: transparent; color: var(--mp-ink, #16211c); font: 600 15px/1.1 system-ui, sans-serif; text-align: left; cursor: pointer; }
     #mundos-menu button:active { background: var(--mp-hover, rgba(0,0,0,.06)); }
     @media (hover: hover) { #mundos-menu button:hover { background: var(--mp-hover, rgba(0,0,0,.06)); } }
@@ -71,7 +71,18 @@
     menu.appendChild(b);
   });
   document.body.appendChild(menu);
-  const setMenu = open => { menu.classList.toggle('open', open); btn.setAttribute('aria-expanded', open ? 'true' : 'false'); };
+  // Pantallas anchas: el botón va en la barra, junto a Extras. Estrechas (móvil): flotando debajo del contador de créditos
+  const mq = window.matchMedia('(min-width: 640px)');
+  function place() {
+    const row = document.getElementById('top-row'), ext = document.getElementById('extras-wrap');
+    if (mq.matches && row && ext) { btn.classList.remove('floating'); row.insertBefore(btn, ext); }
+    else { btn.classList.add('floating'); document.body.appendChild(btn); }
+    setMenu(false);
+  }
+  const setMenu = open => {
+    if (open) { const r = btn.getBoundingClientRect(); menu.style.top = Math.round(r.bottom + 8) + 'px'; menu.style.left = Math.max(10, Math.min(Math.round(r.left), innerWidth - 200)) + 'px'; }
+    menu.classList.toggle('open', open); btn.setAttribute('aria-expanded', open ? 'true' : 'false'); };
+  (mq.addEventListener ? mq.addEventListener('change', place) : mq.addListener(place)); place();
   btn.setAttribute('aria-haspopup', 'menu'); btn.setAttribute('aria-expanded', 'false');
   btn.addEventListener('click', e => { e.stopPropagation(); setMenu(!menu.classList.contains('open')); });
   menu.addEventListener('click', e => { const b = e.target.closest('button'); if (b) { setMenu(false); travel(b.dataset.world); } });
