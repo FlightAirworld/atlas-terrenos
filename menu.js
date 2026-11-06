@@ -401,48 +401,19 @@ body.mp-z1 .ts-pd{opacity:0 !important;pointer-events:none !important}`;
     list.insertBefore(b, document.getElementById('account-btn') || null);   // justo antes de "Cuenta"
     return b;
   }
-  const btnLight = makeBtn('light-btn', '🌗', 'Luz del día', 'Luz y sombras según la hora');
-
   try { localStorage.removeItem('mp3d'); } catch (e) {}   // la vista 3D se quitó: el mapa es siempre plano
 
-  // ---------- Luz del día ----------
-  // Capa de color por encima del mapa (no recibe toques). Hora local del jugador; cambia poco a poco.
-  const ov = document.createElement('div');
-  ov.id = 'mp-light';
-  ov.style.cssText = 'position:fixed;inset:0;z-index:800;pointer-events:none;mix-blend-mode:multiply;transition:background-color 2s linear,opacity 2s linear;opacity:0';
-  document.body.appendChild(ov);
-  const NIGHT = [100, 115, 175, 0.5], DAWN = [255, 190, 140, 0.35], DAY = [255, 255, 255, 0], DUSK = [255, 170, 110, 0.4];
-  const KEYS = [[0, NIGHT], [5, NIGHT], [7, DAWN], [9, DAY], [17, DAY], [19, DUSK], [21, NIGHT], [24, NIGHT]];
-  function lightAt(h) {
-    for (let i = 1; i < KEYS.length; i++) {
-      if (h <= KEYS[i][0]) {
-        const a = KEYS[i - 1], b = KEYS[i], t = (h - a[0]) / (b[0] - a[0]);
-        return a[1].map((v, k) => v + (b[1][k] - v) * t);
-      }
-    }
-    return NIGHT;
-  }
-  let lightOn = store('mpLight') !== '0';
-  function applyLight() {
-    btnLight.setAttribute('aria-pressed', lightOn ? 'true' : 'false');
-    btnLight.style.fontWeight = lightOn ? '800' : '';
-    const d = new Date(), h = d.getHours() + d.getMinutes() / 60;
-    const c = lightAt(h);
-    ov.style.backgroundColor = 'rgb(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ')';
-    ov.style.opacity = lightOn ? String(c[3]) : '0';
-    // Las sombras se mueven con el sol: por la mañana caen hacia un lado y por la tarde hacia el otro; de noche casi desaparecen
+  // ---------- Siempre de día ----------
+  // Sin ciclo día/noche: no hay capa de color y las sombras de las parcelas quedan fijas (como de día).
+  try { localStorage.removeItem('mpLight'); } catch (e) {}
+  function applyShadow() {
     try {
       if (typeof gl !== 'undefined' && gl && gl.getLayer && gl.getLayer('owned-shadow')) {
-        const day = Math.min(1, Math.max(0, (h - 7) / 12));          // 0 = amanecer, 1 = atardecer
-        const x = lightOn ? Math.round((day - 0.5) * 10) : 2;       // mañana: hacia la izquierda; tarde: hacia la derecha
-        const night = h < 6.5 || h > 20.5;
-        gl.setPaintProperty('owned-shadow', 'line-translate', [x, 3]);
-        gl.setPaintProperty('owned-shadow', 'line-color', night && lightOn ? '#05080c' : '#10201a');
+        gl.setPaintProperty('owned-shadow', 'line-translate', [2, 3]);
+        gl.setPaintProperty('owned-shadow', 'line-color', '#10201a');
       }
     } catch (e) {}
   }
-  btnLight.addEventListener('click', () => { lightOn = !lightOn; store('mpLight', lightOn ? '1' : '0'); applyLight(); });
-  applyLight();
-  setInterval(applyLight, 60000);
-  setTimeout(applyLight, 4000);   // por si la capa de sombra aún no existía al arrancar
+  applyShadow();
+  setTimeout(applyShadow, 4000);   // por si la capa de sombra aún no existía al arrancar
 })();

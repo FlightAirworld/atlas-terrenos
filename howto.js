@@ -51,7 +51,7 @@
       </ul>
 
       <h3>5. Un mapa con vida</h3>
-      <p>Acércate a las calles y verás coches, peatones, trenes, aviones, helicópteros, semáforos, animales, lluvia, día y noche. Con el botón <b>🏙️ Vida urbana</b> del menú activas además obras, bodas, desfiles, humo, colas en las tiendas y más. Si tu móvil va justo, apágalo desde ahí o desde los botones del menú.</p>`,
+      <p>Acércate a las calles y verás coches, peatones, trenes, aviones, helicópteros, semáforos, animales y lluvia. Con el botón <b>🏙️ Vida urbana</b> del menú activas además obras, bodas, desfiles, humo, colas en las tiendas y más. Si tu móvil va justo, apágalo desde ahí o desde los botones del menú.</p>`,
       tip: `<div class="tip"><b>Consejos:</b> entra cada día (regalo + ruleta), recoge tus créditos antes de dormir, compra terrenos en lugares con significado para ti (tu calle, tu pueblo) y sube de nivel los que ya tienes antes de comprar muchos nuevos.</div>`
     },
     en: {
@@ -92,7 +92,7 @@
       </ul>
 
       <h3>5. A living map</h3>
-      <p>Zoom in to the streets and you'll see cars, pedestrians, trains, planes, helicopters, traffic lights, animals, rain, day and night. The <b>🏙️ Vida urbana</b> (City life) button in the menu adds roadworks, weddings, parades, smoke, shop queues and more. If your phone struggles, turn it off there.</p>`,
+      <p>Zoom in to the streets and you'll see cars, pedestrians, trains, planes, helicopters, traffic lights, animals and rain. The <b>🏙️ Vida urbana</b> (City life) button in the menu adds roadworks, weddings, parades, smoke, shop queues and more. If your phone struggles, turn it off there.</p>`,
       tip: `<div class="tip"><b>Tips:</b> log in every day (gift + wheel), collect your credits before bed, buy plots in places that mean something to you (your street, your town), and level up the ones you own before buying lots of new ones.</div>
       <p class="muted" style="font-size:12px">Plots are virtual items: they give no rights over the real land. Exact figures (prices, production, prizes) may change; trust what the game shows.</p>`
     }

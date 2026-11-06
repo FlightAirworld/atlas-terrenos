@@ -217,7 +217,7 @@ path.buy-range {
 @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 
 /* Nivel del terreno: estrellas encima del nombre (mismo tamaño que el nombre, ver .owner-pill) */
-.owner-stars { position: absolute; left: 0; top: calc(var(--ppx, 60) * .5px - 3px); transform: translate(-50%, calc(-100% - 1.3em - 5px)); white-space: nowrap; pointer-events: none;
+.owner-stars { position: absolute; left: 0; top: calc(var(--ppx, 60) * .5px - 3px); transform: translate(-50%, -100%); white-space: nowrap; pointer-events: none;
   color: #ffd43b; line-height: 1; letter-spacing: .5px; text-shadow: 0 1px 2px #000;
   font-size: clamp(5px, calc(var(--ppx, 60) * 1px / 13), 10px); }
 .labels-off .owner-stars { display: none; }
