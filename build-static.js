@@ -30,5 +30,8 @@ let count = 0;
   }
 })(__dirname, '');
 
+const swPath = path.join(OUT, 'sw.js');   // misma versión de caché que en el servidor
+if (fs.existsSync(swPath)) fs.writeFileSync(swPath, fs.readFileSync(swPath, 'utf8').replace(/__BUILD__/g, String(process.env.RENDER_GIT_COMMIT || 'dev').slice(0, 8)));
+
 fs.writeFileSync(path.join(OUT, 'config.js'), `window.API_BASE = ${JSON.stringify(API_BASE)};\n`);
 console.log(`dist/ listo: ${count} archivos, API en ${API_BASE}`);

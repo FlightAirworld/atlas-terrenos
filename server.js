@@ -2505,12 +2505,21 @@ const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(x => 
 const zlib = require('node:zlib');
 const staticCache = new Map();   // ruta -> { mtime, etag, buf, gz }
 const COMPRESSIBLE = /^(text\/|application\/(json|manifest\+json)|image\/svg)/;
+const BUILD_ID = String(process.env.RENDER_GIT_COMMIT || 'dev').slice(0, 8);   // cambia en cada despliegue: renueva la caché del service worker
+// Política de seguridad del contenido. La primera se aplica ya (lo que nunca hace falta); la segunda, más estricta, solo avisa
+// (Report-Only) a /api/csp-report: revisa los avisos en los logs de Render y, cuando no salga nada legítimo, pásala a la primera.
+const CSP_ENFORCED = "object-src 'none'; base-uri 'self'";
+const CSP_REPORT = "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://www.paypal.com https://js.stripe.com; " +
+  "style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; " +
+  "connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org https://tiles.openfreemap.org https://server.arcgisonline.com https://*.paypal.com https://api.stripe.com https://atlas-terrenos.onrender.com; " +
+  "frame-src https://www.youtube.com https://www.youtube-nocookie.com https://*.paypal.com https://js.stripe.com https://checkout.stripe.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; report-uri /api/csp-report";
 function sendStatic(req, res, file) {
   const type = MIME[path.extname(file)] || 'application/octet-stream';
   const st = fs.statSync(file);
   let ent = staticCache.get(file);
   if (!ent || ent.mtime !== st.mtimeMs) {
-    const buf = fs.readFileSync(file);
+    let buf = fs.readFileSync(file);
+    if (/[\\/]sw\.js$/.test(file)) buf = Buffer.from(buf.toString('utf8').replace(/__BUILD__/g, BUILD_ID));
     ent = { mtime: st.mtimeMs, buf, etag: '"' + require('node:crypto').createHash('md5').update(buf).digest('hex').slice(0, 20) + '"', gz: null };
     if (staticCache.size > 300) staticCache.clear();
     staticCache.set(file, ent);
@@ -2519,6 +2528,7 @@ function sendStatic(req, res, file) {
   const headers = { 'Content-Type': type, 'ETag': ent.etag, 'Vary': 'Accept-Encoding',
     'Cache-Control': isImg ? 'public, max-age=604800' : 'no-cache',
     'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000' };
+  if (/html/.test(type)) { headers['Content-Security-Policy'] = CSP_ENFORCED; headers['Content-Security-Policy-Report-Only'] = CSP_REPORT; }
   if (req.headers['if-none-match'] === ent.etag) { res.writeHead(304, headers); return res.end(); }
   let body = ent.buf;
   if (COMPRESSIBLE.test(type) && /\bgzip\b/.test(String(req.headers['accept-encoding'] || '')) && body.length > 1024) {
@@ -2552,7 +2562,7 @@ async function sendTile(req, res, url, send) {
   return send(200, ent.body, undefined, extra);
 }
 
-http.createServer(async (req, res) => {
+const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const send = (status, body, type = 'application/json; charset=utf-8', extra = {}) => {
     const h = { ...extra, 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000', 'Vary': 'Accept-Encoding' };
@@ -2582,6 +2592,10 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/online') return onlineStream(req, res, url);
     if (req.method === 'GET' && url.pathname === '/api/chat/stream') return chatStream(req, res, url);   // conexión larga (SSE) del chat   // conexión larga (SSE): no pasa por route()
     if (req.method === 'POST' && url.pathname === '/api/webhooks/stripe') return send(200, JSON.stringify(await stripeWebhook(req)));   // antes de route(): necesitan el cuerpo sin tocar para comprobar la firma
+    if (req.method === 'POST' && url.pathname === '/api/csp-report') {   // avisos del navegador: se anotan unos pocos por conexión y hora
+      if (rateHit('csp:' + clientIp(req), 3_600_000) <= 20) { const raw = await readRaw(req, 8192).catch(() => Buffer.alloc(0)); console.warn('CSP:', raw.toString('utf8').slice(0, 400)); }
+      return send(204, '');
+    }
     if (req.method === 'POST' && url.pathname === '/api/webhooks/paypal') return send(200, JSON.stringify(await paypalWebhook(req)));
     if (req.method === 'GET' && url.pathname === '/api/parcels/tile') return await sendTile(req, res, url, send);   // await: así un error 400 lo recoge el catch de abajo
     if (url.pathname.startsWith('/api/')) {
@@ -2601,3 +2615,24 @@ http.createServer(async (req, res) => {
 }).listen(PORT, () => {
   console.log(`Redecora El Mundo en http://localhost:${PORT}  [${DEMO ? 'MODO DEMO (sin cobro real)' : [HAS_STRIPE ? 'Stripe ' + (STRIPE_SECRET_KEY.includes('_live_') ? 'LIVE' : 'test') : null, HAS_PAYPAL ? 'PayPal ' + PAYPAL_ENV : null].filter(Boolean).join(' + ')}]  packs ${PACKS.map(p => p.credits + '=' + p.price).join(', ')} ${CURRENCY}`);
 });
+
+// ---------- Cierre ordenado ----------
+// Render manda SIGTERM en cada despliegue. Se dejan de aceptar peticiones nuevas, se esperan las que están en curso
+// (un cobro de PayPal no se corta a medias) y después se cierra la base de datos. Las conexiones largas (SSE de chat
+// y de jugadores en línea) se cortan a los 15 s; el navegador se reconecta solo a la nueva versión.
+let shuttingDown = false;
+function shutdown(sig) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${sig}: cerrando con calma…`);
+  const force = setTimeout(() => { console.error('Cierre forzado tras 25 s'); process.exit(1); }, 25_000);
+  force.unref();
+  server.close(async () => {
+    try { await pool.end(); } catch (e) { console.error('Error al cerrar el pool:', e.message); }
+    process.exit(0);
+  });
+  server.closeIdleConnections();
+  setTimeout(() => server.closeAllConnections(), 15_000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

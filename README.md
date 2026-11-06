@@ -202,3 +202,13 @@ Las posiciones de bancos, colas, puertas y chimeneas dentro de cada parcela son 
 3. Abre en el navegador `https://api.telegram.org/bot<TOKEN>/getUpdates` y copia el número de `"chat":{"id":...}`.
 4. En Render > Environment añade `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` y guarda.
 5. Recibirás un mensaje por cada compra y cuando un jugador se conecte (máx. uno por jugador cada 6 h).
+
+## Mantenimiento y despliegue
+
+- **Pruebas:** `npm test` (también se ejecutan solas en GitHub Actions con cada push). Comprueban sintaxis, archivos duplicados, scripts externos con versión fija, `schema.sql` al día y cierre ordenado.
+- **Base de datos:** `schema.sql` es la referencia del esquema (el servidor además crea lo que falte al arrancar). Todas las tablas tienen RLS activado sin políticas: solo el servidor accede, con `DATABASE_URL`.
+- **Cierre ordenado:** el servidor atiende `SIGTERM`; en cada despliegue termina las peticiones en curso (cobros incluidos) antes de salir.
+- **Service worker:** la versión de la caché es el commit desplegado (`RENDER_GIT_COMMIT`), no hay que subir ningún número a mano.
+- **CSP:** se aplica `object-src 'none'; base-uri 'self'`. Una política más estricta va en modo aviso (`Content-Security-Policy-Report-Only`) y los avisos salen en los logs de Render con el prefijo `CSP:`. Cuando no salgan avisos legítimos, pasa `CSP_REPORT` a `CSP_ENFORCED` en `server.js`.
+- **SRI de las librerías externas:** con internet, ejecuta `node tools/add-sri.js` y sube el `index.html` resultante. Repítelo al cambiar la versión de una librería.
+- **Health check en Render:** Settings > Health Check Path = `/api/health`.
