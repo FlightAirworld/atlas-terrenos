@@ -118,7 +118,7 @@ html body #credit-pill{max-width:calc(100vw - 330px) !important}
   html body #map-controls #top-row #menu-btn{padding:0 !important;width:44px}
 }
 /* Mundos: botón abajo a la izquierda, mismo estilo que los de arriba */
-html body #moon-btn{
+html body #mundos-btn{
   position:fixed !important;left:calc(10px + env(safe-area-inset-left,0px)) !important;bottom:calc(14px + env(safe-area-inset-bottom,0px)) !important;z-index:1000;
   height:44px !important;min-width:44px;box-sizing:border-box;width:auto !important;
   padding:0 14px 0 12px !important;margin:0 !important;gap:8px !important;
@@ -134,9 +134,9 @@ html body #moon-btn{
   cursor:pointer;-webkit-tap-highlight-color:transparent;
   transition:transform .12s ease,box-shadow .15s ease,background .15s ease;
 }
-html body #moon-btn:active{transform:scale(.96)}
-@media (hover:hover){html body #moon-btn:hover{transform:translateY(-1px);box-shadow:0 2px 4px rgba(0,0,0,.1),0 12px 26px rgba(0,0,0,.2) !important}}
-html body #moon-btn:focus-visible{outline:2px solid var(--mp-acc);outline-offset:2px}
+html body #mundos-btn:active{transform:scale(.96)}
+@media (hover:hover){html body #mundos-btn:hover{transform:translateY(-1px);box-shadow:0 2px 4px rgba(0,0,0,.1),0 12px 26px rgba(0,0,0,.2) !important}}
+html body #mundos-btn:focus-visible{outline:2px solid var(--mp-acc);outline-offset:2px}
 
 @media (max-width:350px){
   html body #map-controls #top-row #extras-btn .mp-l{display:none}

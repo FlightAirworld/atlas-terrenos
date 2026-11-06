@@ -2268,6 +2268,37 @@ async function sendTile(req, res, url, send) {
   return send(200, ent.body, undefined, extra);
 }
 
+// ---------- Mapas de otros mundos (Luna y Marte) ----------
+// Las imágenes salen de OpenPlanetaryMap (NASA / USGS) en Web Mercator. Pasan por aquí para que el navegador solo hable con nuestro servidor y se guardan en memoria.
+// Luna = relieve LOLA + albedo; Marte = mosaico en color Viking MDIM 2.1. Para Marte hay una segunda fuente por si la primera falla (esa numera las filas al revés).
+const WORLD_TILE_SRC = {
+  moon: (z, x, y) => [`https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-moon-basemap-v0-1/all/${z}/${x}/${y}.png`],
+  mars: (z, x, y) => [
+    `https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-mars-basemap-v0-1/all/${z}/${x}/${y}.png`,
+    `https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/viking_mdim21_global/${z}/${x}/${(1 << z) - 1 - y}.png`
+  ]
+};
+const worldTileCache = new Map();   // "mundo/z/x/y" -> Buffer
+async function sendWorldTile(res, m) {
+  const [, world, zs, xs, ys] = m, z = +zs, x = +xs, y = +ys;
+  if (z > 7 || x >= (1 << z) || y >= (1 << z)) throw new HttpError(400, 'Tesela no válida');
+  const key = `${world}/${z}/${x}/${y}`;
+  let buf = worldTileCache.get(key);
+  if (!buf) {
+    for (const u of WORLD_TILE_SRC[world](z, x, y)) {
+      try {
+        const r = await fetch(u, { signal: AbortSignal.timeout(8000) });
+        if (r.ok && /image\//.test(r.headers.get('content-type') || '')) { buf = Buffer.from(await r.arrayBuffer()); break; }
+      } catch (e) {}
+    }
+    if (!buf) throw new HttpError(502, 'No se pudo cargar la imagen del mapa');
+    if (worldTileCache.size > 4000) worldTileCache.clear();
+    worldTileCache.set(key, buf);
+  }
+  res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=604800', 'X-Content-Type-Options': 'nosniff' });
+  res.end(buf);
+}
+
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const send = (status, body, type = 'application/json; charset=utf-8', extra = {}) => {
@@ -2299,6 +2330,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/chat/stream') return chatStream(req, res, url);   // conexión larga (SSE) del chat   // conexión larga (SSE): no pasa por route()
     if (req.method === 'POST' && url.pathname === '/api/webhooks/stripe') return send(200, JSON.stringify(await stripeWebhook(req)));   // antes de route(): necesitan el cuerpo sin tocar para comprobar la firma
     if (req.method === 'POST' && url.pathname === '/api/webhooks/paypal') return send(200, JSON.stringify(await paypalWebhook(req)));
+    { const wm = req.method === 'GET' && /^\/api\/(moon|mars)-tile\/(\d+)\/(\d+)\/(\d+)\.png$/.exec(url.pathname); if (wm) { await sendWorldTile(res, wm); return; } }
     if (req.method === 'GET' && url.pathname === '/api/parcels/tile') return await sendTile(req, res, url, send);   // await: así un error 400 lo recoge el catch de abajo
     if (url.pathname.startsWith('/api/')) {
       const out = await route(req, res, url);
