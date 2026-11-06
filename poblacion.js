@@ -23,8 +23,16 @@
     .tw-bar { height:6px; border-radius:99px; background:rgba(0,0,0,.1); margin-top:6px; overflow:hidden; }
     .tw-bar i { display:block; height:100%; background:#2a9d8f; border-radius:99px; transition:width .6s; }
     .tw-up { color:#2a9d8f; font-weight:700; }
-    .tw-pres { display:flex; align-items:center; gap:10px; margin:0 0 12px; padding:10px 12px; border-radius:14px; border:2px solid #e9c46a; background:rgba(233,196,106,.18); }
-    .tw-presrow { font-size:12px; margin:4px 6px 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .tw-pres { display:flex; align-items:center; gap:10px; margin:0 0 12px; padding:10px 12px; border-radius:14px; border:2px solid #1d6fd6; background:rgba(29,111,214,.14); cursor:pointer; }
+    .tw-presrow { font-size:13px; margin:6px 0 0; padding:7px 10px; border-radius:10px; border:2px solid #2a9d8f; background:rgba(42,157,143,.16); display:flex; gap:8px; align-items:center; flex-wrap:wrap; cursor:pointer; }
+    .pl-card .pl-grid { display:flex; gap:8px; margin:10px 0; }
+    .pl-card .pl-grid div { flex:1; background:rgba(0,0,0,.05); border-radius:12px; padding:8px; text-align:center; }
+    .pl-card .pl-grid b { display:block; font-size:20px; }
+    .pl-card .pl-grid small { opacity:.7; }
+    .pl-card .pl-name { font-size:22px; font-weight:800; margin:0 0 4px; }
+    .pl-card .pl-pres { color:#2a9d8f; font-weight:700; margin:6px 0; }
+    .pl-card ul { margin:4px 0 10px; padding-left:20px; }
+    .pl-card .pl-btns { display:flex; gap:8px; flex-wrap:wrap; }
     .tw-claim { border:none; background:#e9c46a; color:#1d3557; font-weight:800; border-radius:99px; padding:6px 12px; cursor:pointer; font:inherit; font-weight:800; }
     .tw-claim:disabled { opacity:.6; }
     .tw-pres-ico { font-size:28px; line-height:1; }
@@ -75,15 +83,68 @@
     return root;
   }
 
+  // Ficha del jugador: estadísticas públicas y botón para añadirlo (o quitarlo) de amigos
+  async function openPlayer(nick) {
+    if (!nick) return;
+    const ov = el('div', 'modal'); ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+    const card = el('div', 'modal-card pl-card');
+    const x = el('button', 'close', '×'); x.type = 'button';
+    const close = () => ov.remove();
+    x.addEventListener('click', close);
+    ov.addEventListener('pointerdown', e => { if (e.target === ov) close(); });
+    const content = el('div'); content.appendChild(el('p', 'muted', 'Cargando…'));
+    card.append(x, content); ov.appendChild(card); document.body.appendChild(ov);
+    try {
+      const j = await api('/api/player?nick=' + encodeURIComponent(nick), { method: 'GET' });
+      content.replaceChildren();
+      content.appendChild(el('div', 'pl-name', [flag(j.country).trim(), j.avatar, j.nick].filter(Boolean).join(' ')));
+      if (j.presidentOf.length) content.appendChild(el('div', 'pl-pres', `🏛️ Presidente de ${j.presidentOf.slice(0, 3).join(', ')}${j.presidentOf.length > 3 ? '…' : ''}`));
+      const grid = el('div', 'pl-grid');
+      [[fmt(j.parcels), j.parcels === 1 ? 'terreno' : 'terrenos'], [fmt(j.levels), 'niveles'], [fmt(j.townCount), j.townCount === 1 ? 'pueblo' : 'pueblos']].forEach(([a, b]) => {
+        const d = el('div'); d.append(el('b', null, a), el('small', null, b)); grid.appendChild(d);
+      });
+      content.appendChild(grid);
+      if (j.towns.length) {
+        content.appendChild(el('div', 'tw-sub', 'Donde más terrenos tiene:'));
+        const ul = el('ul'); j.towns.forEach(t => ul.appendChild(el('li', null, `${t.city} · ${t.n}`))); content.appendChild(ul);
+      }
+      if (j.since) content.appendChild(el('div', 'tw-sub', 'Jugando desde el ' + new Date(j.since).toLocaleDateString('es-ES')));
+      const btns = el('div', 'pl-btns'); btns.style.marginTop = '12px';
+      if (j.isMe) content.appendChild(el('div', 'tw-sub', 'Este eres tú 😉'));
+      else if (!j.hasAccount) content.appendChild(el('div', 'tw-sub', 'Este jugador no tiene cuenta, no se puede añadir como amigo.'));
+      else {
+        const fb = el('button', 'primary', j.isFriend ? '✖ Quitar de amigos' : '➕ Añadir amigo'); fb.type = 'button';
+        const msg = el('div', 'tw-sub');
+        let friend = j.isFriend;
+        fb.addEventListener('click', async () => {
+          if (typeof authToken === 'undefined' || !authToken) { close(); if (typeof openLogin === 'function') openLogin('Entra para tener amigos 👥'); return; }
+          fb.disabled = true;
+          try {
+            await api(friend ? '/api/friends/remove' : '/api/friends/add', { method: 'POST', body: { nick: j.nick } });
+            friend = !friend;
+            fb.textContent = friend ? '✖ Quitar de amigos' : '➕ Añadir amigo';
+            msg.textContent = friend ? `¡${j.nick} es ahora tu amigo! 👥` : `${j.nick} ya no es tu amigo`;
+          } catch (e) { msg.textContent = e.message; }
+          fb.disabled = false;
+        });
+        btns.appendChild(fb);
+        if (typeof window.openGift === 'function') { const gb = el('button', null, '💝 Regalar créditos'); gb.type = 'button'; gb.addEventListener('click', () => { close(); window.openGift(j.nick); }); btns.appendChild(gb); }
+        content.append(btns, msg);
+      }
+    } catch (e) { content.replaceChildren(el('p', 'muted', 'No se pudo cargar el jugador: ' + e.message)); }
+  }
+
   // Presidente del pueblo (el que más terrenos tiene allí). Si eres tú, puedes cobrar sus créditos del mes.
   function presRow(t) {
     if (!t.president) return null;
-    const d = el('div', 'tw-presrow');
+    const d = el('div', 'tw-presrow'); d.title = 'Ver al jugador';
+    d.addEventListener('click', () => openPlayer(t.president.owner));
     d.appendChild(el('span', null, `🏛️ Presidente: ${t.president.owner} · ${t.president.n} terreno${t.president.n === 1 ? '' : 's'}`));
     if (t.mine) {
       if (t.canClaim) {
         const b = el('button', 'tw-claim', `🎁 Cobrar ${t.prize} créditos`); b.type = 'button';
-        b.addEventListener('click', async () => {
+        b.addEventListener('click', async ev => {
+          ev.stopPropagation();
           b.disabled = true;
           try {
             const j = await api('/api/town/president/claim', { method: 'POST', body: { city: t.city } });
@@ -106,7 +167,8 @@
     });
     body.appendChild(tot);
     if (president && president.owner) {   // el jugador con más terrenos es el presidente
-      const pr = el('div', 'tw-pres');
+      const pr = el('div', 'tw-pres'); pr.title = 'Ver al jugador';
+      pr.addEventListener('click', () => openPlayer(president.owner));
       pr.appendChild(el('span', 'tw-pres-ico', '🏛️'));
       const txt = el('div');
       txt.appendChild(el('small', null, 'Presidente del juego'));

@@ -1515,11 +1515,19 @@ async function friendsList(req) {
 }
 async function friendsAdd(req, body) {
   const user = await needUser(req);
-  const id = Math.floor(Number(body && body.msgId));
-  if (!Number.isFinite(id) || id < 1) throw new HttpError(400, 'Mensaje no válido');
-  const m = await one('SELECT user_id, nick FROM chat_msgs WHERE id = $1', [id]);
-  if (!m) throw new HttpError(404, 'Ese mensaje ya no existe');
-  if (m.user_id === user.id) throw new HttpError(400, 'Ese eres tú');
+  let m;
+  const byNick = body && typeof body.nick === 'string' ? cleanName(body.nick) : null;
+  if (byNick) {   // desde la ficha de un jugador (p. ej. un presidente en Población)
+    const pf = await one('SELECT user_id, nickname FROM profiles WHERE nickname = $1', [byNick]);
+    if (!pf) throw new HttpError(404, 'Ese jugador no tiene cuenta, no se puede añadir como amigo');
+    m = { user_id: pf.user_id, nick: pf.nickname };
+  } else {
+    const id = Math.floor(Number(body && body.msgId));
+    if (!Number.isFinite(id) || id < 1) throw new HttpError(400, 'Mensaje no válido');
+    m = await one('SELECT user_id, nick FROM chat_msgs WHERE id = $1', [id]);
+    if (!m) throw new HttpError(404, 'Ese mensaje ya no existe');
+  }
+  if (String(m.user_id) === String(user.id)) throw new HttpError(400, 'Ese eres tú');
   const n = Number((await one('SELECT COUNT(*) AS n FROM friends WHERE user_id = $1', [user.id])).n);
   if (n >= FRIENDS_MAX) throw new HttpError(409, `Máximo ${FRIENDS_MAX} amigos`);
   const ins = await run('INSERT INTO friends (user_id, friend_id, created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [user.id, m.user_id, Date.now()]);
@@ -1532,6 +1540,27 @@ async function friendsAdd(req, body) {
     }
   }
   return { ok: true, nick: m.nick };
+}
+// ---------- Ficha pública de un jugador (estadísticas + amistad) ----------
+async function playerGet(req, url) {
+  const nick = cleanName(url.searchParams.get('nick'));
+  if (!nick) throw new HttpError(400, 'Jugador no válido');
+  const tot = await one(`SELECT COUNT(*) AS n, COALESCE(SUM(COALESCE(level, 1)), 0) AS lv, MIN(created_at) AS since,
+      (ARRAY_AGG(country ORDER BY created_at DESC) FILTER (WHERE country IS NOT NULL))[1] AS country,
+      (ARRAY_AGG(avatar ORDER BY created_at DESC) FILTER (WHERE avatar IS NOT NULL))[1] AS avatar
+    FROM parcels WHERE owner = $1`, [nick]);
+  if (!tot || !Number(tot.n)) throw new HttpError(404, 'Jugador no encontrado');
+  const towns = await all('SELECT city, COUNT(*) AS n FROM parcels WHERE owner = $1 AND city IS NOT NULL AND city <> $2 GROUP BY city ORDER BY n DESC, city LIMIT 200', [nick, CITY_NONE]);
+  const pres = await townPresidents(towns.map(t => t.city));
+  const presidentOf = towns.filter(t => { const p = pres.get(t.city); return p && p.owner === nick; }).map(t => t.city);
+  const pf = await one('SELECT user_id::text AS uid FROM profiles WHERE nickname = $1', [nick]);
+  const me = await userFrom(req);
+  const isMe = !!(me && pf && String(pf.uid) === String(me.id));
+  let isFriend = false;
+  if (me && pf && !isMe) isFriend = !!(await one('SELECT 1 AS ok FROM friends WHERE user_id = $1 AND friend_id = $2', [me.id, pf.uid]));
+  return { nick, avatar: tot.avatar || null, country: tot.country || null, parcels: Number(tot.n), levels: Number(tot.lv) || 0, since: tot.since ? Number(tot.since) : null,
+    towns: towns.slice(0, 5).map(t => ({ city: t.city, n: Number(t.n) })), townCount: towns.length, presidentOf,
+    hasAccount: !!pf, isMe, isFriend };
 }
 async function friendsRemove(req, body) {
   const user = await needUser(req);
@@ -2200,6 +2229,7 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/profile') return profileSet(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/push/subscribe') return pushSubscribe(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/push/unsubscribe') return pushUnsubscribe(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/player') return playerGet(req, url);
   if (req.method === 'GET' && pn === '/api/friends') return friendsList(req);
   if (req.method === 'POST' && pn === '/api/friends/add') return friendsAdd(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/friends/remove') return friendsRemove(req, await readJson(req));
