@@ -114,6 +114,8 @@
       center: w.land, zoom: 0.8, minZoom: 0.6, maxZoom: 10, pitch: 0, attributionControl: { compact: true },
       pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5)
     });
+    const closeAttrib = () => { const el = boxes[id].querySelector('.maplibregl-ctrl-attrib'); if (el) { el.removeAttribute('open'); el.classList.remove('maplibregl-compact-show'); } };
+    m.on('load', closeAttrib); [300, 1500, 4000].forEach(t => setTimeout(closeAttrib, t));   // créditos cerrados: solo la «i»
     m.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: false }), 'bottom-right');
     w.sites.forEach(s => {
       const el = document.createElement('div'); el.className = 'mundo-pin';

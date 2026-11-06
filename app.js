@@ -86,13 +86,19 @@ try {
     center: [-5.3536, 36.1408], zoom: 1.6, pitch: 0, bearing: 0,    // empieza visto desde el espacio
     minZoom: 1, maxZoom: 19.5, maxPitch: flatView ? 0 : 60,
     pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),          // menos píxeles = más fluidez en móvil
-    fadeDuration: 0
+    fadeDuration: 0,
+    attributionControl: { compact: true }                              // créditos del mapa: solo el botón «i» (se abre al tocarlo)
   });
 } catch (e) {
   $('map').textContent = 'Tu dispositivo no puede mostrar el mapa 3D (WebGL no disponible).';
   throw e;
 }
 map = createCompatMap(gl);     // API tipo Leaflet usada por el resto del juego (ver mapshim.js)
+// MapLibre enseña los créditos abiertos hasta el primer movimiento del mapa: se cierran al arrancar para que solo se vea la «i»
+(function () {
+  const closeAttrib = () => { const el = document.querySelector('#map .maplibregl-ctrl-attrib'); if (el) { el.removeAttribute('open'); el.classList.remove('maplibregl-compact-show'); } };
+  gl.on('load', closeAttrib); [300, 1500, 4000].forEach(t => setTimeout(closeAttrib, t));
+})();
 
 let glReady = false;
 // Entrada cinematográfica: del espacio a Gibraltar (inclinado, para ver el 3D)
