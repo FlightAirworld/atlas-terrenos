@@ -69,7 +69,7 @@
     }
   }
 
-  function introPlaying() { const el = document.getElementById('intro'); return !!el && !el.classList.contains('hidden'); }
+  function introPlaying() { if (window.coverOpen) return false; const el = document.getElementById('intro'); return !!el && !el.classList.contains('hidden'); }   // en la portada sí suena la música
 
   function scheduler() {
     if (!ctx || mode < 2) return;

@@ -126,6 +126,8 @@
       font-size:20px; font-weight:800; cursor:pointer; box-shadow:0 8px 24px rgba(61,220,151,.35); animation:coverpulse 2.2s ease-in-out infinite; }
     #cover-play:active { transform:scale(.97); }
     #cover-play:focus-visible { outline:3px solid #fff; outline-offset:3px; }
+    #cover .cover-links { display:flex; justify-content:center; gap:10px; margin-top:12px; }
+    #cover .cover-links button { border:2px solid rgba(255,255,255,.7); background:rgba(0,0,0,.35); color:#fff; border-radius:99px; padding:8px 16px; font-size:14px; font-weight:700; cursor:pointer; }
     #cover .cover-legal { margin-top:16px; font-size:12px; opacity:.65; }
     #cover .cover-legal a { color:#fff; }
     @keyframes coverdrift { 0% { transform:rotate(-12deg) translateY(-3%); } 100% { transform:rotate(-12deg) translateY(3%); } }
@@ -216,6 +218,7 @@
       <h1 id="cover-title" aria-label="Redecora El Mundo"><span class="cover-rainbow" aria-hidden="true"><i style="color:#ff4d5e">R</i><i style="color:#ff9f1c">E</i><i style="color:#ffd23f">D</i><i style="color:#3ddc97">E</i><i style="color:#2ec4f1">C</i><i style="color:#5b8cff">O</i><i style="color:#b57bff">R</i><i style="color:#ff6fb5">A</i></span><span class="cover-sub" aria-hidden="true">El Mundo</span></h1>
       <p>Reclama terrenos del mapa del mundo y ponles tu nombre.</p>
       <button id="cover-play" type="button">▶ Jugar</button>
+      <div class="cover-links"><button id="cover-howto" type="button" data-nosound>📖 How to play</button><button id="cover-sound" type="button" data-nosound aria-label="Sonido">🔊</button></div>
       <div class="cover-legal"><a href="/privacidad.html">Privacidad</a> · <a href="/terminos.html">Condiciones</a></div>
     </div>
   </div>
@@ -562,32 +565,14 @@
   <script src="mensual.js"></script>
 <footer style="text-align:center; font-size:13px; padding:12px;">
   <a href="/privacidad.html">Política de Privacidad</a> ·
-  <a href="/terminos.html">Condiciones del Servicio</a> ·
-  <a href="#" id="intro-again">Ver introducción</a>
+  <a href="/terminos.html">Condiciones del Servicio</a>
 </footer>
 
 <script>
-// Vídeo de introducción: se muestra la primera vez y se puede saltar
+// Sin vídeo de introducción: tras pulsar "Jugar" en la portada, el mapa vuela al jugador y (solo la primera vez) sale el mensaje de bienvenida
 (function () {
-  var VIDEO_ID = 'e-8XOvvYia4', KEY = 'introSeen2';
-  var el = document.getElementById('intro');
-  var start = document.getElementById('intro-start');
-  var box = document.getElementById('intro-box');
-  var player = null, apiRequested = false, startMuted = true, firstTime = false;
-  var soundBtn = document.getElementById('intro-sound');
-
-  function seen() { try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; } }
-  function markSeen() { try { localStorage.setItem(KEY, '1'); } catch (e) {} }
-
-  function resetPlayer() {
-    try { if (player && player.destroy) player.destroy(); } catch (e) {}
-    player = null;
-    var old = document.getElementById('intro-player');
-    if (old) old.remove();
-    var fresh = document.createElement('div');
-    fresh.id = 'intro-player';
-    box.appendChild(fresh);
-  }
+  var KEY = 'introSeen2', firstTime = false;
+  try { firstTime = localStorage.getItem(KEY) !== '1'; localStorage.setItem(KEY, '1'); } catch (e) {}
   var welcome = document.getElementById('welcome'), welcomeTimer = null;
   function hideWelcome() { welcome.classList.add('hidden'); clearTimeout(welcomeTimer); }
   function showWelcome() {
@@ -596,64 +581,27 @@
     var m = document.getElementById('map');
     if (m) m.addEventListener('pointerdown', hideWelcome, { once: true });
   }
-  function finish() {
-    markSeen();
-    el.classList.add('hidden');
-    soundBtn.classList.add('hidden');
-    resetPlayer();
-    start.classList.remove('hidden');
-    if (firstTime) {                         // solo la primera vez: vuelo del globo + mensaje de bienvenida
-      firstTime = false;
-      if (window.introFlight) window.introFlight();
-      showWelcome();
-    }
-  }
-  function createPlayer() {
-    player = new YT.Player('intro-player', {
-      videoId: VIDEO_ID, width: '100%', height: '100%',
-      playerVars: { autoplay: 1, playsinline: 1, rel: 0, modestbranding: 1, mute: startMuted ? 1 : 0 },
-      events: {
-        onReady: function (e) { try { e.target.playVideo(); } catch (x) {} if (startMuted) soundBtn.classList.remove('hidden'); },
-        onStateChange: function (e) { if (e.data === 0) finish(); },
-        onError: finish
-      }
-    });
-  }
-  function playVideo() {
-    start.classList.add('hidden');
-    if (window.YT && window.YT.Player) { createPlayer(); return; }
-    window.onYouTubeIframeAPIReady = createPlayer;
-    if (!apiRequested) {
-      apiRequested = true;
-      var s = document.createElement('script');
-      s.src = 'https://www.youtube.com/iframe_api';
-      s.onerror = finish;
-      document.head.appendChild(s);
-    }
-  }
-  function show(withSound) {
-    startMuted = !withSound;          // sin gesto del usuario solo se puede autoarrancar en silencio
-    el.classList.remove('hidden');
-    playVideo();                      // arranca solo
-  }
-
-  // El botón es un gesto del usuario: el vídeo puede arrancar ya con sonido
-  document.getElementById('intro-play').onclick = function () { startMuted = false; playVideo(); };
   document.getElementById('welcome-x').onclick = hideWelcome;
   document.getElementById('welcome-loc').onclick = function () {
     hideWelcome();
     var b = document.getElementById('locate'); if (b) b.click();
   };
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !el.classList.contains('hidden')) finish(); });
-  document.getElementById('intro-skip').onclick = finish;
-  document.getElementById('intro-again').onclick = function (e) { e.preventDefault(); show(true); };
-  soundBtn.onclick = function () {
-    try { player.unMute(); player.setVolume(100); } catch (e) {}
-    soundBtn.classList.add('hidden');
-  };
-
-  // Primera vez: se muestra la pantalla "Empezar" (sin autoarrancar el vídeo en silencio)
-  if (!seen()) { firstTime = true; el.classList.remove('hidden'); }
+  var play = document.getElementById('cover-play');
+  if (firstTime && play) play.addEventListener('click', function () { firstTime = false; showWelcome(); });
+  else if (firstTime) showWelcome();
+})();
+</script>
+<script>
+// Portada: enlace "How to play" (guía en inglés) y botón de sonido
+(function () {
+  var h = document.getElementById('cover-howto'), sb = document.getElementById('cover-sound');
+  if (h) h.addEventListener('click', function (e) { e.stopPropagation(); if (window.openHowTo) window.openHowTo('en'); });
+  if (sb) sb.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var main = document.getElementById('sound-btn'); if (main) main.click();
+    setTimeout(function () { if (main) sb.textContent = main.textContent; }, 0);
+  });
+  document.addEventListener('DOMContentLoaded', function () { var main = document.getElementById('sound-btn'); if (main && sb) sb.textContent = main.textContent; });
 })();
 </script>
 <script>

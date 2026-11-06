@@ -119,7 +119,7 @@ function introFlight() {
     { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
 }
 window.introFlight = introFlight;
-function introAlreadySeen() { try { return localStorage.getItem('introSeen2') === '1'; } catch (e) { return false; } }
+function introAlreadySeen() { return true; }   // ya no hay vídeo de introducción: el mapa vuela al jugador en cuanto pulsa Jugar
 const pendingParcels = new Map();
 const ownedFeatures = new Map();      // id -> Feature GeoJSON (volumen de la parcela)
 let ownedDirty = false;
