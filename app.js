@@ -1365,10 +1365,33 @@ async function showCities(code) {
 $('rank-back').onclick = showRankMain;
 $('rank-btn').onclick = () => { showRankMain(); loadStats(); $('rank').classList.remove('hidden'); };
 $('rank-close').onclick = () => $('rank').classList.add('hidden');
+// Aviso "Estás en…" al ir a mi ubicación: pueblo/ciudad con su categoría y, si se conoce, el barrio. Se cierra al tocarlo.
+const TIER_TEXT = { 'Paraje': 'el paraje de', 'Chabolas': 'las chabolas de', 'Barriada': 'la barriada de', 'Barrio': 'el barrio de', 'Aldea': 'la aldea de', 'Pueblo': 'el pueblo de', 'Villa': 'la villa de', 'Localidad': 'la localidad de', 'Urbe': 'la urbe de', 'Ciudad': 'la ciudad de' };
+let whereTimer = null;
+async function showWhereBanner(lat, lng) {
+  const old = $('where-banner'); if (old) old.remove();
+  clearTimeout(whereTimer);
+  let j;
+  try { j = await api(`/api/where?lat=${lat.toFixed(5)}&lng=${lng.toFixed(5)}`, { method: 'GET' }); } catch (e) { return; }
+  if (!j || !j.city) return;
+  const bar = document.createElement('div'); bar.id = 'where-banner'; bar.setAttribute('role', 'button'); bar.tabIndex = 0;
+  const ico = document.createElement('span'); ico.textContent = '📍'; ico.style.cssText = 'font-size:28px;line-height:1';
+  const txt = document.createElement('div'); txt.style.cssText = 'flex:1;line-height:1.3';
+  const b = document.createElement('b');
+  b.textContent = j.tier ? `Estás en ${TIER_TEXT[j.tier] || 'el pueblo de'} ${j.city}` : `Estás en ${j.city}`;
+  txt.appendChild(b);
+  if (j.district) { const sm = document.createElement('div'); sm.style.cssText = 'font-size:13px;opacity:.95'; sm.textContent = `Barrio: ${j.district}`; txt.appendChild(sm); }
+  const close = () => { bar.remove(); clearTimeout(whereTimer); };
+  bar.onclick = close; bar.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); close(); } };
+  bar.append(ico, txt);
+  bar.style.top = $('ayto-banner') ? '172px' : '76px';   // por debajo del aviso del presidente si está
+  document.body.appendChild(bar);
+  whereTimer = setTimeout(close, 12000);   // si no lo tocas, se va solo
+}
 $('locate').onclick = () => {
   if (!navigator.geolocation) return alert('Tu navegador no permite geolocalización');
   navigator.geolocation.getCurrentPosition(
-    pos => { const ll = L.latLng(pos.coords.latitude, pos.coords.longitude); map.flyTo(ll, 18); map.once('moveend', () => selectAt(ll)); },
+    pos => { const ll = L.latLng(pos.coords.latitude, pos.coords.longitude); map.flyTo(ll, 18); map.once('moveend', () => selectAt(ll)); showWhereBanner(ll.lat, ll.lng); },
     () => alert('No se pudo obtener tu ubicación. Revisa los permisos del navegador.'),
     { enableHighAccuracy: true, timeout: 10000 });
 };

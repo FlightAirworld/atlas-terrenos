@@ -1825,6 +1825,36 @@ function townRow(r) {
 }
 const TOWN_COLS = 'COUNT(*) AS n, SUM($1::int + (COALESCE(level, 1) - 1) * $2::int) AS pop, COUNT(*) FILTER (WHERE created_at > $3) AS recent, AVG(x) AS ax, AVG(y) AS ay';
 let townsCache = { t: 0, rows: null };
+// ---------- ¿Dónde estoy? Pueblo/ciudad, categoría y barrio de unas coordenadas ----------
+const districtCache = new Map();   // celda de ~100 m -> barrio ('' si no hay)
+let whereLast = 0;
+async function reverseDistrict(lat, lng) {
+  const key = Math.round(lat / 0.001) + ',' + Math.round(lng / 0.001);
+  if (districtCache.has(key)) return districtCache.get(key);
+  const wait = whereLast + 1100 - Date.now(); whereLast = Math.max(Date.now(), whereLast) + (wait > 0 ? 1100 : 0);   // Nominatim: máx. 1 consulta por segundo
+  if (wait > 0) await sleepMs(wait);
+  const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&accept-language=es&lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}`,
+    { headers: { 'User-Agent': 'atlas-terrenos/1.0 (' + (process.env.CITY_CONTACT || 'https://atlas-terrenos.onrender.com') + ')' }, signal: AbortSignal.timeout(10_000) });
+  if (!r.ok) throw new Error('Nominatim ' + r.status);
+  const a = ((await r.json()) || {}).address || {};
+  const name = String(a.neighbourhood || a.quarter || a.suburb || a.city_district || '').trim().slice(0, 80);
+  if (districtCache.size > 20000) districtCache.clear();
+  districtCache.set(key, name);
+  return name;
+}
+async function whereGet(url) {
+  const lat = Number(url.searchParams.get('lat')), lng = Number(url.searchParams.get('lng'));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new HttpError(400, 'Ubicación no válida');
+  if (!CITY_GEOCODE) throw new HttpError(503, 'Ubicación no disponible');
+  const city = (await reverseCity(lat, lng)).name;
+  const out = { city: city === CITY_NONE ? null : city, district: null, parcels: 0, pop: 0, tier: null };
+  if (!out.city) return out;
+  const r = await one(`SELECT ${TOWN_COLS} FROM parcels WHERE city = $4`, [POP_PER_PARCEL, POP_PER_LEVEL, Date.now() - 86_400_000, out.city]);
+  out.parcels = Number(r.n) || 0; out.pop = Number(r.pop) || 0;
+  if (out.parcels) out.tier = townTier(out.pop).tier;
+  try { const d = await reverseDistrict(lat, lng); if (d && d !== out.city) out.district = d; } catch { /* sin barrio */ }
+  return out;
+}
 async function townsGet(url, req) {
   const since = Date.now() - 86_400_000;
   if (!townsCache.rows || Date.now() - townsCache.t > 15_000) {
@@ -2244,6 +2274,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/rank/cities') return rankCities(url);
+  if (req.method === 'GET' && pn === '/api/where') return whereGet(url);
   if (req.method === 'GET' && pn === '/api/towns') return townsGet(url, req);
   if (req.method === 'GET' && pn === '/api/town/president/ayuntamiento') {
     const u = await needUser(req);
