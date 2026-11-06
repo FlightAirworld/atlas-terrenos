@@ -101,7 +101,7 @@ const HOME = [-5.3536, 36.1408];   // Gibraltar: destino si no hay ubicación
 function introFlight() {
   if (!glReady) { flightRequested = true; return; }
   if (window.coverOpen) { window.afterCover = introFlight; return; }   // con la portada abierta el vuelo espera a que el jugador pulse Jugar
-  const fly = (center, zoom) => gl.flyTo({ center, zoom, pitch: flatView ? 0 : 45, bearing: flatView ? 0 : -15, duration: 7000, essential: true });
+  const fly = (center, zoom) => { gl.flyTo({ center, zoom, pitch: flatView ? 0 : 45, bearing: flatView ? 0 : -15, duration: 7000, essential: true }); if (window.skydive) window.skydive(7000); };   // el paracaidista baja a la vez y aterriza donde acaba el vuelo
   let done = false;
   const toHome = () => { if (done) return; done = true; fly(HOME, 16); };
   if (!navigator.geolocation) return toHome();

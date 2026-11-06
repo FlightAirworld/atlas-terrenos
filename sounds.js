@@ -50,6 +50,22 @@
     pop:    t => tone(sfxBus, 'sine', 350, t, 0.16, 0.5, { slideTo: 900 }),
     bells:  t => { [91, 95, 100, 95, 91, 100, 103, 100, 95, 103, 107, 103].forEach((n, i) => tone(sfxBus, 'triangle', hz(n), t + i * 0.085, 0.3, 0.32)); },
     hohoho: t => { [0, 0.42, 0.84].forEach(d => { tone(sfxBus, 'sawtooth', 150, t + d, 0.32, 0.3, { slideTo: 105 }); tone(sfxBus, 'triangle', 300, t + d, 0.32, 0.22, { slideTo: 210 }); }); },
+    // Aterrizaje del paracaidista: golpe sordo y un grito ("aaah" con vibrato) hecho con una onda diente de sierra filtrada por formantes
+    grito:  t => {
+      tone(sfxBus, 'sine', 110, t, 0.3, 1.2, { slideTo: 40 });
+      const o = ctx.createOscillator(), g = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(380, t + 0.05); o.frequency.linearRampToValueAtTime(820, t + 0.4);
+      o.frequency.linearRampToValueAtTime(650, t + 0.85); o.frequency.exponentialRampToValueAtTime(330, t + 1.5);
+      lfo.frequency.value = 7; lg.gain.value = 22; lfo.connect(lg); lg.connect(o.frequency);
+      g.gain.setValueAtTime(0.0001, t + 0.05); g.gain.linearRampToValueAtTime(2.4, t + 0.12);
+      g.gain.setValueAtTime(2.4, t + 0.95); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+      [[800, 1], [1250, 0.6], [2600, 0.25]].forEach(([f, a]) => {
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 5;
+        const ga = ctx.createGain(); ga.gain.value = a; o.connect(bp); bp.connect(ga); ga.connect(g);
+      });
+      g.connect(sfxBus); o.start(t + 0.05); lfo.start(t + 0.05); o.stop(t + 1.7); lfo.stop(t + 1.7);
+    },
     error:  t => { tone(sfxBus, 'sawtooth', 220, t, 0.25, 0.3, { slideTo: 110 }); }
   };
 
