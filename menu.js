@@ -409,6 +409,12 @@ body.mp-z1 .ts-pd{opacity:0 !important;pointer-events:none !important}`;
   function apply3d(anim) {
     try {
       if (typeof gl === 'undefined' || !gl) return false;
+      // La vista plana (app.js) bloquea la inclinación (maxPitch 0) y oculta los volúmenes: hay que desactivarla para poder inclinar.
+      if (typeof flatView !== 'undefined' && typeof applyViewMode === 'function') {
+        flatView = !on3d;
+        try { localStorage.setItem('flatView', flatView ? '1' : '0'); } catch (e) {}
+        applyViewMode(!!anim);
+      }
       if (gl.getLayer('owned-3d')) {
         gl.setPaintProperty('owned-3d', 'fill-extrusion-opacity', on3d ? 0.55 : 0.35);
         gl.setPaintProperty('owned-3d', 'fill-extrusion-vertical-gradient', on3d);
