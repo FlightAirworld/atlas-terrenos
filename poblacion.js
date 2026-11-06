@@ -1,5 +1,5 @@
 'use strict';
-// POBLACIÓN: botón de Extras con los pueblos del juego, sus habitantes y su categoría (Aldea → Pueblo → Villa → Ciudad → Gran ciudad).
+// POBLACIÓN: botón de Extras con los pueblos del juego, sus habitantes y su categoría (Paraje → Chabolas → Barriada → Barrio → Aldea → Pueblo → Villa → Localidad → Urbe → Ciudad).
 // La población crece sola con cada terreno que se reclama o se mejora (la calcula el servidor: /api/towns).
 // Los nombres son los reales: salen de la ubicación del terreno (geocodificación inversa del servidor).
 (function () {

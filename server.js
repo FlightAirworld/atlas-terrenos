@@ -1770,7 +1770,8 @@ async function rankCities(url) {
 // que ya se averigua por geocodificación (reverseCity) a partir de las coordenadas del terreno. La categoría depende de la población.
 const POP_PER_PARCEL = Math.max(0, Number(process.env.POP_PER_PARCEL || 4));
 const POP_PER_LEVEL = Math.max(0, Number(process.env.POP_PER_LEVEL || 2));
-const TOWN_TIERS = [[0, 'Aldea'], [50, 'Pueblo'], [300, 'Villa'], [1000, 'Ciudad'], [5000, 'Gran ciudad']];
+// [habitantes mínimos, nombre]. Siempre en orden creciente y empezando en 0.
+const TOWN_TIERS = [[0, 'Paraje'], [5, 'Chabolas'], [50, 'Barriada'], [100, 'Barrio'], [500, 'Aldea'], [2000, 'Pueblo'], [10000, 'Villa'], [50000, 'Localidad'], [250000, 'Urbe'], [1000000, 'Ciudad']];
 function townTier(pop) {
   let i = 0;
   while (i + 1 < TOWN_TIERS.length && pop >= TOWN_TIERS[i + 1][0]) i++;
