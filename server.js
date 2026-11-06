@@ -1923,6 +1923,19 @@ async function notifyFriendsOf(userId, kind, level) {
   } catch (e) { console.error('push social:', e.message); }
 }
 
+// Pueblos donde este jugador es presidente y todavía no ha puesto el ayuntamiento (para avisarle en el panel de terrenos)
+async function presidentAytoPending(userId) {
+  const rows = await all(`SELECT p.city FROM (
+      SELECT DISTINCT ON (city) city, user_id FROM (
+        SELECT city, user_id::text AS user_id, COUNT(*) AS n, MIN(created_at) AS first FROM parcels
+        WHERE user_id IS NOT NULL AND city IS NOT NULL AND city <> $3
+          AND city IN (SELECT city FROM parcels WHERE user_id::text = $1 AND city IS NOT NULL)
+        GROUP BY city, user_id) t
+      WHERE n >= $2 ORDER BY city, n DESC, first ASC) p
+    WHERE p.user_id = $1 AND NOT EXISTS (SELECT 1 FROM parcels a WHERE a.city = p.city AND a.house = $4 AND a.user_id::text = $1)
+    ORDER BY p.city`, [String(userId), PRESIDENT_MIN_PARCELS, CITY_NONE, AYUNTAMIENTO]);
+  return rows.map(r => r.city);
+}
 // Pueblos donde este jugador es presidente y aún no ha cobrado el premio de este mes
 async function presidentPendingTowns(userId, month) {
   const rows = await all(`SELECT p.city FROM (
@@ -2133,7 +2146,7 @@ async function route(req, res, url) {
     const mine = !!(user && row && row.user_id === user.id);
     return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null, avatar: row ? row.avatar : null, country: row ? row.country : null,
       house: row ? row.house : null, level: row ? row.level : null, mine, giftable: !!(row && row.user_id),
-      lvlDiscount: mine ? await bomberosDiscount(pool, user.id, row.city) : 0 };
+      city: mine ? row.city : null, lvlDiscount: mine ? await bomberosDiscount(pool, user.id, row.city) : 0 };
   }
 
   if (req.method === 'GET' && pn === '/api/parcels') {
@@ -2154,6 +2167,7 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/rank/cities') return rankCities(url);
   if (req.method === 'GET' && pn === '/api/towns') return townsGet(url, req);
+  if (req.method === 'GET' && pn === '/api/town/president/ayuntamiento') { const u = await needUser(req); return { towns: await presidentAytoPending(u.id), cost: HOUSE_COST }; }
   if (req.method === 'POST' && pn === '/api/town/president/claim') return presidentClaim(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };

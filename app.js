@@ -651,6 +651,7 @@ async function selectAt(latlng) {
   selected = p;
   setSelected(p);
   showPanel(p);
+  refreshAyto().then(() => { if (selected === p) renderAytoPromo(p); });
   sfx('select');
 }
 map.on('click', e => {
@@ -784,6 +785,39 @@ function setupAdminControls() {
   box.append(title, description, token, button, statsBtn, statsOut);
   $('p-free').appendChild(box);
 }
+// ---------- Aviso al presidente: poner el ayuntamiento ----------
+let aytoTowns = [], aytoAt = 0;
+async function refreshAyto(force) {
+  if (typeof authToken === 'undefined' || !authToken) { aytoTowns = []; return; }
+  if (!force && Date.now() - aytoAt < 30000) return;
+  try { aytoTowns = (await api('/api/town/president/ayuntamiento', { method: 'GET' })).towns || []; aytoAt = Date.now(); } catch (e) {}
+}
+function renderAytoPromo(p) {
+  const old = $('ayto-promo'); if (old) old.remove();
+  const AYTO = 'images/ayuntamiento.webp';
+  if (!aytoTowns.length || !p) return;
+  const owned = !!p.owner;
+  if (owned && (!p.mine || p.house === AYTO)) return;
+  const here = owned && p.city && aytoTowns.includes(p.city);   // este terreno está en un pueblo del que eres presidente
+  const box = document.createElement('div'); box.id = 'ayto-promo';
+  box.style.cssText = 'display:flex;gap:10px;align-items:center;margin:8px 0;padding:8px;border-radius:12px;background:linear-gradient(135deg,#fff4d6,#ffe3a3);color:#3b2a00;border:2px solid #ffb703';
+  const img = document.createElement('img'); img.src = sizedUrl(AYTO, 's'); img.alt = 'Ayuntamiento';
+  img.style.cssText = 'width:76px;height:76px;border-radius:10px;object-fit:cover;flex:0 0 auto';
+  const txt = document.createElement('div'); txt.style.cssText = 'font-size:13px;line-height:1.3';
+  const b = document.createElement('b'); b.textContent = here ? `🏛️ ¡Eres el presidente de ${p.city}!` : `🏛️ ¡Eres presidente de ${aytoTowns.slice(0, 2).join(' y ')}${aytoTowns.length > 2 ? '…' : ''}!`;
+  const sm = document.createElement('div');
+  sm.textContent = here ? 'Construye aquí el Ayuntamiento de tu pueblo.' : (owned ? 'Tu Ayuntamiento va en un terreno de ese pueblo: elígelo en el mapa.' : 'Pon el Ayuntamiento en uno de tus terrenos de ese pueblo: elígelo en el mapa y pulsa CAMBIAR CASA.');
+  txt.append(b, sm);
+  if (here) {
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'primary'; btn.style.cssText = 'margin-top:6px;width:100%;padding:8px';
+    const c = (cfg.buildings && cfg.buildings[AYTO] && cfg.buildings[AYTO].cost) ?? cfg.houseCost ?? 1;
+    btn.textContent = `🏛️ CONSTRUIR AYUNTAMIENTO${c > 0 ? ` (${c} 🎟️)` : ''}`;
+    btn.onclick = () => { const h = [...$('house-pick-edit').children].find(x => x.dataset.house === AYTO); if (h) h.click(); };
+    txt.appendChild(btn);
+  }
+  box.append(img, txt);
+  if (owned) $('p-owned').insertBefore(box, $('house-edit')); else $('p-free').insertBefore(box, $('p-free').children[1] || null);
+}
 function showPanel(p) {
   $('panel').classList.remove('hidden');
   $('p-title').textContent = `Terreno ${p.id}`;
@@ -808,6 +842,7 @@ function showPanel(p) {
   } else {
     buildPackPicker();
   }
+  renderAytoPromo(p);
 }
 $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; };
 $('gift-owner-btn').onclick = () => { if (selected && selected.owner && window.openGift) openGift(selected.owner); };
@@ -914,7 +949,7 @@ function markHouse(box, current) {
       $('house-pick-wrap').classList.add('hidden');
       try {   // refresca el panel: descuento de bomberos y texto del edificio
         const fresh = await api(`/api/parcel?lat=${selected.south + cfg.size / 2}&lng=${selected.west + cfg.size / 2}`, { method: 'GET' });
-        selected.lvlDiscount = fresh.lvlDiscount || 0; showPanel(selected);
+        selected.lvlDiscount = fresh.lvlDiscount || 0; selected.city = fresh.city; await refreshAyto(true); showPanel(selected);
       } catch (e) {}
       setMsg(`🏠 ¡Casa cambiada! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
     } catch (e) { setMsg(e.message, 'err'); }

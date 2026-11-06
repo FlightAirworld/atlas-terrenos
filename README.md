@@ -60,7 +60,7 @@ Otras variables: `DATABASE_URL` (obligatoria), `ADMIN_TOKEN`, `PACKS` (packs a l
 Cada terreno tiene una columna `house` (ruta de la imagen). Si está vacía se usa la casa "al azar" de siempre.
 El dueño con cuenta puede cambiarla desde el panel del terreno (`POST /api/parcel/house`). Cuesta 1 crédito (variable `HOUSE_COST`; pon 0 para que sea gratis). Elegir la casa al reclamar es gratis.
 El servidor añade la columna solo al arrancar (`migration-house.sql` es el mismo comando por si prefieres ejecutarlo a mano).
-🏛️ **Ayuntamiento** (`images/ayuntamiento.webp`): casa especial, solo la puede poner en uno de sus terrenos el presidente del pueblo (el que más terrenos tiene allí) y solo hay uno por pueblo. No sale al azar ni se elige al reclamar. Si otro jugador pasa a ser presidente y construye el suyo, el ayuntamiento anterior pasa a casa al azar.
+🏛️ **Ayuntamiento** (`images/ayuntamiento.webp`): casa especial, solo la puede poner en uno de sus terrenos el presidente del pueblo (el que más terrenos tiene allí) y solo hay uno por pueblo. No sale al azar ni se elige al reclamar. Al presidente que aún no lo ha puesto le sale un aviso con la imagen del ayuntamiento en el panel de terrenos (`GET /api/town/president/ayuntamiento`), con un botón para construirlo si el terreno está en su pueblo. Si otro jugador pasa a ser presidente y construye el suyo, el ayuntamiento anterior pasa a casa al azar.
 **Edificios con función propia** (se construyen cambiando la casa de un terreno propio que ya tenga pueblo; cuestan `BUILDING_COST` créditos, 3 por defecto, y la fábrica 2 más):
 - 🏦 Banco: ese terreno produce ×`BANCO_MULT` (1,25). Uno por jugador y pueblo.
 - 🏭 Fábrica: produce ×`FABRICA_MULT` (2). Uno por jugador y pueblo.
