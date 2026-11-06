@@ -212,3 +212,4 @@ Las posiciones de bancos, colas, puertas y chimeneas dentro de cada parcela son 
 - **CSP:** se aplica `object-src 'none'; base-uri 'self'`. Una política más estricta va en modo aviso (`Content-Security-Policy-Report-Only`) y los avisos salen en los logs de Render con el prefijo `CSP:`. Cuando no salgan avisos legítimos, pasa `CSP_REPORT` a `CSP_ENFORCED` en `server.js`.
 - **SRI de las librerías externas:** con internet, ejecuta `node tools/add-sri.js` y sube el `index.html` resultante. Repítelo al cambiar la versión de una librería.
 - **Health check en Render:** Settings > Health Check Path = `/api/health`.
+- **Portada:** al abrir el juego sale una pantalla de título con el botón Jugar (una vez por pestaña; no sale al volver de un pago ni con `?nocover`). Los textos y las imágenes están al principio de `index.html` (`#cover`).

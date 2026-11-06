@@ -100,6 +100,7 @@ let flightRequested = false;
 const HOME = [-5.3536, 36.1408];   // Gibraltar: destino si no hay ubicación
 function introFlight() {
   if (!glReady) { flightRequested = true; return; }
+  if (window.coverOpen) { window.afterCover = introFlight; return; }   // con la portada abierta el vuelo espera a que el jugador pulse Jugar
   const fly = (center, zoom) => gl.flyTo({ center, zoom, pitch: flatView ? 0 : 45, bearing: flatView ? 0 : -15, duration: 7000, essential: true });
   let done = false;
   const toHome = () => { if (done) return; done = true; fly(HOME, 16); };
@@ -1705,7 +1706,7 @@ let walkerBusy = false, walkerTimer = null;
 const randBetween = (a, b) => a + Math.random() * (b - a);
 function scheduleWalker(ms) { clearTimeout(walkerTimer); walkerTimer = setTimeout(trySpawnWalker, ms); }
 function walkerUiBusy() {
-  return document.hidden || !!document.querySelector('.modal:not(.hidden)') || !$('intro').classList.contains('hidden');
+  return document.hidden || !!window.coverOpen || !!document.querySelector('.modal:not(.hidden)') || !$('intro').classList.contains('hidden');
 }
 async function trySpawnWalker() {
   if (walkerBusy) return;
