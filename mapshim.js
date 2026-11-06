@@ -112,7 +112,7 @@
       getZoom: () => gl.getZoom() + ZOFF,
       getSize: () => { const c = gl.getContainer(); return { x: c.clientWidth, y: c.clientHeight }; },
       getCenter: () => { const c = gl.getCenter(); return { lat: c.lat, lng: c.lng }; },
-      flyTo(ll, z) { gl.flyTo({ center: toLngLat(ll), zoom: (z == null ? api.getZoom() : z) - ZOFF, essential: true }); return api; },
+      flyTo(ll, z, o) { gl.flyTo({ center: toLngLat(ll), zoom: (z == null ? api.getZoom() : z) - ZOFF, essential: true, ...(o && o.duration ? { duration: o.duration } : {}) }); return api; },   // o.duration (ms) opcional: vuelo más lento
       setView(ll, z) { gl.jumpTo({ center: toLngLat(ll), zoom: (z == null ? api.getZoom() : z) - ZOFF }); return api; },
       on(ev, fn) {
         if (ev === 'click') gl.on('click', e => fn({ latlng: { lat: e.lngLat.lat, lng: e.lngLat.lng }, point: e.point, originalEvent: e.originalEvent }));

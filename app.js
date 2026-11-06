@@ -1392,7 +1392,16 @@ async function showWhereBanner(lat, lng) {
 $('locate').onclick = () => {
   if (!navigator.geolocation) return alert('Tu navegador no permite geolocalización');
   navigator.geolocation.getCurrentPosition(
-    pos => { const ll = L.latLng(pos.coords.latitude, pos.coords.longitude); map.flyTo(ll, 18); map.once('moveend', () => selectAt(ll)); showWhereBanner(ll.lat, ll.lng); },
+    pos => {
+      const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
+      // Si el mapa está lejos de tu ubicación, vuelves en paracaídas: vuelo lento y grito al tocar suelo
+      const c = map.getCenter(), rad = Math.PI / 180;
+      const dx = (ll.lng - c.lng) * Math.cos(((ll.lat + c.lat) / 2) * rad), dy = ll.lat - c.lat;
+      const meters = Math.sqrt(dx * dx + dy * dy) * 111320;
+      if (meters > 150 && window.skydive) { map.flyTo(ll, 18, { duration: 7000 }); window.skydive(7000); }
+      else map.flyTo(ll, 18);
+      map.once('moveend', () => selectAt(ll)); showWhereBanner(ll.lat, ll.lng);
+    },
     () => alert('No se pudo obtener tu ubicación. Revisa los permisos del navegador.'),
     { enableHighAccuracy: true, timeout: 10000 });
 };
