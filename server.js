@@ -112,69 +112,27 @@ const HOUSES = [
   'images/burrito-blanco.webp',
   'images/arcobaleno.webp',
   'images/la-cruilla.webp',
-  'images/cesped-2.webp',
-  'images/parque-picnic.webp',
-  'images/desierto-1.webp',
-  'images/desierto-2.webp',
-  'images/prado.webp',
-  'images/claro-bosque.webp',
-  'images/parque-futbol.webp',
-  'images/mar.webp',
-  'images/mar-peces.webp',
-  'images/ayuntamiento.webp',
-  'images/banco.webp',
-  'images/hospital.webp',
-  'images/bomberos.webp',
-  'images/fabrica.webp',
-  'images/puerto.webp',
-  'images/parque-atracciones.webp',
-  'images/estadio.webp',
-  'images/iglesia.webp',
-  'images/estacion.webp',
-  'images/aeropuerto.webp',
-  'images/navidad.webp',
-  'images/halloween.webp',
-  'images/carrefour.webp',
-  'images/iso-casa-roja.webp',
-  'images/iso-casa-azul.webp',
-  'images/iso-chalet.webp',
-  'images/iso-casa-moderna.webp',
-  'images/iso-adosadas.webp',
-  'images/iso-bloque-azul.webp',
-  'images/iso-bloque-ladrillo.webp',
-  'images/iso-rascacielos.webp',
-  'images/iso-torre-oficinas.webp',
-  'images/iso-torre-beige.webp',
-  'images/iso-tienda.webp',
-  'images/iso-farmacia.webp',
-  'images/iso-panaderia.webp',
-  'images/iso-cafe.webp',
-  'images/iso-restaurante.webp',
-  'images/iso-supermercado.webp',
-  'images/iso-centro-comercial.webp',
-  'images/iso-gasolinera.webp',
-  'images/iso-banco.webp',
-  'images/iso-cine.webp',
-  'images/iso-gimnasio.webp',
-  'images/iso-hotel.webp',
-  'images/iso-colegio.webp',
-  'images/iso-hospital.webp',
-  'images/iso-comisaria.webp',
-  'images/iso-bomberos.webp',
-  'images/iso-iglesia.webp',
-  'images/iso-ayuntamiento.webp',
-  'images/iso-museo.webp',
-  'images/iso-fabrica.webp',
-  'images/iso-almacen.webp',
-  'images/iso-granja.webp'
+  'images/torre-metalica.webp',
+  'images/casa-modernista.webp',
+  'images/casa-modernista-2.webp',
+  'images/estadio-1.webp',
+  'images/estadio-2.webp',
+  'images/rugby.webp',
+  'images/estadio-3.webp',
+  'images/estadio-4.webp',
+  'images/plaza-de-toros.webp',
+  'images/teatro.webp',
+  'images/cine.webp',
+  'images/supermercado-3.webp',
+  'images/supermercado-4.webp',
+  'images/supermercado-2.webp',
+  'images/pisos-3.webp',
+  'images/pisos-4.webp',
+  'images/pisos-5.webp',
+  'images/casa-7.webp',
+  'images/casa-8.webp'
 ];
-// Casas especiales: no salen al azar ni se pueden elegir al reclamar; tienen sus propias reglas (ver setHouse)
-const AYUNTAMIENTO = 'images/ayuntamiento.webp';
-const BANCO = 'images/banco.webp', HOSPITAL = 'images/hospital.webp', BOMBEROS = 'images/bomberos.webp', FABRICA = 'images/fabrica.webp', PUERTO = 'images/puerto.webp';
-const ATRACCIONES = 'images/parque-atracciones.webp', ESTADIO = 'images/estadio.webp', IGLESIA = 'images/iglesia.webp', ESTACION = 'images/estacion.webp', AEROPUERTO = 'images/aeropuerto.webp';
-const NAVIDAD = 'images/navidad.webp', HALLOWEEN = 'images/halloween.webp';   // de temporada
-const SPECIAL_HOUSES = [AYUNTAMIENTO, BANCO, HOSPITAL, BOMBEROS, FABRICA, PUERTO, ATRACCIONES, ESTADIO, IGLESIA, ESTACION, AEROPUERTO, NAVIDAD, HALLOWEEN];
-const cleanHouse = (h, allowSpecial = false) => { h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h; return HOUSES.includes(h) && (allowSpecial || !SPECIAL_HOUSES.includes(h)) ? h : null; };   // null = al azar (como hasta ahora)
+const cleanHouse = h => { h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h; return HOUSES.includes(h) ? h : null; };   // null = al azar (como hasta ahora)
 const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
 
 // ---------- Seguridad de administrador ----------
@@ -527,6 +485,22 @@ async function settledOrder(orderId) {
 
 // Entrega el pack de un pedido ya cobrado y reservado (status PROCESSING). Todo en una transacción: o se suman los créditos y se marca PAID, o no pasa nada.
 // Si falla, el pedido vuelve a CREATED para poder reintentarlo (otra petición, o el reintento automático del webhook).
+
+// ---------- Avisos al móvil del dueño (Telegram, gratis) ----------
+// 1) En Telegram habla con @BotFather, escribe /newbot y copia el token. 2) Escribe cualquier cosa a tu bot nuevo.
+// 3) Abre https://api.telegram.org/bot<TOKEN>/getUpdates y copia el número de "chat":{"id":...}.
+// Pon TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en Render > Environment. Sin ellas no se envía nada.
+const TG_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim(), TG_CHAT = (process.env.TELEGRAM_CHAT_ID || '').trim();
+function ownerNotify(title, body) {
+  if (!TG_TOKEN || !TG_CHAT) return;
+  fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: TG_CHAT, text: body ? `${title}\n${body}` : String(title), disable_web_page_preview: true })
+  }).catch(() => {});   // nunca debe romper el juego
+}
+const seenNotified = new Map();   // cid -> última vez que se avisó de su conexión
+
 async function deliverPack(orderId, packCredits, user, captureId) {
   const client = await pool.connect();
   try {
@@ -545,6 +519,7 @@ async function deliverPack(orderId, packCredits, user, captureId) {
     const done = await client.query("UPDATE pack_orders SET status = 'PAID', code = $1, capture_id = $3 WHERE order_id = $2 AND status = 'PROCESSING' RETURNING order_id", [code, orderId, captureId || null]);
     if (!done.rows[0]) throw new Error('El pedido ya no estaba reservado');
     await client.query('COMMIT');
+    try { const pk = PACKS.find(p => p.credits === packCredits); ownerNotify('💰 Nueva compra', `Pack de ${packCredits} créditos${pk ? ' · ' + pk.price + ' ' + (process.env.CURRENCY || 'EUR') : ''}${user ? '' : ' (sin cuenta)'}`); } catch {}
     return { code, credits };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -755,57 +730,22 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house })
 const HOUSE_COST = Math.max(0, Math.floor(Number(process.env.HOUSE_COST ?? 1)));
 async function setHouse(req, { id, house }) {
   const user = await needUser(req);
-  const h = cleanHouse(house, true);
+  const h = cleanHouse(house);
   if (!h) throw new HttpError(400, 'Casa no válida');
   const pack = await ensureUserPack(user);
-  // Edificios especiales: si el terreno aún no tiene pueblo, lo averiguamos ahora mismo (sin esperar al proceso de fondo)
-  if (CITY_GEOCODE && (BUILDINGS[h] || (AMBIENT[h] && AMBIENT[h].city) || h === AYUNTAMIENTO)) {
-    const cur = await one('SELECT x, y, city FROM parcels WHERE id = $1 AND user_id = $2', [String(id), user.id]);
-    if (cur && (!cur.city || cur.city === CITY_NONE)) {
-      try {
-        const { name } = await reverseCity(cur.y * SIZE - 90 + SIZE / 2, cur.x * SIZE - 180 + SIZE / 2, true);
-        if (name !== CITY_NONE || !cur.city) await run('UPDATE parcels SET city = $1 WHERE id = $2', [name, String(id)]);
-      } catch (e) { /* si falla, saldrá el aviso de "aún no tiene pueblo" y se reintenta */ }
-    }
-  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('SELECT code FROM packs WHERE code = $1 FOR UPDATE', [pack.code]);   // una operación a la vez por cuenta
-    const par = (await client.query('SELECT house, city FROM parcels WHERE id = $1 AND user_id = $2 FOR UPDATE', [String(id), user.id])).rows[0];
+    const par = (await client.query('SELECT house FROM parcels WHERE id = $1 AND user_id = $2 FOR UPDATE', [String(id), user.id])).rows[0];
     if (!par) throw new HttpError(403, 'Este terreno no es tuyo');
-    const bd = BUILDINGS[h] || AMBIENT[h];
-    if (bd && par.house !== h) {   // edificios con función, de ambiente o de temporada: respetan su límite (y exigen pueblo salvo los de temporada)
-      if (bd.season && !inSeason(bd.season)) throw new HttpError(403, `${bd.name}: solo se puede construir del ${fmtMD(bd.season.from)} al ${fmtMD(bd.season.to)}`);
-      if (bd.city !== false && (!par.city || par.city === CITY_NONE)) throw new HttpError(400, 'Este terreno aún no tiene pueblo');
-      const other = bd.unique ? (await client.query(bd.unique === 'town'
-        ? 'SELECT id, user_id FROM parcels WHERE city = $1 AND house = $2 AND id <> $3 LIMIT 1 FOR UPDATE'
-        : 'SELECT id, user_id FROM parcels WHERE city = $1 AND house = $2 AND id <> $3 AND user_id = $4 LIMIT 1 FOR UPDATE',
-        bd.unique === 'town' ? [par.city, h, String(id)] : [par.city, h, String(id), user.id])).rows[0] : null;
-      if (other) throw new HttpError(409, bd.unique === 'town'
-        ? (String(other.user_id) === String(user.id) ? `Ya tienes ${bd.name.toLowerCase()} de este pueblo en otro de tus terrenos` : `Este pueblo ya tiene ${bd.name.toLowerCase()}`)
-        : `Ya tienes ${bd.name.toLowerCase()} en este pueblo`);
-    }
-    if (h === AYUNTAMIENTO && par.house !== AYUNTAMIENTO) {
-      // Ayuntamiento: solo el presidente del pueblo, y solo uno por pueblo
-      if (!par.city || par.city === CITY_NONE) throw new HttpError(400, 'Este terreno aún no tiene pueblo');
-      const top = (await client.query(`SELECT user_id, COUNT(*) AS n, MIN(created_at) AS first FROM parcels
-        WHERE city = $1 AND user_id IS NOT NULL GROUP BY user_id ORDER BY n DESC, first ASC LIMIT 1`, [par.city])).rows[0];
-      if (!top || String(top.user_id) !== String(user.id) || Number(top.n) < PRESIDENT_MIN_PARCELS)
-        throw new HttpError(403, `Solo el presidente de ${par.city} puede construir el ayuntamiento`);
-      const other = (await client.query('SELECT id, user_id FROM parcels WHERE city = $1 AND house = $2 AND id <> $3 FOR UPDATE', [par.city, AYUNTAMIENTO, String(id)])).rows[0];
-      if (other && String(other.user_id) === String(user.id)) throw new HttpError(409, 'Ya tienes el ayuntamiento de este pueblo en otro de tus terrenos');
-      if (other) await client.query('UPDATE parcels SET house = NULL WHERE id = $1', [other.id]);   // era de un presidente anterior: pasa al nuevo
-    }
     let credits;
     if (par.house === h) {   // ya tiene esa casa: no se cobra nada
       credits = (await client.query('SELECT credits FROM packs WHERE code = $1', [pack.code])).rows[0].credits;
     } else {
-      const houseCost = bd ? bd.cost : HOUSE_COST;
-      const r = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [houseCost, pack.code]);
+      const r = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [HOUSE_COST, pack.code]);
       if (!r.rows[0]) throw new HttpError(402, 'NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.');
       credits = r.rows[0].credits;
-      await client.query('UPDATE parcels SET house = $1, house_prev = $3, house_at = $4 WHERE id = $2', [h, String(id), par.house, Date.now()]);
+      await client.query('UPDATE parcels SET house = $1 WHERE id = $2', [h, String(id)]);
     }
     await client.query('COMMIT');
     return { ok: true, house: h, credits };
@@ -1095,62 +1035,6 @@ const HOUR_MS = 3600000;
 // Variables opcionales: LEVEL_MAX, LEVEL_STEP, LEVEL_COST_K, o listas completas LEVEL_MULTS / LEVEL_COSTS (separadas por comas) que mandan sobre la fórmula.
 const numEnv = (name, def) => { const v = String(process.env[name] ?? '').trim(); const n = v === '' ? NaN : Number(v); return Number.isFinite(n) && n >= 0 ? n : def; };
 const numList = (s, def) => { const a = String(s || '').split(',').map(x => x.trim()).filter(x => x !== '').map(Number).filter(x => Number.isFinite(x) && x >= 0); return a.length ? a : def; };
-// ---------- Edificios con función propia ----------
-// Se construyen cambiando la casa de un terreno propio (cuesta "cost" créditos) y exigen que el terreno tenga pueblo.
-//   mult: multiplicador de producción de ese terreno · flat: créditos por hora fijos (el hospital: HOSPITAL_PER_DAY al día)
-//   discount: descuento al mejorar de nivel los terrenos del dueño en el mismo pueblo (bomberos)
-//   unique: 'owner' = uno por jugador y pueblo · 'town' = uno por pueblo
-// Variables opcionales: BUILDING_COST (3), BANCO_MULT (1.25), FABRICA_MULT (2), PUERTO_MULT (1.5), HOSPITAL_PER_DAY (1), BOMBEROS_DISCOUNT (0.2)
-const BUILDING_COST = Math.floor(numEnv('BUILDING_COST', 3));
-const BUILDINGS = {
-  [BANCO]:    { name: 'Banco',    mult: numEnv('BANCO_MULT', 1.25), flat: 0, cost: BUILDING_COST,     unique: 'owner' },
-  [FABRICA]:  { name: 'Fábrica',  mult: numEnv('FABRICA_MULT', 2),  flat: 0, cost: BUILDING_COST + 2, unique: 'owner' },
-  [PUERTO]:   { name: 'Puerto',   mult: numEnv('PUERTO_MULT', 1.5), flat: 0, cost: BUILDING_COST,     unique: 'town' },
-  [HOSPITAL]: { name: 'Hospital', mult: 1, flat: numEnv('HOSPITAL_PER_DAY', 1) / 24, cost: BUILDING_COST, unique: 'owner' },
-  [BOMBEROS]: { name: 'Bomberos', mult: 1, flat: 0, discount: Math.min(0.9, numEnv('BOMBEROS_DISCOUNT', 0.2)), cost: BUILDING_COST, unique: 'owner' }
-};
-// ---------- Edificios de ambiente y de temporada ----------
-// No cambian la producción: son para decorar y coleccionar. Se ponen igual que el resto (CAMBIAR CASA en un terreno propio).
-//   unique: 'town' = uno por pueblo (escasos) · 'owner' = uno por jugador y pueblo · null = sin límite
-//   city: false = no hace falta que el terreno tenga pueblo
-//   season: ventana anual 'MM-DD..MM-DD' en la que se puede construir (la que ya tengas puesta se queda para siempre)
-// Variables opcionales: AMBIENT_COST (5), SEASON_NAVIDAD (12-01..01-06), SEASON_HALLOWEEN (10-15..11-02)
-const AMBIENT_COST = Math.floor(numEnv('AMBIENT_COST', 5));
-const parseSeason = (v, def) => { const m = String(v || def).match(/^(\d\d)-(\d\d)\.\.(\d\d)-(\d\d)$/); const w = m || def.match(/^(\d\d)-(\d\d)\.\.(\d\d)-(\d\d)$/); return { from: `${w[1]}-${w[2]}`, to: `${w[3]}-${w[4]}` }; };
-const SEASON_NAVIDAD = parseSeason(process.env.SEASON_NAVIDAD, '12-01..01-06');
-const SEASON_HALLOWEEN = parseSeason(process.env.SEASON_HALLOWEEN, '10-15..11-02');
-const inSeason = w => { const md = dayKey().slice(5); return w.from <= w.to ? (md >= w.from && md <= w.to) : (md >= w.from || md <= w.to); };
-const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-const fmtMD = md => `${Number(md.slice(3))} ${MESES[Number(md.slice(0, 2)) - 1]}`;
-const AMBIENT = {
-  [IGLESIA]:     { name: 'Iglesia',            cost: BUILDING_COST,     unique: 'owner', city: true,  desc: 'decoración' },
-  [ESTACION]:    { name: 'Estación',           cost: AMBIENT_COST,      unique: 'town',  city: true,  desc: 'decoración' },
-  [ATRACCIONES]: { name: 'Parque de atracciones', cost: AMBIENT_COST + 1, unique: 'town', city: true,  desc: 'decoración' },
-  [ESTADIO]:     { name: 'Estadio',            cost: AMBIENT_COST + 1,  unique: 'town',  city: true,  desc: 'decoración' },
-  [AEROPUERTO]:  { name: 'Aeropuerto',         cost: AMBIENT_COST + 3,  unique: 'town',  city: true,  desc: 'decoración' },
-  [NAVIDAD]:     { name: 'Terreno navideño',   cost: BUILDING_COST,     unique: null,    city: false, desc: 'edición limitada', season: SEASON_NAVIDAD },
-  [HALLOWEEN]:   { name: 'Terreno de Halloween', cost: BUILDING_COST,   unique: null,    city: false, desc: 'edición limitada', season: SEASON_HALLOWEEN }
-};
-const fmtN = n => Number(n).toLocaleString('es-ES', { maximumFractionDigits: 2 });
-const BUILDINGS_PUBLIC = (() => {
-  const o = { [AYUNTAMIENTO]: { name: 'Ayuntamiento', cost: HOUSE_COST, desc: 'Solo el presidente del pueblo; uno por pueblo.' } };
-  for (const [h, b] of Object.entries(BUILDINGS)) {
-    const d = [];
-    if (b.mult !== 1) d.push(`produce ×${fmtN(b.mult)}`);
-    if (b.flat) d.push(`+${fmtN(b.flat * 24)} 🎟️ al día`);
-    if (b.discount) d.push(`-${Math.round(b.discount * 100)}% al mejorar tus terrenos de este pueblo`);
-    d.push(b.unique === 'town' ? 'uno por pueblo' : 'uno por jugador y pueblo');
-    o[h] = { name: b.name, cost: b.cost, desc: d.join(' · ') };
-  }
-  for (const [h, b] of Object.entries(AMBIENT)) {
-    const d = [b.desc];
-    if (b.unique) d.push(b.unique === 'town' ? 'uno por pueblo' : 'uno por jugador y pueblo');
-    if (b.season) d.push(`del ${fmtMD(b.season.from)} al ${fmtMD(b.season.to)} · se queda para siempre`);
-    o[h] = { name: b.name, cost: b.cost, desc: d.join(' · '), ...(b.season ? { season: { active: inSeason(b.season), from: b.season.from, to: b.season.to } } : {}) };
-  }
-  return o;
-})();
-const upgradeCostFor = (base, discount) => discount ? Math.max(1, Math.round(base * (1 - discount))) : base;
 const LEVEL_MAX = Math.max(1, Math.min(200, Math.floor(numEnv('LEVEL_MAX', 50))));
 const LEVEL_STEP = numEnv('LEVEL_STEP', 0.5);
 const LEVEL_COST_K = numEnv('LEVEL_COST_K', 0.75);
@@ -1162,12 +1046,6 @@ const LEVEL_COSTS = (() => {                                                  //
   return c.slice(0, Math.max(0, MAX_LEVEL - 1));
 })();
 
-// Descuento al mejorar: si el jugador tiene unos bomberos en ese mismo pueblo
-async function bomberosDiscount(db, userId, city) {
-  if (!city || city === CITY_NONE || !BUILDINGS[BOMBEROS].discount) return 0;
-  const r = await db.query('SELECT 1 FROM parcels WHERE user_id = $1 AND city = $2 AND house = $3 LIMIT 1', [userId, city, BOMBEROS]);
-  return r.rows[0] ? BUILDINGS[BOMBEROS].discount : 0;
-}
 // Subir un terreno propio al siguiente nivel. "from" (opcional) es el nivel que ve el jugador: evita cobrar dos veces por un doble toque.
 async function upgradeParcel(req, { id, from }) {
   const user = await needUser(req);
@@ -1175,12 +1053,12 @@ async function upgradeParcel(req, { id, from }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const par = (await client.query('SELECT level, city FROM parcels WHERE id = $1 AND user_id = $2 FOR UPDATE', [String(id), user.id])).rows[0];
+    const par = (await client.query('SELECT level FROM parcels WHERE id = $1 AND user_id = $2 FOR UPDATE', [String(id), user.id])).rows[0];
     if (!par) throw new HttpError(403, 'Este terreno no es tuyo');
     const level = Math.max(1, Math.min(MAX_LEVEL, Number(par.level) || 1));
     if (from != null && Number(from) !== level) throw new HttpError(409, 'El nivel de este terreno ya ha cambiado');
     if (level >= MAX_LEVEL) throw new HttpError(409, 'Este terreno ya está al nivel máximo');
-    let cost = upgradeCostFor(LEVEL_COSTS[level - 1], await bomberosDiscount(client, user.id, par.city)), free = false, freeLeft = 0;
+    let cost = LEVEL_COSTS[level - 1], free = false, freeLeft = 0;
     // Si tiene una mejora gratis (premio del mes) se gasta esa en vez de créditos
     let r = await client.query('UPDATE packs SET free_upgrades = free_upgrades - 1 WHERE code = $1 AND free_upgrades > 0 RETURNING credits, free_upgrades', [pack.code]);
     if (r.rows[0]) { free = true; cost = 0; freeLeft = Number(r.rows[0].free_upgrades) || 0; }
@@ -1205,44 +1083,28 @@ async function upgradeParcel(req, { id, from }) {
 // Cada terreno produce según su nivel. Si subió de nivel dentro del periodo que se está acumulando, el tiempo anterior a la
 // mejora cuenta con el multiplicador del nivel anterior y el posterior con el nuevo: la mejora solo vale desde que se hace,
 // así que subir de nivel justo antes de recoger no da créditos de más.
-const BN_NAMES = Object.keys(BUILDINGS), BN_MULTS = BN_NAMES.map(h => BUILDINGS[h].mult), BN_FLATS = BN_NAMES.map(h => BUILDINGS[h].flat);
 async function prodCompute(db, userId, lastCollect, carry, now) {
-  // Dos momentos de cambio por terreno: level_at (subió de nivel) y house_at (cambió de edificio). Antes de cada uno vale el valor anterior
-  // (nivel-1 / house_prev) y después el actual, así ninguna mejora ni cambio da créditos de más por el tiempo ya acumulado.
   const r = (await db.query(
     `SELECT COUNT(*) AS n,
             COALESCE(SUM(wms), 0) AS wms,
-            COALESCE(SUM(fms), 0) AS fms,
-            COALESCE(SUM(mc * bc), 0) AS mult,
-            COALESCE(SUM(fc), 0) AS flat,
+            COALESCE(SUM(mc), 0) AS mult,
             COUNT(*) FILTER (WHERE e < $4::bigint) AS active,
-            COALESCE(SUM(mc * bc) FILTER (WHERE e < $4::bigint), 0) AS active_mult,
-            COALESCE(SUM(fc) FILTER (WHERE e < $4::bigint), 0) AS active_flat,
+            COALESCE(SUM(mc) FILTER (WHERE e < $4::bigint), 0) AS active_mult,
             MIN($4::bigint - e) FILTER (WHERE e < $4::bigint) AS next_cap
-       FROM (SELECT e, mc, bc, fc,
-                    lo * mp * bp + (hi - lo) * (CASE WHEN a1 <= a2 THEN mc * bp ELSE mp * bc END) + (d - hi) * mc * bc AS wms,
-                    a2 * fp + (d - a2) * fc AS fms
-               FROM (SELECT e, d, mc, mp, bc, bp, fc, fp, a1, a2, LEAST(a1, a2) AS lo, GREATEST(a1, a2) AS hi
-                       FROM (SELECT e, d, mc, mp, bc, bp, fc, fp, LEAST(o1, d) AS a1, LEAST(o2, d) AS a2
-                               FROM (SELECT e, LEAST(e, $4::bigint) AS d, o1, o2, mc, mp,
-                                            COALESCE(($6::float8[])[array_position($8::text[], house)], 1) AS bc,
-                                            COALESCE(($6::float8[])[array_position($8::text[], house_prev)], 1) AS bp,
-                                            COALESCE(($7::float8[])[array_position($8::text[], house)], 0) AS fc,
-                                            COALESCE(($7::float8[])[array_position($8::text[], house_prev)], 0) AS fp
-                                       FROM (SELECT house, house_prev,
-                                                    GREATEST($2::bigint - GREATEST(created_at, $3::bigint), 0) AS e,
-                                                    GREATEST(COALESCE(level_at, 0) - GREATEST(created_at, $3::bigint), 0) AS o1,
-                                                    GREATEST(COALESCE(house_at, 0) - GREATEST(created_at, $3::bigint), 0) AS o2,
-                                                    ($5::float8[])[LEAST(GREATEST(level, 1), ${MAX_LEVEL})] AS mc,
-                                                    ($5::float8[])[LEAST(GREATEST(level - 1, 1), ${MAX_LEVEL})] AS mp
-                                               FROM parcels WHERE user_id = $1) a) b2) b3) b4) s`,
-    [userId, now, lastCollect || 0, Math.round(PROD_CAP_HOURS * HOUR_MS), LEVEL_MULTS, BN_MULTS, BN_FLATS, BN_NAMES])).rows[0];
+       FROM (SELECT e, mc,
+                    LEAST(o, LEAST(e, $4::bigint)) * mp + (LEAST(e, $4::bigint) - LEAST(o, LEAST(e, $4::bigint))) * mc AS wms
+               FROM (SELECT GREATEST($2::bigint - GREATEST(created_at, $3::bigint), 0) AS e,
+                            GREATEST(COALESCE(level_at, 0) - GREATEST(created_at, $3::bigint), 0) AS o,
+                            ($5::float8[])[LEAST(GREATEST(level, 1), ${MAX_LEVEL})] AS mc,
+                            ($5::float8[])[LEAST(GREATEST(level - 1, 1), ${MAX_LEVEL})] AS mp
+                       FROM parcels WHERE user_id = $1) a) s`,
+    [userId, now, lastCollect || 0, Math.round(PROD_CAP_HOURS * HOUR_MS), LEVEL_MULTS])).rows[0];
   const n = Number(r.n);
-  const total = (Number(carry) || 0) + (Number(r.wms) / HOUR_MS) * PROD_RATE + Number(r.fms) / HOUR_MS;
+  const total = (Number(carry) || 0) + (Number(r.wms) / HOUR_MS) * PROD_RATE;
   // active = terrenos que aún no han llegado al tope y siguen produciendo (activeMult: suma de sus multiplicadores);
   // next_cap = ms hasta que el primero llegue al tope
-  return { parcels: n, perHour: Number(r.mult) * PROD_RATE + Number(r.flat), total, ready: Math.floor(total + 1e-9), active: Number(r.active),
-    activeMult: Number(r.active_mult), activeFlat: Number(r.active_flat), nextCap: r.next_cap == null ? null : Number(r.next_cap) };
+  return { parcels: n, perHour: Number(r.mult) * PROD_RATE, total, ready: Math.floor(total + 1e-9), active: Number(r.active),
+    activeMult: Number(r.active_mult), nextCap: r.next_cap == null ? null : Number(r.next_cap) };
 }
 
 async function myParcels(req) {
@@ -1258,7 +1120,7 @@ async function productionGet(req) {
   const p = await one('SELECT last_collect, prod_carry FROM packs WHERE code = $1', [pack.code]);
   const st = await prodCompute(pool, user.id, p && p.last_collect, p && p.prod_carry, Date.now());
   return { parcels: st.parcels, perHour: Math.round(st.perHour * 10000) / 10000, ready: st.ready, capHours: PROD_CAP_HOURS, rate: PROD_RATE,
-    total: Math.round(st.total * 1e6) / 1e6, activeRate: st.activeMult * PROD_RATE + st.activeFlat, nextCapMs: st.nextCap };
+    total: Math.round(st.total * 1e6) / 1e6, activeRate: st.activeMult * PROD_RATE, nextCapMs: st.nextCap };
 }
 
 async function productionCollect(req) {
@@ -1374,7 +1236,15 @@ function onlineStream(req, res, url) {
     'X-Content-Type-Options': 'nosniff'
   });
   let set = onlineClients.get(cid);
-  if (!set) { set = new Set(); onlineClients.set(cid, set); }
+  if (!set) {
+    set = new Set(); onlineClients.set(cid, set);
+    const last = seenNotified.get(cid) || 0;   // un aviso por jugador como mucho cada 6 h
+    if (Date.now() - last > 6 * 3600_000) {
+      seenNotified.set(cid, Date.now());
+      if (seenNotified.size > 5000) seenNotified.clear();
+      ownerNotify('👋 Alguien se ha conectado', `Jugadores reales conectados: ${onlineClients.size}`);
+    }
+  }
   set.add(res);
   onlineByIp.set(ip, (onlineByIp.get(ip) || 0) + 1);
   res.write(`retry: 3000\n\ndata: ${onlineShown()}\n\n`);   // el recién llegado ve el número al instante
@@ -1596,19 +1466,11 @@ async function friendsList(req) {
 }
 async function friendsAdd(req, body) {
   const user = await needUser(req);
-  let m;
-  const byNick = body && typeof body.nick === 'string' ? cleanName(body.nick) : null;
-  if (byNick) {   // desde la ficha de un jugador (p. ej. un presidente en Población)
-    const pf = await one('SELECT user_id, nickname FROM profiles WHERE nickname = $1', [byNick]);
-    if (!pf) throw new HttpError(404, 'Ese jugador no tiene cuenta, no se puede añadir como amigo');
-    m = { user_id: pf.user_id, nick: pf.nickname };
-  } else {
-    const id = Math.floor(Number(body && body.msgId));
-    if (!Number.isFinite(id) || id < 1) throw new HttpError(400, 'Mensaje no válido');
-    m = await one('SELECT user_id, nick FROM chat_msgs WHERE id = $1', [id]);
-    if (!m) throw new HttpError(404, 'Ese mensaje ya no existe');
-  }
-  if (String(m.user_id) === String(user.id)) throw new HttpError(400, 'Ese eres tú');
+  const id = Math.floor(Number(body && body.msgId));
+  if (!Number.isFinite(id) || id < 1) throw new HttpError(400, 'Mensaje no válido');
+  const m = await one('SELECT user_id, nick FROM chat_msgs WHERE id = $1', [id]);
+  if (!m) throw new HttpError(404, 'Ese mensaje ya no existe');
+  if (m.user_id === user.id) throw new HttpError(400, 'Ese eres tú');
   const n = Number((await one('SELECT COUNT(*) AS n FROM friends WHERE user_id = $1', [user.id])).n);
   if (n >= FRIENDS_MAX) throw new HttpError(409, `Máximo ${FRIENDS_MAX} amigos`);
   const ins = await run('INSERT INTO friends (user_id, friend_id, created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [user.id, m.user_id, Date.now()]);
@@ -1621,27 +1483,6 @@ async function friendsAdd(req, body) {
     }
   }
   return { ok: true, nick: m.nick };
-}
-// ---------- Ficha pública de un jugador (estadísticas + amistad) ----------
-async function playerGet(req, url) {
-  const nick = cleanName(url.searchParams.get('nick'));
-  if (!nick) throw new HttpError(400, 'Jugador no válido');
-  const tot = await one(`SELECT COUNT(*) AS n, COALESCE(SUM(COALESCE(level, 1)), 0) AS lv, MIN(created_at) AS since,
-      (ARRAY_AGG(country ORDER BY created_at DESC) FILTER (WHERE country IS NOT NULL))[1] AS country,
-      (ARRAY_AGG(avatar ORDER BY created_at DESC) FILTER (WHERE avatar IS NOT NULL))[1] AS avatar
-    FROM parcels WHERE owner = $1`, [nick]);
-  if (!tot || !Number(tot.n)) throw new HttpError(404, 'Jugador no encontrado');
-  const towns = await all('SELECT city, COUNT(*) AS n FROM parcels WHERE owner = $1 AND city IS NOT NULL AND city <> $2 GROUP BY city ORDER BY n DESC, city LIMIT 200', [nick, CITY_NONE]);
-  const pres = await townPresidents(towns.map(t => t.city));
-  const presidentOf = towns.filter(t => { const p = pres.get(t.city); return p && p.owner === nick; }).map(t => t.city);
-  const pf = await one('SELECT user_id::text AS uid FROM profiles WHERE nickname = $1', [nick]);
-  const me = await userFrom(req);
-  const isMe = !!(me && pf && String(pf.uid) === String(me.id));
-  let isFriend = false;
-  if (me && pf && !isMe) isFriend = !!(await one('SELECT 1 AS ok FROM friends WHERE user_id = $1 AND friend_id = $2', [me.id, pf.uid]));
-  return { nick, avatar: tot.avatar || null, country: tot.country || null, parcels: Number(tot.n), levels: Number(tot.lv) || 0, since: tot.since ? Number(tot.since) : null,
-    towns: towns.slice(0, 5).map(t => ({ city: t.city, n: Number(t.n) })), townCount: towns.length, presidentOf,
-    hasAccount: !!pf, isMe, isFriend };
 }
 async function friendsRemove(req, body) {
   const user = await needUser(req);
@@ -1784,9 +1625,9 @@ const CITY_GEOCODE = process.env.CITY_GEOCODE !== '0';
 const CITY_NONE = 'Sin ciudad';
 const cityCache = new Map();   // celda de ~500 m -> nombre de la ciudad
 const sleepMs = ms => new Promise(r => setTimeout(r, ms));
-async function reverseCity(lat, lng, force) {
+async function reverseCity(lat, lng) {
   const key = Math.round(lat / 0.005) + ',' + Math.round(lng / 0.005);
-  if (!force && cityCache.has(key)) return { name: cityCache.get(key), cached: true };
+  if (cityCache.has(key)) return { name: cityCache.get(key), cached: true };
   const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=es&lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}`,
     { headers: { 'User-Agent': 'atlas-terrenos/1.0 (' + (process.env.CITY_CONTACT || 'https://atlas-terrenos.onrender.com') + ')' }, signal: AbortSignal.timeout(10_000) });
   if (!r.ok) throw new Error('Nominatim ' + r.status);
@@ -1841,8 +1682,7 @@ async function rankCities(url) {
 // que ya se averigua por geocodificación (reverseCity) a partir de las coordenadas del terreno. La categoría depende de la población.
 const POP_PER_PARCEL = Math.max(0, Number(process.env.POP_PER_PARCEL || 4));
 const POP_PER_LEVEL = Math.max(0, Number(process.env.POP_PER_LEVEL || 2));
-// [habitantes mínimos, nombre]. Siempre en orden creciente y empezando en 0.
-const TOWN_TIERS = [[0, 'Paraje'], [5, 'Chabolas'], [50, 'Barriada'], [100, 'Barrio'], [500, 'Aldea'], [2000, 'Pueblo'], [10000, 'Villa'], [50000, 'Localidad'], [250000, 'Urbe'], [1000000, 'Ciudad']];
+const TOWN_TIERS = [[0, 'Aldea'], [50, 'Pueblo'], [300, 'Villa'], [1000, 'Ciudad'], [5000, 'Gran ciudad']];
 function townTier(pop) {
   let i = 0;
   while (i + 1 < TOWN_TIERS.length && pop >= TOWN_TIERS[i + 1][0]) i++;
@@ -1858,37 +1698,7 @@ function townRow(r) {
 }
 const TOWN_COLS = 'COUNT(*) AS n, SUM($1::int + (COALESCE(level, 1) - 1) * $2::int) AS pop, COUNT(*) FILTER (WHERE created_at > $3) AS recent, AVG(x) AS ax, AVG(y) AS ay';
 let townsCache = { t: 0, rows: null };
-// ---------- ¿Dónde estoy? Pueblo/ciudad, categoría y barrio de unas coordenadas ----------
-const districtCache = new Map();   // celda de ~100 m -> barrio ('' si no hay)
-let whereLast = 0;
-async function reverseDistrict(lat, lng) {
-  const key = Math.round(lat / 0.001) + ',' + Math.round(lng / 0.001);
-  if (districtCache.has(key)) return districtCache.get(key);
-  const wait = whereLast + 1100 - Date.now(); whereLast = Math.max(Date.now(), whereLast) + (wait > 0 ? 1100 : 0);   // Nominatim: máx. 1 consulta por segundo
-  if (wait > 0) await sleepMs(wait);
-  const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&accept-language=es&lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}`,
-    { headers: { 'User-Agent': 'atlas-terrenos/1.0 (' + (process.env.CITY_CONTACT || 'https://atlas-terrenos.onrender.com') + ')' }, signal: AbortSignal.timeout(10_000) });
-  if (!r.ok) throw new Error('Nominatim ' + r.status);
-  const a = ((await r.json()) || {}).address || {};
-  const name = String(a.neighbourhood || a.quarter || a.suburb || a.city_district || '').trim().slice(0, 80);
-  if (districtCache.size > 20000) districtCache.clear();
-  districtCache.set(key, name);
-  return name;
-}
-async function whereGet(url) {
-  const lat = Number(url.searchParams.get('lat')), lng = Number(url.searchParams.get('lng'));
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new HttpError(400, 'Ubicación no válida');
-  if (!CITY_GEOCODE) throw new HttpError(503, 'Ubicación no disponible');
-  const city = (await reverseCity(lat, lng)).name;
-  const out = { city: city === CITY_NONE ? null : city, district: null, parcels: 0, pop: 0, tier: null };
-  if (!out.city) return out;
-  const r = await one(`SELECT ${TOWN_COLS} FROM parcels WHERE city = $4`, [POP_PER_PARCEL, POP_PER_LEVEL, Date.now() - 86_400_000, out.city]);
-  out.parcels = Number(r.n) || 0; out.pop = Number(r.pop) || 0;
-  if (out.parcels) out.tier = townTier(out.pop).tier;
-  try { const d = await reverseDistrict(lat, lng); if (d && d !== out.city) out.district = d; } catch { /* sin barrio */ }
-  return out;
-}
-async function townsGet(url, req) {
+async function townsGet(url) {
   const since = Date.now() - 86_400_000;
   if (!townsCache.rows || Date.now() - townsCache.t > 15_000) {
     const rows = await all(`SELECT city, (ARRAY_AGG(country ORDER BY created_at DESC) FILTER (WHERE country IS NOT NULL))[1] AS country, ${TOWN_COLS}
@@ -1908,72 +1718,7 @@ async function townsGet(url, req) {
       }
     } catch { /* sin geocodificación ahora mismo: simplemente no sale "Aquí" */ }
   }
-  // Presidente de cada pueblo: el jugador (con cuenta) con más terrenos allí. Cobra PRESIDENT_CREDITS créditos al mes.
-  try {
-    const user = req ? await userFrom(req).catch(() => null) : null;
-    out.towns = await withPresidents(out.towns, user);
-    if (out.here) out.here = (await withPresidents([out.here], user))[0];
-  } catch (e) { console.error('Presidentes de pueblos:', e.message); }
   return out;
-}
-
-// ---------- Presidente de cada pueblo: 10 créditos gratis al mes ----------
-// Presidente = el jugador con cuenta que más terrenos tiene en ese pueblo (si hay empate, el que llegó antes).
-// La tabla president_grants (clave pueblo + mes) garantiza que el premio de cada pueblo se paga una sola vez al mes.
-// Variables opcionales: PRESIDENT_CREDITS (por defecto 10; 0 lo desactiva) y PRESIDENT_MIN_PARCELS (terrenos mínimos para ser presidente, por defecto 1).
-const PRESIDENT_CREDITS = Math.max(0, Math.min(1000, Math.floor(Number(process.env.PRESIDENT_CREDITS ?? 10)) || 0));
-const PRESIDENT_MIN_PARCELS = Math.max(1, Math.floor(Number(process.env.PRESIDENT_MIN_PARCELS || 1)) || 1);
-async function townPresidents(cities) {
-  const out = new Map();
-  if (!cities.length) return out;
-  const rows = await all(`SELECT DISTINCT ON (city) city, user_id, owner, n FROM (
-      SELECT city, user_id, (ARRAY_AGG(owner ORDER BY created_at DESC))[1] AS owner, COUNT(*) AS n, MIN(created_at) AS first
-      FROM parcels WHERE city = ANY($1::text[]) AND user_id IS NOT NULL GROUP BY city, user_id) t
-    WHERE n >= $2 ORDER BY city, n DESC, first ASC`, [cities, PRESIDENT_MIN_PARCELS]);
-  rows.forEach(r => out.set(r.city, { user_id: String(r.user_id), owner: r.owner, n: Number(r.n) || 0 }));
-  return out;
-}
-async function withPresidents(towns, user) {
-  const list = towns.filter(t => t && t.city);
-  const pres = await townPresidents([...new Set(list.map(t => t.city))]);
-  const month = dayKey().slice(0, 7);
-  const uid = user ? String(user.id) : null;
-  const mine = list.filter(t => uid && pres.get(t.city) && pres.get(t.city).user_id === uid).map(t => t.city);
-  const paid = new Set();
-  if (mine.length) (await all('SELECT city FROM president_grants WHERE month = $1 AND city = ANY($2::text[])', [month, mine])).forEach(r => paid.add(r.city));
-  return towns.map(t => {
-    const p = t && pres.get(t.city);
-    if (!p) return t;
-    const isMine = !!uid && p.user_id === uid;
-    return { ...t, president: { owner: p.owner, n: p.n }, mine: isMine, prize: PRESIDENT_CREDITS,
-             canClaim: isMine && PRESIDENT_CREDITS > 0 && !paid.has(t.city), claimed: isMine && paid.has(t.city) };
-  });
-}
-async function presidentClaim(req, body) {
-  const user = await needUser(req);
-  if (!PRESIDENT_CREDITS) throw new HttpError(404, 'Este premio está desactivado');
-  const city = String((body && body.city) || '').trim().slice(0, 200);
-  if (!city || city === CITY_NONE) throw new HttpError(400, 'Falta el pueblo');
-  const pack = await ensureUserPack(user);
-  const month = dayKey().slice(0, 7);
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query('SELECT code FROM packs WHERE code = $1 FOR UPDATE', [pack.code]);   // una reclamación a la vez por cuenta
-    const top = (await client.query(`SELECT user_id, COUNT(*) AS n, MIN(created_at) AS first FROM parcels
-      WHERE city = $1 AND user_id IS NOT NULL GROUP BY user_id ORDER BY n DESC, first ASC LIMIT 1`, [city])).rows[0];
-    if (!top || String(top.user_id) !== String(user.id) || Number(top.n) < PRESIDENT_MIN_PARCELS)
-      throw new HttpError(403, 'Solo el presidente de este pueblo puede cobrar el premio');
-    const g = await client.query('INSERT INTO president_grants (city, month, user_id, credits, created_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (city, month) DO NOTHING RETURNING city',
-      [city, month, String(user.id), PRESIDENT_CREDITS, Date.now()]);
-    if (!g.rows[0]) throw new HttpError(409, `El premio de ${city} ya se ha cobrado este mes. ¡Vuelve el mes que viene!`);
-    const up = (await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING credits', [PRESIDENT_CREDITS, pack.code])).rows[0];
-    await client.query('COMMIT');
-    return { ok: true, city, amount: PRESIDENT_CREDITS, credits: Number(up.credits) };
-  } catch (e) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw e;
-  } finally { client.release(); }
 }
 
 // ---------- Avisos al móvil (notificaciones push) ----------
@@ -2064,33 +1809,6 @@ async function notifyFriendsOf(userId, kind, level) {
   } catch (e) { console.error('push social:', e.message); }
 }
 
-// Pueblos donde este jugador es presidente y todavía no ha puesto el ayuntamiento (para avisarle en el panel de terrenos)
-async function presidentAytoPending(userId) {
-  const rows = await all(`SELECT p.city FROM (
-      SELECT DISTINCT ON (city) city, user_id FROM (
-        SELECT city, user_id::text AS user_id, COUNT(*) AS n, MIN(created_at) AS first FROM parcels
-        WHERE user_id IS NOT NULL AND city IS NOT NULL AND city <> $3
-          AND city IN (SELECT city FROM parcels WHERE user_id::text = $1 AND city IS NOT NULL)
-        GROUP BY city, user_id) t
-      WHERE n >= $2 ORDER BY city, n DESC, first ASC) p
-    WHERE p.user_id = $1 AND NOT EXISTS (SELECT 1 FROM parcels a WHERE a.city = p.city AND a.house = $4 AND a.user_id::text = $1)
-    ORDER BY p.city`, [String(userId), PRESIDENT_MIN_PARCELS, CITY_NONE, AYUNTAMIENTO]);
-  return rows.map(r => r.city);
-}
-// Pueblos donde este jugador es presidente y aún no ha cobrado el premio de este mes
-async function presidentPendingTowns(userId, month) {
-  const rows = await all(`SELECT p.city FROM (
-      SELECT DISTINCT ON (city) city, user_id FROM (
-        SELECT city, user_id::text AS user_id, COUNT(*) AS n, MIN(created_at) AS first FROM parcels
-        WHERE user_id IS NOT NULL AND city IS NOT NULL AND city <> $4
-          AND city IN (SELECT city FROM parcels WHERE user_id::text = $1 AND city IS NOT NULL)
-        GROUP BY city, user_id) t
-      WHERE n >= $2 ORDER BY city, n DESC, first ASC) p
-    WHERE p.user_id = $1 AND NOT EXISTS (SELECT 1 FROM president_grants g WHERE g.city = p.city AND g.month = $3)
-    ORDER BY p.city`, [String(userId), PRESIDENT_MIN_PARCELS, month, CITY_NONE]);
-  return rows.map(r => r.city);
-}
-
 let pushBusy = false;
 const PUSH_STREAK_FROM = 18, PUSH_STREAK_GAP_MS = 2 * 3600_000, PUSH_FULL_SOON_MS = 2 * 3600_000;
 async function pushRun() {
@@ -2145,21 +1863,6 @@ async function pushRun() {
           const ms = monthlyState(mr, day);
           if (ms.canClaim) mon = { ms, text: monthlyText(monthlyReward(ms.nextDay, ms.total)) };
         } catch (e) { /* si falla, se avisa solo del regalo diario */ }
-        // 3b) Presidente de pueblo: una vez al mes, avisa de que ya puede cobrar el premio
-        if (!payload && PRESIDENT_CREDITS > 0 && (!st || st.last_pres_push !== day.slice(0, 7))) {
-          try {
-            const towns = await presidentPendingTowns(u.user_id, day.slice(0, 7));
-            if (towns.length) {
-              const total = towns.length * PRESIDENT_CREDITS;
-              payload = { title: '🏛️ ¡Cobra tu premio de presidente!',
-                body: towns.length === 1
-                  ? `Eres el presidente de ${towns[0]}. Entra y cobra tus ${PRESIDENT_CREDITS} créditos de este mes.`
-                  : `Eres presidente de ${towns.length} pueblos (${towns.slice(0, 3).join(', ')}${towns.length > 3 ? '…' : ''}). Entra y cobra tus ${total} créditos de este mes.`,
-                tag: 'president', url: '/' };
-              field = 'last_pres_push'; value = day.slice(0, 7);
-            }
-          } catch (e) { console.error('push presidente:', e.message); }
-        }
         // 4) Regalo diario por la mañana (con el premio del mes si también está pendiente)
         if (!payload && info.canClaim && (!st || (st.last_daily_push !== day && st.last_daily_push !== day + '!'))) {
           const s = info.streak;
@@ -2277,17 +1980,15 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
     return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, demo: DEMO, stripe: !DEMO && HAS_STRIPE, paypal: !DEMO && HAS_PAYPAL, clientId: (DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, packSize: PACKS[0].credits, packs: PACKS,
-      maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, buildings: BUILDINGS_PUBLIC, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
+      maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')));
     if (!p) throw new HttpError(400, 'Coordenadas no válidas');
     const row = await q.parcelById(p.id);
     const user = row && row.user_id ? await userFrom(req) : null;
-    const mine = !!(user && row && row.user_id === user.id);
     return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null, avatar: row ? row.avatar : null, country: row ? row.country : null,
-      house: row ? row.house : null, level: row ? row.level : null, mine, giftable: !!(row && row.user_id),
-      city: mine ? row.city : null, lvlDiscount: mine ? await bomberosDiscount(pool, user.id, row.city) : 0 };
+      house: row ? row.house : null, level: row ? row.level : null, mine: !!(user && row && row.user_id === user.id), giftable: !!(row && row.user_id) };
   }
 
   if (req.method === 'GET' && pn === '/api/parcels') {
@@ -2307,20 +2008,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/rank/cities') return rankCities(url);
-  if (req.method === 'GET' && pn === '/api/where') return whereGet(url);
-  if (req.method === 'GET' && pn === '/api/towns') return townsGet(url, req);
-  if (req.method === 'GET' && pn === '/api/town/president/ayuntamiento') {
-    const u = await needUser(req);
-    const towns = await presidentAytoPending(u.id);
-    // Un terreno tuyo de cada pueblo (para llevarte allí desde el cuadro del Ayuntamiento)
-    const spots = {};
-    if (towns.length) {
-      const rows = await all('SELECT DISTINCT ON (city) city, x, y FROM parcels WHERE user_id::text = $1 AND city = ANY($2::text[]) ORDER BY city, created_at', [String(u.id), towns]);
-      rows.forEach(r => { spots[r.city] = { x: r.x, y: r.y }; });
-    }
-    return { towns, spots, cost: HOUSE_COST };
-  }
-  if (req.method === 'POST' && pn === '/api/town/president/claim') return presidentClaim(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/towns') return townsGet(url);
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };
 
@@ -2342,7 +2030,6 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/profile') return profileSet(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/push/subscribe') return pushSubscribe(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/push/unsubscribe') return pushUnsubscribe(req, await readJson(req));
-  if (req.method === 'GET' && pn === '/api/player') return playerGet(req, url);
   if (req.method === 'GET' && pn === '/api/friends') return friendsList(req);
   if (req.method === 'POST' && pn === '/api/friends/add') return friendsAdd(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/friends/remove') return friendsRemove(req, await readJson(req));
@@ -2380,8 +2067,6 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
   .then(async () => {   // niveles de terreno (no hacen nada si las columnas ya existen)
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level SMALLINT NOT NULL DEFAULT 1');
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level_at BIGINT');
-    await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house_at BIGINT');      // cuándo se cambió de edificio (para no dar créditos de más)
-    await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house_prev TEXT');     // edificio anterior
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS city TEXT');          // ranking por ciudades
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS city_try BIGINT');
     await run('CREATE INDEX IF NOT EXISTS parcels_country_city ON parcels (country, city)');
@@ -2423,7 +2108,6 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE INDEX IF NOT EXISTS push_subs_user ON push_subs (user_id)');
     await run('ALTER TABLE push_state ADD COLUMN IF NOT EXISTS last_full_push BIGINT');   // aviso "se llena pronto" (una vez por recogida)
     await run('CREATE TABLE IF NOT EXISTS push_state (user_id TEXT PRIMARY KEY, last_seen BIGINT, unseen INT NOT NULL DEFAULT 0, last_any BIGINT, last_prod_push BIGINT, last_daily_push TEXT)');
-    await run('ALTER TABLE push_state ADD COLUMN IF NOT EXISTS last_pres_push TEXT');   // aviso mensual del premio de presidente (mes en que se avisó)
     if (PUSH_ON) { setTimeout(pushRun, 120_000).unref(); setInterval(pushRun, 15 * 60_000).unref(); }   // revisa cada 15 min quién tiene algo pendiente
     const purge = () => run('DELETE FROM chat_msgs WHERE created_at < $1', [Date.now() - CHAT_KEEP_MS]).then(() => run('DELETE FROM chat_reacts WHERE msg_id NOT IN (SELECT id FROM chat_msgs)')).catch(() => {});
     purge(); setInterval(purge, 3600_000).unref();
@@ -2527,7 +2211,6 @@ ready.then(async () => {   // ruleta diaria: una fila por cuenta y día (la clav
   await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS free_spins INT NOT NULL DEFAULT 0');
   await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS free_upgrades INT NOT NULL DEFAULT 0');
   await run('CREATE TABLE IF NOT EXISTS monthly_rewards (user_id TEXT NOT NULL, month TEXT NOT NULL, streak INT NOT NULL DEFAULT 0, last_day TEXT, PRIMARY KEY (user_id, month))');
-  await run('CREATE TABLE IF NOT EXISTS president_grants (city TEXT NOT NULL, month TEXT NOT NULL, user_id TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (city, month))');
 }).catch(e => console.error('No se pudo preparar la ruleta:', e.message));
 
 // Sitio estático en otro dominio: CORS_ORIGINS = direcciones permitidas, separadas por comas (p. ej. https://atlas-terrenos-web.onrender.com)
@@ -2538,51 +2221,12 @@ const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(x => 
 const zlib = require('node:zlib');
 const staticCache = new Map();   // ruta -> { mtime, etag, buf, gz }
 const COMPRESSIBLE = /^(text\/|application\/(json|manifest\+json)|image\/svg)/;
-// ---------- Mapa lunar: las teselas pasan por aquí para que el navegador no dependa de CORS ni de que el servidor externo esté disponible ----------
-const MOON_UPSTREAM = 'https://s3.amazonaws.com/opmbuilder/301_moon/tiles/w/hillshaded-albedo/';   // OpenPlanetaryMap: LOLA hillshade + albedo (NASA / USGS)
-const moonCache = new Map();
-async function moonFetch(z, x, y) {
-  const key = z + '/' + x + '/' + y;
-  if (moonCache.has(key)) return moonCache.get(key);
-  const r = await fetch(MOON_UPSTREAM + key + '.png', { signal: AbortSignal.timeout(8000) });
-  if (!r.ok) return { status: r.status };
-  const out = { status: 200, buf: Buffer.from(await r.arrayBuffer()) };
-  if (moonCache.size >= 600) moonCache.delete(moonCache.keys().next().value);
-  moonCache.set(key, out);
-  return out;
-}
-async function moonTile(res, pathname) {
-  const m = /^\/api\/moon-tile\/(\d{1,2})\/(\d{1,6})\/(\d{1,6})\.png$/.exec(pathname);
-  const z = m && +m[1], x = m && +m[2], y = m && +m[3];
-  if (!m || z > 9 || x >= 2 ** z || y >= 2 ** z) { res.writeHead(400); return res.end(); }
-  let t;
-  try { t = await moonFetch(z, x, y); } catch (e) { t = { status: 504 }; }
-  if (t.status !== 200) { res.writeHead(t.status === 403 || t.status === 404 ? 404 : 502, { 'Cache-Control': 'no-store' }); return res.end(); }
-  res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' });
-  res.end(t.buf);
-}
-async function moonCheck() {
-  try {
-    const r = await fetch(MOON_UPSTREAM + '0/0/0.png', { signal: AbortSignal.timeout(8000) });
-    return { upstream: MOON_UPSTREAM + '0/0/0.png', status: r.status, type: r.headers.get('content-type'), bytes: (await r.arrayBuffer()).byteLength };
-  } catch (e) { return { upstream: MOON_UPSTREAM, error: String(e && e.message || e) }; }
-}
-
-const BUILD_ID = String(process.env.RENDER_GIT_COMMIT || 'dev').slice(0, 8);   // cambia en cada despliegue: renueva la caché del service worker
-// Política de seguridad del contenido. La primera se aplica ya (lo que nunca hace falta); la segunda, más estricta, solo avisa
-// (Report-Only) a /api/csp-report: revisa los avisos en los logs de Render y, cuando no salga nada legítimo, pásala a la primera.
-const CSP_ENFORCED = "object-src 'none'; base-uri 'self'";
-const CSP_REPORT = "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://www.paypal.com https://js.stripe.com; " +
-  "style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; " +
-  "connect-src 'self' https://*.supabase.co https://nominatim.openstreetmap.org https://tiles.openfreemap.org https://server.arcgisonline.com https://s3.amazonaws.com https://*.paypal.com https://api.stripe.com https://atlas-terrenos.onrender.com; " +
-  "frame-src https://www.youtube.com https://www.youtube-nocookie.com https://*.paypal.com https://js.stripe.com https://checkout.stripe.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; report-uri /api/csp-report";
 function sendStatic(req, res, file) {
   const type = MIME[path.extname(file)] || 'application/octet-stream';
   const st = fs.statSync(file);
   let ent = staticCache.get(file);
   if (!ent || ent.mtime !== st.mtimeMs) {
-    let buf = fs.readFileSync(file);
-    if (/[\\/]sw\.js$/.test(file)) buf = Buffer.from(buf.toString('utf8').replace(/__BUILD__/g, BUILD_ID));
+    const buf = fs.readFileSync(file);
     ent = { mtime: st.mtimeMs, buf, etag: '"' + require('node:crypto').createHash('md5').update(buf).digest('hex').slice(0, 20) + '"', gz: null };
     if (staticCache.size > 300) staticCache.clear();
     staticCache.set(file, ent);
@@ -2591,7 +2235,6 @@ function sendStatic(req, res, file) {
   const headers = { 'Content-Type': type, 'ETag': ent.etag, 'Vary': 'Accept-Encoding',
     'Cache-Control': isImg ? 'public, max-age=604800' : 'no-cache',
     'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000' };
-  if (/html/.test(type)) { headers['Content-Security-Policy'] = CSP_ENFORCED; headers['Content-Security-Policy-Report-Only'] = CSP_REPORT; }
   if (req.headers['if-none-match'] === ent.etag) { res.writeHead(304, headers); return res.end(); }
   let body = ent.buf;
   if (COMPRESSIBLE.test(type) && /\bgzip\b/.test(String(req.headers['accept-encoding'] || '')) && body.length > 1024) {
@@ -2625,7 +2268,7 @@ async function sendTile(req, res, url, send) {
   return send(200, ent.body, undefined, extra);
 }
 
-const server = http.createServer(async (req, res) => {
+http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const send = (status, body, type = 'application/json; charset=utf-8', extra = {}) => {
     const h = { ...extra, 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000', 'Vary': 'Accept-Encoding' };
@@ -2655,13 +2298,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/online') return onlineStream(req, res, url);
     if (req.method === 'GET' && url.pathname === '/api/chat/stream') return chatStream(req, res, url);   // conexión larga (SSE) del chat   // conexión larga (SSE): no pasa por route()
     if (req.method === 'POST' && url.pathname === '/api/webhooks/stripe') return send(200, JSON.stringify(await stripeWebhook(req)));   // antes de route(): necesitan el cuerpo sin tocar para comprobar la firma
-    if (req.method === 'POST' && url.pathname === '/api/csp-report') {   // avisos del navegador: se anotan unos pocos por conexión y hora
-      if (rateHit('csp:' + clientIp(req), 3_600_000) <= 20) { const raw = await readRaw(req, 8192).catch(() => Buffer.alloc(0)); console.warn('CSP:', raw.toString('utf8').slice(0, 400)); }
-      return send(204, '');
-    }
     if (req.method === 'POST' && url.pathname === '/api/webhooks/paypal') return send(200, JSON.stringify(await paypalWebhook(req)));
-    if (req.method === 'GET' && url.pathname === '/api/moon-check') return send(200, JSON.stringify(await moonCheck()));   // diagnóstico: ¿responde la fuente de imágenes de la Luna?
-    if (req.method === 'GET' && url.pathname.startsWith('/api/moon-tile/')) return await moonTile(res, url.pathname);
     if (req.method === 'GET' && url.pathname === '/api/parcels/tile') return await sendTile(req, res, url, send);   // await: así un error 400 lo recoge el catch de abajo
     if (url.pathname.startsWith('/api/')) {
       const out = await route(req, res, url);
@@ -2680,24 +2317,3 @@ const server = http.createServer(async (req, res) => {
 }).listen(PORT, () => {
   console.log(`Redecora El Mundo en http://localhost:${PORT}  [${DEMO ? 'MODO DEMO (sin cobro real)' : [HAS_STRIPE ? 'Stripe ' + (STRIPE_SECRET_KEY.includes('_live_') ? 'LIVE' : 'test') : null, HAS_PAYPAL ? 'PayPal ' + PAYPAL_ENV : null].filter(Boolean).join(' + ')}]  packs ${PACKS.map(p => p.credits + '=' + p.price).join(', ')} ${CURRENCY}`);
 });
-
-// ---------- Cierre ordenado ----------
-// Render manda SIGTERM en cada despliegue. Se dejan de aceptar peticiones nuevas, se esperan las que están en curso
-// (un cobro de PayPal no se corta a medias) y después se cierra la base de datos. Las conexiones largas (SSE de chat
-// y de jugadores en línea) se cortan a los 15 s; el navegador se reconecta solo a la nueva versión.
-let shuttingDown = false;
-function shutdown(sig) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  console.log(`${sig}: cerrando con calma…`);
-  const force = setTimeout(() => { console.error('Cierre forzado tras 25 s'); process.exit(1); }, 25_000);
-  force.unref();
-  server.close(async () => {
-    try { await pool.end(); } catch (e) { console.error('Error al cerrar el pool:', e.message); }
-    process.exit(0);
-  });
-  server.closeIdleConnections();
-  setTimeout(() => server.closeAllConnections(), 15_000).unref();
-}
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));

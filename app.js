@@ -9,8 +9,8 @@ const drawn = new Map();       // id -> { srcId, url, label }
 
 // ---------- Mapa 3D (MapLibre GL): globo + satélite + relieve ----------
 // Vista plana (tipo Atlas Earth): cámara cenital, sin inclinación y sin volúmenes 3D. Por defecto activada.
-let flatView = true;   // el mapa es siempre plano
-try { localStorage.removeItem('flatView'); } catch (e) {}
+let flatView = true;
+try { flatView = localStorage.getItem('flatView') !== '0'; } catch (e) {}
 // Mapa base: 'estilizado' (dibujo limpio tipo Atlas Earth, vectorial) o 'satelite'
 let baseMode = 'estilizado';
 try { baseMode = localStorage.getItem('baseMode') === 'satelite' ? 'satelite' : 'estilizado'; } catch (e) {}
@@ -100,8 +100,7 @@ let flightRequested = false;
 const HOME = [-5.3536, 36.1408];   // Gibraltar: destino si no hay ubicación
 function introFlight() {
   if (!glReady) { flightRequested = true; return; }
-  if (window.coverOpen) { window.afterCover = introFlight; return; }   // con la portada abierta el vuelo espera a que el jugador pulse Jugar
-  const fly = (center, zoom) => { gl.flyTo({ center, zoom, pitch: flatView ? 0 : 45, bearing: flatView ? 0 : -15, duration: 7000, essential: true }); if (window.skydive) window.skydive(7000); };   // el paracaidista baja a la vez y aterriza donde acaba el vuelo
+  const fly = (center, zoom) => gl.flyTo({ center, zoom, pitch: flatView ? 0 : 45, bearing: flatView ? 0 : -15, duration: 7000, essential: true });
   let done = false;
   const toHome = () => { if (done) return; done = true; fly(HOME, 16); };
   if (!navigator.geolocation) return toHome();
@@ -119,7 +118,7 @@ function introFlight() {
     { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
 }
 window.introFlight = introFlight;
-function introAlreadySeen() { return true; }   // ya no hay vídeo de introducción: el mapa vuela al jugador en cuanto pulsa Jugar
+function introAlreadySeen() { try { return localStorage.getItem('introSeen2') === '1'; } catch (e) { return false; } }
 const pendingParcels = new Map();
 const ownedFeatures = new Map();      // id -> Feature GeoJSON (volumen de la parcela)
 let ownedDirty = false;
@@ -164,74 +163,26 @@ const HOUSES = [
   'images/burrito-blanco.webp',
   'images/arcobaleno.webp',
   'images/la-cruilla.webp',
-  'images/cesped-2.webp',
-  'images/parque-picnic.webp',
-  'images/desierto-1.webp',
-  'images/desierto-2.webp',
-  'images/prado.webp',
-  'images/claro-bosque.webp',
-  'images/parque-futbol.webp',
-  'images/mar.webp',
-  'images/mar-peces.webp',
-  'images/ayuntamiento.webp',
-  'images/banco.webp',
-  'images/hospital.webp',
-  'images/bomberos.webp',
-  'images/fabrica.webp',
-  'images/puerto.webp',
-  'images/parque-atracciones.webp',
-  'images/estadio.webp',
-  'images/iglesia.webp',
-  'images/estacion.webp',
-  'images/aeropuerto.webp',
-  'images/navidad.webp',
-  'images/halloween.webp',
-  'images/carrefour.webp',
-  'images/iso-casa-roja.webp',
-  'images/iso-casa-azul.webp',
-  'images/iso-chalet.webp',
-  'images/iso-casa-moderna.webp',
-  'images/iso-adosadas.webp',
-  'images/iso-bloque-azul.webp',
-  'images/iso-bloque-ladrillo.webp',
-  'images/iso-rascacielos.webp',
-  'images/iso-torre-oficinas.webp',
-  'images/iso-torre-beige.webp',
-  'images/iso-tienda.webp',
-  'images/iso-farmacia.webp',
-  'images/iso-panaderia.webp',
-  'images/iso-cafe.webp',
-  'images/iso-restaurante.webp',
-  'images/iso-supermercado.webp',
-  'images/iso-centro-comercial.webp',
-  'images/iso-gasolinera.webp',
-  'images/iso-banco.webp',
-  'images/iso-cine.webp',
-  'images/iso-gimnasio.webp',
-  'images/iso-hotel.webp',
-  'images/iso-colegio.webp',
-  'images/iso-hospital.webp',
-  'images/iso-comisaria.webp',
-  'images/iso-bomberos.webp',
-  'images/iso-iglesia.webp',
-  'images/iso-ayuntamiento.webp',
-  'images/iso-museo.webp',
-  'images/iso-fabrica.webp',
-  'images/iso-almacen.webp',
-  'images/iso-granja.webp'
+  'images/torre-metalica.webp',
+  'images/casa-modernista.webp',
+  'images/casa-modernista-2.webp',
+  'images/estadio-1.webp',
+  'images/estadio-2.webp',
+  'images/rugby.webp',
+  'images/estadio-3.webp',
+  'images/estadio-4.webp',
+  'images/plaza-de-toros.webp',
+  'images/teatro.webp',
+  'images/cine.webp',
+  'images/supermercado-3.webp',
+  'images/supermercado-4.webp',
+  'images/supermercado-2.webp',
+  'images/pisos-3.webp',
+  'images/pisos-4.webp',
+  'images/pisos-5.webp',
+  'images/casa-7.webp',
+  'images/casa-8.webp'
 ];
-// Casas especiales: no salen al azar ni al reclamar (el ayuntamiento es solo para el presidente del pueblo)
-const SPECIAL_HOUSES = ['images/ayuntamiento.webp', 'images/banco.webp', 'images/hospital.webp', 'images/bomberos.webp', 'images/fabrica.webp', 'images/puerto.webp',
-  'images/parque-atracciones.webp', 'images/estadio.webp', 'images/iglesia.webp', 'images/estacion.webp', 'images/aeropuerto.webp', 'images/navidad.webp', 'images/halloween.webp'];
-const BUILDING_ICON = { ayuntamiento: '🏛️', banco: '🏦', hospital: '🏥', bomberos: '🚒', fabrica: '🏭', puerto: '⚓',
-  'parque-atracciones': '🎡', estadio: '🏟️', iglesia: '⛪', estacion: '🚉', aeropuerto: '✈️', navidad: '🎄', halloween: '🎃' };
-// Nombre y función de un edificio especial (los textos vienen del servidor: cfg.buildings)
-function buildingText(h) {
-  const b = h && cfg && cfg.buildings && cfg.buildings[h]; if (!b) return '';
-  const k = String(h).split('/').pop().replace(/\.webp$/i, '');
-  return `${BUILDING_ICON[k] || '🏢'} ${b.name}: ${b.desc}`;
-}
-const RANDOM_HOUSES = HOUSES.filter(h => !SPECIAL_HOUSES.includes(h));
 
 function houseFor(id, house) {
   if (house) house = String(house).replace(/\.png$/i, '.webp');   // terrenos guardados antes del cambio a webp
@@ -240,11 +191,12 @@ function houseFor(id, house) {
   for (const c of id) {
     h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
   }
-  return RANDOM_HOUSES[(h >>> 16) % RANDOM_HOUSES.length];
+  return HOUSES[(h >>> 16) % HOUSES.length];
 }
 // Altura aproximada (en metros) de cada tipo de edificio: da volumen 3D a las parcelas
 const HOUSE_HEIGHT = {
-  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'condis': 9, 'cepsa': 7, 'aurgi': 8, 'burrito-blanco': 8, 'arcobaleno': 8, 'la-cruilla': 8, 'cesped-2': 1, 'parque-picnic': 1, 'desierto-1': 1, 'desierto-2': 1, 'prado': 1, 'claro-bosque': 1, 'parque-futbol': 1, 'mar': 1, 'mar-peces': 1, 'ayuntamiento': 18, 'banco': 16, 'hospital': 20, 'bomberos': 12, 'fabrica': 16, 'puerto': 8
+  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'condis': 9, 'cepsa': 7, 'aurgi': 8, 'burrito-blanco': 8, 'arcobaleno': 8, 'la-cruilla': 8,
+  'torre-metalica': 60, 'casa-modernista': 20, 'casa-modernista-2': 20, 'estadio-1': 25, 'estadio-2': 25, 'rugby': 10, 'estadio-3': 40, 'estadio-4': 40, 'plaza-de-toros': 20, 'teatro': 14, 'cine': 10, 'supermercado-3': 8, 'supermercado-4': 8, 'supermercado-2': 8, 'pisos-3': 30, 'pisos-4': 30, 'pisos-5': 30, 'casa-7': 8, 'casa-8': 8
 };
 // Nivel del terreno (1 a 5): más estrellas junto al nombre y un edificio más alto
 const maxLevel = () => (cfg && cfg.levels && cfg.levels.mults.length) || 5;
@@ -275,11 +227,7 @@ function flushOwned() {
 
 // Para ir fluido, la foto del suelo y la etiqueta con el nombre solo existen en las parcelas más cercanas al centro.
 // El volumen 3D (una sola capa para todas) se mantiene siempre.
-const MAX_DETAIL = 40;   // (antiguo) ya no se usa: ver DETAIL_LOAD / DETAIL_KEEP
-// Histéresis: las fotos se cargan en las parcelas más cercanas al centro (LOAD) pero solo se quitan cuando quedan
-// bastante lejos (KEEP). Así no desaparecen y vuelven a cargar al mover un poco el mapa. A más zoom las fotos pesan
-// más (128, 256 o 512 px), por eso se guardan menos.
-const DETAIL_LOAD = { t: 80, s: 60, m: 40 }, DETAIL_KEEP = { t: 220, s: 140, m: 90 };
+const MAX_DETAIL = 40;
 let detailQueued = false;
 // ---------- Casas recortadas por las calles ----------
 // Las calles reales (teselas de OpenFreeMap) se restan de cada parcela: la casa queda cortada por la carretera.
@@ -489,7 +437,19 @@ function mountDetail(ex, imgUrl, blob) {
   const cutNow = roadCut.get(ex.p.id), k = (cutNow && cutNow.road) ? 0 : 0.004, dw = (e - w) * k, dh = (n - s) * k;
   gl.addSource(ex.srcId, { type: 'image', url: imgUrl, coordinates: [[w - dw, n + dh], [e + dw, n + dh], [e + dw, s - dh], [w - dw, s - dh]] });
   gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
-  // sin nombre ni estrellas en el mapa: el dueño y el nivel se ven al tocar la parcela
+  const pill = document.createElement('span');
+  pill.className = 'owner-pill';
+  pill.textContent = labelOf(ex.p);          // textContent: sin HTML
+  const stars = document.createElement('span');
+  stars.className = 'owner-stars';
+  stars.textContent = starsOf(ex.level);
+  ex.starsEl = stars;
+  const wrap = document.createElement('span');
+  wrap.append(stars, pill);
+  ex.label = L.marker([(s + n) / 2, (w + e) / 2], {   // en el centro de la parcela, dentro de la casa
+    icon: L.divIcon({ className: 'owner-label', html: wrap, iconSize: [0, 0] }),
+    interactive: false, keyboard: false
+  }).addTo(map);
   ex.hasDetail = true;
   ex.res = resOf();
 }
@@ -514,12 +474,10 @@ function updateDetail() {
     const c = gl.getCenter();
     all.forEach(ex => { const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y); ex.d = Math.hypot((s + n) / 2 - c.lat, (w + e) / 2 - c.lng); });
     all.sort((a, b) => a.d - b.d);
-    const r = resOf(), load = DETAIL_LOAD[r], keep = DETAIL_KEEP[r];
-    all.forEach((ex, i) => { if (i < load) addDetail(ex); else if (i >= keep) dropDetail(ex); });   // entre LOAD y KEEP: se queda como está
+    all.forEach((ex, i) => i < MAX_DETAIL ? addDetail(ex) : dropDetail(ex));
   });
 }
 gl.on('moveend', updateDetail);
-{ let moveT = 0; gl.on('move', () => { const t = Date.now(); if (t - moveT > 400) { moveT = t; updateDetail(); } }); }   // también mientras se arrastra: las fotos llegan antes que tú
 
 function drawOwned(p) {
   if (!glReady) { pendingParcels.set(p.id, p); return; }
@@ -694,7 +652,6 @@ async function selectAt(latlng) {
   selected = p;
   setSelected(p);
   showPanel(p);
-  refreshAyto().then(() => { if (selected === p) renderAytoPromo(p); });
   sfx('select');
 }
 map.on('click', e => {
@@ -828,87 +785,6 @@ function setupAdminControls() {
   box.append(title, description, token, button, statsBtn, statsOut);
   $('p-free').appendChild(box);
 }
-// ---------- Aviso al presidente: poner el ayuntamiento ----------
-let aytoTowns = [], aytoSpots = {}, aytoAt = 0;
-async function refreshAyto(force) {
-  if (typeof authToken === 'undefined' || !authToken) { aytoTowns = []; aytoSpots = {}; return; }
-  if (!force && Date.now() - aytoAt < 30000) return;
-  try { const j = await api('/api/town/president/ayuntamiento', { method: 'GET' }); aytoTowns = j.towns || []; aytoSpots = j.spots || {}; aytoAt = Date.now(); } catch (e) {}
-}
-// Lleva el mapa a un terreno tuyo del pueblo y lo selecciona (con openPicker abre además la lista de casas para poner el Ayuntamiento)
-async function gotoAytoSpot(town, openPicker) {
-  const sp = aytoSpots[town];
-  if (!sp) { setMsg(`🏛️ Elige en el mapa uno de tus terrenos de ${town || 'ese pueblo'}.`, 'err'); return; }
-  const bb = boundsOf(sp.x, sp.y);
-  const ll = L.latLng((bb[0][0] + bb[1][0]) / 2, (bb[0][1] + bb[1][1]) / 2);
-  map.flyTo(ll, 18);
-  await new Promise(res => map.once('moveend', res));
-  await selectAt(ll);   // al llegar, el cuadro pasa a "Construye aquí el Ayuntamiento"
-  if (openPicker && selected && selected.mine) $('house-pick-wrap').classList.remove('hidden');
-}
-// Aviso verde al entrar al juego: eres presidente de un pueblo y aún no tienes el Ayuntamiento
-let aytoBannerShown = false;
-async function showPresidentBanner() {
-  if (aytoBannerShown || !authToken) return;
-  await refreshAyto(true);
-  if (!aytoTowns.length) return;
-  aytoBannerShown = true;
-  const old = $('ayto-banner'); if (old) old.remove();
-  const bar = document.createElement('div'); bar.id = 'ayto-banner'; bar.setAttribute('role', 'button'); bar.tabIndex = 0;
-  const ico = document.createElement('span'); ico.textContent = '🏛️'; ico.style.cssText = 'font-size:30px;line-height:1';
-  const txt = document.createElement('div'); txt.style.cssText = 'flex:1;line-height:1.3';
-  const b = document.createElement('b'); b.textContent = `¡Eres presidente de ${aytoTowns.slice(0, 2).join(' y ')}${aytoTowns.length > 2 ? '…' : ''}!`;
-  const sm = document.createElement('div'); sm.style.cssText = 'font-size:13px;opacity:.95';
-  sm.textContent = 'Toca aquí: te llevo a uno de tus terrenos para poner el Ayuntamiento.';
-  txt.append(b, sm);
-  const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', 'Cerrar');
-  x.style.cssText = 'border:0;background:transparent;color:#fff;font-size:24px;line-height:1;padding:2px 8px;align-self:flex-start';
-  x.onclick = e => { e.stopPropagation(); bar.remove(); };
-  const go = async () => {
-    bar.remove();
-    await refreshAyto(true);
-    const town = aytoTowns[0];
-    if (town) gotoAytoSpot(town, true);
-  };
-  bar.onclick = go; bar.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
-  bar.append(ico, txt, x);
-  document.body.appendChild(bar);
-}
-function renderAytoPromo(p) {
-  const old = $('ayto-promo'); if (old) old.remove();
-  const AYTO = 'images/ayuntamiento.webp';
-  if (!aytoTowns.length || !p) return;
-  const owned = !!p.owner;
-  if (owned && (!p.mine || p.house === AYTO)) return;
-  const here = owned && p.city && aytoTowns.includes(p.city);   // este terreno está en un pueblo del que eres presidente
-  const box = document.createElement('div'); box.id = 'ayto-promo';
-  box.style.cssText = 'display:flex;gap:10px;align-items:center;margin:8px 0;padding:8px;border-radius:12px;background:linear-gradient(135deg,#fff4d6,#ffe3a3);color:#3b2a00;border:2px solid #ffb703';
-  const img = document.createElement('img'); img.src = sizedUrl(AYTO, 's'); img.alt = 'Ayuntamiento';
-  img.style.cssText = 'width:76px;height:76px;border-radius:10px;object-fit:cover;flex:0 0 auto';
-  const txt = document.createElement('div'); txt.style.cssText = 'font-size:13px;line-height:1.3';
-  const b = document.createElement('b'); b.textContent = here ? `🏛️ ¡Eres el presidente de ${p.city}!` : `🏛️ ¡Eres presidente de ${aytoTowns.slice(0, 2).join(' y ')}${aytoTowns.length > 2 ? '…' : ''}!`;
-  const sm = document.createElement('div');
-  sm.textContent = here ? 'Construye aquí el Ayuntamiento de tu pueblo.' : 'Toca aquí y te llevo a uno de tus terrenos de ese pueblo para poner el Ayuntamiento.';
-  txt.append(b, sm);
-  if (here) {
-    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'primary'; btn.style.cssText = 'margin-top:6px;width:100%;padding:8px';
-    const c = (cfg.buildings && cfg.buildings[AYTO] && cfg.buildings[AYTO].cost) ?? cfg.houseCost ?? 1;
-    btn.textContent = `🏛️ CONSTRUIR AYUNTAMIENTO${c > 0 ? ` (${c} 🎟️)` : ''}`;
-    txt.appendChild(btn);   // el clic lo gestiona todo el cuadro amarillo (box.onclick)
-  }
-  // Al pulsar el cuadro amarillo: si ya estás en un terreno tuyo del pueblo, construye el Ayuntamiento; si no, te lleva a uno
-  box.style.cursor = 'pointer';
-  box.onclick = () => {
-    if (here) {
-      const h = [...$('house-pick-edit').children].find(x => x.dataset.house === AYTO);
-      if (h) h.click();   // mismo flujo de CAMBIAR CASA (confirma coste y lo construye)
-      return;
-    }
-    gotoAytoSpot((p.city && aytoTowns.includes(p.city)) ? p.city : aytoTowns[0], false);
-  };
-  box.append(img, txt);
-  if (owned) $('p-owned').insertBefore(box, $('house-edit')); else $('p-free').insertBefore(box, $('p-free').children[1] || null);
-}
 function showPanel(p) {
   $('panel').classList.remove('hidden');
   $('p-title').textContent = `Terreno ${p.id}`;
@@ -926,29 +802,27 @@ function showPanel(p) {
     $('gift-owner-btn').classList.toggle('hidden', !!p.mine || !p.giftable);   // solo en terrenos de otros jugadores con cuenta
     $('house-pick-wrap').classList.add('hidden');
     { const c = cfg.houseCost ?? 1; $('house-change-btn').textContent = '🏠 CAMBIAR CASA' + (c > 0 ? ` (${c} 🎟️)` : ' (gratis)'); }
-    if (p.mine) { if (window.rebuildEditPicker) rebuildEditPicker(p.house && String(p.house).replace(/\.png$/i, '.webp')); markHouse($('house-pick-edit'), p.house && String(p.house).replace(/\.png$/i, '.webp')); }
+    if (p.mine) markHouse($('house-pick-edit'), p.house && String(p.house).replace(/\.png$/i, '.webp'));
     $('p-avatar').textContent = p.avatar || '';
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
     renderLevelBox(p);
   } else {
     buildPackPicker();
   }
-  renderAytoPromo(p);
 }
 $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; };
 $('gift-owner-btn').onclick = () => { if (selected && selected.owner && window.openGift) openGift(selected.owner); };
 
 // ---------- Nivel del terreno y botón de mejora ----------
-const upCost = (lvl, p) => { const c = cfg.levels.costs[lvl - 1], d = p && p.lvlDiscount; return d ? Math.max(1, Math.round(c * (1 - d))) : c; };   // igual que en el servidor (descuento de los bomberos)
 function renderLevelBox(p) {
   if (!cfg || !cfg.levels) { $('p-level').textContent = ''; $('level-edit').classList.add('hidden'); return; }
   const lvl = levelOf(p), max = maxLevel();
-  $('p-level').textContent = `${'⭐'.repeat(tierOf(lvl))} Nivel ${lvl} de ${max} · produce ×${fmtNum(multOf(lvl))}` + (SPECIAL_HOUSES.includes(p.house) ? `\n${buildingText(p.house)}` : '');
+  $('p-level').textContent = `${'⭐'.repeat(tierOf(lvl))} Nivel ${lvl} de ${max} · produce ×${fmtNum(multOf(lvl))}`;
   $('level-edit').classList.toggle('hidden', !p.mine);
   if (!p.mine) return;
   const btn = $('upgrade-btn'), note = $('level-note');
   if (lvl >= max) { btn.classList.add('hidden'); note.textContent = '🏆 Nivel máximo: tu terreno produce al máximo.'; return; }
-  const cost = upCost(lvl, p);
+  const cost = cfg.levels.costs[lvl - 1];
   btn.classList.remove('hidden');
   const fu = window.freeUpgrades || 0;       // mejoras gratis ganadas en los premios del mes
   btn.textContent = fu > 0 ? `⬆️ Subir a nivel ${lvl + 1} · GRATIS 🎁 (${fu})` : `⬆️ Subir a nivel ${lvl + 1} · ${cost} 🎟️`;
@@ -958,7 +832,7 @@ $('upgrade-btn').onclick = async () => {
   if (!selected || !selected.mine || !cfg || !cfg.levels) return;
   const lvl = levelOf(selected);
   if (lvl >= maxLevel()) return;
-  const cost = upCost(lvl, selected);
+  const cost = cfg.levels.costs[lvl - 1];
   const useFree = (window.freeUpgrades || 0) > 0;
   if (!useFree && credits < cost) return setMsg('NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.', 'err');
   if (!confirm(useFree ? `Subir este terreno al nivel ${lvl + 1} gratis, con una de tus mejoras de los premios del mes. ¿Continuar?` : `Subir este terreno al nivel ${lvl + 1} cuesta ${cost} ${plural(cost, 'crédito', 'créditos')}. ¿Continuar?`)) return;
@@ -998,7 +872,7 @@ try { const s = localStorage.getItem('avatar'); if (AVATARS.includes(s)) avatar 
 // ---------- Elegir casa ----------
 let chosenHouse = null;   // casa elegida para el terreno que vas a reclamar (null = al azar)
 const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '').replace(/[-_]/g, ' ');
-function buildHousePicker(box, onPick, withRandom, current) {
+function buildHousePicker(box, onPick, withRandom) {
   box.replaceChildren();
   const add = (value, content, label) => {
     const b = document.createElement('button');
@@ -1007,14 +881,11 @@ function buildHousePicker(box, onPick, withRandom, current) {
     b.append(content); b.onclick = () => onPick(value); box.appendChild(b);
   };
   if (withRandom) add(null, '🎲', 'Al azar');
-  [...HOUSES].reverse().forEach(h => {   // las más nuevas (al final de HOUSES) salen primero
-    if (withRandom && SPECIAL_HOUSES.includes(h)) return;   // las especiales no se eligen al reclamar
-    const sb = cfg && cfg.buildings && cfg.buildings[h];
-    if (sb && sb.season && !sb.season.active && h !== current) return;   // de temporada: solo se ofrecen en sus fechas
+  HOUSES.forEach(h => {
     const i = document.createElement('img');
     i.src = sizedUrl(h, 't'); i.alt = ''; i.loading = 'lazy';
     i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;display:block';
-    add(h, i, SPECIAL_HOUSES.includes(h) ? (buildingText(h) || houseName(h)) : houseName(h));
+    add(h, i, houseName(h));
   });
 }
 function markHouse(box, current) {
@@ -1024,12 +895,12 @@ function markHouse(box, current) {
   const freeBox = $('house-pick-free'), editBox = $('house-pick-edit');
   buildHousePicker(freeBox, h => { chosenHouse = h; markHouse(freeBox, h); }, true);
   markHouse(freeBox, null);
-  const editHandler = async h => {
+  buildHousePicker(editBox, async h => {
     if (!selected || !selected.mine || h === selected.house) return;
-    const cost = (cfg.buildings && cfg.buildings[h] && cfg.buildings[h].cost != null) ? cfg.buildings[h].cost : (cfg.houseCost ?? 1);
+    const cost = cfg.houseCost ?? 1;
     if (cost > 0) {
       if (credits < cost) return setMsg('NO TIENES CRÉDITOS PARA ESTA MEJORA. COMPRA CRÉDITOS.', 'err');
-      if (!confirm(`${SPECIAL_HOUSES.includes(h) ? 'Construir este edificio' : 'Cambiar la casa'} cuesta ${cost} ${plural(cost, 'crédito', 'créditos')}. ¿Continuar?`)) return;
+      if (!confirm(`Cambiar la casa cuesta ${cost} ${plural(cost, 'crédito', 'créditos')}. ¿Continuar?`)) return;
     }
     try {
       const j = await api('/api/parcel/house', { method: 'POST', body: { id: selected.id, house: h } });
@@ -1040,15 +911,9 @@ function markHouse(box, current) {
       drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: j.house, level: selected.level });
       sfx('claim');
       $('house-pick-wrap').classList.add('hidden');
-      try {   // refresca el panel: descuento de bomberos y texto del edificio
-        const fresh = await api(`/api/parcel?lat=${selected.south + cfg.size / 2}&lng=${selected.west + cfg.size / 2}`, { method: 'GET' });
-        selected.lvlDiscount = fresh.lvlDiscount || 0; selected.city = fresh.city; await refreshAyto(true); showPanel(selected);
-      } catch (e) {}
       setMsg(`🏠 ¡Casa cambiada! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
     } catch (e) { setMsg(e.message, 'err'); }
-  };
-  window.rebuildEditPicker = cur => { buildHousePicker(editBox, editHandler, false, cur); };   // se reconstruye al abrir un terreno (ya conocemos las fechas de temporada)
-  rebuildEditPicker(null);
+  }, false);
   $('house-change-btn').onclick = () => $('house-pick-wrap').classList.toggle('hidden');
 })();
 
@@ -1367,7 +1232,7 @@ async function loadStats() {
     const s = await api('/api/stats');
     $('stats').textContent = `${s.sold} terrenos vendidos`;
     const ol = $('rank-list'); ol.replaceChildren();
-    s.top.forEach((t, i) => { const li = document.createElement('li'); li.textContent = `${i === 0 ? '🏛️ ' : ''}${flagOf(t.country) ? flagOf(t.country) + ' ' : ''}${t.owner} — ${t.n}${i === 0 ? ' · Presidente' : ''}`; if (i === 0) li.style.fontWeight = '800'; ol.appendChild(li); });
+    s.top.forEach(t => { const li = document.createElement('li'); li.textContent = `${flagOf(t.country) ? flagOf(t.country) + ' ' : ''}${t.owner} — ${t.n}`; ol.appendChild(li); });
     if (!s.top.length) ol.textContent = 'Aún no hay propietarios. ¡Sé el primero!';
     const oc = $('rank-countries'); oc.replaceChildren();
     (s.countries || []).forEach(c => { const li = document.createElement('li'); li.className = 'rank-link'; li.tabIndex = 0; li.setAttribute('role', 'button'); li.textContent = `${flagOf(c.country)} ${countryName(c.country)} — ${c.n}`; li.onclick = () => showCities(c.country); li.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showCities(c.country); } }; oc.appendChild(li); });
@@ -1399,42 +1264,10 @@ async function showCities(code) {
 $('rank-back').onclick = showRankMain;
 $('rank-btn').onclick = () => { showRankMain(); loadStats(); $('rank').classList.remove('hidden'); };
 $('rank-close').onclick = () => $('rank').classList.add('hidden');
-// Aviso "Estás en…" al ir a mi ubicación: pueblo/ciudad con su categoría y, si se conoce, el barrio. Se cierra al tocarlo.
-const TIER_TEXT = { 'Paraje': 'el paraje de', 'Chabolas': 'las chabolas de', 'Barriada': 'la barriada de', 'Barrio': 'el barrio de', 'Aldea': 'la aldea de', 'Pueblo': 'el pueblo de', 'Villa': 'la villa de', 'Localidad': 'la localidad de', 'Urbe': 'la urbe de', 'Ciudad': 'la ciudad de' };
-let whereTimer = null;
-async function showWhereBanner(lat, lng) {
-  const old = $('where-banner'); if (old) old.remove();
-  clearTimeout(whereTimer);
-  let j;
-  try { j = await api(`/api/where?lat=${lat.toFixed(5)}&lng=${lng.toFixed(5)}`, { method: 'GET' }); } catch (e) { return; }
-  if (!j || !j.city) return;
-  const bar = document.createElement('div'); bar.id = 'where-banner'; bar.setAttribute('role', 'button'); bar.tabIndex = 0;
-  const ico = document.createElement('span'); ico.textContent = '📍'; ico.style.cssText = 'font-size:28px;line-height:1';
-  const txt = document.createElement('div'); txt.style.cssText = 'flex:1;line-height:1.3';
-  const b = document.createElement('b');
-  b.textContent = j.tier ? `Estás en ${TIER_TEXT[j.tier] || 'el pueblo de'} ${j.city}` : `Estás en ${j.city}`;
-  txt.appendChild(b);
-  if (j.district) { const sm = document.createElement('div'); sm.style.cssText = 'font-size:13px;opacity:.95'; sm.textContent = `Barrio: ${j.district}`; txt.appendChild(sm); }
-  const close = () => { bar.remove(); clearTimeout(whereTimer); };
-  bar.onclick = close; bar.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); close(); } };
-  bar.append(ico, txt);
-  bar.style.top = $('ayto-banner') ? '172px' : '76px';   // por debajo del aviso del presidente si está
-  document.body.appendChild(bar);
-  whereTimer = setTimeout(close, 12000);   // si no lo tocas, se va solo
-}
 $('locate').onclick = () => {
   if (!navigator.geolocation) return alert('Tu navegador no permite geolocalización');
   navigator.geolocation.getCurrentPosition(
-    pos => {
-      const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
-      // Si el mapa está lejos de tu ubicación, vuelves en paracaídas: vuelo lento y grito al tocar suelo
-      const c = map.getCenter(), rad = Math.PI / 180;
-      const dx = (ll.lng - c.lng) * Math.cos(((ll.lat + c.lat) / 2) * rad), dy = ll.lat - c.lat;
-      const meters = Math.sqrt(dx * dx + dy * dy) * 111320;
-      if (meters > 150 && window.skydive) { map.flyTo(ll, 18, { duration: 7000 }); window.skydive(7000); }
-      else map.flyTo(ll, 18);
-      map.once('moveend', () => selectAt(ll)); showWhereBanner(ll.lat, ll.lng);
-    },
+    pos => { const ll = L.latLng(pos.coords.latitude, pos.coords.longitude); map.flyTo(ll, 18); map.once('moveend', () => selectAt(ll)); },
     () => alert('No se pudo obtener tu ubicación. Revisa los permisos del navegador.'),
     { enableHighAccuracy: true, timeout: 10000 });
 };
@@ -1511,7 +1344,6 @@ async function linkAccountOnServer() {
       $('login').classList.add('hidden');
     }
     loadDaily(); loadProduction();
-    showPresidentBanner();   // aviso: eres presidente de un pueblo
     if (j.welcomeBonus > 0) showWelcomeGift(j.welcomeBonus);   // regalo de bienvenida (solo la primera vez)
     if (j.ownerBonus > 0 && window.giftToast) giftToast(`👑 ¡Paga del mes! Te han ingresado ${Number(j.ownerBonus).toLocaleString('es-ES')} créditos.`);
     if (window.inviteAfterLink) inviteAfterLink();      // Invita y gana: apunta de quién viene
@@ -1748,7 +1580,7 @@ let walkerBusy = false, walkerTimer = null;
 const randBetween = (a, b) => a + Math.random() * (b - a);
 function scheduleWalker(ms) { clearTimeout(walkerTimer); walkerTimer = setTimeout(trySpawnWalker, ms); }
 function walkerUiBusy() {
-  return document.hidden || !!window.coverOpen || !!document.querySelector('.modal:not(.hidden)') || !$('intro').classList.contains('hidden');
+  return document.hidden || !!document.querySelector('.modal:not(.hidden)') || !$('intro').classList.contains('hidden');
 }
 async function trySpawnWalker() {
   if (walkerBusy) return;
