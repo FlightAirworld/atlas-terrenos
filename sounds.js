@@ -64,6 +64,50 @@
       });
       g.connect(sfxBus); o.start(t + 0.05); lfo.start(t + 0.05); o.stop(t + 1.7); lfo.stop(t + 1.7);
     },
+    // Cuenta atrás del cohete
+    beep:   t => tone(sfxBus, 'sine', 880, t, 0.14, 0.5),
+    beepgo: t => tone(sfxBus, 'sine', 1320, t, 0.5, 0.55),
+    // Despegue: rugido de ruido que se abre y retumbo grave
+    cohete: t => {
+      const src = ctx.createBufferSource(); src.buffer = noiseBuf(3); src.loop = true;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(250, t); lp.frequency.exponentialRampToValueAtTime(2200, t + 4.5); lp.frequency.exponentialRampToValueAtTime(700, t + 7);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(2.2, t + 1.0); g.gain.setValueAtTime(2.2, t + 4.8); g.gain.exponentialRampToValueAtTime(0.0001, t + 7);
+      src.connect(lp); lp.connect(g); g.connect(sfxBus); src.start(t); src.stop(t + 7.1);
+      const o = ctx.createOscillator(), og = ctx.createGain(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(36, t); o.frequency.linearRampToValueAtTime(72, t + 5);
+      og.gain.setValueAtTime(0.0001, t); og.gain.linearRampToValueAtTime(0.5, t + 1.0); og.gain.exponentialRampToValueAtTime(0.0001, t + 7);
+      o.connect(og); og.connect(sfxBus); o.start(t); o.stop(t + 7.1);
+    },
+    // Cohete que llega o se va (más corto y suave)
+    retro: t => {
+      const src = ctx.createBufferSource(); src.buffer = noiseBuf(3); src.loop = true;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(500, t); lp.frequency.linearRampToValueAtTime(1400, t + 1.2); lp.frequency.linearRampToValueAtTime(400, t + 2.6);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(1.3, t + 0.6); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+      src.connect(lp); lp.connect(g); g.connect(sfxBus); src.start(t); src.stop(t + 2.7);
+    },
+    // Grito del astronauta: más agudo y largo, filtrado como una radio, con pitidos de fin de transmisión
+    grito2: t => {
+      tone(sfxBus, 'sine', 90, t, 0.25, 0.9, { slideTo: 45 });
+      const o = ctx.createOscillator(), g = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain();
+      const hp = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 450; lp.type = 'lowpass'; lp.frequency.value = 3400;
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(520, t + 0.05); o.frequency.linearRampToValueAtTime(1150, t + 0.5);
+      o.frequency.linearRampToValueAtTime(900, t + 1.0); o.frequency.exponentialRampToValueAtTime(420, t + 1.9);
+      lfo.frequency.value = 5.5; lg.gain.value = 35; lfo.connect(lg); lg.connect(o.frequency);
+      g.gain.setValueAtTime(0.0001, t + 0.05); g.gain.linearRampToValueAtTime(2.2, t + 0.12);
+      g.gain.setValueAtTime(2.2, t + 1.5); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.0);
+      [[420, 1], [2300, 0.7], [3100, 0.3]].forEach(([f, a]) => {
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 5;
+        const ga = ctx.createGain(); ga.gain.value = a; o.connect(bp); bp.connect(ga); ga.connect(g);
+      });
+      g.connect(hp); hp.connect(lp); lp.connect(sfxBus);
+      o.start(t + 0.05); lfo.start(t + 0.05); o.stop(t + 2.1); lfo.stop(t + 2.1);
+      tone(sfxBus, 'sine', 1500, t + 2.1, 0.07, 0.5); tone(sfxBus, 'sine', 1100, t + 2.22, 0.09, 0.5);
+    },
     error:  t => { tone(sfxBus, 'sawtooth', 220, t, 0.25, 0.3, { slideTo: 110 }); }
   };
 

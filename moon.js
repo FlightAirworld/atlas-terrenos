@@ -67,14 +67,28 @@
     }, 8000);
   }
 
+  // Ida: despega el cohete desde la Tierra, llega a la Luna y el astronauta salta en paracaídas. Vuelta: despega de la Luna y salta ya sin traje.
+  let traveling = false;
   function open() {
-    box.classList.remove('hidden');
+    if (traveling || !box.classList.contains('hidden')) return;
+    traveling = true;
+    const launch = window.rocketLaunch ? window.rocketLaunch('tierra') : Promise.resolve();
+    box.classList.remove('hidden');                       // el mapa lunar se prepara debajo de la pantalla del cohete
     if (!mm) build(); else mm.resize();
-    // Llegada: de lejos al lugar del Apolo 11 (Mar de la Tranquilidad)
     mm.jumpTo({ center: [10, 10], zoom: 0.8 });
-    mm.flyTo({ center: [23.47, 0.67], zoom: 4.2, duration: 6500, essential: true });
+    launch.then(() => {
+      mm.flyTo({ center: [23.47, 0.67], zoom: 4.2, duration: 6500, essential: true });   // llegada al lugar del Apolo 11 (Mar de la Tranquilidad)
+      return window.rocketDrop ? window.rocketDrop({ target: 'moon-map', suit: true }) : null;
+    }).catch(() => {}).then(() => { traveling = false; });
   }
-  function close() { box.classList.add('hidden'); }
+  function close() {
+    if (traveling || box.classList.contains('hidden')) return;
+    traveling = true;
+    const launch = window.rocketLaunch ? window.rocketLaunch('luna') : Promise.resolve();
+    box.classList.add('hidden');                          // debajo de la pantalla del cohete se vuelve al mapa de la Tierra
+    launch.then(() => window.rocketDrop ? window.rocketDrop({ target: 'map', suit: false }) : null)
+      .catch(() => {}).then(() => { traveling = false; });
+  }
   btn.addEventListener('click', open);
   document.getElementById('moon-back').addEventListener('click', close);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !box.classList.contains('hidden')) close(); });
