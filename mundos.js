@@ -51,14 +51,13 @@
     .mundo .maplibregl-ctrl-attrib { font-size: 10px; }
     #mundos-menu { position: fixed; left: 10px; top: 120px; z-index: 1001; display: none; flex-direction: column; gap: 2px; min-width: 190px; padding: 6px;
       border-radius: 16px; background: var(--mp-bg, #fff); border: 1px solid var(--mp-bd, rgba(0,0,0,.14)); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 14px 34px rgba(0,0,0,.22);
-      -webkit-backdrop-filter: blur(14px) saturate(1.5); backdrop-filter: blur(14px) saturate(1.5); transform-origin: top left; }
+      -webkit-backdrop-filter: blur(14px) saturate(1.5); backdrop-filter: blur(14px) saturate(1.5); transform-origin: top right; }
     #mundos-menu.open { display: flex; animation: mundosIn .17s cubic-bezier(.2,.85,.25,1) both; }
     @keyframes mundosIn { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
     #mundos-menu button { display: flex; align-items: center; gap: 12px; width: 100%; border: 0; border-radius: 12px; padding: 9px 12px 9px 9px; background: transparent; color: var(--mp-ink, #16211c); font: 600 15px/1.1 system-ui, sans-serif; text-align: left; cursor: pointer; }
     #mundos-menu button:active { background: var(--mp-hover, rgba(0,0,0,.06)); }
     @media (hover: hover) { #mundos-menu button:hover { background: var(--mp-hover, rgba(0,0,0,.06)); } }
-    #mundos-menu svg { width: 30px; height: 30px; }
-    #mundos-btn[aria-expanded="true"] { background: var(--mp-acc, #087f5b) !important; border-color: transparent !important; color: #fff !important; }`;
+    #mundos-menu svg { width: 30px; height: 30px; }`;
   document.head.appendChild(st);
 
   // ---------- Menú del botón "Mundos" (en la Tierra) ----------
@@ -71,14 +70,10 @@
     menu.appendChild(b);
   });
   document.body.appendChild(menu);
-  // El botón va dentro de la barra de arriba, en medio: entre "en línea" y Extras
-  const row = document.getElementById('top-row'), ext = document.getElementById('extras-wrap');
-  if (row && ext) row.insertBefore(btn, ext);
   const setMenu = open => {
-    if (open) { const r = btn.getBoundingClientRect(); menu.style.top = Math.round(r.bottom + 8) + 'px'; menu.style.left = Math.max(10, Math.min(Math.round(r.left), innerWidth - 212)) + 'px'; }
+    if (open) { const r = (document.getElementById('menu-btn') || btn).getBoundingClientRect(); menu.style.top = Math.round(r.bottom + 8) + 'px'; menu.style.right = Math.max(10, Math.round(innerWidth - r.right)) + 'px'; menu.style.left = 'auto'; }
     menu.classList.toggle('open', open); btn.setAttribute('aria-expanded', open ? 'true' : 'false'); };
-  btn.setAttribute('aria-haspopup', 'menu'); btn.setAttribute('aria-expanded', 'false');
-  btn.addEventListener('click', e => { e.stopPropagation(); setMenu(!menu.classList.contains('open')); });
+    btn.addEventListener('click', () => setMenu(true));   // el menú Menú se cierra solo (lo hace menu.js) y debajo de su botón sale la lista de mundos
   menu.addEventListener('click', e => { const b = e.target.closest('button'); if (b) { setMenu(false); travel(b.dataset.world); } });
   document.addEventListener('pointerdown', e => { if (menu.classList.contains('open') && !menu.contains(e.target) && !btn.contains(e.target)) setMenu(false); });
 

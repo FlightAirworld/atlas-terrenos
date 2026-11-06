@@ -110,32 +110,11 @@ html body #map-controls #extras-items button::after{flex:1;font-size:15px !impor
 #mp-scrim{position:fixed;inset:0;z-index:900;background:rgba(8,20,14,.30);opacity:0;pointer-events:none;transition:opacity .18s ease;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
 #mp-scrim.on{opacity:1;pointer-events:auto}
 
-/* Pantallas estrechas: el texto del Menú se oculta y queda el icono */
-html body #credit-pill{max-width:calc(100vw - 382px) !important}
+/* Pantallas estrechas: el contador se achica un poco; el botón Menú conserva su texto */
+html body #credit-pill{max-width:calc(100vw - 330px) !important}
 @media (max-width:420px){
-  html body #credit-pill{max-width:calc(100vw - 310px) !important;padding:0 11px !important;font-size:14px !important}
-  html body #map-controls #top-row #menu-btn .mp-l{display:none}
-  html body #map-controls #top-row #menu-btn{padding:0 !important;width:44px}
+  html body #credit-pill{max-width:calc(100vw - 300px) !important;padding:0 11px !important;font-size:14px !important}
 }
-/* Mundos: botón redondo de 44 px (como el alto de Extras y Menú), en medio de la barra, entre "en línea" y Extras */
-html body #mundos-btn{
-  width:44px !important;height:44px !important;min-width:44px;box-sizing:border-box;flex:none;
-  padding:0 !important;margin:0 !important;
-  border-radius:50% !important;
-  background:var(--mp-bg) !important;
-  border:1px solid var(--mp-bd) !important;
-  box-shadow:0 1px 2px rgba(0,0,0,.08),0 8px 22px rgba(0,0,0,.16) !important;
-  -webkit-backdrop-filter:blur(14px) saturate(1.5);backdrop-filter:blur(14px) saturate(1.5);
-  color:var(--mp-ink) !important;
-  display:inline-flex !important;align-items:center;justify-content:center;
-  cursor:pointer;-webkit-tap-highlight-color:transparent;
-  transition:transform .12s ease,box-shadow .15s ease,background .15s ease;
-}
-html body #mundos-btn .mundos-globe{font-size:23px;line-height:1;pointer-events:none}
-html body #mundos-btn:active{transform:scale(.96)}
-@media (hover:hover){html body #mundos-btn:hover{transform:translateY(-1px);box-shadow:0 2px 4px rgba(0,0,0,.1),0 12px 26px rgba(0,0,0,.2) !important}}
-html body #mundos-btn:focus-visible{outline:2px solid var(--mp-acc);outline-offset:2px}
-
 @media (max-width:350px){
   html body #map-controls #top-row #extras-btn .mp-l{display:none}
   html body #map-controls #top-row #extras-btn{padding:0 !important;width:44px}
