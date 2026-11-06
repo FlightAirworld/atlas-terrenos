@@ -71,18 +71,12 @@
     menu.appendChild(b);
   });
   document.body.appendChild(menu);
-  // Pantallas anchas: el botón va en la barra, junto a Extras. Estrechas (móvil): flotando debajo del contador de créditos
-  const mq = window.matchMedia('(min-width: 640px)');
-  function place() {
-    const row = document.getElementById('top-row'), ext = document.getElementById('extras-wrap');
-    if (mq.matches && row && ext) { btn.classList.remove('floating'); row.insertBefore(btn, ext); }
-    else { btn.classList.add('floating'); document.body.appendChild(btn); }
-    setMenu(false);
-  }
+  // El botón va dentro de la barra de arriba, en medio: entre "en línea" y Extras
+  const row = document.getElementById('top-row'), ext = document.getElementById('extras-wrap');
+  if (row && ext) row.insertBefore(btn, ext);
   const setMenu = open => {
-    if (open) { const r = btn.getBoundingClientRect(); menu.style.top = Math.round(r.bottom + 8) + 'px'; menu.style.left = Math.max(10, Math.min(Math.round(r.left), innerWidth - 200)) + 'px'; }
+    if (open) { const r = btn.getBoundingClientRect(); menu.style.top = Math.round(r.bottom + 8) + 'px'; menu.style.left = Math.max(10, Math.min(Math.round(r.left), innerWidth - 212)) + 'px'; }
     menu.classList.toggle('open', open); btn.setAttribute('aria-expanded', open ? 'true' : 'false'); };
-  (mq.addEventListener ? mq.addEventListener('change', place) : mq.addListener(place)); place();
   btn.setAttribute('aria-haspopup', 'menu'); btn.setAttribute('aria-expanded', 'false');
   btn.addEventListener('click', e => { e.stopPropagation(); setMenu(!menu.classList.contains('open')); });
   menu.addEventListener('click', e => { const b = e.target.closest('button'); if (b) { setMenu(false); travel(b.dataset.world); } });
