@@ -117,6 +117,27 @@ html body #credit-pill{max-width:calc(100vw - 330px) !important}
   html body #map-controls #top-row #menu-btn .mp-l{display:none}
   html body #map-controls #top-row #menu-btn{padding:0 !important;width:44px}
 }
+/* Mundos: botón abajo a la izquierda, mismo estilo que los de arriba */
+html body #moon-btn{
+  position:fixed !important;left:calc(10px + env(safe-area-inset-left,0px)) !important;bottom:calc(14px + env(safe-area-inset-bottom,0px)) !important;z-index:1000;
+  height:44px !important;min-width:44px;box-sizing:border-box;width:auto !important;
+  padding:0 14px 0 12px !important;margin:0 !important;gap:8px !important;
+  border-radius:14px !important;
+  background:var(--mp-bg) !important;
+  border:1px solid var(--mp-bd) !important;
+  box-shadow:0 1px 2px rgba(0,0,0,.08),0 8px 22px rgba(0,0,0,.16) !important;
+  -webkit-backdrop-filter:blur(14px) saturate(1.5);backdrop-filter:blur(14px) saturate(1.5);
+  color:var(--mp-ink) !important;
+  font:700 14px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif !important;
+  letter-spacing:.01em;white-space:nowrap;
+  display:inline-flex !important;align-items:center;justify-content:center;flex-direction:row !important;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+  transition:transform .12s ease,box-shadow .15s ease,background .15s ease;
+}
+html body #moon-btn:active{transform:scale(.96)}
+@media (hover:hover){html body #moon-btn:hover{transform:translateY(-1px);box-shadow:0 2px 4px rgba(0,0,0,.1),0 12px 26px rgba(0,0,0,.2) !important}}
+html body #moon-btn:focus-visible{outline:2px solid var(--mp-acc);outline-offset:2px}
+
 @media (max-width:350px){
   html body #map-controls #top-row #extras-btn .mp-l{display:none}
   html body #map-controls #top-row #extras-btn{padding:0 !important;width:44px}
