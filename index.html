@@ -218,7 +218,7 @@
       <h1 id="cover-title" aria-label="Redecora El Mundo"><span class="cover-rainbow" aria-hidden="true"><i style="color:#ff4d5e">R</i><i style="color:#ff9f1c">E</i><i style="color:#ffd23f">D</i><i style="color:#3ddc97">E</i><i style="color:#2ec4f1">C</i><i style="color:#5b8cff">O</i><i style="color:#b57bff">R</i><i style="color:#ff6fb5">A</i></span><span class="cover-sub" aria-hidden="true">El Mundo</span></h1>
       <p>Reclama terrenos del mapa del mundo y ponles tu nombre.</p>
       <button id="cover-play" type="button">▶ Jugar</button>
-      <div class="cover-links"><button id="cover-howto" type="button" data-nosound>📖 How to play</button><button id="cover-sound" type="button" data-nosound aria-label="Sonido">🔊</button></div>
+      <div class="cover-links"><button id="cover-howto" type="button" data-nosound>📖 How to play</button></div>
       <div class="cover-legal"><a href="/privacidad.html">Privacidad</a> · <a href="/terminos.html">Condiciones</a></div>
     </div>
   </div>
@@ -278,7 +278,6 @@
     </button>
     <button id="rank-btn" data-label="Ranking" type="button" title="Ranking" aria-label="Ranking">🏆</button>
     <button id="chat-btn" data-label="Chat" type="button" title="Chat de la zona" aria-label="Chat de la zona">💬</button>
-    <button id="sound-btn" data-label="Sonido" type="button" title="Música y efectos" aria-label="Sonido">🔊</button>
     <button id="account-btn" data-label="Cuenta" type="button" class="hidden" title="Entrar" aria-label="Entrar">👤</button>
     <button id="push-btn" data-label="Avisos" type="button" class="hidden" title="Avisos al móvil" aria-label="Avisos al móvil">🔔</button>
     <button id="install-btn" data-label="Descargar app" type="button" class="hidden" title="Descargar la app" aria-label="Descargar la app"><img src="/images/icon-192.png" alt="" width="28" height="28" style="width:28px;height:28px;border-radius:7px;display:block"></button>
@@ -593,16 +592,10 @@
 })();
 </script>
 <script>
-// Portada: enlace "How to play" (guía en inglés) y botón de sonido
+// Portada: enlace "How to play" (guía en inglés)
 (function () {
-  var h = document.getElementById('cover-howto'), sb = document.getElementById('cover-sound');
+  var h = document.getElementById('cover-howto');
   if (h) h.addEventListener('click', function (e) { e.stopPropagation(); if (window.openHowTo) window.openHowTo('en'); });
-  if (sb) sb.addEventListener('click', function (e) {
-    e.stopPropagation();
-    var main = document.getElementById('sound-btn'); if (main) main.click();
-    setTimeout(function () { if (main) sb.textContent = main.textContent; }, 0);
-  });
-  document.addEventListener('DOMContentLoaded', function () { var main = document.getElementById('sound-btn'); if (main && sb) sb.textContent = main.textContent; });
 })();
 </script>
 <script>

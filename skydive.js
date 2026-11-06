@@ -37,10 +37,11 @@
 
   let busy = false;
   window.skydive = function (ms) {
-    if (busy || !window.Element || !Element.prototype.animate) return;
-    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const noMusic = () => { if (window.stopMusic) window.stopMusic(); };   // sin animación no hay caída: la música no se queda sonando
+    if (busy || !window.Element || !Element.prototype.animate) return noMusic();
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return noMusic();
     const mapEl = document.getElementById('map');
-    if (!mapEl) return;
+    if (!mapEl) return noMusic();
     busy = true;
     const r = mapEl.getBoundingClientRect();
     const feetY = r.top + r.height / 2;            // el vuelo termina centrado en la ubicación del jugador
@@ -59,6 +60,7 @@
     fall.onfinish = function () {
       sway.cancel();
       el.classList.add('landed');
+      if (window.stopMusic) window.stopMusic();   // la música dura lo que dura la caída
       if (window.sfx) window.sfx('grito');
       try { if (navigator.vibrate) navigator.vibrate([60, 40, 120]); } catch (e) {}
       setTimeout(function () { el.classList.add('bye'); }, 2600);

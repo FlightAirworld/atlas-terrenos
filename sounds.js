@@ -1,12 +1,10 @@
 'use strict';
 // Música y efectos de sonido generados con Web Audio (sin archivos externos).
-// Modos: 2 = música + efectos, 1 = solo efectos, 0 = silencio. Se recuerda en el dispositivo.
+// Ya no hay botón de sonido: siempre efectos y música. La música suena en la portada y mientras baja el paracaidista, y se corta al aterrizar (window.stopMusic()).
 (function () {
-  const KEY = 'soundMode';
-  let mode = 2;   // por defecto música + efectos (la música empieza con el primer toque); el botón 🔊 los cambia
-  try { const s = localStorage.getItem(KEY); if (s !== null) mode = Math.min(2, Math.max(0, Number(s) || 0)); } catch (e) {}
+  const mode = 2;   // efectos siempre activos; la música la corta window.stopMusic() cuando aterriza el paracaidista
 
-  let ctx = null, master, sfxBus, musicBus, delay, started = false, timer = null, nextTime = 0, step = 0;
+  let musicStopped = false, ctx = null, master, sfxBus, musicBus, delay, started = false, timer = null, nextTime = 0, step = 0;
   const hz = m => 440 * Math.pow(2, (m - 69) / 12);
 
   function ensure() {
@@ -88,7 +86,7 @@
   function introPlaying() { if (window.coverOpen) return false; const el = document.getElementById('intro'); return !!el && !el.classList.contains('hidden'); }   // en la portada sí suena la música
 
   function scheduler() {
-    if (!ctx || mode < 2) return;
+    if (!ctx || mode < 2 || musicStopped) return;
     if (ctx.state === 'suspended') return;
     if (nextTime < ctx.currentTime) nextTime = ctx.currentTime + 0.05;
     while (nextTime < ctx.currentTime + 0.6) {
@@ -96,7 +94,7 @@
       nextTime += EIGHTH; step++;
     }
   }
-  function startMusic() { if (!timer) { nextTime = 0; timer = setInterval(scheduler, 200); } }
+  function startMusic() { if (!timer && !musicStopped) { nextTime = 0; timer = setInterval(scheduler, 200); } }
   function stopMusic() { if (timer) { clearInterval(timer); timer = null; } }
 
   function applyMode() {
@@ -118,31 +116,12 @@
     ctx.resume().then(() => { started = true; applyMode(); }).catch(() => {});
   }
   ['pointerdown', 'keydown', 'touchstart'].forEach(ev => window.addEventListener(ev, unlock, { passive: true }));
-
-  // ---------- Botón 🔊 / 🔔 / 🔇 ----------
-  const ICONS = ['🔇', '🔔', '🔊'], TITLES = ['Sonido apagado', 'Solo efectos', 'Música y efectos'];
-  function refreshBtn() {
-    const b = document.getElementById('sound-btn'); if (!b) return;
-    b.textContent = ICONS[mode]; b.title = TITLES[mode]; b.setAttribute('aria-label', TITLES[mode]);
-  }
-  function setMode(m) {
-    mode = m;
-    try { localStorage.setItem(KEY, String(mode)); } catch (e) {}
-    refreshBtn();
-    if (mode >= 1) ensure();
-    if (ctx && ctx.state === 'suspended') ctx.resume();
-    applyMode();
-  }
-  document.addEventListener('DOMContentLoaded', () => {
-    const b = document.getElementById('sound-btn');
-    if (b) b.addEventListener('click', e => { e.stopPropagation(); setMode((mode + 2) % 3); play('open'); });   // 2 -> 1 -> 0 -> 2
-    refreshBtn();
-  });
+  unlock();   // intenta arrancar ya en la portada (si el navegador lo permite); si no, arranca con el primer toque
 
   // Clic suave en cualquier botón (el de sonido y los que tienen su propio sonido se excluyen)
   document.addEventListener('click', e => {
     const b = e.target.closest && e.target.closest('button');
-    if (!b || b.id === 'sound-btn' || b.dataset.nosound) return;
+    if (!b || b.dataset.nosound) return;
     play(b.classList.contains('close') ? 'click' : 'open');
   }, true);
 
@@ -188,6 +167,12 @@
     }
   };
 
+  // Corta la música con un fundido (los efectos siguen igual). Lo llama el paracaidista al tocar tierra.
+  window.stopMusic = function () {
+    musicStopped = true;
+    if (ctx && musicBus) { musicBus.gain.cancelScheduledValues(ctx.currentTime); musicBus.gain.setTargetAtTime(0, ctx.currentTime, 0.25); }
+    setTimeout(stopMusic, 1500);
+  };
   window.sfx = play;
-  window.soundMode = () => mode;   // 0 = silencio, 1 = solo efectos, 2 = música y efectos (lo usa vehicles.js para aviones y sirenas)
+  window.soundMode = () => mode;   // siempre 2 (lo usan vehicles.js y trains.js para aviones, sirenas y trenes)
 })();

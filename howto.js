@@ -92,14 +92,12 @@
       </ul>
 
       <h3>5. A living map</h3>
-      <p>Zoom in to the streets and you'll see cars, pedestrians, trains, planes, helicopters, traffic lights, animals, rain, day and night. The <b>🏙️ Vida urbana</b> (City life) button in the menu adds roadworks, weddings, parades, smoke, shop queues and more. If your phone struggles, turn it off there.</p>
-      <p>🔊 <b>Music:</b> the 🔊 button cycles music + effects, effects only, and silent.</p>`,
+      <p>Zoom in to the streets and you'll see cars, pedestrians, trains, planes, helicopters, traffic lights, animals, rain, day and night. The <b>🏙️ Vida urbana</b> (City life) button in the menu adds roadworks, weddings, parades, smoke, shop queues and more. If your phone struggles, turn it off there.</p>`,
       tip: `<div class="tip"><b>Tips:</b> log in every day (gift + wheel), collect your credits before bed, buy plots in places that mean something to you (your street, your town), and level up the ones you own before buying lots of new ones.</div>
       <p class="muted" style="font-size:12px">Plots are virtual items: they give no rights over the real land. Exact figures (prices, production, prizes) may change; trust what the game shows.</p>`
     }
   };
   T.es.tip += `<p class="muted" style="font-size:12px">Los terrenos son objetos virtuales: no dan ningún derecho sobre el suelo real. Las cifras exactas (precios, producción, premios) pueden cambiar; fíjate en lo que muestra el juego.</p>`;
-  T.es.body += `<p>🔊 <b>Música:</b> el botón 🔊 alterna música y efectos, solo efectos o silencio.</p>`;
 
   let lang = 'es';
   try { const s = localStorage.getItem('howtoLang'); lang = s || ((navigator.language || '').toLowerCase().startsWith('es') ? 'es' : 'en'); } catch (e) {}
