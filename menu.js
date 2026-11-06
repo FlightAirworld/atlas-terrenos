@@ -291,3 +291,95 @@ const MP_ICON = {
     download(file);
   });
 })();
+
+// ====================================================================================================
+// Realismo del mapa: sombra suave bajo las parcelas, casas menos repetidas entre vecinas y menos señales.
+// Va al final de este archivo porque se carga después de app.js y signs.js. Si algo falla, no pasa nada: el juego sigue igual.
+// Ajustes: a partir de qué zoom salen las señales de velocidad y los rombos amarillos de peatones.
+// ====================================================================================================
+(function () {
+  const SPEED_MIN_ZOOM = 18.7;   // por debajo de este zoom no se ven las señales "30"
+  const PED_MIN_ZOOM = 19.2;     // por debajo de este zoom no se ven los rombos amarillos
+  const SHADOW_COLOR = '#10201a';
+
+  // --- Señales: se ocultan al alejar el zoom (signs.js las dibuja siempre; aquí solo se desvanecen) ---
+  const st = document.createElement('style');
+  st.id = 'realismo-css';
+  st.textContent = `
+.ts-i{transition:opacity .25s ease}
+body.mp-z0 .ts-sp,body.mp-z0 .ts-pd{opacity:0 !important;pointer-events:none !important}
+body.mp-z1 .ts-pd{opacity:0 !important;pointer-events:none !important}`;
+  document.head.appendChild(st);
+
+  // --- Casas: las parcelas sin casa elegida evitan repetir la de sus 8 vecinas (la que elige el dueño manda siempre) ---
+  try {
+    if (typeof houseFor === 'function' && typeof RANDOM_HOUSES !== 'undefined') {
+      const orig = houseFor;
+      const hashIdx = id => {
+        let h = 2166136261;
+        for (const c of String(id)) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+        return (h >>> 16) % RANDOM_HOUSES.length;
+      };
+      const around = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+      houseFor = function (id, house) {
+        try {
+          if (house) return orig(id, house);
+          const m = /^(-?\d+):(-?\d+)$/.exec(String(id));
+          if (!m) return orig(id, house);
+          const x = +m[1], y = +m[2], n = RANDOM_HOUSES.length;
+          const bad = new Set(around.map(d => hashIdx((x + d[0]) + ':' + (y + d[1]))));
+          let i = hashIdx(id);
+          for (let k = 0; k < n && bad.has(i); k++) i = (i + 1) % n;
+          return RANDOM_HOUSES[i];
+        } catch (e) { return orig(id, house); }
+      };
+    }
+  } catch (e) { /* si app.js cambia de forma, se deja como estaba */ }
+
+  // --- Sombra suave alrededor de cada parcela con dueño (capa de línea difuminada, debajo de las fotos) ---
+  function setupShadow(g) {
+    if (g.getLayer('owned-shadow')) return true;
+    if (!g.getLayer('owned-3d')) return false;
+    let before = 'owned-3d';
+    const first = (g.getStyle().layers || []).find(l => /^img-/.test(l.id));   // si ya hay fotos montadas, la sombra va debajo de la primera
+    if (first) before = first.id;
+    g.addLayer({
+      id: 'owned-shadow', type: 'line', source: 'owned', layout: { 'line-join': 'round' },
+      paint: {
+        'line-color': SHADOW_COLOR,
+        'line-opacity': ['interpolate', ['linear'], ['zoom'], 16, 0, 17.5, 0.22, 19, 0.34],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 17, 3, 19, 10, 21, 24],
+        'line-blur': ['interpolate', ['linear'], ['zoom'], 17, 3, 19, 9, 21, 22],
+        'line-translate': [2, 3]
+      }
+    }, before);
+    return true;
+  }
+
+  let tries = 0;
+  const timer = setInterval(() => {
+    try {
+      if (++tries > 300) { clearInterval(timer); return; }   // 60 s como máximo
+      if (typeof gl === 'undefined' || !gl || !gl.getLayer) return;
+      if (!setupShadow(gl)) return;
+      clearInterval(timer);
+
+      // Si el modo de vista oculta o muestra las parcelas, la sombra las sigue
+      gl.on('idle', () => {
+        try {
+          const v = gl.getLayoutProperty('owned-3d', 'visibility') || 'visible';
+          if ((gl.getLayoutProperty('owned-shadow', 'visibility') || 'visible') !== v) gl.setLayoutProperty('owned-shadow', 'visibility', v);
+        } catch (e) {}
+      });
+
+      // Zoom -> clases para ocultar señales al alejar
+      const zc = () => {
+        const z = gl.getZoom();
+        document.body.classList.toggle('mp-z0', z < SPEED_MIN_ZOOM);
+        document.body.classList.toggle('mp-z1', z < PED_MIN_ZOOM);
+      };
+      gl.on('zoom', zc);
+      zc();
+    } catch (e) { /* se reintenta en el siguiente ciclo */ }
+  }, 200);
+})();
