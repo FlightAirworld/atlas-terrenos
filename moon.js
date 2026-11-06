@@ -5,8 +5,8 @@
   const btn = document.getElementById('moon-btn');
   if (!btn || !window.maplibregl) return;
 
-  // Imágenes lunares en Web Mercator: LOLA hillshade + albedo (NASA / USGS) servidas por OpenPlanetaryMap
-  const TILES = 'https://s3.amazonaws.com/opmbuilder/301_moon/tiles/w/hillshaded-albedo/{z}/{x}/{y}.png';
+  // Imágenes lunares en Web Mercator: LOLA hillshade + albedo (NASA / USGS) de OpenPlanetaryMap, a través de nuestro servidor (/api/moon-tile)
+  const TILES = location.origin + '/api/moon-tile/{z}/{x}/{y}.png';
   const SITES = [   // alunizajes del programa Apolo
     ['Apolo 11', 23.4730, 0.6741], ['Apolo 12', -23.4219, -3.0128], ['Apolo 14', -17.4714, -3.6453],
     ['Apolo 15', 3.6339, 26.1322], ['Apolo 16', 15.5002, -8.9730], ['Apolo 17', 30.7717, 20.1908]
@@ -58,12 +58,13 @@
       el.innerHTML = '<i></i><span></span>'; el.querySelector('span').textContent = s[0];
       new maplibregl.Marker({ element: el, anchor: 'top' }).setLngLat([s[1], s[2]]).addTo(mm);
     });
-    let failed = false;
-    mm.on('error', e => {
-      if (failed || !e || !e.sourceId) return;
-      failed = true;
-      document.getElementById('moon-note').textContent = 'No se pudo cargar el mapa lunar. Revisa tu conexión y vuelve a intentarlo.';
-    });
+    // Si en unos segundos no ha llegado ninguna tesela, se avisa (con el motivo, para poder arreglarlo)
+    let got = false, lastErr = '';
+    mm.on('data', e => { if (e.sourceId === 'moon' && e.tile) got = true; });
+    mm.on('error', e => { if (e && e.sourceId === 'moon') lastErr = String((e.error && (e.error.status || e.error.message)) || ''); });
+    setTimeout(() => {
+      if (!got) document.getElementById('moon-note').textContent = 'No se pudo cargar el mapa lunar' + (lastErr ? ' (' + lastErr + ')' : '') + '. Inténtalo de nuevo en un rato.';
+    }, 8000);
   }
 
   function open() {

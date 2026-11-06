@@ -2505,6 +2505,36 @@ const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(x => 
 const zlib = require('node:zlib');
 const staticCache = new Map();   // ruta -> { mtime, etag, buf, gz }
 const COMPRESSIBLE = /^(text\/|application\/(json|manifest\+json)|image\/svg)/;
+// ---------- Mapa lunar: las teselas pasan por aquí para que el navegador no dependa de CORS ni de que el servidor externo esté disponible ----------
+const MOON_UPSTREAM = 'https://s3.amazonaws.com/opmbuilder/301_moon/tiles/w/hillshaded-albedo/';   // OpenPlanetaryMap: LOLA hillshade + albedo (NASA / USGS)
+const moonCache = new Map();
+async function moonFetch(z, x, y) {
+  const key = z + '/' + x + '/' + y;
+  if (moonCache.has(key)) return moonCache.get(key);
+  const r = await fetch(MOON_UPSTREAM + key + '.png', { signal: AbortSignal.timeout(8000) });
+  if (!r.ok) return { status: r.status };
+  const out = { status: 200, buf: Buffer.from(await r.arrayBuffer()) };
+  if (moonCache.size >= 600) moonCache.delete(moonCache.keys().next().value);
+  moonCache.set(key, out);
+  return out;
+}
+async function moonTile(res, pathname) {
+  const m = /^\/api\/moon-tile\/(\d{1,2})\/(\d{1,6})\/(\d{1,6})\.png$/.exec(pathname);
+  const z = m && +m[1], x = m && +m[2], y = m && +m[3];
+  if (!m || z > 9 || x >= 2 ** z || y >= 2 ** z) { res.writeHead(400); return res.end(); }
+  let t;
+  try { t = await moonFetch(z, x, y); } catch (e) { t = { status: 504 }; }
+  if (t.status !== 200) { res.writeHead(t.status === 403 || t.status === 404 ? 404 : 502, { 'Cache-Control': 'no-store' }); return res.end(); }
+  res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' });
+  res.end(t.buf);
+}
+async function moonCheck() {
+  try {
+    const r = await fetch(MOON_UPSTREAM + '0/0/0.png', { signal: AbortSignal.timeout(8000) });
+    return { upstream: MOON_UPSTREAM + '0/0/0.png', status: r.status, type: r.headers.get('content-type'), bytes: (await r.arrayBuffer()).byteLength };
+  } catch (e) { return { upstream: MOON_UPSTREAM, error: String(e && e.message || e) }; }
+}
+
 const BUILD_ID = String(process.env.RENDER_GIT_COMMIT || 'dev').slice(0, 8);   // cambia en cada despliegue: renueva la caché del service worker
 // Política de seguridad del contenido. La primera se aplica ya (lo que nunca hace falta); la segunda, más estricta, solo avisa
 // (Report-Only) a /api/csp-report: revisa los avisos en los logs de Render y, cuando no salga nada legítimo, pásala a la primera.
@@ -2597,6 +2627,8 @@ const server = http.createServer(async (req, res) => {
       return send(204, '');
     }
     if (req.method === 'POST' && url.pathname === '/api/webhooks/paypal') return send(200, JSON.stringify(await paypalWebhook(req)));
+    if (req.method === 'GET' && url.pathname === '/api/moon-check') return send(200, JSON.stringify(await moonCheck()));   // diagnóstico: ¿responde la fuente de imágenes de la Luna?
+    if (req.method === 'GET' && url.pathname.startsWith('/api/moon-tile/')) return await moonTile(res, url.pathname);
     if (req.method === 'GET' && url.pathname === '/api/parcels/tile') return await sendTile(req, res, url, send);   // await: así un error 400 lo recoge el catch de abajo
     if (url.pathname.startsWith('/api/')) {
       const out = await route(req, res, url);
