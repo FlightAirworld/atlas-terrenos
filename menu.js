@@ -383,3 +383,87 @@ body.mp-z1 .ts-pd{opacity:0 !important;pointer-events:none !important}`;
     } catch (e) { /* se reintenta en el siguiente ciclo */ }
   }, 200);
 })();
+
+// ====================================================================================================
+// Vista 3D (botón en el Menú) y luz del día (tono y sombras según la hora del jugador).
+// ====================================================================================================
+(function () {
+  const list = document.getElementById('menu-items');
+  if (!list) return;
+  const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) {} return null; };
+
+  function makeBtn(id, icon, label, title) {
+    const b = document.createElement('button');
+    b.id = id; b.type = 'button'; b.title = title;
+    b.setAttribute('data-label', label); b.setAttribute('aria-label', title); b.setAttribute('aria-pressed', 'false');
+    const s = document.createElement('span'); s.className = 'mp-ic'; s.textContent = icon;
+    b.appendChild(s);
+    list.insertBefore(b, document.getElementById('account-btn') || null);   // justo antes de "Cuenta"
+    return b;
+  }
+  const btn3d = makeBtn('view3d-btn', '🏙️', 'Vista 3D', 'Inclinar el mapa y ver los edificios en 3D');
+  const btnLight = makeBtn('light-btn', '🌗', 'Luz del día', 'Luz y sombras según la hora');
+
+  // ---------- Vista 3D ----------
+  let on3d = store('mp3d') === '1';
+  function apply3d(anim) {
+    try {
+      if (typeof gl === 'undefined' || !gl) return false;
+      if (gl.getLayer('owned-3d')) {
+        gl.setPaintProperty('owned-3d', 'fill-extrusion-opacity', on3d ? 0.55 : 0.35);
+        gl.setPaintProperty('owned-3d', 'fill-extrusion-vertical-gradient', on3d);
+        gl.setPaintProperty('owned-3d', 'fill-extrusion-color', on3d ? '#e8e1d2' : '#f1ede4');
+      }
+      gl.easeTo({ pitch: on3d ? 55 : 0, duration: anim ? 700 : 0 });
+      btn3d.setAttribute('aria-pressed', on3d ? 'true' : 'false');
+      btn3d.style.fontWeight = on3d ? '800' : '';
+      return true;
+    } catch (e) { return false; }
+  }
+  btn3d.addEventListener('click', () => { on3d = !on3d; store('mp3d', on3d ? '1' : '0'); apply3d(true); });
+  if (on3d) {                                     // recuerda la elección de la última vez
+    let n = 0;
+    const t = setInterval(() => { if (++n > 150 || (typeof gl !== 'undefined' && gl && gl.getLayer && gl.getLayer('owned-3d') && apply3d(false))) clearInterval(t); }, 200);
+  }
+
+  // ---------- Luz del día ----------
+  // Capa de color por encima del mapa (no recibe toques). Hora local del jugador; cambia poco a poco.
+  const ov = document.createElement('div');
+  ov.id = 'mp-light';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:800;pointer-events:none;mix-blend-mode:multiply;transition:background-color 2s linear,opacity 2s linear;opacity:0';
+  document.body.appendChild(ov);
+  const NIGHT = [100, 115, 175, 0.5], DAWN = [255, 190, 140, 0.35], DAY = [255, 255, 255, 0], DUSK = [255, 170, 110, 0.4];
+  const KEYS = [[0, NIGHT], [5, NIGHT], [7, DAWN], [9, DAY], [17, DAY], [19, DUSK], [21, NIGHT], [24, NIGHT]];
+  function lightAt(h) {
+    for (let i = 1; i < KEYS.length; i++) {
+      if (h <= KEYS[i][0]) {
+        const a = KEYS[i - 1], b = KEYS[i], t = (h - a[0]) / (b[0] - a[0]);
+        return a[1].map((v, k) => v + (b[1][k] - v) * t);
+      }
+    }
+    return NIGHT;
+  }
+  let lightOn = store('mpLight') !== '0';
+  function applyLight() {
+    btnLight.setAttribute('aria-pressed', lightOn ? 'true' : 'false');
+    btnLight.style.fontWeight = lightOn ? '800' : '';
+    const d = new Date(), h = d.getHours() + d.getMinutes() / 60;
+    const c = lightAt(h);
+    ov.style.backgroundColor = 'rgb(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ')';
+    ov.style.opacity = lightOn ? String(c[3]) : '0';
+    // Las sombras se mueven con el sol: por la mañana caen hacia un lado y por la tarde hacia el otro; de noche casi desaparecen
+    try {
+      if (typeof gl !== 'undefined' && gl && gl.getLayer && gl.getLayer('owned-shadow')) {
+        const day = Math.min(1, Math.max(0, (h - 7) / 12));          // 0 = amanecer, 1 = atardecer
+        const x = lightOn ? Math.round((day - 0.5) * 10) : 2;       // mañana: hacia la izquierda; tarde: hacia la derecha
+        const night = h < 6.5 || h > 20.5;
+        gl.setPaintProperty('owned-shadow', 'line-translate', [x, 3]);
+        gl.setPaintProperty('owned-shadow', 'line-color', night && lightOn ? '#05080c' : '#10201a');
+      }
+    } catch (e) {}
+  }
+  btnLight.addEventListener('click', () => { lightOn = !lightOn; store('mpLight', lightOn ? '1' : '0'); applyLight(); });
+  applyLight();
+  setInterval(applyLight, 60000);
+  setTimeout(applyLight, 4000);   // por si la capa de sombra aún no existía al arrancar
+})();
