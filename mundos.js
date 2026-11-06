@@ -49,7 +49,7 @@
     .mundo .mundo-pin i { width: 12px; height: 12px; border-radius: 50%; background: #ffd23f; border: 2px solid #fff; box-shadow: 0 0 8px rgba(255,210,63,.9); }
     .mundo .mundo-pin span { margin-top: 3px; font: 700 11px/1 system-ui, sans-serif; color: #fff; text-shadow: 0 1px 3px #000, 0 0 6px #000; white-space: nowrap; }
     .mundo .maplibregl-ctrl-attrib { font-size: 10px; }
-    #mundos-menu { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(14px + 44px + 8px + env(safe-area-inset-bottom, 0px)); z-index: 1001; display: none; flex-direction: column; gap: 2px; min-width: 190px; padding: 6px;
+    #mundos-menu { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(14px + 76px + 8px + env(safe-area-inset-bottom, 0px)); z-index: 1001; display: none; flex-direction: column; gap: 2px; min-width: 190px; padding: 6px;
       border-radius: 16px; background: var(--mp-bg, #fff); border: 1px solid var(--mp-bd, rgba(0,0,0,.14)); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 14px 34px rgba(0,0,0,.22);
       -webkit-backdrop-filter: blur(14px) saturate(1.5); backdrop-filter: blur(14px) saturate(1.5); transform-origin: bottom left; }
     #mundos-menu.open { display: flex; animation: mundosIn .17s cubic-bezier(.2,.85,.25,1) both; }
