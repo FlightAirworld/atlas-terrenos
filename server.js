@@ -1839,6 +1839,20 @@ async function notifyFriendsOf(userId, kind, level) {
   } catch (e) { console.error('push social:', e.message); }
 }
 
+// Pueblos donde este jugador es presidente y aún no ha cobrado el premio de este mes
+async function presidentPendingTowns(userId, month) {
+  const rows = await all(`SELECT p.city FROM (
+      SELECT DISTINCT ON (city) city, user_id FROM (
+        SELECT city, user_id::text AS user_id, COUNT(*) AS n, MIN(created_at) AS first FROM parcels
+        WHERE user_id IS NOT NULL AND city IS NOT NULL AND city <> $4
+          AND city IN (SELECT city FROM parcels WHERE user_id::text = $1 AND city IS NOT NULL)
+        GROUP BY city, user_id) t
+      WHERE n >= $2 ORDER BY city, n DESC, first ASC) p
+    WHERE p.user_id = $1 AND NOT EXISTS (SELECT 1 FROM president_grants g WHERE g.city = p.city AND g.month = $3)
+    ORDER BY p.city`, [String(userId), PRESIDENT_MIN_PARCELS, month, CITY_NONE]);
+  return rows.map(r => r.city);
+}
+
 let pushBusy = false;
 const PUSH_STREAK_FROM = 18, PUSH_STREAK_GAP_MS = 2 * 3600_000, PUSH_FULL_SOON_MS = 2 * 3600_000;
 async function pushRun() {
@@ -1893,6 +1907,21 @@ async function pushRun() {
           const ms = monthlyState(mr, day);
           if (ms.canClaim) mon = { ms, text: monthlyText(monthlyReward(ms.nextDay, ms.total)) };
         } catch (e) { /* si falla, se avisa solo del regalo diario */ }
+        // 3b) Presidente de pueblo: una vez al mes, avisa de que ya puede cobrar el premio
+        if (!payload && PRESIDENT_CREDITS > 0 && (!st || st.last_pres_push !== day.slice(0, 7))) {
+          try {
+            const towns = await presidentPendingTowns(u.user_id, day.slice(0, 7));
+            if (towns.length) {
+              const total = towns.length * PRESIDENT_CREDITS;
+              payload = { title: '🏛️ ¡Cobra tu premio de presidente!',
+                body: towns.length === 1
+                  ? `Eres el presidente de ${towns[0]}. Entra y cobra tus ${PRESIDENT_CREDITS} créditos de este mes.`
+                  : `Eres presidente de ${towns.length} pueblos (${towns.slice(0, 3).join(', ')}${towns.length > 3 ? '…' : ''}). Entra y cobra tus ${total} créditos de este mes.`,
+                tag: 'president', url: '/' };
+              field = 'last_pres_push'; value = day.slice(0, 7);
+            }
+          } catch (e) { console.error('push presidente:', e.message); }
+        }
         // 4) Regalo diario por la mañana (con el premio del mes si también está pendiente)
         if (!payload && info.canClaim && (!st || (st.last_daily_push !== day && st.last_daily_push !== day + '!'))) {
           const s = info.streak;
@@ -2139,6 +2168,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE INDEX IF NOT EXISTS push_subs_user ON push_subs (user_id)');
     await run('ALTER TABLE push_state ADD COLUMN IF NOT EXISTS last_full_push BIGINT');   // aviso "se llena pronto" (una vez por recogida)
     await run('CREATE TABLE IF NOT EXISTS push_state (user_id TEXT PRIMARY KEY, last_seen BIGINT, unseen INT NOT NULL DEFAULT 0, last_any BIGINT, last_prod_push BIGINT, last_daily_push TEXT)');
+    await run('ALTER TABLE push_state ADD COLUMN IF NOT EXISTS last_pres_push TEXT');   // aviso mensual del premio de presidente (mes en que se avisó)
     if (PUSH_ON) { setTimeout(pushRun, 120_000).unref(); setInterval(pushRun, 15 * 60_000).unref(); }   // revisa cada 15 min quién tiene algo pendiente
     const purge = () => run('DELETE FROM chat_msgs WHERE created_at < $1', [Date.now() - CHAT_KEEP_MS]).then(() => run('DELETE FROM chat_reacts WHERE msg_id NOT IN (SELECT id FROM chat_msgs)')).catch(() => {});
     purge(); setInterval(purge, 3600_000).unref();

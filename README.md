@@ -81,7 +81,7 @@ Los avisos (push) necesitan `npm install` (paquete `web-push`) y estas variables
 (se crean con `npx web-push generate-vapid-keys`) y `VAPID_SUBJECT` (por ejemplo `mailto:tu@correo.com`). Sin ellas los avisos quedan desactivados y el botón 🔔 no aparece.
 En iPhone solo funcionan si la app está instalada en la pantalla de inicio.
 
-Avisos, por orden de prioridad: racha en peligro (desde las 18:00 hora del jugador), un terreno a punto de llenarse (2 h antes), producción lista y regalo diario.
+Avisos, por orden de prioridad: racha en peligro (desde las 18:00 hora del jugador), un terreno a punto de llenarse (2 h antes), producción lista, premio de presidente (una vez al mes, si es presidente de algún pueblo y aún no lo ha cobrado) y regalo diario.
 Solo entre las 10:00 y las 21:00 del jugador, 6 h entre avisos (2 h para el de la racha) y se paran tras 3 avisos sin que vuelva a entrar.
 
 Racha de 7 días: premios de cada día en `DAILY_REWARDS` (7 números separados por comas; por defecto `1,1,2,2,3,3,10`, el día 7 es el premio grande).
