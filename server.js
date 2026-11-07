@@ -54,6 +54,8 @@ if (!DATABASE_URL) {
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');   // https://xxxx.supabase.co
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';               // clave pública "anon"
 const AUTH_ENABLED = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+// ID de cliente de Google (público, no es secreto). Sirve para el botón "Entrar con Google" que enseña tu dominio y no el de Supabase.
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '675164689286-hqr16va7gv3v0kpeu5vpc6mpse980nai.apps.googleusercontent.com';
 const REQUIRE_LOGIN = AUTH_ENABLED && process.env.REQUIRE_LOGIN !== '0';     // comprar y cobrar el regalo exige cuenta
 
 // Rejilla del mundo: cada parcela es un cuadrado de 0.001° (~111 m de lado en latitud)
@@ -1945,7 +1947,7 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
     return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, demo: DEMO, stripe: !DEMO && HAS_STRIPE, paypal: !DEMO && HAS_PAYPAL, clientId: (DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, packSize: PACKS[0].credits, packs: PACKS,
-      maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null } };
+      maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null, googleClientId: AUTH_ENABLED ? GOOGLE_CLIENT_ID : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')));

@@ -1,4 +1,4 @@
-const CACHE = 'atlas-terrenos-__BUILD__';   // el servidor y build-static.js sustituyen __BUILD__ por el commit desplegado
+const CACHE = 'redecora-v37';
 const SHELL = ['/', '/style.css', '/app.js', '/mapshim.js', '/sounds.js', '/images/icon-192.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
