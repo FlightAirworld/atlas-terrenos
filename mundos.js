@@ -137,12 +137,17 @@
     const w = WORLDS[id], box = document.createElement('div');
     box.id = 'mundo-' + id; box.className = 'mundo hidden'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', w.name);
     box.innerHTML = `<div class="mundo-map" id="mundo-map-${id}"></div>
-      <div class="mundo-top"><div class="mundo-title">${planet(id)}<span></span></div><div class="mundo-gos"></div></div>
-      <div class="mundo-note"></div>`;
+      <div class="mundo-top"><div class="mundo-title">${planet(id)}<span></span></div><div class="mundo-gos"></div><button type="button" class="mundo-pres hidden" data-nosound></button></div>
+      <div class="mundo-note"></div>
+      <div class="mundo-sheet hidden"><div class="mundo-card"><button type="button" class="mundo-x" aria-label="Cerrar">×</button><h2 class="mundo-h"></h2><div class="mundo-body"></div></div></div>`;
     box.querySelector('.mundo-title span').textContent = w.name;
     box.querySelector('.mundo-note').textContent = w.note;
     const gos = box.querySelector('.mundo-gos');   // solo un botón «Mundos»; la lista de planetas se despliega al tocarlo
-    gos.innerHTML = '<button type="button" class="mundo-go mundo-drop" data-nosound aria-haspopup="true" aria-expanded="false"><span>🌎 Mundos</span><b>▾</b></button><div class="mundo-list"></div>';
+    gos.innerHTML = '<button type="button" class="mundo-go mundo-xtra" data-nosound><span>📊 Extras</span></button><button type="button" class="mundo-go mundo-drop" data-nosound aria-haspopup="true" aria-expanded="false"><span>🌎 Mundos</span><b>▾</b></button><div class="mundo-list"></div>';
+    gos.querySelector('.mundo-xtra').addEventListener('click', () => openSheet(id));
+    box.querySelector('.mundo-pres').addEventListener('click', () => openSheet(id));
+    box.querySelector('.mundo-x').addEventListener('click', () => box.querySelector('.mundo-sheet').classList.add('hidden'));
+    box.querySelector('.mundo-sheet').addEventListener('pointerdown', e => { if (e.target.classList.contains('mundo-sheet')) e.currentTarget.classList.add('hidden'); });
     const list = gos.querySelector('.mundo-list'), drop = gos.querySelector('.mundo-drop');
     drop.addEventListener('click', () => { const o = !list.classList.contains('open'); closeLists(); if (o) { list.classList.add('open'); drop.setAttribute('aria-expanded', 'true'); } });
     ['tierra'].concat(ORDER).filter(o => o !== id).forEach(o => {
@@ -155,6 +160,82 @@
     document.body.appendChild(box);
     boxes[id] = box;
   });
+
+  // ---------- Estadísticas, presidente y Extras de cada mundo (todos menos la Tierra, que tiene los suyos) ----------
+  const css2 = document.createElement('style');
+  css2.textContent = `
+    .mundo .mundo-gos { gap: 8px; }
+    .mundo .mundo-pres { flex-basis: auto; order: 3; align-self: flex-start; border: 1px solid rgba(255,210,63,.55); background: rgba(0,0,0,.6); color: #ffe08a; border-radius: 99px; padding: 6px 12px; font: 800 13px/1 system-ui, sans-serif; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mundo .mundo-pres.hidden { display: none; }
+    .mundo .mundo-sheet { position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; }
+    .mundo .mundo-sheet.hidden { display: none; }
+    .mundo .mundo-card { position: relative; width: min(420px, 100%); max-height: calc(100% - 24px); overflow-y: auto; background: #0e1424; border: 1px solid rgba(255,255,255,.2); border-radius: 20px; padding: 18px 16px 16px; box-shadow: 0 18px 50px rgba(0,0,0,.6); }
+    .mundo .mundo-x { position: absolute; right: 10px; top: 8px; border: 0; background: transparent; color: #fff; font-size: 28px; line-height: 1; cursor: pointer; }
+    .mundo .mundo-h { margin: 0 34px 10px 0; font: 800 20px/1.2 system-ui, sans-serif; }
+    .mundo .mundo-body { font: 500 14px/1.4 system-ui, sans-serif; }
+    .mundo .mundo-pres-card { background: linear-gradient(135deg, rgba(255,210,63,.22), rgba(255,210,63,.06)); border: 1px solid rgba(255,210,63,.5); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+    .mundo .mundo-pres-card b { display: block; font-size: 18px; margin-top: 2px; }
+    .mundo .mundo-nums { display: flex; gap: 8px; margin-bottom: 10px; }
+    .mundo .mundo-nums div { flex: 1; background: rgba(255,255,255,.08); border-radius: 12px; padding: 8px 10px; text-align: center; }
+    .mundo .mundo-nums b { display: block; font-size: 20px; }
+    .mundo .mundo-nums span { font-size: 12px; opacity: .75; }
+    .mundo .mundo-sub { margin: 12px 0 6px; font: 800 13px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+    .mundo .mundo-rank { margin: 0; padding: 0; list-style: none; }
+    .mundo .mundo-rank li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; border-radius: 10px; }
+    .mundo .mundo-rank li:nth-child(odd) { background: rgba(255,255,255,.05); }
+    .mundo .mundo-rank li.first { font-weight: 800; color: #ffe08a; }
+    .mundo .mundo-extras { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .mundo .mundo-extras button { border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.08); color: #fff; border-radius: 12px; padding: 10px 8px; font: 700 14px/1.15 system-ui, sans-serif; cursor: pointer; }
+    .mundo .mundo-extras button:active { transform: scale(.97); }
+    .mundo .mundo-mine { background: rgba(8,127,91,.25); border: 1px solid rgba(8,127,91,.6); border-radius: 12px; padding: 8px 12px; margin-bottom: 10px; }`;
+  document.head.appendChild(css2);
+
+  const EXTRAS = [['daily-btn', '🎁 Regalo diario'], ['roulette-btn', '🎡 Ruleta diaria'], ['monthly-btn', '🗓️ Premios del mes'], ['gift-btn', '💝 Regalar créditos'], ['mine-btn', '🏠 Mis terrenos'], ['howto-btn', '📖 Cómo jugar'], ['share-app-btn', '📤 Compartir']];
+  const fmt = n => Number(n || 0).toLocaleString('es');
+  const stats = {};   // última respuesta por mundo
+  async function worldInfo(id) {   // trae las estadísticas y pone al presidente bajo el nombre del mundo
+    try {
+      const j = await api('/api/world/stats?world=' + encodeURIComponent(id));
+      stats[id] = j;
+      const chip = boxes[id].querySelector('.mundo-pres');
+      chip.textContent = j.president ? `👑 Presidente de ${WORLDS[id].name}: ${j.president.owner} · ${fmt(j.president.n)}` : `👑 ${WORLDS[id].name} aún no tiene presidente: ¡sé el primero!`;
+      chip.classList.remove('hidden');
+      return j;
+    } catch (e) { return null; }
+  }
+  function renderSheet(id, j) {
+    const box = boxes[id], body = box.querySelector('.mundo-body'), name = WORLDS[id].name;
+    box.querySelector('.mundo-h').textContent = '📊 ' + name;
+    body.replaceChildren();
+    const add = (tag, cls, text, parent) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; (parent || body).appendChild(el); return el; };
+    if (!j) { add('p', '', 'No se pudieron cargar las estadísticas. Inténtalo de nuevo en un rato.'); }
+    else {
+      const pc = add('div', 'mundo-pres-card');
+      add('span', '', `👑 Presidente de ${name}`, pc);
+      add('b', '', j.president ? `${j.president.owner} — ${fmt(j.president.n)} terreno${j.president.n === 1 ? '' : 's'}` : 'Aún nadie. ¡Compra un terreno y serás el primero!', pc);
+      const nums = add('div', 'mundo-nums');
+      [[j.sold, 'terrenos vendidos'], [j.owners, 'propietarios']].forEach(([n, t]) => { const d = add('div', '', null, nums); add('b', '', fmt(n), d); add('span', '', t, d); });
+      if (j.mine && j.mine.n) add('div', 'mundo-mine', `🏠 Tienes ${fmt(j.mine.n)} terreno${j.mine.n === 1 ? '' : 's'} aquí · puesto nº ${j.mine.rank}`);
+      add('div', 'mundo-sub', 'Ranking');
+      const ol = add('ol', 'mundo-rank');
+      j.top.forEach((t, i) => { const li = add('li', i === 0 ? 'first' : '', null, ol); add('span', '', `${i === 0 ? '👑 ' : (i + 1) + '. '}${t.owner}`, li); add('span', '', fmt(t.n), li); });
+      if (!j.top.length) add('li', '', 'Aún no hay propietarios.', ol);
+    }
+    add('div', 'mundo-sub', 'Extras');
+    const ex = add('div', 'mundo-extras');
+    EXTRAS.forEach(([bid, label]) => {
+      const target = document.getElementById(bid); if (!target) return;
+      const b = add('button', '', label, ex); b.type = 'button';
+      b.addEventListener('click', () => { box.querySelector('.mundo-sheet').classList.add('hidden'); target.click(); });   // abre lo mismo que en la Tierra (sus ventanas van por encima del mapa del planeta)
+    });
+  }
+  async function openSheet(id) {
+    const sheet = boxes[id].querySelector('.mundo-sheet');
+    renderSheet(id, stats[id] || null);
+    if (!stats[id]) boxes[id].querySelector('.mundo-body').prepend(Object.assign(document.createElement('p'), { textContent: 'Cargando…' }));
+    sheet.classList.remove('hidden');
+    renderSheet(id, await worldInfo(id) || stats[id] || null);
+  }
 
   function build(id) {
     const w = WORLDS[id], note = boxes[id].querySelector('.mundo-note');
@@ -405,6 +486,7 @@
         if (!maps[to]) maps[to] = build(to); else maps[to].resize();
         map = maps[to];
         map.jumpTo({ center: [10, 10], zoom: 0.8 });
+        worldInfo(to);
       } catch (e) { console.error('[mundos] no se pudo preparar el mapa de ' + to, e); }   // aunque el mapa falle, el viaje termina y se puede volver
     }
     current = to;

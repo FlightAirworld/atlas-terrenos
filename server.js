@@ -2114,6 +2114,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/player') return playerGet(req, url);
   if (req.method === 'GET' && pn === '/api/town/president') return presidentGet(req);
   if (req.method === 'POST' && pn === '/api/town/president/claim') return presidentClaim(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/world/stats') return worldStats(url, req);
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };
 
@@ -2410,6 +2411,30 @@ async function sendPlanetTile(req, res, url) {
   }
   res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=604800, immutable', 'Cross-Origin-Resource-Policy': 'cross-origin', 'X-Content-Type-Options': 'nosniff' });
   res.end(buf);
+}
+
+// ---------- Estadísticas de cada mundo (Luna, Marte, planetas) ----------
+// Mismo estilo que el ranking de la Tierra, pero por mundo. El presidente del mundo es quien más terrenos tiene allí
+// (si hay empate, el que llegó antes). Por ahora es solo un título: no da créditos.
+async function worldStats(url, req) {
+  const world = cleanWorld(url.searchParams.get('world'));
+  if (world === 'tierra') throw new HttpError(400, 'La Tierra tiene su propio ranking');
+  const sold = Number((await one('SELECT COUNT(*) AS n FROM parcels WHERE world = $1', [world])).n);
+  const owners = Number((await one('SELECT COUNT(DISTINCT owner) AS n FROM parcels WHERE world = $1', [world])).n);
+  const top = (await all('SELECT owner, COUNT(*) AS n, MIN(created_at) AS first FROM parcels WHERE world = $1 GROUP BY owner ORDER BY n DESC, MIN(created_at) ASC LIMIT 10', [world]))
+    .map(r => ({ owner: r.owner, n: Number(r.n), since: Number(r.first) }));
+  const recent = (await all('SELECT owner, created_at FROM parcels WHERE world = $1 ORDER BY created_at DESC LIMIT 5', [world]))
+    .map(r => ({ owner: r.owner, at: Number(r.created_at) }));
+  let mine = null;
+  try {   // si hay sesión, cuántos terrenos tiene aquí el jugador y en qué puesto va
+    const user = await needUser(req);
+    const n = Number((await one('SELECT COUNT(*) AS n FROM parcels WHERE world = $1 AND user_id = $2', [world, user.id])).n);
+    if (n) {
+      const ahead = Number((await one('SELECT COUNT(*) AS n FROM (SELECT user_id, COUNT(*) AS c, MIN(created_at) AS f FROM parcels WHERE world = $1 AND user_id IS NOT NULL GROUP BY user_id) t WHERE c > $2 OR (c = $2 AND f < (SELECT MIN(created_at) FROM parcels WHERE world = $1 AND user_id = $3))', [world, n, user.id])).n);
+      mine = { n, rank: ahead + 1 };
+    } else mine = { n: 0, rank: null };
+  } catch (e) { /* sin sesión: no hay datos personales */ }
+  return { world, sold, owners, president: top[0] ? { owner: top[0].owner, n: top[0].n } : null, top, recent, mine };
 }
 
 // Dirección antigua (onrender.com) -> dominio propio. Solo se redirige a quien abre la web en el navegador (una página, GET):
