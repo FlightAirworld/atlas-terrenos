@@ -397,7 +397,8 @@
     const c = ws.filter(w => w.age > 3 && w.age < w.life - 5 && !w.cb && w.mk && view.contains(map.unproject(L.point(w.x, w.y), REF_Z)));
     if (!c.length) return false;
     const w = pick(c), el = w.mk.getElement(); if (!el) return false;
-    const b = document.createElement('div'); b.className = 'cb'; b.textContent = phrase(); el.appendChild(b); w.cb = b;
+    const txt = phrase(), b = document.createElement('div'); b.className = 'cb'; b.textContent = txt; el.appendChild(b); w.cb = b;
+    if (window.atlasVoice && !window.earthMuted) window.atlasVoice.speak(txt, w.vp || (w.vp = window.atlasVoice.profile('human')), { vol: 0.85 });   // el peatón dice su frase en voz alta (voices.js)
     bubbles.push({ w, b, until: performance.now() + 3400 });
     return true;
   }

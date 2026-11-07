@@ -7,6 +7,7 @@
 // Todo es un dibujo ligero (SVG) que se coloca sobre el mapa de cada planeta (mundos.js avisa con el evento «mundo:map»).
 // Solo se ve de cerca (zoom 15 o más). Se apaga con el mismo botón de la gente (🚶), como los animales de la Tierra.
 // Para probar en la consola: alienSay('marte') hace hablar a un marciano; alienSaucer('marte') llama a un platillo.
+// Voces y sonidos: cada burbuja se dice en voz alta (voices.js): los marcianos hablan, los vichos hacen su ruido y los platillos zumban.
 (function () {
   if (!window.maplibregl) return;
   const IDS = ['mercurio', 'venus', 'marte', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton'];   // la Luna no está
@@ -211,6 +212,7 @@
     ['Ayer vi un platillo mal aparcado.', 'Seguro que era del cuñado de Orión.'],
     ['¿Por qué lleva ese aparato en la mano?', 'Dicen que es su antena. Pobrecillo, solo tiene una… y plana.']
   ];
+  const FLYSAY = ['¡Ahí os quedáis, terrícolas!', '¡Que llego tarde a la abducción!', '¡Apartaos, que paso!', '¡Hola, abajo! ¡Adiós, abajo!', '¡Uiiii, qué velocidad!', '¡Salud, terrícolas!'];
   const SOUNDS = ['¡blup!', 'bzzz', 'ñic ñic', '¿miau?', '¡piii!', 'glub', '¡hip!', 'splosh'];
   const ARRIVE = ['¡Hemos llegado! ¿Y este terrícola?', '¡Aterrizaje perfecto! Casi.', 'Buen viaje. ¿Quién deja a un terrícola suelto?', '¡Qué mal aparca el piloto!'];
 
@@ -285,7 +287,7 @@
     const el = div('al-e'); el.style.opacity = '0';
     if (W.hov && type !== 'jelly') { el.appendChild(div('al-hd')); el.classList.add('hov'); }
     const sp = div('al-sp'), fl = div('al-fl', svg); sp.appendChild(fl); el.appendChild(sp); W.layer.appendChild(el);
-    const e = { type, el, sp, fl, mx: x, my: y, tx: x, ty: y, v, h, dir: 1, state: 'idle', t: rnd(0.2, 2), tb: rnd(2.5, 9), cool: rnd(4, 14), cls, sx: 0, sy: 0, sc: 1, bub: null, partner: null, visitor: false, born: performance.now() };
+    const e = { type, el, sp, fl, mx: x, my: y, tx: x, ty: y, v, h, dir: 1, state: 'idle', t: rnd(0.2, 2), tb: rnd(2.5, 9), cool: rnd(4, 14), cls, sx: 0, sy: 0, sc: 1, bub: null, partner: null, visitor: false, born: performance.now(), vp: type === 'alien' && window.atlasVoice ? window.atlasVoice.profile('alien') : null };
     sp.className = 'al-sp still' + cls; requestAnimationFrame(() => { el.style.opacity = '1'; });
     return e;
   }
@@ -366,7 +368,20 @@
     const el = div('al-b ' + kind); el.textContent = text; W.layer.appendChild(el);
     const b = { el, e, t: dur || Math.max(3, text.length * 0.07 + 1.8), w: el.offsetWidth, tail: kind.indexOf('think') >= 0 ? 24 : 10 };
     W.bubbles.push(b); e.bub = b; requestAnimationFrame(() => el.classList.add('on'));
+    voiceSay(W, e, text, force);
     return true;
+  }
+  // Voz y sonidos: más fuerte cuanto más cerca del centro de la pantalla; el paneo de los efectos sigue al platillo
+  const near = (W, x, y) => clamp(1 - Math.hypot(x - W.w / 2, y - W.h / 2) / Math.max(W.w, W.h), 0.35, 1);
+  function voiceSay(W, e, text, force) {
+    const v = window.atlasVoice; if (!v) return;
+    const vol = near(W, e.sx, e.sy);
+    if (e.type === 'alien') v.speak(text, e.vp || (e.vp = v.profile('alien')), { force: !!force, vol });
+    else v.critter(text, vol * 0.9);
+  }
+  function sfxAt(W, name, sx, sy, o) {
+    const v = window.atlasVoice; if (!v) return;
+    v.sfx(name, Object.assign({ vol: near(W, sx, sy), pan: clamp((sx - W.w / 2) / (W.w / 2), -1, 1) * 0.8 }, o));
   }
   function dropBubble(W, b, now) {
     const i = W.bubbles.indexOf(b); if (i >= 0) W.bubbles.splice(i, 1);
@@ -424,11 +439,11 @@
     const S = pad.sau;
     if (S.state === 'wait') {
       S.t -= dt;
-      if (S.t <= 0) { S.state = 'in'; S.u = 0; S.dur = rnd(4, 5.2); S.dir = Math.random() < .5 ? -1 : 1; S.el.style.display = ''; S.shadow.style.display = ''; }
+      if (S.t <= 0) { S.state = 'in'; S.u = 0; S.dur = rnd(4, 5.2); S.dir = Math.random() < .5 ? -1 : 1; S.el.style.display = ''; S.shadow.style.display = ''; if (W.view && inView(W.view, pad.mx, pad.my, 0.15)) sfxAt(W, 'ufoIn', pad.sx, pad.sy); }
     } else if (S.state === 'in') {
       S.u += dt / S.dur; S.a = Math.pow(1 - Math.min(1, S.u), 2.2);
       if (S.u >= 1) {
-        S.state = 'land'; S.t = rnd(7, 11); S.a = 0; S.land0 = S.t;
+        S.state = 'land'; S.t = rnd(7, 11); S.a = 0; S.land0 = S.t; if (W.view && inView(W.view, pad.mx, pad.my, 0.15)) sfxAt(W, 'thud', pad.sx, pad.sy);
         const n = Math.random() < .5 ? 1 : 2, vis = W.walkers.filter(q => q.visitor);
         for (let i = 0; i < n; i++) {
           if (vis.length + i >= 4) break;
@@ -438,7 +453,7 @@
       }
     } else if (S.state === 'land') {
       S.t -= dt; S.a = 0;
-      if (S.t <= 0) { S.state = 'out'; S.u = 0; S.dur = rnd(3.2, 4); }
+      if (S.t <= 0) { S.state = 'out'; S.u = 0; S.dur = rnd(3.2, 4); if (W.view && inView(W.view, pad.mx, pad.my, 0.15)) sfxAt(W, 'ufoOut', pad.sx, pad.sy); }
     } else {
       S.u += dt / S.dur; S.a = Math.min(1, S.u) * Math.min(1, S.u);
       if (S.u >= 1) { S.state = 'wait'; S.t = rnd(9, 20); S.el.style.display = 'none'; S.shadow.style.display = 'none'; S.a = 1; }
@@ -462,11 +477,15 @@
     if (!F) {
       W.flyT -= dt; if (W.flyT > 0) return;
       const el = div('al-e', ''); const sp = div('al-sp mid', saucerSVG()); el.appendChild(sp); el.style.zIndex = 9500; W.layer.appendChild(el);
-      F = W.fly = { el, u: 0, dur: rnd(8, 12), dir: Math.random() < .5 ? -1 : 1, y: rnd(0.14, 0.5) * W.h, ph: rnd(0, 6) };
+      F = W.fly = { el, u: 0, dur: rnd(8, 12), dir: Math.random() < .5 ? -1 : 1, y: rnd(0.14, 0.5) * W.h, ph: rnd(0, 6), said: false,
+        pilot: { type: 'alien', sx: 0, sy: 0, sc: 1, h: 22, bub: null, vp: window.atlasVoice ? window.atlasVoice.profile('alien') : null } };   // el piloto habla desde el platillo
+      if (window.atlasVoice) window.atlasVoice.sfx('ufoFly', { dur: F.dur, vol: 0.9, panFrom: F.dir > 0 ? -0.85 : 0.85, panTo: F.dir > 0 ? 0.85 : -0.85 });
     }
     F.u += dt / F.dur;
-    if (F.u >= 1) { F.el.remove(); W.fly = null; W.flyT = rnd(22, 40); return; }
+    if (F.u >= 1) { F.el.remove(); dropBubbleOf(W, F.pilot); W.fly = null; W.flyT = rnd(22, 40); return; }
     const x = F.dir > 0 ? -50 + (W.w + 100) * F.u : W.w + 50 - (W.w + 100) * F.u, y = F.y + Math.sin(F.u * 7 + F.ph) * 12;
+    F.pilot.sx = x; F.pilot.sy = y;
+    if (!F.said && F.u > 0.22 && F.u < 0.7) { F.said = true; if (Math.random() < 0.7) say(W, F.pilot, pick(FLYSAY), 'say', 3.6); }
     F.el.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,0) scale(.85) rotate(' + (Math.sin(F.u * 7 + F.ph) * 5).toFixed(1) + 'deg)';
   }
 
@@ -474,7 +493,7 @@
   let last = 0;
   function tick(W, dt, ts) {
     const map = W.map, z = map.getZoom();
-    if (z < MIN_Z || !isOn()) { if (!W.off) { W.layer.classList.add('off'); W.off = true; W.bubbles.slice().forEach(b => dropBubble(W, b, true)); } return; }
+    if (z < MIN_Z || !isOn()) { if (!W.off) { W.layer.classList.add('off'); W.off = true; W.bubbles.slice().forEach(b => dropBubble(W, b, true)); if (window.atlasVoice) window.atlasVoice.stop(); } return; }
     if (W.off) { W.layer.classList.remove('off'); W.off = false; W.sync = 0; W.viewT = 0; }
     W.viewT -= dt; if (W.viewT <= 0 || !W.view) { W.view = viewOf(W); W.viewT = 0.25; }
     const v = W.view, s = clamp(Math.pow(2, z - REF_Z), 0.45, 6);

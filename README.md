@@ -228,6 +228,10 @@ Desde el botón **Mundos** se viaja en cohete a cualquier planeta. En cada uno s
 
 `python3 tools/make-planets.py` (necesita `pillow` y `numpy`) genera en `images/planetas/` el dibujo redondo de cada planeta (`<mundo>.webp`) y la textura de su mapa (`mapa-<mundo>.jpg`, solo para los mundos sin mapa real). Son ilustraciones procedurales, no fotos. Si pones tus propios archivos con esos nombres, el juego los usa.
 
+### Voces y sonidos de los personajes
+
+`voices.js` (`window.atlasVoice`) hace que hablen las burbujas de texto: los **marcianos** con la síntesis de voz del navegador (cada uno con su tono y velocidad, y un «pío» raro antes de hablar; en las charlas se alternan sus voces), los **vichos** con sonidos sintetizados (blup, bzzz, ñic ñic, miau, piii…), los **platillos** con zumbido al bajar, al subir y al pasar de largo (con paneo, y el piloto grita desde arriba), los **peatones de la Tierra** con su frase en voz alta, y el **león** con rugido. Una sola voz a la vez: los pensamientos sueltos se saltan si alguien ya está hablando. Se apaga con el botón 🚶 (como la gente y los marcianos) o con `atlasVoice.mute(true)` en la consola (se recuerda en el navegador).
+
 ### Sonido del cohete
 
 El motor (`window.rocketEngine` en `sounds.js`) suena sin cortarse desde el despegue hasta que el astronauta toca suelo.

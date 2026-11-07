@@ -175,6 +175,7 @@
           if (window.peopleKill) window.peopleKill(L_.target);
           L_.target = null; L_.eaten++; L_.state = 'eat'; L_.t = 1.4;
           if (L_.el) L_.el.classList.add('say', 'still');
+          if (window.atlasVoice) { window.atlasVoice.roar(0.9); window.atlasVoice.speak('¡Aaaaah!', window.atlasVoice.profile('human'), { force: true }); }   // rugido del león y grito de la víctima
         } else {
           const step = Math.min(sp * dt, d);
           L_.x += dx / d * step; L_.y += dy / d * step; moving = true;
