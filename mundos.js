@@ -170,6 +170,22 @@
       el.innerHTML = '<i></i><span></span>'; el.querySelector('span').textContent = s[0];
       new maplibregl.Marker({ element: el, anchor: 'top' }).setLngLat([s[1], s[2]]).addTo(m);
     });
+    // Textura real opcional (mundos sin teselas): si existe images/planetas/mapa-<mundo>.jpg (.webp/.png), 2:1 equirrectangular, se pone sobre el globo
+    if (!w.tiles) {
+      let ready = false, texUrl = null;
+      const addTex = () => {
+        if (!ready || !texUrl || m.getSource('tex')) return;
+        m.addSource('tex', { type: 'image', url: texUrl, coordinates: [[-180, 85.051], [180, 85.051], [180, -85.051], [-180, -85.051]] });
+        m.addLayer({ id: 'tex', type: 'raster', source: 'tex', paint: { 'raster-fade-duration': 0 } });
+      };
+      m.on('load', () => { ready = true; addTex(); });
+      const tryTex = i => {
+        const exts = ['jpg', 'webp', 'png']; if (i >= exts.length) return;
+        const url = new URL('images/planetas/mapa-' + id + '.' + exts[i], location.href).href, im = new Image();
+        im.onload = () => { texUrl = url; addTex(); }; im.onerror = () => tryTex(i + 1); im.src = url;
+      };
+      tryTex(0);
+    }
     // Si en unos segundos no ha llegado ninguna tesela, se avisa (con el motivo, para poder arreglarlo)
     let got = false, lastErr = '';
     m.on('data', e => { if (e.sourceId === 'mundo' && e.tile) got = true; });

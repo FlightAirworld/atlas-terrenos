@@ -86,9 +86,11 @@
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const reduced = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  const SPR = {};   // mundo -> ruta de su dibujo real (images/planetas/<mundo>.png), si existe
   // ---------- Planetas (dibujos para el vuelo y para los botones) ----------
   let pid = 0;
   window.planetSVG = function (w) {
+    if (SPR[w]) return `<svg viewBox="0 0 100 100" aria-hidden="true" data-planet="${w}"><image href="${SPR[w]}" x="0" y="0" width="100" height="100"/></svg>`;
     const n = ++pid, id = k => `pl${k}${n}`;
     const C = { tierra: ['#7cc4ff', '#1f5fbf', '#0b2f6b'], luna: ['#e4e4e4', '#9a9a9a', '#5c5c5c'], marte: ['#f09a68', '#b4502a', '#6e2a12'], mercurio: ['#d5cdc3', '#8d8378', '#4d463f'], venus: ['#fff0b0', '#e6a93f', '#8a5217'], jupiter: ['#f0d2a8', '#c58a56', '#6e4426'], saturno: ['#f3e2b0', '#cfae6c', '#7a6234'], urano: ['#c9f4f4', '#7fd0d6', '#3a8a96'], neptuno: ['#7aa6ff', '#2f4fd0', '#14206b'], pluton: ['#f1e2d0', '#b89a82', '#5e4636'] }[w] || ['#ccc', '#888', '#444'];
     let detail = '';
@@ -117,7 +119,7 @@
     } else if (w === 'pluton') {
       detail = `<g opacity=".55"><path d="M10 40 C25 30 40 44 52 40 C64 36 80 44 92 38 L92 62 C74 70 60 58 44 66 C30 72 18 66 10 60Z" fill="#7a5a46"/></g><path d="M52 64 C34 52 34 36 44 34 C50 33 53 38 53 38 C53 38 57 31 64 34 C74 38 70 52 52 64Z" fill="#fbf4ea" opacity=".92"/>`;
     }
-    return `<svg viewBox="0 0 100 100" aria-hidden="true"><defs>
+    return `<svg viewBox="0 0 100 100" aria-hidden="true" data-planet="${w}"><defs>
       <radialGradient id="${id('b')}" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="${C[0]}"/><stop offset=".6" stop-color="${C[1]}"/><stop offset="1" stop-color="${C[2]}"/></radialGradient>
       <radialGradient id="${id('s')}" cx=".3" cy=".28" r=".9"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".6"/></radialGradient>
       <clipPath id="${id('c')}"><circle cx="50" cy="50" r="48"/></clipPath></defs>
@@ -130,6 +132,14 @@
   const AU = { mercurio: 0.39, venus: 0.72, tierra: 1, luna: 1, marte: 1.52, jupiter: 5.2, saturno: 9.58, urano: 19.2, neptuno: 30.05, pluton: 39.5 };   // distancia al Sol (para el «qué lejos»)
   const NAME = { mercurio: 'Mercurio', venus: 'Venus', tierra: 'la Tierra', luna: 'la Luna', marte: 'Marte', jupiter: 'Júpiter', saturno: 'Saturno', urano: 'Urano', neptuno: 'Neptuno', pluton: 'Plutón' };
   const TRIP = {}; Object.keys(NAME).forEach(k => { TRIP[k] = 'Viajando a ' + NAME[k].replace(/^la /, 'La '); });
+  // Dibujos reales opcionales: si existe images/planetas/<mundo>.png (tierra, luna, marte, jupiter…) se usa en vez del dibujo vectorial
+  let refreshT = 0;
+  function refreshPlanets() {
+    clearTimeout(refreshT);
+    refreshT = setTimeout(() => document.querySelectorAll('svg[data-planet]').forEach(s => { const id = s.getAttribute('data-planet'); if (SPR[id] && !s.querySelector('image')) s.outerHTML = window.planetSVG(id); }), 50);
+  }
+  CHAIN.forEach(id => { const url = 'images/planetas/' + id + '.png', im = new Image(); im.onload = () => { SPR[id] = url; refreshPlanets(); }; im.src = url; });
+
   // Cuanto más lejos, más se queja el astronauta
   function farMsg(d) {
     const km = Math.round(d * 149.6).toLocaleString('es-ES') + ' millones de km';
@@ -185,6 +195,17 @@
     <path d="M56 37 Q60 40 64 37" stroke="rgba(0,0,0,.5)" fill="none" stroke-width="1.6" stroke-linecap="round"/>
     <ellipse cx="60" cy="46" rx="52" ry="14" fill="#aeb8c8" stroke="#6b768a" stroke-width="2"/><ellipse cx="60" cy="53" rx="32" ry="8" fill="#7d889c"/>
     ${[22, 41, 60, 79, 98].map((x, k) => `<circle class="ufo-l" style="animation-delay:${k * 0.12}s" cx="${x}" cy="${46 + (k % 2 ? 1 : 0)}" r="3.6" fill="${LIGHTS[k]}"/>`).join('')}</svg>`;
+  // Voz de los marcianos (síntesis de voz del navegador, aguda y con un tono distinto en cada platillo)
+  const PITCH = [1.9, 1.5, 2, 0.6, 1.7, 1.2];
+  function speak(txt, pitch) {
+    try {
+      const ss = window.speechSynthesis; if (!ss || !window.SpeechSynthesisUtterance) return;
+      const u = new SpeechSynthesisUtterance(txt.toLowerCase().replace(/\.{3}/g, '…'));
+      u.lang = 'es-ES'; u.pitch = pitch; u.rate = 0.92; u.volume = 1;
+      const voice = (ss.getVoices() || []).find(x => /^es/i.test(x.lang)); if (voice) u.voice = voice;
+      ss.cancel(); setTimeout(() => ss.speak(u), 80);
+    } catch (e) {}
+  }
   function ufos(ov, rocket, total, dist, W, H) {
     const n = Math.min(6, Math.max(1, Math.round(dist / 3))), gap = Math.max(2200, (total - 4200) / n), dur = 5200;
     for (let i = 0; i < n; i++) wait(5600 + 800 + i * gap).then(() => {
@@ -192,12 +213,14 @@
       const y = 150 + Math.random() * Math.max(50, H * 0.52 - 150), x0 = dir > 0 ? -w - 40 : W + 40, x1 = dir > 0 ? W + 40 : -w - 40;
       el.className = 'ufo'; el.style.width = w + 'px';
       el.innerHTML = ufoSVG(ALIEN[i % ALIEN.length]) + '<div class="say"></div>';
-      el.querySelector('.say').textContent = i === 0 ? '¿DÓNDE VAS...?' : SAY[Math.floor(Math.random() * SAY.length)];
+      const say = i === 0 ? '¿DÓNDE VAS...?' : SAY[Math.floor(Math.random() * SAY.length)];
+      el.querySelector('.say').textContent = say;
       ov.insertBefore(el, rocket);
       el.animate([{ transform: `translate(${x0}px, ${y}px)` }, { transform: `translate(${(x0 + x1) / 2}px, ${y - 22}px)`, offset: 0.5 }, { transform: `translate(${x1}px, ${y + 6}px)` }], { duration: dur, fill: 'both' });
       el.firstElementChild.animate([{ transform: 'rotate(-6deg)' }, { transform: 'rotate(6deg)' }], { duration: 700, direction: 'alternate', iterations: Infinity, easing: 'ease-in-out' });
       el.querySelector('.say').animate([{ opacity: 0 }, { opacity: 1, offset: 0.18 }, { opacity: 1, offset: 0.82 }, { opacity: 0 }], { duration: dur, fill: 'both' });
       sfx('ufo');
+      setTimeout(() => speak(say, PITCH[i % PITCH.length]), 250);   // el marciano habla en cuanto aparece
       setTimeout(() => el.remove(), dur + 300);
     });
   }
@@ -253,7 +276,7 @@
       });
       wait(5600 + trip.total + 1100).then(() => {
         ov.classList.add('fade'); resolve();
-        setTimeout(() => { ov.remove(); launching = false; }, 900);
+        setTimeout(() => { ov.remove(); launching = false; try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {} }, 900);
       });
     });
   };
