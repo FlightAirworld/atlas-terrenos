@@ -335,19 +335,17 @@
     [['Diámetro', I[2]], [id === 'luna' ? 'Distancia' : 'Distancia al Sol', I[3]], ['Gravedad', I[4]], ['Un día', I[5]], ['Un año', I[6]], ['Temperatura', I[7]], ['Lunas', I[8]]]
       .forEach(([k, v]) => { add('dt', '', k, dl); add('dd', '', v, dl); });
     add('p', 'mundo-fun', '💡 ' + I[9]);
-    const go = add('button', 'mundo-play', '🚀 Jugar en ' + WORLDS[id].name.replace(/^La /, 'la ')); go.type = 'button';
-    go.addEventListener('click', () => openMenus(id, true));
     sheet.classList.remove('hidden');
   }
 
   // Pestaña «Menús» de cada planeta: dentro está la página del planeta («Jugar en la Luna», «Jugar en Marte»…), que se abre sin salir del juego
   function openMenus(id, direct) {
     const box = boxes[id], sheet = box.querySelector('.mundo-sheet'), body = box.querySelector('.mundo-body'), h = box.querySelector('.mundo-h');
-    const label = 'Jugar en ' + WORLDS[id].name.replace(/^La /, 'la ');
+    const label = 'Guía de ' + WORLDS[id].name;
     function list() {
       h.textContent = '📋 Menú'; body.replaceChildren();
       const ul = document.createElement('div'); ul.className = 'mundo-menulist';
-      const b = document.createElement('button'); b.type = 'button'; b.textContent = '🚀 ' + label;
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = '📖 ' + label;
       b.addEventListener('click', page); ul.appendChild(b); body.appendChild(ul);
     }
     function page() {
@@ -582,6 +580,8 @@
     st.tiles.clear();   // las teselas se vuelven a pedir con calma (así se ve lo que compraron otros)
     flush(p.world);
   };
+  window.worldLand = id => (WORLDS[id] && WORLDS[id].land) || null;   // aliens.js: dónde se aterriza en cada mundo
+  window.worldParcelTaken = (id, lng, lat) => { const st = pw[id]; if (!st) return false; const s = cellSize(); return st.owned.has(id + ':' + Math.floor((lng + 180) / s) + ':' + Math.floor((lat + 90) / s)); };   // aliens.js: no poner nada encima de una parcela ya comprada
   window.worldClearSel = () => { Object.keys(pw).forEach(k => setSel(k, null)); };
   let pendingGoto = null;
   window.goToWorldParcel = p => {   // desde «Mis terrenos»: viaja al planeta (si hace falta) y se acerca a la parcela
@@ -631,7 +631,7 @@
     if (to !== 'tierra') {
       boxes[to].classList.remove('hidden');
       try {
-        if (!maps[to]) maps[to] = build(to); else maps[to].resize();
+        if (!maps[to]) { maps[to] = build(to); try { window.dispatchEvent(new CustomEvent('mundo:map', { detail: { id: to, map: maps[to] } })); } catch (e) {} } else maps[to].resize();
         map = maps[to];
         map.jumpTo({ center: [10, 10], zoom: 0.8 });
         loadWorldStats(to);
