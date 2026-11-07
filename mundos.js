@@ -136,7 +136,7 @@
   // Iconos de línea para la barra de arriba
   const SV = d => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
   const IC = {
-    chart: SV('<path d="M5 20v-6M12 20V5M19 20v-9"/>'),
+    stats: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="12" width="5" height="9.5" rx="1.4" fill="#4da3ff"/><rect x="9.5" y="2.5" width="5" height="19" rx="1.4" fill="#3ddc97"/><rect x="16.5" y="7.5" width="5" height="14" rx="1.4" fill="#ffd23f"/></svg>',
     list: SV('<path d="M4 6h16M4 12h16M4 18h10"/>'),
     globe: SV('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>'),
     info: SV('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>').replace('<svg ', '<svg class="mundo-i" ')
@@ -164,9 +164,9 @@
     const ttl = box.querySelector('.mundo-title'); ttl.setAttribute('aria-label', 'Información de ' + w.name); ttl.addEventListener('click', () => openInfo(id));
     box.querySelector('.mundo-note').textContent = w.note;
     const gos = box.querySelector('.mundo-gos');   // solo un botón «Mundos»; la lista de planetas se despliega al tocarlo
-    gos.innerHTML = '<button type="button" class="mundo-tb mundo-xtra" data-nosound aria-label="Extras" title="Extras">' + IC.chart + '<span class="tb-l">Extras</span></button>'
-      + '<button type="button" class="mundo-tb mundo-menus" data-nosound aria-label="Menús" title="Menús">' + IC.list + '<span class="tb-l">Menús</span></button>'
-      + '<button type="button" class="mundo-tb mundo-drop" data-nosound aria-haspopup="true" aria-expanded="false" aria-label="Mundos" title="Mundos">' + IC.globe + '<span class="tb-l tb-w">Mundos</span><b>▾</b></button><div class="mundo-list"></div>';
+    gos.innerHTML = '<button type="button" class="mundo-tb mundo-xtra" data-nosound aria-label="Estadísticas y extras" title="Estadísticas">' + IC.stats + '</button>'
+      + '<button type="button" class="mundo-tb mundo-menus" data-nosound aria-label="Menú" title="Menú">' + IC.list + '<span class="tb-l">Menú</span></button>'
+      + '<button type="button" class="mundo-tb mundo-drop" data-nosound aria-haspopup="true" aria-expanded="false" aria-label="Mundos" title="Mundos"><span class="tb-l">Mundos</span><span class="tb-e" aria-hidden="true">🌎</span></button><div class="mundo-list"></div>';
     gos.querySelector('.mundo-xtra').addEventListener('click', () => openSheet(id));
     gos.querySelector('.mundo-menus').addEventListener('click', () => openMenus(id));
     box.querySelector('.mundo-pres').addEventListener('click', () => openSheet(id));
@@ -194,14 +194,16 @@
     .mundo .mundo-title:active { transform: scale(.97); }
     .mundo .mundo-title .mundo-i { width: 16px; height: 16px; opacity: .65; }
     .mundo .mundo-gos { border-radius: 99px; flex: none; gap: 0; }
-    .mundo .mundo-tb { display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 12px; border: 0; background: transparent; color: #fff; font: 700 13px/1 system-ui, sans-serif; cursor: pointer; }
+    .mundo .mundo-tb { display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 11px; border: 0; background: transparent; color: #fff; font: 700 13px/1 system-ui, sans-serif; cursor: pointer; }
     .mundo .mundo-tb svg { width: 18px; height: 18px; flex: none; display: block; }
     .mundo .mundo-tb:active { background: rgba(255,255,255,.16); }
     .mundo .mundo-xtra { border-radius: 99px 0 0 99px; }
     .mundo .mundo-drop { border-radius: 0 99px 99px 0; }
     .mundo .mundo-menus, .mundo .mundo-drop { border-left: 1px solid rgba(255,255,255,.16); }
-    @media (max-width: 459px) { .mundo .mundo-tb .tb-l { display: none; } .mundo .mundo-tb .tb-w { display: inline; } .mundo .mundo-tb { padding: 0 11px; } }
-    @media (max-width: 384px) { .mundo .mundo-tb .tb-w { display: none; } }
+    .mundo .mundo-tb .tb-e { font-size: 16px; line-height: 1; }
+    .mundo .mundo-title span { overflow: hidden; text-overflow: ellipsis; }
+    @media (max-width: 389px) { .mundo .mundo-title .mundo-i { display: none; } }
+    @media (max-width: 339px) { .mundo .mundo-menus .tb-l { display: none; } }
     .mundo .mundo-facts { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; margin: 12px 0; }
     .mundo .mundo-facts dt { opacity: .7; }
     .mundo .mundo-facts dd { margin: 0; font-weight: 700; text-align: right; }
@@ -343,14 +345,14 @@
     const box = boxes[id], sheet = box.querySelector('.mundo-sheet'), body = box.querySelector('.mundo-body'), h = box.querySelector('.mundo-h');
     const label = 'Jugar en ' + WORLDS[id].name.replace(/^La /, 'la ');
     function list() {
-      h.textContent = '📋 Menús'; body.replaceChildren();
+      h.textContent = '📋 Menú'; body.replaceChildren();
       const ul = document.createElement('div'); ul.className = 'mundo-menulist';
       const b = document.createElement('button'); b.type = 'button'; b.textContent = '🚀 ' + label;
       b.addEventListener('click', page); ul.appendChild(b); body.appendChild(ul);
     }
     function page() {
       h.textContent = label; body.replaceChildren();
-      const back = document.createElement('button'); back.type = 'button'; back.className = 'mundo-back'; back.textContent = '← Menús';
+      const back = document.createElement('button'); back.type = 'button'; back.className = 'mundo-back'; back.textContent = '← Menú';
       back.addEventListener('click', list);
       const f = document.createElement('iframe'); f.className = 'mundo-frame'; f.title = label; f.loading = 'lazy'; f.src = '/mundo-' + id + '.html';
       body.append(back, f);
