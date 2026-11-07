@@ -1,4 +1,4 @@
-const CACHE = 'redecora-v43';
+const CACHE = 'redecora-__BUILD__';   // __BUILD__ lo sustituye el servidor (server.js) o build-static.js por el commit de cada despliegue
 const SHELL = ['/', '/style.css', '/app.js', '/mapshim.js', '/sounds.js', '/voices.js', '/images/icon-192.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {}));

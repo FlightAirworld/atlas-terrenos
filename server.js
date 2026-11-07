@@ -2366,12 +2366,14 @@ const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(x => 
 const zlib = require('node:zlib');
 const staticCache = new Map();   // ruta -> { mtime, etag, buf, gz }
 const COMPRESSIBLE = /^(text\/|application\/(json|manifest\+json)|image\/svg)/;
+const BUILD_ID = String(process.env.RENDER_GIT_COMMIT || 'dev').slice(0, 8);
 function sendStatic(req, res, file) {
   const type = MIME[path.extname(file)] || 'application/octet-stream';
   const st = fs.statSync(file);
   let ent = staticCache.get(file);
   if (!ent || ent.mtime !== st.mtimeMs) {
-    const buf = fs.readFileSync(file);
+    let buf = fs.readFileSync(file);
+    if (path.basename(file) === 'sw.js') buf = Buffer.from(buf.toString('utf8').replace(/__BUILD__/g, BUILD_ID));   // la caché del service worker cambia con cada despliegue
     ent = { mtime: st.mtimeMs, buf, etag: '"' + require('node:crypto').createHash('md5').update(buf).digest('hex').slice(0, 20) + '"', gz: null };
     if (staticCache.size > 300) staticCache.clear();
     staticCache.set(file, ent);
@@ -2524,7 +2526,7 @@ function shouldRedirectOldHost(req, pathname) {
   return dest === 'document' || (!dest && /text\/html/.test(String(req.headers.accept || '')));   // sin Sec-Fetch-Dest (navegadores antiguos): se mira que pida una página HTML
 }
 
-http.createServer(async (req, res) => {
+const httpServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (shouldRedirectOldHost(req, url.pathname)) {   // 307 = temporal: si algún día quieres quitarlo, los navegadores no se quedan con la redirección guardada
     res.writeHead(307, { Location: NEW_ORIGIN + url.pathname + url.search, 'Cache-Control': 'no-store' });
@@ -2577,4 +2579,11 @@ http.createServer(async (req, res) => {
   }
 }).listen(PORT, () => {
   console.log(`Redecora El Mundo en http://localhost:${PORT}  [${DEMO ? 'MODO DEMO (sin cobro real)' : [HAS_STRIPE ? 'Stripe ' + (STRIPE_SECRET_KEY.includes('_live_') ? 'LIVE' : 'test') : null, HAS_PAYPAL ? 'PayPal ' + PAYPAL_ENV : null].filter(Boolean).join(' + ')}]  packs ${PACKS.map(p => p.credits + '=' + p.price).join(', ')} ${CURRENCY}`);
+});
+
+// Render manda SIGTERM al reiniciar o desplegar: se dejan de aceptar peticiones, se cierra la base de datos y se sale limpio (a los 8 s se sale igualmente).
+process.on('SIGTERM', () => {
+  console.log('SIGTERM: cerrando el servidor…');
+  setTimeout(() => process.exit(0), 8000).unref();
+  httpServer.close(() => { Promise.resolve(pool.end()).catch(() => {}).finally(() => process.exit(0)); });
 });
