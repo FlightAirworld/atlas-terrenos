@@ -960,6 +960,11 @@ let country = '';
 // ---------- Packs de terrenos (créditos) ----------
 let packCode = null, credits = 0;
 try { packCode = localStorage.getItem('packCode'); } catch {}
+// Enlace VIP (/?vip=CODIGO, lo da el administrador): entra con ese pack sin iniciar sesión y se borra de la dirección
+try {
+  const sp0 = new URLSearchParams(location.search), vip = (sp0.get('vip') || '').trim().toUpperCase().slice(0, 40);
+  if (vip) { packCode = vip; localStorage.setItem('packCode', vip); sp0.delete('vip'); history.replaceState(null, '', location.pathname + (sp0.toString() ? '?' + sp0 : '') + location.hash); }
+} catch {}
 function saveCode(c) {
   packCode = c;
   try { if (c) localStorage.setItem('packCode', c); else localStorage.removeItem('packCode'); } catch {}
@@ -975,7 +980,13 @@ function updateCreditUi() {
 async function fetchPack(code) {
   const r = await fetch('/api/pack', { headers: { Authorization: 'Bearer ' + code } });
   const j = await r.json().catch(() => ({}));
+  if (r.status === 200 && j.nick) applyFixedNick(j.nick, j.country);
   return { status: r.status, credits: j.credits };
+}
+// Pack VIP: el nombre (y el país) vienen fijos del servidor y no se pueden cambiar
+function applyFixedNick(nick, ctry) {
+  const n = $('name'); if (n) { n.value = nick; n.readOnly = true; }
+  const c = $('country'); if (c && ctry) { c.value = ctry; country = ctry; c.disabled = true; }
 }
 async function refreshCredits() {
   if (packCode) {

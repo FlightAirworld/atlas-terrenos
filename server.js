@@ -247,6 +247,31 @@ const packCodeFrom = req => {
   return m ? m[1].trim().toUpperCase().slice(0, 40) : null;
 };
 
+// Packs VIP: los crea el administrador (POST /api/admin/vip). Tienen apodo y país fijos y se usan sin iniciar sesión, solo con el código.
+// El apodo queda reservado: nadie más puede usarlo (ni como nombre al reclamar ni como apodo de cuenta).
+async function nickReserved(name, exceptCode) {
+  if (!name) return false;
+  const r = await one('SELECT code FROM packs WHERE lower(fixed_nick) = lower($1)', [name]);
+  return !!r && r.code !== exceptCode;
+}
+async function adminVip(req, { nickname, country, credits }) {
+  requireAdmin(req);
+  const nick = cleanName(nickname);
+  if (!nick) throw new HttpError(400, 'Apodo no válido (2 a 30 caracteres)');
+  const cr = Math.floor(Number(credits));
+  if (!Number.isFinite(cr) || cr < 0 || cr > 100_000_000) throw new HttpError(400, 'Créditos no válidos');
+  const ctry = cleanCountry(country);
+  const ex = await one('SELECT code FROM packs WHERE lower(fixed_nick) = lower($1)', [nick]);
+  if (ex) {   // ya existe: el administrador solo ajusta sus créditos (y país)
+    await run('UPDATE packs SET credits = $1, fixed_country = COALESCE($2, fixed_country) WHERE code = $3', [cr, ctry, ex.code]);
+    return { ok: true, created: false, nickname: nick, credits: cr, code: ex.code, link: '/?vip=' + ex.code };
+  }
+  if (await one('SELECT 1 AS ok FROM profiles WHERE lower(nickname) = lower($1)', [nick])) throw new HttpError(409, 'Ese apodo ya lo usa una cuenta');
+  const code = newPackCode();
+  await run('INSERT INTO packs (code, credits, created_at, fixed_nick, fixed_country) VALUES ($1,$2,$3,$4,$5)', [code, cr, Date.now(), nick, ctry]);
+  return { ok: true, created: true, nickname: nick, credits: cr, country: ctry, code, link: '/?vip=' + code };
+}
+
 async function getPack(req) {
   const code = packCodeFrom(req);
   const row = code && await one('SELECT code, credits FROM packs WHERE code = $1', [code]);
@@ -302,6 +327,7 @@ async function profileSet(req, { nickname }) {
   const name = cleanName(nickname);
   if (!name) throw new HttpError(400, 'El apodo debe tener de 2 a 30 caracteres');
   if (await getProfile(user.id)) throw new HttpError(409, 'Tu apodo ya está fijado y no se puede cambiar');
+  if (await nickReserved(name)) throw new HttpError(409, 'Ese apodo ya está en uso. Elige otro');
   try {
     await run('INSERT INTO profiles (user_id, nickname, created_at) VALUES ($1,$2,$3)', [user.id, name, Date.now()]);
   } catch (e) {
@@ -327,8 +353,8 @@ async function linkAccount(req) {
     const isNewAccount = !mine;          // la cuenta aún no tenía pack: es la primera vez que entra
     let old = null;
     if (local && (!mine || mine.code !== local)) {
-      old = (await client.query('SELECT code, credits, user_id FROM packs WHERE code = $1 FOR UPDATE', [local])).rows[0] || null;
-      if (old && old.user_id) old = null;          // ya es de otra cuenta: no se toca
+      old = (await client.query('SELECT code, credits, user_id, fixed_nick FROM packs WHERE code = $1 FOR UPDATE', [local])).rows[0] || null;
+      if (old && (old.user_id || old.fixed_nick)) old = null;   // de otra cuenta o pack VIP: no se toca          // ya es de otra cuenta: no se toca
     }
     if (!mine && old) {
       await client.query('UPDATE packs SET user_id = $1 WHERE code = $2', [user.id, old.code]);
@@ -668,8 +694,11 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
   const user = await userFrom(req);
   const prof = user && await getProfile(user.id);
-  const name = prof ? prof.nickname : cleanName(owner);   // con cuenta, siempre sale el apodo fijo
+  const vip = code && await one('SELECT fixed_nick, fixed_country FROM packs WHERE code = $1 AND fixed_nick IS NOT NULL', [code]);
+  const name = vip ? vip.fixed_nick : prof ? prof.nickname : cleanName(owner);   // pack VIP o cuenta: siempre sale el apodo fijo
   if (!name) throw new HttpError(400, 'Pon un nombre de 2 a 30 caracteres');
+  if (!vip && await nickReserved(name)) throw new HttpError(409, 'Ese nombre está reservado. Elige otro');
+  if (vip && vip.fixed_country) country = vip.fixed_country;
 
   const now = Date.now();
   await q.purgeOrders(now);
@@ -2074,6 +2103,7 @@ async function route(req, res, url) {
     requireAdmin(req);
     return adminClaimParcel(await readJson(req));
   }
+  if (req.method === 'POST' && pn === '/api/admin/vip') return adminVip(req, await readJson(req));   // crea (o ajusta) un jugador VIP sin login: apodo y país fijos + créditos
   if (req.method === 'POST' && pn === '/api/admin/santa') {   // prueba: hace venir a Papá Noel ahora mismo
     requireAdmin(req);
     return { started: await santaStart(true) };
@@ -2122,7 +2152,7 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/packs/orders') return createPackOrder(req, await readJson(req));
   const pm = pn.match(/^\/api\/packs\/orders\/([^/]+)\/capture$/);
   if (req.method === 'POST' && pm) return capturePackOrder(req, decodeURIComponent(pm[1]));
-  if (req.method === 'GET' && pn === '/api/pack') return { credits: (await getPack(req)).credits };
+  if (req.method === 'GET' && pn === '/api/pack') { const p = await getPack(req); const v = await one('SELECT fixed_nick, fixed_country FROM packs WHERE code = $1', [p.code]); return v && v.fixed_nick ? { credits: p.credits, nick: v.fixed_nick, country: v.fixed_country } : { credits: p.credits }; }
   if (req.method === 'GET' && pn === '/api/daily') return dailyGet(req);
   if (req.method === 'POST' && pn === '/api/daily/claim') return dailyClaim(req);
   if (req.method === 'GET' && pn === '/api/roulette') return rouletteGet(req);
@@ -2320,6 +2350,10 @@ ready.then(async () => {   // ruleta diaria: una fila por cuenta y día (la clav
   // premios del mes: giros extra y mejoras gratis ganados, y el calendario de cada cuenta por mes
   await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS free_spins INT NOT NULL DEFAULT 0');
   await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS free_upgrades INT NOT NULL DEFAULT 0');
+  // packs VIP (los crea solo el administrador): apodo y país fijos, sin necesidad de iniciar sesión
+  await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS fixed_nick TEXT');
+  await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS fixed_country TEXT');
+  await run('CREATE UNIQUE INDEX IF NOT EXISTS packs_fixed_nick ON packs (lower(fixed_nick)) WHERE fixed_nick IS NOT NULL');
   await run('CREATE TABLE IF NOT EXISTS monthly_rewards (user_id TEXT NOT NULL, month TEXT NOT NULL, streak INT NOT NULL DEFAULT 0, last_day TEXT, PRIMARY KEY (user_id, month))');
   await run('CREATE TABLE IF NOT EXISTS president_grants (city TEXT NOT NULL, month TEXT NOT NULL, user_id TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (city, month))');
 }).catch(e => console.error('No se pudo preparar la ruleta:', e.message));

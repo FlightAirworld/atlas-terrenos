@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS packs (
   roulette_carry NUMERIC(6,2) NOT NULL DEFAULT 0, free_spins INT NOT NULL DEFAULT 0, free_upgrades INT NOT NULL DEFAULT 0
 );
 
+-- Packs VIP (los crea el administrador con POST /api/admin/vip): apodo y país fijos, se usan sin iniciar sesión
+ALTER TABLE packs ADD COLUMN IF NOT EXISTS fixed_nick TEXT;
+ALTER TABLE packs ADD COLUMN IF NOT EXISTS fixed_country TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS packs_fixed_nick ON packs (lower(fixed_nick)) WHERE fixed_nick IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS pack_orders (
   order_id TEXT PRIMARY KEY, status TEXT NOT NULL, code TEXT, created_at BIGINT NOT NULL, pack_credits INT, pack_price TEXT,
   user_id TEXT, capture_id TEXT, refunded_cents INT NOT NULL DEFAULT 0, disputed_cents INT NOT NULL DEFAULT 0,

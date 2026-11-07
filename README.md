@@ -228,6 +228,17 @@ Desde el botón **Mundos** se viaja en cohete a cualquier planeta. En cada uno s
 
 `python3 tools/make-planets.py` (necesita `pillow` y `numpy`) genera en `images/planetas/` el dibujo redondo de cada planeta (`<mundo>.webp`) y la textura de su mapa (`mapa-<mundo>.jpg`, solo para los mundos sin mapa real). Son ilustraciones procedurales, no fotos. Si pones tus propios archivos con esos nombres, el juego los usa.
 
+### Jugador VIP sin login (lo controla el administrador)
+
+`POST /api/admin/vip` (con `Authorization: Bearer <ADMIN_TOKEN>`) crea un pack con **apodo y país fijos** y los créditos que quieras, que se usa **sin iniciar sesión**. Si el apodo ya existe, solo ajusta sus créditos. Devuelve el código y un enlace `/?vip=CODIGO`: quien abre ese enlace entra como ese jugador (el código se guarda en el navegador y se borra de la dirección).
+
+```
+curl -X POST https://TU-SERVIDOR/api/admin/vip -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"nickname":"Robert","country":"US","credits":30000}'
+```
+
+El apodo queda **reservado**: nadie más puede usarlo como nombre al reclamar ni como apodo de cuenta. El pack VIP no se puede fundir con una cuenta al iniciar sesión (no se le pueden vaciar los créditos). El servidor añade solo las columnas `fixed_nick` y `fixed_country` a `packs` al arrancar.
+
 ### Voces y sonidos de los personajes
 
 `voices.js` (`window.atlasVoice`) hace que hablen las burbujas de texto: los **marcianos** con la síntesis de voz del navegador (cada uno con su tono y velocidad, y un «pío» raro antes de hablar; en las charlas se alternan sus voces), los **vichos** con sonidos sintetizados (blup, bzzz, ñic ñic, miau, piii…), los **platillos** con zumbido al bajar, al subir y al pasar de largo (con paneo, y el piloto grita desde arriba), los **peatones de la Tierra** con su frase en voz alta, y el **león** con rugido. Una sola voz a la vez: los pensamientos sueltos se saltan si alguien ya está hablando. Se apaga con el botón 🚶 (como la gente y los marcianos) o con `atlasVoice.mute(true)` en la consola (se recuerda en el navegador).
