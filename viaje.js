@@ -1,21 +1,25 @@
 'use strict';
-// Viajes en cohete entre la Tierra, la Luna y Marte (en línea recta: Tierra – Luna – Marte).
-// window.rocketLaunch(origen, destino) con 'tierra' | 'luna' | 'marte' → Promise: cuenta atrás y despegue, luego el vuelo con el cartel
+// Viajes en cohete entre todos los mundos, en línea: Mercurio – Venus – Tierra – Luna – Marte – Júpiter – Saturno – Urano – Neptuno – Plutón.
+// window.rocketLaunch(origen, destino) con 'mercurio' … 'pluton' → Promise: cuenta atrás y despegue, luego el vuelo con el cartel
 // "Viajando a …" y los planetas que se cruzan por el camino (el de salida se aleja, los del medio pasan de largo y el de destino se acerca).
 // Se resuelve cuando el cohete ya ha llegado y la pantalla empieza a desvanecerse.
 // window.rocketDrop({ target, suit, world }) → Promise: el cohete llega arriba, el muñeco salta en paracaídas (con traje de astronauta si suit)
 // y la promesa se resuelve cuando aterriza y grita. window.planetSVG(mundo) devuelve el dibujo de un planeta (lo usa mundos.js).
 (function () {
+  const SURF = { mercurio: ['#b3a79b', '#6f665d'], venus: ['#e9b44c', '#a56a1e'], jupiter: ['#d9a066', '#8f5a30'], saturno: ['#e6cf94', '#a98748'], urano: ['#a8e6ea', '#5fb2bb'], neptuno: ['#5f86ff', '#2a3fb5'], pluton: ['#e6d3c0', '#a58f7e'] };
+  const SKY = { venus: ['#c98a2b', '#e9b44c', '#f6d98a'], jupiter: ['#a8683a', '#d9a066', '#f0d2a8'], saturno: ['#b4915a', '#e6cf94', '#f3e8c4'], urano: ['#5fb2bb', '#a8e6ea', '#d9f8f8'], neptuno: ['#1c2c8f', '#4a6fe8', '#9cb8ff'] };
+  const SURF_CSS = Object.keys(SURF).map(k => `#viaje.${k} .ground { background: linear-gradient(${SURF[k][0]}, ${SURF[k][1]}); } #viaje.${k} .puff { background: ${SURF[k][0]}; }`).join('\n    ')
+    + Object.keys(SKY).map(k => `\n    #viaje.${k} .sky { background: linear-gradient(${SKY[k][0]} 0%, ${SKY[k][1]} 65%, ${SKY[k][2]} 100%); }`).join('');
   const st = document.createElement('style');
   st.textContent = `
     #viaje { position: fixed; inset: 0; z-index: 2300; overflow: hidden; background: #000; transition: opacity .8s; }
     #viaje.fade { opacity: 0; }
     #viaje .sky { position: absolute; inset: 0; background: linear-gradient(#4d9be6 0%, #8ccbff 65%, #d8f0ff 100%); transition: opacity 3.6s ease-in; }
     #viaje.go .sky { opacity: 0; }
-    #viaje.luna .sky { display: none; }
+    #viaje.luna .sky, #viaje.mercurio .sky, #viaje.pluton .sky { display: none; }
     #viaje.marte .sky { background: linear-gradient(#b9764a 0%, #dd9d6c 65%, #f0c9a0 100%); }
     #viaje .stars { position: absolute; inset: 0; opacity: 0; transition: opacity 3.6s ease-in; }
-    #viaje.go .stars, #viaje.luna .stars { opacity: 1; }
+    #viaje.go .stars, #viaje.luna .stars, #viaje.mercurio .stars, #viaje.pluton .stars { opacity: 1; }
     #viaje .stars { inset: -25% 0 0 0; }
     #viaje .stars i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff; }
     #viaje .ground { position: absolute; left: 0; right: 0; bottom: 0; height: 24%; transition: transform 3.6s ease-in; }
@@ -34,7 +38,7 @@
     .rocket.on .flame { opacity: 1; }
     @keyframes viajeFlame { from { transform: scaleY(.8) scaleX(.9); } to { transform: scaleY(1.15) scaleX(1.05); } }
     .rocket .earth-only { display: none; } .rocket.tierra .earth-only { display: inline; }
-    .rocket .moon-only { display: none; } .rocket.luna .moon-only, .rocket.marte .moon-only { display: inline; }
+    .rocket .moon-only { display: none; } .rocket:not(.tierra) .moon-only { display: inline; }
     #viaje .puff { position: absolute; bottom: 24%; left: 50%; width: 40px; height: 40px; margin-left: -20px; border-radius: 50%; background: rgba(240,240,240,.85); opacity: 0; }
     #viaje.luna .puff { background: rgba(180,180,180,.8); }
     #viaje.marte .puff { background: rgba(214,150,110,.85); }
@@ -46,6 +50,9 @@
       transition: opacity .6s, transform .6s; }
     #viaje .trip.show { opacity: 1; transform: translate(-50%, 0); }
     .rocket { z-index: 3; }
+    ${SURF_CSS}
+    #viaje .tripsub { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 72px); z-index: 4; transform: translate(-50%, -8px); opacity: 0; white-space: nowrap; color: #fff; background: rgba(0,0,0,.4); border-radius: 99px; padding: 7px 14px; font: 700 16px/1 system-ui, sans-serif; text-shadow: 0 1px 4px #000; transition: opacity .6s, transform .6s; }
+    #viaje .tripsub.show { opacity: 1; transform: translate(-50%, 0); }
     #viaje .puff.on { animation: viajePuff 2.4s ease-out forwards; }
     @keyframes viajePuff { 0% { opacity: .9; transform: translate(0,0) scale(.5); } 100% { opacity: 0; transform: translate(var(--dx), -20px) scale(4); } }`;
   document.head.appendChild(st);
@@ -77,7 +84,7 @@
   let pid = 0;
   window.planetSVG = function (w) {
     const n = ++pid, id = k => `pl${k}${n}`;
-    const C = { tierra: ['#7cc4ff', '#1f5fbf', '#0b2f6b'], luna: ['#e4e4e4', '#9a9a9a', '#5c5c5c'], marte: ['#f09a68', '#b4502a', '#6e2a12'] }[w] || ['#ccc', '#888', '#444'];
+    const C = { tierra: ['#7cc4ff', '#1f5fbf', '#0b2f6b'], luna: ['#e4e4e4', '#9a9a9a', '#5c5c5c'], marte: ['#f09a68', '#b4502a', '#6e2a12'], mercurio: ['#d5cdc3', '#8d8378', '#4d463f'], venus: ['#fff0b0', '#e6a93f', '#8a5217'], jupiter: ['#f0d2a8', '#c58a56', '#6e4426'], saturno: ['#f3e2b0', '#cfae6c', '#7a6234'], urano: ['#c9f4f4', '#7fd0d6', '#3a8a96'], neptuno: ['#7aa6ff', '#2f4fd0', '#14206b'], pluton: ['#f1e2d0', '#b89a82', '#5e4636'] }[w] || ['#ccc', '#888', '#444'];
     let detail = '';
     if (w === 'tierra') {
       detail = `<g fill="#4cae56" stroke="#2f7d3a" stroke-width=".8"><path d="M20 30 C28 20 40 22 44 31 C48 40 40 46 36 54 C32 63 23 58 19 48 C17 40 17 34 20 30Z"/><path d="M56 22 C67 18 80 27 82 38 C84 49 73 51 69 59 C65 67 58 61 56 50 C54 40 49 27 56 22Z"/><path d="M38 70 C50 65 63 70 67 79 C60 88 44 89 37 81Z"/></g>
@@ -85,22 +92,48 @@
     } else if (w === 'luna') {
       detail = `<g fill="#7d7d7d" opacity=".5"><path d="M24 36 C32 26 44 30 46 40 C48 50 36 54 28 50 C22 46 20 40 24 36Z"/><path d="M58 52 C66 46 78 50 78 60 C78 70 66 72 60 66 C56 62 54 56 58 52Z"/></g>
         <g fill="#8a8a8a" stroke="#f2f2f2" stroke-width="1" stroke-opacity=".6"><circle cx="70" cy="28" r="7"/><circle cx="34" cy="68" r="9"/><circle cx="52" cy="82" r="5"/><circle cx="18" cy="52" r="4"/><circle cx="48" cy="24" r="3.5"/><circle cx="82" cy="48" r="3.5"/></g>`;
-    } else {
+    } else if (w === 'marte') {
       detail = `<g fill="#6e2a12" opacity=".55"><path d="M16 46 C24 36 36 40 42 48 C46 56 38 64 28 62 C20 60 14 54 16 46Z"/><path d="M52 40 C62 34 74 40 76 50 C78 60 66 64 58 60 C50 56 46 46 52 40Z"/><path d="M38 70 C48 66 60 70 62 78 C58 86 44 86 38 80Z"/></g>
         <ellipse cx="50" cy="8" rx="20" ry="6" fill="#fff" opacity=".9"/><ellipse cx="50" cy="93" rx="13" ry="3.5" fill="#fff" opacity=".7"/>
         <g fill="#9c3d1c" stroke="#f3b184" stroke-width=".8" stroke-opacity=".6"><circle cx="30" cy="28" r="4"/><circle cx="72" cy="72" r="5"/><circle cx="22" cy="72" r="3"/></g>`;
+    } else if (w === 'mercurio') {
+      detail = `<g fill="#8d8378" stroke="#f0e9df" stroke-width=".8" stroke-opacity=".5"><circle cx="30" cy="34" r="10"/><circle cx="64" cy="26" r="6"/><circle cx="70" cy="62" r="12"/><circle cx="34" cy="72" r="6"/><circle cx="52" cy="48" r="4"/><circle cx="16" cy="58" r="4"/></g>`;
+    } else if (w === 'venus') {
+      detail = `<g opacity=".45" fill="none" stroke="#b9772a" stroke-width="6"><path d="M0 28 C30 18 60 40 100 26"/><path d="M0 50 C30 42 60 62 100 48"/><path d="M0 72 C30 64 60 84 100 70"/></g>`;
+    } else if (w === 'jupiter') {
+      detail = `<g opacity=".7"><rect x="0" y="20" width="100" height="9" fill="#a8683a"/><rect x="0" y="38" width="100" height="12" fill="#c98f5a"/><rect x="0" y="58" width="100" height="8" fill="#9a5a30"/><rect x="0" y="74" width="100" height="8" fill="#b87a4a"/></g><ellipse cx="62" cy="56" rx="9" ry="5" fill="#c0392b" opacity=".85"/>`;
+    } else if (w === 'saturno') {
+      detail = `<g opacity=".6"><rect x="0" y="24" width="100" height="10" fill="#b4915a"/><rect x="0" y="44" width="100" height="12" fill="#e6cf94"/><rect x="0" y="66" width="100" height="9" fill="#a98748"/></g>`;
+    } else if (w === 'urano') {
+      detail = `<g opacity=".35"><rect x="0" y="30" width="100" height="6" fill="#fff"/><rect x="0" y="52" width="100" height="10" fill="#4aa3ad"/></g>`;
+    } else if (w === 'neptuno') {
+      detail = `<g opacity=".5"><rect x="0" y="26" width="100" height="8" fill="#0f1a66"/><rect x="0" y="60" width="100" height="10" fill="#9cc0ff"/></g><ellipse cx="38" cy="44" rx="9" ry="5" fill="#0b1250" opacity=".7"/>`;
+    } else if (w === 'pluton') {
+      detail = `<g opacity=".55"><path d="M10 40 C25 30 40 44 52 40 C64 36 80 44 92 38 L92 62 C74 70 60 58 44 66 C30 72 18 66 10 60Z" fill="#7a5a46"/></g><path d="M52 64 C34 52 34 36 44 34 C50 33 53 38 53 38 C53 38 57 31 64 34 C74 38 70 52 52 64Z" fill="#fbf4ea" opacity=".92"/>`;
     }
     return `<svg viewBox="0 0 100 100" aria-hidden="true"><defs>
       <radialGradient id="${id('b')}" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="${C[0]}"/><stop offset=".6" stop-color="${C[1]}"/><stop offset="1" stop-color="${C[2]}"/></radialGradient>
       <radialGradient id="${id('s')}" cx=".3" cy=".28" r=".9"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".6"/></radialGradient>
       <clipPath id="${id('c')}"><circle cx="50" cy="50" r="48"/></clipPath></defs>
       <circle cx="50" cy="50" r="48" fill="url(#${id('b')})"/><g clip-path="url(#${id('c')})">${detail}</g>
-      <circle cx="50" cy="50" r="48" fill="url(#${id('s')})"/>${w === 'tierra' ? '<circle cx="50" cy="50" r="48" fill="none" stroke="#9fd8ff" stroke-width="2.5" opacity=".5"/>' : ''}</svg>`;
+      <circle cx="50" cy="50" r="48" fill="url(#${id('s')})"/>${w === 'tierra' ? '<circle cx="50" cy="50" r="48" fill="none" stroke="#9fd8ff" stroke-width="2.5" opacity=".5"/>' : ''}${w === 'saturno' ? '<ellipse cx="50" cy="50" rx="74" ry="15" fill="none" stroke="#e3cd96" stroke-width="6" opacity=".9" transform="rotate(-16 50 50)"/><ellipse cx="50" cy="50" rx="60" ry="11" fill="none" stroke="#b79a5e" stroke-width="2" opacity=".8" transform="rotate(-16 50 50)"/>' : ''}</svg>`;
   };
 
   // ---------- Ruta: la Tierra, la Luna y Marte están en línea ----------
-  const CHAIN = ['tierra', 'luna', 'marte'], HOP = [4500, 6500];   // ms de vuelo Tierra→Luna y Luna→Marte
-  const TRIP = { tierra: 'Viajando a La Tierra', luna: 'Viajando a La Luna', marte: 'Viajando a Marte' };
+  const CHAIN = ['mercurio', 'venus', 'tierra', 'luna', 'marte', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton'], HOP = [3500, 3500, 4500, 6500, 4200, 4200, 4200, 4200, 4200];   // ms de vuelo entre cada par vecino
+  const AU = { mercurio: 0.39, venus: 0.72, tierra: 1, luna: 1, marte: 1.52, jupiter: 5.2, saturno: 9.58, urano: 19.2, neptuno: 30.05, pluton: 39.5 };   // distancia al Sol (para el «qué lejos»)
+  const NAME = { mercurio: 'Mercurio', venus: 'Venus', tierra: 'la Tierra', luna: 'la Luna', marte: 'Marte', jupiter: 'Júpiter', saturno: 'Saturno', urano: 'Urano', neptuno: 'Neptuno', pluton: 'Plutón' };
+  const TRIP = {}; Object.keys(NAME).forEach(k => { TRIP[k] = 'Viajando a ' + NAME[k].replace(/^la /, 'La '); });
+  // Cuanto más lejos, más se queja el astronauta
+  function farMsg(d) {
+    const km = Math.round(d * 149.6).toLocaleString('es-ES') + ' millones de km';
+    if (d < 0.3) return '';
+    if (d < 1) return 'Un saltito… · ' + km;
+    if (d < 4) return 'Esto ya no es un paseo… · ' + km;
+    if (d < 12) return 'Uf… qué lejos… · ' + km;
+    if (d < 25) return 'Uuuf… ¡qué lejísimos! · ' + km;
+    return '¡¡UUUF… QUÉ LEJÍSIMOS!! · ' + km;
+  }
   function route(from, to) {
     const a = CHAIN.indexOf(from), b = CHAIN.indexOf(to), step = a < b ? 1 : -1, stops = [];
     let t = 0;
@@ -148,14 +181,15 @@
       let stars = '';
       for (let i = 0; i < 90; i++) stars += `<i style="left:${Math.random() * 100}%;top:${Math.random() * 100}%;opacity:${(0.4 + Math.random() * 0.6).toFixed(2)}"></i>`;
       ov.innerHTML = `<div class="sky"></div><div class="stars">${stars}</div><div class="ground"></div><div class="pad"></div>
-        <div class="count"></div><div class="trip"></div>` + [-60, -25, 25, 60].map(dx => `<div class="puff" style="--dx:${dx * 2}px"></div>`).join('');
+        <div class="count"></div><div class="trip"></div><div class="tripsub"></div>` + [-60, -25, 25, 60].map(dx => `<div class="puff" style="--dx:${dx * 2}px"></div>`).join('');
       const rocket = rocketEl(from, 3);
       rocket.style.bottom = 'calc(24% + 8px)';
       ov.appendChild(rocket);
       document.body.appendChild(ov);
       const W = innerWidth, H = innerHeight;
-      const count = ov.querySelector('.count'), banner = ov.querySelector('.trip');
-      banner.textContent = TRIP[to];
+      const count = ov.querySelector('.count'), banner = ov.querySelector('.trip'), sub = ov.querySelector('.tripsub');
+      const dist = Math.abs(AU[from] - AU[to]);
+      banner.textContent = TRIP[to]; sub.textContent = farMsg(dist);
       const say = (txt, snd) => { count.textContent = txt; count.classList.remove('pop'); void count.offsetWidth; count.classList.add('pop'); sfx(snd); };
       say('3', 'beep');
       wait(800).then(() => say('2', 'beep'));
@@ -168,14 +202,18 @@
       });
       const RISE = -H * 0.22;
       wait(3000).then(() => {
-        ov.classList.add('go'); count.textContent = ''; banner.classList.add('show');   // al despegar sale el cartel "Viajando a …"
+        ov.classList.add('go'); count.textContent = ''; banner.classList.add('show'); if (sub.textContent) sub.classList.add('show');   // al despegar sale el cartel "Viajando a …"
         rocket.animate([{ transform: 'translateY(0)' }, { transform: `translateY(${RISE}px)` }],
           { duration: 3600, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
         ov.querySelector('.stars').animate([{ transform: 'translateY(0)' }, { transform: 'translateY(25%)' }], { duration: 2600 + trip.total + 600, fill: 'forwards' });
       });
-      wait(5600).then(() => flyBy(ov, rocket, trip, W, H));    // al dejar atrás el suelo empiezan a verse los planetas
+      wait(5600).then(() => flyBy(ov, rocket, trip, W, H));
+      trip.stops.slice(1, -1).forEach(s => wait(5600 + s.t - 600).then(() => { banner.textContent = 'Pasando por ' + NAME[s.w]; }));
+      wait(5600 + trip.total - 2200).then(() => { banner.textContent = TRIP[to]; if (dist >= 4) sub.textContent = '¡Ya casi llegamos!'; });
+      if (dist >= 4) wait(5600 + trip.total * 0.5).then(() => { sub.textContent = '¿Falta mucho…?'; });
+      if (dist >= 25) wait(5600 + trip.total * 0.78).then(() => { sub.textContent = '¿Seguimos sin llegar…?'; });    // al dejar atrás el suelo empiezan a verse los planetas
       wait(5600 + trip.total + 400).then(() => {               // llegada: el cohete se va hacia arriba y la pantalla se desvanece
-        banner.classList.remove('show');
+        banner.classList.remove('show'); sub.classList.remove('show');
         rocket.animate([{ transform: `translateY(${RISE}px)` }, { transform: `translateY(${-(H + 320)}px)` }], { duration: 800, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'forwards' });
       });
       wait(5600 + trip.total + 1100).then(() => {

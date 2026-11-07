@@ -8,6 +8,13 @@
   if (!btn || !window.maplibregl) return;
 
   const API = window.API_BASE || location.origin;
+  // Ayudas para los mapas ilustrados (sin imágenes reales): cráteres repetibles, bandas de nubes y manchas
+  const rnd = seed => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const circ = (lo, la, r) => Array.from({ length: 14 }, (_, i) => { const a = i / 14 * 6.2832; return [lo + r * Math.cos(a), Math.max(-80, Math.min(80, la + r * Math.sin(a)))]; });
+  const craters = (c, n, seed, r0, r1) => { const r = rnd(seed); return Array.from({ length: n }, () => [c, circ(r() * 300 - 150, r() * 140 - 70, r0 + r() * (r1 - r0))]); };
+  const bands = list => list.map(b => [b[0], [[-179, b[1]], [179, b[1]], [179, b[2]], [-179, b[2]]]]);
+  const G = (name, bg, land, note, sites, shapes) => ({ name, short: name, bg, attr: name + ': mapa ilustrado (sin imágenes reales)', land, note, sites, shapes });
+  const GAS = ' Es un gigante gaseoso: no tiene suelo, lo que ves son nubes ilustradas. Solo se explora.';
   const WORLDS = {
     tierra: { name: 'La Tierra', short: 'Tierra' },
     luna: {
@@ -28,8 +35,32 @@
       sites: [['Viking 1', -47.95, 22.27], ['Viking 2', 134.26, 47.67], ['Pathfinder', -33.22, 19.13], ['Spirit', 175.47, -14.57],
         ['Opportunity', -5.53, -1.95], ['Curiosity', 137.44, -4.59], ['Phoenix', -125.7, 68.22], ['InSight', 135.62, 4.5],
         ['Perseverance', 77.45, 18.44], ['Zhurong', 109.93, 25.07]]
-    }
+    },
+    pluton: {
+      name: 'Plutón', short: 'Plutón', bg: '#b99b84',
+      attr: 'Plutón: mapa ilustrado a partir de New Horizons (NASA / JHUAPL / SwRI)',
+      land: [165, 22],   // el «corazón» de Plutón (Tombaugh Regio y Sputnik Planitia)
+      note: 'Plutón: mapa ilustrado (sin imágenes reales todavía). Solo se explora; las posiciones son aproximadas.',
+      sites: [['Sputnik Planitia', 178, 25], ['Tombaugh Regio', 150, 22], ['Cthulhu Macula', 95, -15]],
+      shapes: [   // [color, [[lon, lat], ...]]
+        ['#f7efe3', [[165, -18], [148, 2], [142, 22], [150, 36], [163, 34], [166, 26], [172, 36], [179, 32], [180, 18], [176, 0]]],
+        ['#5a3f33', [[60, -5], [80, -12], [110, -10], [125, -20], [100, -28], [70, -24]]]
+      ]
+    },
+    mercurio: G('Mercurio', '#a39a8f', [162, 31], 'Mercurio: mapa ilustrado de cráteres. Solo se explora.',
+      [['Caloris Planitia', 162, 31], ['Cráter Rembrandt', 88, -33]], craters('#8a8075', 40, 7, 3, 9).concat(craters('#d2c9bb', 14, 11, 1.5, 3.5))),
+    venus: G('Venus', '#e3a93f', [-165.5, 0.5], 'Venus: mapa ilustrado bajo las nubes ácidas. Solo se explora.',
+      [['Maat Mons', -165.5, 0.5], ['Maxwell Montes', 3, 65]], craters('#c98a2b', 18, 5, 8, 20).concat(craters('#f6d27a', 14, 9, 6, 14))),
+    jupiter: G('Júpiter', '#ead3ab', [20, -22], 'Júpiter:' + GAS,
+      [['Gran Mancha Roja', 20, -22]], bands([['#b87a4a', -62, -48], ['#9a5a30', -34, -22], ['#a8683a', -10, 0], ['#c98f5a', 14, 24], ['#9a5a30', 40, 50]]).concat([['#c0392b', circ(20, -22, 9)]])),
+    saturno: G('Saturno', '#ecd9a0', [0, 10], 'Saturno:' + GAS,
+      [['Tormenta del norte', 40, 60]], bands([['#cfae6c', -58, -42], ['#b4915a', -26, -12], ['#d9bc7a', 4, 18], ['#b4915a', 30, 42], ['#cfae6c', 54, 66]])),
+    urano: G('Urano', '#a9e5ea', [0, 0], 'Urano:' + GAS,
+      [['Polo (eje tumbado)', 0, 70]], bands([['#8fd3da', -30, -18], ['#c9f4f4', 14, 26], ['#8fd3da', 44, 54]])),
+    neptuno: G('Neptuno', '#3f63e0', [-60, -22], 'Neptuno:' + GAS,
+      [['Gran Mancha Oscura', -60, -22]], bands([['#2c46b8', -46, -34], ['#7fa3ff', 8, 16], ['#2c46b8', 34, 46]]).concat([['#10195e', circ(-60, -22, 8)]]))
   };
+  const ORDER = ['mercurio', 'venus', 'luna', 'marte', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton'];
   const planet = w => (window.planetSVG ? window.planetSVG(w) : '');
 
   const st = document.createElement('style');
@@ -41,7 +72,7 @@
     .mundo .mundo-top > * { pointer-events: auto; }
     .mundo .mundo-title { background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.25); border-radius: 99px; padding: 8px 14px; font: 800 15px/1 system-ui, sans-serif; display: flex; align-items: center; gap: 8px; }
     .mundo .mundo-title svg, .mundo-go svg, #mundos-menu svg { width: 22px; height: 22px; flex: none; display: block; }
-    .mundo .mundo-gos { display: flex; gap: 8px; }
+    .mundo .mundo-gos { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
     .mundo-go { border: 1px solid rgba(255,255,255,.28); border-radius: 99px; padding: 6px 12px 6px 7px; background: rgba(0,0,0,.55); color: #fff; font: 800 14px/1 system-ui, sans-serif; cursor: pointer; display: flex; align-items: center; gap: 7px; }
     .mundo-go:active { transform: scale(.96); }
     .mundo .mundo-note { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.2); border-radius: 14px; padding: 10px 14px; font: 600 14px/1.35 system-ui, sans-serif; text-align: center; z-index: 2; pointer-events: none; }
@@ -49,7 +80,7 @@
     .mundo .mundo-pin i { width: 12px; height: 12px; border-radius: 50%; background: #ffd23f; border: 2px solid #fff; box-shadow: 0 0 8px rgba(255,210,63,.9); }
     .mundo .mundo-pin span { margin-top: 3px; font: 700 11px/1 system-ui, sans-serif; color: #fff; text-shadow: 0 1px 3px #000, 0 0 6px #000; white-space: nowrap; }
     .mundo .maplibregl-ctrl-attrib { font-size: 10px; }
-    #mundos-menu { position: fixed; left: 10px; top: 120px; z-index: 1001; display: none; flex-direction: column; gap: 2px; min-width: 190px; padding: 6px;
+    #mundos-menu { max-height: calc(100vh - 150px); overflow-y: auto; position: fixed; left: 10px; top: 120px; z-index: 1001; display: none; flex-direction: column; gap: 2px; min-width: 190px; padding: 6px;
       border-radius: 16px; background: var(--mp-bg, #fff); border: 1px solid var(--mp-bd, rgba(0,0,0,.14)); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 14px 34px rgba(0,0,0,.22);
       -webkit-backdrop-filter: blur(14px) saturate(1.5); backdrop-filter: blur(14px) saturate(1.5); transform-origin: top right; }
     #mundos-menu.open { display: flex; animation: mundosIn .17s cubic-bezier(.2,.85,.25,1) both; }
@@ -63,7 +94,7 @@
   // ---------- Menú del botón "Mundos" (en la Tierra) ----------
   const menu = document.createElement('div');
   menu.id = 'mundos-menu'; menu.setAttribute('role', 'menu');
-  ['luna', 'marte'].forEach(id => {
+  ORDER.forEach(id => {
     const b = document.createElement('button');
     b.type = 'button'; b.setAttribute('role', 'menuitem'); b.dataset.world = id; b.setAttribute('data-nosound', '');
     b.innerHTML = planet(id) + '<span></span>'; b.lastChild.textContent = WORLDS[id].name;
@@ -79,7 +110,7 @@
 
   // ---------- Un mapa por mundo ----------
   const boxes = {}, maps = {};
-  ['luna', 'marte'].forEach(id => {
+  ORDER.forEach(id => {
     const w = WORLDS[id], box = document.createElement('div');
     box.id = 'mundo-' + id; box.className = 'mundo hidden'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', w.name);
     box.innerHTML = `<div class="mundo-map" id="mundo-map-${id}"></div>
@@ -87,7 +118,7 @@
       <div class="mundo-note"></div>`;
     box.querySelector('.mundo-title span').textContent = w.name;
     box.querySelector('.mundo-note').textContent = w.note;
-    ['tierra', 'luna', 'marte'].filter(o => o !== id).forEach(o => {
+    ['tierra'].concat(ORDER).filter(o => o !== id).forEach(o => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'mundo-go'; b.setAttribute('data-nosound', ''); b.setAttribute('aria-label', 'Viajar a ' + WORLDS[o].name);
       b.innerHTML = planet(o) + '<span></span>'; b.lastChild.textContent = WORLDS[o].short;
@@ -105,11 +136,12 @@
       style: {
         version: 8,
         projection: { type: 'globe' },
-        sources: { mundo: { type: 'raster', tileSize: 256, maxzoom: 7, tiles: [w.tiles], attribution: w.attr } },
-        layers: [
-          { id: 'mundo-bg', type: 'background', paint: { 'background-color': w.bg } },
-          { id: 'mundo', type: 'raster', source: 'mundo' }
-        ]
+        sources: Object.assign(
+          { formas: { type: 'geojson', attribution: w.tiles ? '' : w.attr, data: { type: 'FeatureCollection', features: (w.shapes || []).map(s => ({ type: 'Feature', properties: { c: s[0] }, geometry: { type: 'Polygon', coordinates: [s[1].concat([s[1][0]])] } })) } } },
+          w.tiles ? { mundo: { type: 'raster', tileSize: 256, maxzoom: 7, tiles: [w.tiles], attribution: w.attr } } : {}),
+        layers: [{ id: 'mundo-bg', type: 'background', paint: { 'background-color': w.bg } }]
+          .concat(w.tiles ? [{ id: 'mundo', type: 'raster', source: 'mundo' }] : [])
+          .concat([{ id: 'formas', type: 'fill', source: 'formas', paint: { 'fill-color': ['get', 'c'], 'fill-opacity': 0.9 } }])
       },
       center: w.land, zoom: 0.8, minZoom: 0.6, maxZoom: 10, pitch: 0, attributionControl: { compact: true },
       pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5)
@@ -127,7 +159,7 @@
     m.on('data', e => { if (e.sourceId === 'mundo' && e.tile) got = true; });
     m.on('error', e => { if (e && e.sourceId === 'mundo') lastErr = String((e.error && (e.error.status || e.error.message)) || ''); });
     setTimeout(() => {
-      if (!got) note.textContent = 'No se pudo cargar el mapa de ' + w.name + (lastErr ? ' (' + lastErr + ')' : '') + '. Inténtalo de nuevo en un rato.';
+      if (w.tiles && !got) note.textContent = 'No se pudo cargar el mapa de ' + w.name + (lastErr ? ' (' + lastErr + ')' : '') + '. Inténtalo de nuevo en un rato.';
     }, 8000);
     return m;
   }
