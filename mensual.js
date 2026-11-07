@@ -95,8 +95,8 @@
   function syncDots() {                                        // puntito rojo en el botón y en Extras
     const on = !!(S && S.canClaim);
     dot.classList.toggle('hidden', !on);
-    const e = $('extras-dot'), dd = $('daily-dot');
-    if (e) e.classList.toggle('hidden', !on && !(dd && !dd.classList.contains('hidden')));
+    if (window.syncExtrasDot) window.syncExtrasDot();
+    else { const e = $('extras-dot'), dd = $('daily-dot'); if (e) e.classList.toggle('hidden', !on && !(dd && !dd.classList.contains('hidden'))); }
   }
 
   function render() {

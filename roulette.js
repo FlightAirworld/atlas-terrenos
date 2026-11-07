@@ -24,7 +24,9 @@
     #rl-win { font-size:22px; font-weight:800; min-height:1.4em; margin:6px 0; }
     #rl-win.pop { animation:rlpop .5s ease-out; }
     @keyframes rlpop { 0% {transform:scale(.6);opacity:0} 60% {transform:scale(1.2)} 100% {transform:scale(1);opacity:1} }
-    @media (prefers-reduced-motion: reduce) { #rl-win.pop { animation:none; } }`;
+    #roulette-dot { position:absolute; top:1px; right:1px; width:13px; height:13px; border-radius:50%; background:#e63946; border:2px solid #fff; animation:dailypulse 1.4s infinite; }
+    #roulette-dot.hidden { display:none; }
+    @media (prefers-reduced-motion: reduce) { #rl-win.pop, #roulette-dot { animation:none; } }`;
   document.head.appendChild(st);
 
   const box = document.createElement('div');
@@ -105,7 +107,7 @@
     info.textContent = 'Cargando…';
     try {
       const j = await api('/api/roulette', { method: 'GET' });
-      canSpin = !!j.canSpin;
+      canSpin = !!j.canSpin; setDot(canSpin);
       const ex = j.extra || 0, exTxt = ex ? ` 🎁 Tienes ${ex} ${ex === 1 ? 'giro extra' : 'giros extra'} de los premios del mes.` : '';
       info.textContent = (j.daily ? 'Tienes un giro gratis hoy. ¡Toca la ruleta!' : canSpin ? 'Hoy ya has hecho tu giro diario.' : 'Hoy ya has girado. ¡Vuelve mañana!') + exTxt;
       render(canSpin ? null : '⏳ Vuelve mañana');
@@ -139,7 +141,7 @@
     catch (e) { spinning = false; render(e.message); load(); return; }
     const k = PRIZES.findIndex(p => Math.abs(p - j.prize) < 1e-9);
     animateTo(k < 0 ? 0 : k, () => {
-      spinning = false; canSpin = (j.extra || 0) > 0;
+      spinning = false; canSpin = (j.extra || 0) > 0; setDot(canSpin);
       credits = j.credits; updateCreditUi();
       if (window.monthlyRefresh) monthlyRefresh();
       const big = j.prize >= 1;
@@ -150,6 +152,25 @@
       render(canSpin ? null : '⏳ Vuelve mañana');
     });
   }
+
+  // ---------- Puntito rojo: hay un giro que hacer (el diario o extras de los premios del mes) ----------
+  const dot = document.createElement('span'); dot.id = 'roulette-dot'; dot.className = 'hidden'; btn.appendChild(dot);
+  // El puntito de «Extras» se enciende si hay algo que recoger en cualquiera de estos botones (regalo diario, ruleta, premios del mes)
+  window.syncExtrasDot = () => {
+    const e = $id('extras-dot'); if (!e) return;
+    const on = ['daily-dot', 'monthly-dot', 'roulette-dot'].some(id => { const d = $id(id); return d && !d.classList.contains('hidden'); });
+    e.classList.toggle('hidden', !on);
+  };
+  let tokenSeen = null;
+  function setDot(on) { dot.classList.toggle('hidden', !on); window.syncExtrasDot(); }
+  async function checkDot() {
+    if (typeof authToken === 'undefined' || !authToken) return setDot(false);
+    try { const j = await api('/api/roulette', { method: 'GET' }); setDot(!!j.canSpin); } catch (e) { /* sin conexión: se deja como está */ }
+  }
+  window.rouletteRefresh = checkDot;
+  setInterval(() => { if (typeof authToken !== 'undefined' && authToken !== tokenSeen) { tokenSeen = authToken; checkDot(); } window.syncExtrasDot(); }, 2000);   // entrar / salir de la cuenta
+  setInterval(() => { if (!document.hidden) checkDot(); }, 5 * 60e3);                                                                     // día nuevo, giros extra nuevos
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDot(); });
 
   canvas.addEventListener('click', spin);
   canvas.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); spin(); } });

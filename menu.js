@@ -211,7 +211,7 @@ const MP_ICON = {
   // El puntito rojo del regalo diario también se ve en el botón Extras, aunque esté cerrado
   const dot = document.getElementById('daily-dot');
   if (dot && eDot) {
-    const sync = () => eDot.classList.toggle('hidden', dot.classList.contains('hidden'));
+    const sync = () => { if (window.syncExtrasDot) window.syncExtrasDot(); else eDot.classList.toggle('hidden', dot.classList.contains('hidden')); };
     new MutationObserver(sync).observe(dot, { attributes: true, attributeFilter: ['class'] });
     sync();
   }
