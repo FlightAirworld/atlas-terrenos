@@ -143,8 +143,9 @@
     box.querySelector('.mundo-title span').textContent = w.name;
     box.querySelector('.mundo-note').textContent = w.note;
     const gos = box.querySelector('.mundo-gos');   // solo un botón «Mundos»; la lista de planetas se despliega al tocarlo
-    gos.innerHTML = '<button type="button" class="mundo-go mundo-xtra" data-nosound><span>📊 Extras</span></button><button type="button" class="mundo-go mundo-drop" data-nosound aria-haspopup="true" aria-expanded="false"><span>🌎 Mundos</span><b>▾</b></button><div class="mundo-list"></div>';
+    gos.innerHTML = '<button type="button" class="mundo-go mundo-xtra" data-nosound><span>📊 Extras</span></button><button type="button" class="mundo-go mundo-menus" data-nosound><span>📋 Menús</span></button><button type="button" class="mundo-go mundo-drop" data-nosound aria-haspopup="true" aria-expanded="false"><span>🌎 Mundos</span><b>▾</b></button><div class="mundo-list"></div>';
     gos.querySelector('.mundo-xtra').addEventListener('click', () => openSheet(id));
+    gos.querySelector('.mundo-menus').addEventListener('click', () => openMenus(id));
     box.querySelector('.mundo-pres').addEventListener('click', () => openSheet(id));
     box.querySelector('.mundo-x').addEventListener('click', () => box.querySelector('.mundo-sheet').classList.add('hidden'));
     box.querySelector('.mundo-sheet').addEventListener('pointerdown', e => { if (e.target.classList.contains('mundo-sheet')) e.currentTarget.classList.add('hidden'); });
@@ -194,6 +195,11 @@
     .mundo .mundo-extras { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .mundo .mundo-extras button { border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.08); color: #fff; border-radius: 12px; padding: 10px 8px; font: 700 14px/1.15 system-ui, sans-serif; cursor: pointer; }
     .mundo .mundo-extras button:active { transform: scale(.97); }
+    .mundo .mundo-menulist { display: grid; gap: 8px; }
+    .mundo .mundo-menulist button, .mundo .mundo-back { border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.08); color: #fff; border-radius: 12px; padding: 12px 14px; font: 700 15px/1.15 system-ui, sans-serif; cursor: pointer; text-align: left; }
+    .mundo .mundo-menulist button:active, .mundo .mundo-back:active { transform: scale(.97); }
+    .mundo .mundo-back { padding: 8px 12px; font-size: 13px; margin-bottom: 8px; }
+    .mundo .mundo-frame { display: block; width: 100%; height: min(62vh, 520px); border: 0; border-radius: 12px; background: #050816; }
     .mundo .mundo-mine { background: rgba(8,127,91,.25); border: 1px solid rgba(8,127,91,.6); border-radius: 12px; padding: 8px 12px; margin-bottom: 10px; }`;
   document.head.appendChild(css2);
 
@@ -264,6 +270,27 @@
     if (!stats[id]) boxes[id].querySelector('.mundo-body').prepend(Object.assign(document.createElement('p'), { textContent: 'Cargando…' }));
     sheet.classList.remove('hidden');
     renderSheet(id, await loadWorldStats(id) || stats[id] || null);
+  }
+
+  // Pestaña «Menús» de cada planeta: dentro está la página del planeta («Jugar en la Luna», «Jugar en Marte»…), que se abre sin salir del juego
+  function openMenus(id) {
+    const box = boxes[id], sheet = box.querySelector('.mundo-sheet'), body = box.querySelector('.mundo-body'), h = box.querySelector('.mundo-h');
+    const label = 'Jugar en ' + WORLDS[id].name.replace(/^La /, 'la ');
+    function list() {
+      h.textContent = '📋 Menús'; body.replaceChildren();
+      const ul = document.createElement('div'); ul.className = 'mundo-menulist';
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = '🚀 ' + label;
+      b.addEventListener('click', page); ul.appendChild(b); body.appendChild(ul);
+    }
+    function page() {
+      h.textContent = label; body.replaceChildren();
+      const back = document.createElement('button'); back.type = 'button'; back.className = 'mundo-back'; back.textContent = '← Menús';
+      back.addEventListener('click', list);
+      const f = document.createElement('iframe'); f.className = 'mundo-frame'; f.title = label; f.loading = 'lazy'; f.src = '/mundo-' + id + '.html';
+      body.append(back, f);
+    }
+    list();
+    sheet.classList.remove('hidden');
   }
 
   // Vuela hasta el terreno de un jugador del ranking y lo selecciona
