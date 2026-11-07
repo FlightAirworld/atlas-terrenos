@@ -107,23 +107,21 @@ const HOME = [-5.3536, 36.1408];   // Gibraltar: destino si no hay ubicación
 function introFlight() {
   if (!glReady) { flightRequested = true; return; }
   const fly = (center, zoom) => gl.flyTo({ center, zoom, pitch: flatView ? 0 : 45, bearing: flatView ? 0 : -15, duration: 7000, essential: true });
-  let done = false, touched = false;
-  const mapEl = document.getElementById('map');
-  if (mapEl) mapEl.addEventListener('pointerdown', () => { touched = true; }, { once: true });   // si el jugador mueve el mapa, ya no se le lleva a ningún sitio
+  let done = false;
   const toHome = () => { if (done) return; done = true; fly(HOME, 16); };
   if (!navigator.geolocation) return toHome();
-  // Va solo a la ubicación del jugador (el navegador pregunta la primera vez). Si se niega o tarda, se va a Gibraltar;
-  // y si la ubicación llega tarde y el jugador no ha tocado el mapa, se le lleva entonces.
-  const timer = setTimeout(toHome, 8000);
+  // Pide la ubicación (el navegador pregunta al jugador); si no llega pronto o se niega, vamos a Gibraltar
+  const timer = setTimeout(toHome, 10000);
   navigator.geolocation.getCurrentPosition(
     pos => {
       clearTimeout(timer);
-      if (touched) return;
+      if (done) return;                       // ya se fue a Gibraltar: no le movemos el mapa de golpe
       done = true;
       fly([pos.coords.longitude, pos.coords.latitude], 16.5);
+      const b = $('welcome-loc'); if (b) b.style.display = 'none';   // el aviso ya no necesita "Ir a mi ubicación"
     },
     () => { clearTimeout(timer); toHome(); },
-    { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 });
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
 }
 window.introFlight = introFlight;
 function introAlreadySeen() { try { return localStorage.getItem('introSeen2') === '1'; } catch (e) { return false; } }
