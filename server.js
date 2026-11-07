@@ -112,25 +112,15 @@ const HOUSES = [
   'images/burrito-blanco.webp',
   'images/arcobaleno.webp',
   'images/la-cruilla.webp',
-  'images/torre-metalica.webp',
-  'images/casa-modernista.webp',
-  'images/casa-modernista-2.webp',
-  'images/estadio-1.webp',
-  'images/estadio-2.webp',
-  'images/rugby.webp',
-  'images/estadio-3.webp',
-  'images/estadio-4.webp',
-  'images/plaza-de-toros.webp',
-  'images/teatro.webp',
-  'images/cine.webp',
-  'images/supermercado-3.webp',
-  'images/supermercado-4.webp',
-  'images/supermercado-2.webp',
-  'images/pisos-3.webp',
-  'images/pisos-4.webp',
-  'images/pisos-5.webp',
-  'images/casa-7.webp',
-  'images/casa-8.webp'
+  'images/cesped-2.webp',
+  'images/parque-picnic.webp',
+  'images/desierto-1.webp',
+  'images/desierto-2.webp',
+  'images/prado.webp',
+  'images/claro-bosque.webp',
+  'images/parque-futbol.webp',
+  'images/mar.webp',
+  'images/mar-peces.webp'
 ];
 const cleanHouse = h => { h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h; return HOUSES.includes(h) ? h : null; };   // null = al azar (como hasta ahora)
 const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
@@ -485,22 +475,6 @@ async function settledOrder(orderId) {
 
 // Entrega el pack de un pedido ya cobrado y reservado (status PROCESSING). Todo en una transacción: o se suman los créditos y se marca PAID, o no pasa nada.
 // Si falla, el pedido vuelve a CREATED para poder reintentarlo (otra petición, o el reintento automático del webhook).
-
-// ---------- Avisos al móvil del dueño (Telegram, gratis) ----------
-// 1) En Telegram habla con @BotFather, escribe /newbot y copia el token. 2) Escribe cualquier cosa a tu bot nuevo.
-// 3) Abre https://api.telegram.org/bot<TOKEN>/getUpdates y copia el número de "chat":{"id":...}.
-// Pon TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID en Render > Environment. Sin ellas no se envía nada.
-const TG_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim(), TG_CHAT = (process.env.TELEGRAM_CHAT_ID || '').trim();
-function ownerNotify(title, body) {
-  if (!TG_TOKEN || !TG_CHAT) return;
-  fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: TG_CHAT, text: body ? `${title}\n${body}` : String(title), disable_web_page_preview: true })
-  }).catch(() => {});   // nunca debe romper el juego
-}
-const seenNotified = new Map();   // cid -> última vez que se avisó de su conexión
-
 async function deliverPack(orderId, packCredits, user, captureId) {
   const client = await pool.connect();
   try {
@@ -519,7 +493,6 @@ async function deliverPack(orderId, packCredits, user, captureId) {
     const done = await client.query("UPDATE pack_orders SET status = 'PAID', code = $1, capture_id = $3 WHERE order_id = $2 AND status = 'PROCESSING' RETURNING order_id", [code, orderId, captureId || null]);
     if (!done.rows[0]) throw new Error('El pedido ya no estaba reservado');
     await client.query('COMMIT');
-    try { const pk = PACKS.find(p => p.credits === packCredits); ownerNotify('💰 Nueva compra', `Pack de ${packCredits} créditos${pk ? ' · ' + pk.price + ' ' + (process.env.CURRENCY || 'EUR') : ''}${user ? '' : ' (sin cuenta)'}`); } catch {}
     return { code, credits };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -1236,15 +1209,7 @@ function onlineStream(req, res, url) {
     'X-Content-Type-Options': 'nosniff'
   });
   let set = onlineClients.get(cid);
-  if (!set) {
-    set = new Set(); onlineClients.set(cid, set);
-    const last = seenNotified.get(cid) || 0;   // un aviso por jugador como mucho cada 6 h
-    if (Date.now() - last > 6 * 3600_000) {
-      seenNotified.set(cid, Date.now());
-      if (seenNotified.size > 5000) seenNotified.clear();
-      ownerNotify('👋 Alguien se ha conectado', `Jugadores reales conectados: ${onlineClients.size}`);
-    }
-  }
+  if (!set) { set = new Set(); onlineClients.set(cid, set); }
   set.add(res);
   onlineByIp.set(ip, (onlineByIp.get(ip) || 0) + 1);
   res.write(`retry: 3000\n\ndata: ${onlineShown()}\n\n`);   // el recién llegado ve el número al instante
@@ -2268,39 +2233,21 @@ async function sendTile(req, res, url, send) {
   return send(200, ent.body, undefined, extra);
 }
 
-// ---------- Mapas de otros mundos (Luna y Marte) ----------
-// Las imágenes salen de OpenPlanetaryMap (NASA / USGS) en Web Mercator. Pasan por aquí para que el navegador solo hable con nuestro servidor y se guardan en memoria.
-// Luna = relieve LOLA + albedo; Marte = mosaico en color Viking MDIM 2.1. Para Marte hay una segunda fuente por si la primera falla (esa numera las filas al revés).
-const WORLD_TILE_SRC = {
-  moon: (z, x, y) => [`https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-moon-basemap-v0-1/all/${z}/${x}/${y}.png`],
-  mars: (z, x, y) => [
-    `https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-mars-basemap-v0-1/all/${z}/${x}/${y}.png`,
-    `https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/viking_mdim21_global/${z}/${x}/${(1 << z) - 1 - y}.png`
-  ]
-};
-const worldTileCache = new Map();   // "mundo/z/x/y" -> Buffer
-async function sendWorldTile(res, m) {
-  const [, world, zs, xs, ys] = m, z = +zs, x = +xs, y = +ys;
-  if (z > 7 || x >= (1 << z) || y >= (1 << z)) throw new HttpError(400, 'Tesela no válida');
-  const key = `${world}/${z}/${x}/${y}`;
-  let buf = worldTileCache.get(key);
-  if (!buf) {
-    for (const u of WORLD_TILE_SRC[world](z, x, y)) {
-      try {
-        const r = await fetch(u, { signal: AbortSignal.timeout(8000) });
-        if (r.ok && /image\//.test(r.headers.get('content-type') || '')) { buf = Buffer.from(await r.arrayBuffer()); break; }
-      } catch (e) {}
-    }
-    if (!buf) throw new HttpError(502, 'No se pudo cargar la imagen del mapa');
-    if (worldTileCache.size > 4000) worldTileCache.clear();
-    worldTileCache.set(key, buf);
-  }
-  res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=604800', 'X-Content-Type-Options': 'nosniff' });
-  res.end(buf);
+// Dirección antigua (onrender.com) -> dominio propio. Solo se redirige a quien abre la web en el navegador (una página, GET):
+// la API, las imágenes y el sitio estático atlas-terrenos-web siguen funcionando igual y no se rompe ningún enlace de datos.
+const OLD_HOST = 'atlas-terrenos.onrender.com', NEW_ORIGIN = 'https://redecoraelmundo.com';
+function shouldRedirectOldHost(req, pathname) {
+  if (String(req.headers.host || '').toLowerCase() !== OLD_HOST || req.method !== 'GET' || pathname.startsWith('/api/')) return false;
+  const dest = String(req.headers['sec-fetch-dest'] || '');
+  return dest === 'document' || (!dest && /text\/html/.test(String(req.headers.accept || '')));   // sin Sec-Fetch-Dest (navegadores antiguos): se mira que pida una página HTML
 }
 
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if (shouldRedirectOldHost(req, url.pathname)) {   // 307 = temporal: si algún día quieres quitarlo, los navegadores no se quedan con la redirección guardada
+    res.writeHead(307, { Location: NEW_ORIGIN + url.pathname + url.search, 'Cache-Control': 'no-store' });
+    return res.end();
+  }
   const send = (status, body, type = 'application/json; charset=utf-8', extra = {}) => {
     const h = { ...extra, 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000', 'Vary': 'Accept-Encoding' };
     const plain = () => { res.writeHead(status, h); res.end(body); };
@@ -2330,7 +2277,6 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/chat/stream') return chatStream(req, res, url);   // conexión larga (SSE) del chat   // conexión larga (SSE): no pasa por route()
     if (req.method === 'POST' && url.pathname === '/api/webhooks/stripe') return send(200, JSON.stringify(await stripeWebhook(req)));   // antes de route(): necesitan el cuerpo sin tocar para comprobar la firma
     if (req.method === 'POST' && url.pathname === '/api/webhooks/paypal') return send(200, JSON.stringify(await paypalWebhook(req)));
-    { const wm = req.method === 'GET' && /^\/api\/(moon|mars)-tile\/(\d+)\/(\d+)\/(\d+)\.png$/.exec(url.pathname); if (wm) { await sendWorldTile(res, wm); return; } }
     if (req.method === 'GET' && url.pathname === '/api/parcels/tile') return await sendTile(req, res, url, send);   // await: así un error 400 lo recoge el catch de abajo
     if (url.pathname.startsWith('/api/')) {
       const out = await route(req, res, url);
