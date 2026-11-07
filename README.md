@@ -34,7 +34,7 @@ Los terrenos que ya perdiste en Render no se pueden recuperar; a partir de ahora
 
 3. Para cobrar de verdad usa las credenciales Live y `PAYPAL_ENV=live`.
 
-Presidente de pueblo: el jugador con cuenta que más terrenos tiene en un pueblo (Población) cobra `PRESIDENT_CREDITS` créditos al mes (por defecto 10; 0 lo desactiva). Cada pueblo paga una sola vez al mes. `PRESIDENT_MIN_PARCELS` (por defecto 1) fija los terrenos mínimos para ser presidente.
+Presidente de pueblo: el jugador con cuenta que más terrenos tiene en un pueblo (Población) cobra `PRESIDENT_CREDITS` créditos al mes (por defecto 10; 0 lo desactiva). Cada pueblo paga una sola vez al mes. `PRESIDENT_MIN_PARCELS` (por defecto 1) fija los terrenos mínimos para ser presidente. Se avisa al presidente con un punto rojo, un cartel al entrar y una notificación al móvil una vez al mes (si tiene los avisos activados).
 
 Otras variables: `DATABASE_URL` (obligatoria), `ADMIN_TOKEN`, `PACKS` (packs a la venta, `créditos:precio` separados por comas; por defecto `50:1,150:2,300:3,500:4`; sustituye a `PRICE` y `PACK_SIZE`), `CURRENCY` (EUR), `PORT` (3000).
 

@@ -86,13 +86,19 @@ try {
     center: [-5.3536, 36.1408], zoom: 1.6, pitch: 0, bearing: 0,    // empieza visto desde el espacio
     minZoom: 1, maxZoom: 19.5, maxPitch: flatView ? 0 : 60,
     pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),          // menos píxeles = más fluidez en móvil
-    fadeDuration: 0
+    fadeDuration: 0,
+    attributionControl: { compact: true }                              // créditos del mapa: solo el botón «i» (se abre al tocarlo)
   });
 } catch (e) {
   $('map').textContent = 'Tu dispositivo no puede mostrar el mapa 3D (WebGL no disponible).';
   throw e;
 }
 map = createCompatMap(gl);     // API tipo Leaflet usada por el resto del juego (ver mapshim.js)
+// MapLibre enseña los créditos abiertos hasta el primer movimiento del mapa: se cierran al arrancar para que solo se vea la «i»
+(function () {
+  const closeAttrib = () => { const el = document.querySelector('#map .maplibregl-ctrl-attrib'); if (el) { el.removeAttribute('open'); el.classList.remove('maplibregl-compact-show'); } };
+  gl.on('load', closeAttrib); [300, 1500, 4000].forEach(t => setTimeout(closeAttrib, t));
+})();
 
 let glReady = false;
 // Entrada cinematográfica: del espacio a Gibraltar (inclinado, para ver el 3D)
@@ -163,15 +169,25 @@ const HOUSES = [
   'images/burrito-blanco.webp',
   'images/arcobaleno.webp',
   'images/la-cruilla.webp',
-  'images/cesped-2.webp',
-  'images/parque-picnic.webp',
-  'images/desierto-1.webp',
-  'images/desierto-2.webp',
-  'images/prado.webp',
-  'images/claro-bosque.webp',
-  'images/parque-futbol.webp',
-  'images/mar.webp',
-  'images/mar-peces.webp'
+  'images/torre-metalica.webp',
+  'images/casa-modernista.webp',
+  'images/casa-modernista-2.webp',
+  'images/estadio-1.webp',
+  'images/estadio-2.webp',
+  'images/rugby.webp',
+  'images/estadio-3.webp',
+  'images/estadio-4.webp',
+  'images/plaza-de-toros.webp',
+  'images/teatro.webp',
+  'images/cine.webp',
+  'images/supermercado-3.webp',
+  'images/supermercado-4.webp',
+  'images/supermercado-2.webp',
+  'images/pisos-3.webp',
+  'images/pisos-4.webp',
+  'images/pisos-5.webp',
+  'images/casa-7.webp',
+  'images/casa-8.webp'
 ];
 
 function houseFor(id, house) {
@@ -185,7 +201,8 @@ function houseFor(id, house) {
 }
 // Altura aproximada (en metros) de cada tipo de edificio: da volumen 3D a las parcelas
 const HOUSE_HEIGHT = {
-  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'condis': 9, 'cepsa': 7, 'aurgi': 8, 'burrito-blanco': 8, 'arcobaleno': 8, 'la-cruilla': 8, 'cesped-2': 1, 'parque-picnic': 1, 'desierto-1': 1, 'desierto-2': 1, 'prado': 1, 'claro-bosque': 1, 'parque-futbol': 1, 'mar': 1, 'mar-peces': 1
+  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'condis': 9, 'cepsa': 7, 'aurgi': 8, 'burrito-blanco': 8, 'arcobaleno': 8, 'la-cruilla': 8,
+  'torre-metalica': 60, 'casa-modernista': 20, 'casa-modernista-2': 20, 'estadio-1': 25, 'estadio-2': 25, 'rugby': 10, 'estadio-3': 40, 'estadio-4': 40, 'plaza-de-toros': 20, 'teatro': 14, 'cine': 10, 'supermercado-3': 8, 'supermercado-4': 8, 'supermercado-2': 8, 'pisos-3': 30, 'pisos-4': 30, 'pisos-5': 30, 'casa-7': 8, 'casa-8': 8
 };
 // Nivel del terreno (1 a 5): más estrellas junto al nombre y un edificio más alto
 const maxLevel = () => (cfg && cfg.levels && cfg.levels.mults.length) || 5;
@@ -216,11 +233,7 @@ function flushOwned() {
 
 // Para ir fluido, la foto del suelo y la etiqueta con el nombre solo existen en las parcelas más cercanas al centro.
 // El volumen 3D (una sola capa para todas) se mantiene siempre.
-const MAX_DETAIL = 40;   // (antiguo) ya no se usa: ver DETAIL_LOAD / DETAIL_KEEP
-// Histéresis: las fotos se cargan en las parcelas más cercanas al centro (LOAD) pero solo se quitan cuando quedan
-// bastante lejos (KEEP). Así no desaparecen y vuelven a cargar al mover un poco el mapa. A más zoom las fotos pesan
-// más (128, 256 o 512 px), por eso se guardan menos.
-const DETAIL_LOAD = { t: 80, s: 60, m: 40 }, DETAIL_KEEP = { t: 220, s: 140, m: 90 };
+const MAX_DETAIL = 40;
 let detailQueued = false;
 // ---------- Casas recortadas por las calles ----------
 // Las calles reales (teselas de OpenFreeMap) se restan de cada parcela: la casa queda cortada por la carretera.
@@ -430,7 +443,16 @@ function mountDetail(ex, imgUrl, blob) {
   const cutNow = roadCut.get(ex.p.id), k = (cutNow && cutNow.road) ? 0 : 0.004, dw = (e - w) * k, dh = (n - s) * k;
   gl.addSource(ex.srcId, { type: 'image', url: imgUrl, coordinates: [[w - dw, n + dh], [e + dw, n + dh], [e + dw, s - dh], [w - dw, s - dh]] });
   gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
-  // sin nombre ni estrellas en el mapa: el dueño y el nivel se ven al tocar la parcela
+  const stars = document.createElement('span');
+  stars.className = 'owner-stars';
+  stars.textContent = starsOf(ex.level);
+  ex.starsEl = stars;
+  const wrap = document.createElement('span');
+  wrap.append(stars);   // solo las estrellas del nivel: el nombre del dueño ya no se muestra sobre la parcela
+  ex.label = L.marker([(s + n) / 2, (w + e) / 2], {   // en el centro de la parcela, dentro de la casa
+    icon: L.divIcon({ className: 'owner-label', html: wrap, iconSize: [0, 0] }),
+    interactive: false, keyboard: false
+  }).addTo(map);
   ex.hasDetail = true;
   ex.res = resOf();
 }
@@ -455,12 +477,10 @@ function updateDetail() {
     const c = gl.getCenter();
     all.forEach(ex => { const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y); ex.d = Math.hypot((s + n) / 2 - c.lat, (w + e) / 2 - c.lng); });
     all.sort((a, b) => a.d - b.d);
-    const r = resOf(), load = DETAIL_LOAD[r], keep = DETAIL_KEEP[r];
-    all.forEach((ex, i) => { if (i < load) addDetail(ex); else if (i >= keep) dropDetail(ex); });   // entre LOAD y KEEP: se queda como está
+    all.forEach((ex, i) => i < MAX_DETAIL ? addDetail(ex) : dropDetail(ex));
   });
 }
 gl.on('moveend', updateDetail);
-{ let moveT = 0; gl.on('move', () => { const t = Date.now(); if (t - moveT > 400) { moveT = t; updateDetail(); } }); }   // también mientras se arrastra: las fotos llegan antes que tú
 
 function drawOwned(p) {
   if (!glReady) { pendingParcels.set(p.id, p); return; }
@@ -864,7 +884,7 @@ function buildHousePicker(box, onPick, withRandom) {
     b.append(content); b.onclick = () => onPick(value); box.appendChild(b);
   };
   if (withRandom) add(null, '🎲', 'Al azar');
-  [...HOUSES].reverse().forEach(h => {   // las más nuevas (al final de HOUSES) salen primero
+  HOUSES.forEach(h => {
     const i = document.createElement('img');
     i.src = sizedUrl(h, 't'); i.alt = ''; i.loading = 'lazy';
     i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;display:block';
@@ -1215,7 +1235,7 @@ async function loadStats() {
     const s = await api('/api/stats');
     $('stats').textContent = `${s.sold} terrenos vendidos`;
     const ol = $('rank-list'); ol.replaceChildren();
-    s.top.forEach(t => { const li = document.createElement('li'); li.textContent = `${flagOf(t.country) ? flagOf(t.country) + ' ' : ''}${t.owner} — ${t.n}`; ol.appendChild(li); });
+    s.top.forEach((t, i) => { const li = document.createElement('li'); li.textContent = `${i === 0 ? '🏛️ ' : ''}${flagOf(t.country) ? flagOf(t.country) + ' ' : ''}${t.owner} — ${t.n}${i === 0 ? ' · Presidente' : ''}`; if (i === 0) li.style.fontWeight = '800'; ol.appendChild(li); });
     if (!s.top.length) ol.textContent = 'Aún no hay propietarios. ¡Sé el primero!';
     const oc = $('rank-countries'); oc.replaceChildren();
     (s.countries || []).forEach(c => { const li = document.createElement('li'); li.className = 'rank-link'; li.tabIndex = 0; li.setAttribute('role', 'button'); li.textContent = `${flagOf(c.country)} ${countryName(c.country)} — ${c.n}`; li.onclick = () => showCities(c.country); li.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showCities(c.country); } }; oc.appendChild(li); });

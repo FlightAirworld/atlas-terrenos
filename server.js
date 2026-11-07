@@ -1433,11 +1433,19 @@ async function friendsList(req) {
 }
 async function friendsAdd(req, body) {
   const user = await needUser(req);
-  const id = Math.floor(Number(body && body.msgId));
-  if (!Number.isFinite(id) || id < 1) throw new HttpError(400, 'Mensaje no válido');
-  const m = await one('SELECT user_id, nick FROM chat_msgs WHERE id = $1', [id]);
-  if (!m) throw new HttpError(404, 'Ese mensaje ya no existe');
-  if (m.user_id === user.id) throw new HttpError(400, 'Ese eres tú');
+  let m;
+  if (body && body.nick && !body.msgId) {   // desde la ficha del jugador
+    const nk = cleanName(body.nick);
+    const f = nk && await one('SELECT user_id, nickname FROM profiles WHERE nickname = $1', [nk]);
+    if (!f) throw new HttpError(404, 'Ese jugador no tiene cuenta');
+    m = { user_id: String(f.user_id), nick: f.nickname };
+  } else {                                   // desde un mensaje del chat
+    const id = Math.floor(Number(body && body.msgId));
+    if (!Number.isFinite(id) || id < 1) throw new HttpError(400, 'Mensaje no válido');
+    m = await one('SELECT user_id, nick FROM chat_msgs WHERE id = $1', [id]);
+    if (!m) throw new HttpError(404, 'Ese mensaje ya no existe');
+  }
+  if (String(m.user_id) === String(user.id)) throw new HttpError(400, 'Ese eres tú');
   const n = Number((await one('SELECT COUNT(*) AS n FROM friends WHERE user_id = $1', [user.id])).n);
   if (n >= FRIENDS_MAX) throw new HttpError(409, `Máximo ${FRIENDS_MAX} amigos`);
   const ins = await run('INSERT INTO friends (user_id, friend_id, created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [user.id, m.user_id, Date.now()]);
@@ -1665,7 +1673,7 @@ function townRow(r) {
 }
 const TOWN_COLS = 'COUNT(*) AS n, SUM($1::int + (COALESCE(level, 1) - 1) * $2::int) AS pop, COUNT(*) FILTER (WHERE created_at > $3) AS recent, AVG(x) AS ax, AVG(y) AS ay';
 let townsCache = { t: 0, rows: null };
-async function townsGet(url) {
+async function townsGet(url, req) {
   const since = Date.now() - 86_400_000;
   if (!townsCache.rows || Date.now() - townsCache.t > 15_000) {
     const rows = await all(`SELECT city, (ARRAY_AGG(country ORDER BY created_at DESC) FILTER (WHERE country IS NOT NULL))[1] AS country, ${TOWN_COLS}
@@ -1685,7 +1693,115 @@ async function townsGet(url) {
       }
     } catch { /* sin geocodificación ahora mismo: simplemente no sale "Aquí" */ }
   }
+  // Presidente de cada pueblo: el jugador (con cuenta) con más terrenos allí. Cobra PRESIDENT_CREDITS créditos al mes.
+  try {
+    const user = req ? await userFrom(req).catch(() => null) : null;
+    out.towns = await withPresidents(out.towns, user);
+    if (out.here) out.here = (await withPresidents([out.here], user))[0];
+  } catch (e) { console.error('Presidentes de pueblos:', e.message); }
   return out;
+}
+
+// ---------- Presidente de cada pueblo: 10 créditos gratis al mes ----------
+// Presidente = el jugador con cuenta que más terrenos tiene en ese pueblo (si hay empate, el que llegó antes).
+// La tabla president_grants (clave pueblo + mes) garantiza que el premio de cada pueblo se paga una sola vez al mes.
+// Variables opcionales: PRESIDENT_CREDITS (por defecto 10; 0 lo desactiva) y PRESIDENT_MIN_PARCELS (terrenos mínimos para ser presidente, por defecto 1).
+const PRESIDENT_CREDITS = Math.max(0, Math.min(1000, Math.floor(Number(process.env.PRESIDENT_CREDITS ?? 10)) || 0));
+const PRESIDENT_MIN_PARCELS = Math.max(1, Math.floor(Number(process.env.PRESIDENT_MIN_PARCELS || 1)) || 1);
+async function townPresidents(cities) {
+  const out = new Map();
+  if (!cities.length) return out;
+  const rows = await all(`SELECT DISTINCT ON (city) city, user_id, owner, n FROM (
+      SELECT city, user_id, (ARRAY_AGG(owner ORDER BY created_at DESC))[1] AS owner, COUNT(*) AS n, MIN(created_at) AS first
+      FROM parcels WHERE city = ANY($1::text[]) AND user_id IS NOT NULL GROUP BY city, user_id) t
+    WHERE n >= $2 ORDER BY city, n DESC, first ASC`, [cities, PRESIDENT_MIN_PARCELS]);
+  rows.forEach(r => out.set(r.city, { user_id: String(r.user_id), owner: r.owner, n: Number(r.n) || 0 }));
+  return out;
+}
+async function withPresidents(towns, user) {
+  const list = towns.filter(t => t && t.city);
+  const pres = await townPresidents([...new Set(list.map(t => t.city))]);
+  const month = dayKey().slice(0, 7);
+  const uid = user ? String(user.id) : null;
+  const mine = list.filter(t => uid && pres.get(t.city) && pres.get(t.city).user_id === uid).map(t => t.city);
+  const paid = new Set();
+  if (mine.length) (await all('SELECT city FROM president_grants WHERE month = $1 AND city = ANY($2::text[])', [month, mine])).forEach(r => paid.add(r.city));
+  return towns.map(t => {
+    const p = t && pres.get(t.city);
+    if (!p) return t;
+    const isMine = !!uid && p.user_id === uid;
+    return { ...t, president: { owner: p.owner, n: p.n }, mine: isMine, prize: PRESIDENT_CREDITS,
+             canClaim: isMine && PRESIDENT_CREDITS > 0 && !paid.has(t.city), claimed: isMine && paid.has(t.city) };
+  });
+}
+// Pueblos de los que este jugador es presidente (con onlyUnpaid: solo los que aún no han cobrado el premio de este mes)
+async function presidentTowns(userId, onlyUnpaid) {
+  const month = dayKey().slice(0, 7);
+  const rows = await all(`SELECT m.city, m.n FROM (
+      SELECT city, COUNT(*) AS n FROM parcels WHERE user_id::text = $1 AND city IS NOT NULL AND city <> $2 GROUP BY city) m
+    WHERE m.n >= $3
+      AND ($5::boolean = false OR NOT EXISTS (SELECT 1 FROM president_grants g WHERE g.city = m.city AND g.month = $4))
+      AND (SELECT p.user_id::text FROM parcels p WHERE p.city = m.city AND p.user_id IS NOT NULL
+           GROUP BY p.user_id ORDER BY COUNT(*) DESC, MIN(p.created_at) ASC LIMIT 1) = $1
+    ORDER BY m.n DESC, m.city LIMIT 20`, [String(userId), CITY_NONE, PRESIDENT_MIN_PARCELS, month, !!onlyUnpaid]);
+  return rows.map(r => ({ city: r.city, n: Number(r.n) || 0 }));
+}
+// Para avisar: pueblos con premio sin cobrar este mes
+const presidentPending = userId => PRESIDENT_CREDITS ? presidentTowns(userId, true) : Promise.resolve([]);
+async function presidentGet(req) {
+  const user = await needUser(req);
+  return { prize: PRESIDENT_CREDITS, month: dayKey().slice(0, 7), towns: await presidentPending(user.id) };
+}
+// Ficha pública de un jugador (para la pantalla de Población y el chat)
+async function playerGet(req, url) {
+  const nick = cleanName(url.searchParams.get('nick'));
+  if (!nick) throw new HttpError(400, 'Falta el jugador');
+  const prof = await one('SELECT user_id, nickname, avatar FROM profiles WHERE nickname = $1', [nick]);
+  const where = prof ? 'user_id = $1' : 'owner = $1 AND user_id IS NULL', val = prof ? prof.user_id : nick;
+  const st = await one(`SELECT COUNT(*) AS n, COALESCE(SUM(level), 0) AS lv, MIN(created_at) AS since,
+      (ARRAY_AGG(country ORDER BY created_at DESC) FILTER (WHERE country IS NOT NULL))[1] AS country,
+      (ARRAY_AGG(avatar ORDER BY created_at DESC) FILTER (WHERE avatar IS NOT NULL))[1] AS avatar,
+      COUNT(DISTINCT city) FILTER (WHERE city IS NOT NULL AND city <> $2) AS towns
+    FROM parcels WHERE ${where}`, [val, CITY_NONE]);
+  if (!prof && !Number(st.n)) throw new HttpError(404, 'Jugador no encontrado');
+  const towns = await all(`SELECT city, COUNT(*) AS n FROM parcels WHERE ${where} AND city IS NOT NULL AND city <> $2
+    GROUP BY city ORDER BY n DESC, city LIMIT 5`, [val, CITY_NONE]);
+  const me = await userFrom(req).catch(() => null);
+  const isMe = !!(me && prof && String(me.id) === String(prof.user_id));
+  const isFriend = !!(me && prof && !isMe && await one('SELECT 1 AS x FROM friends WHERE user_id = $1 AND friend_id = $2', [me.id, prof.user_id]));
+  return {
+    nick: prof ? prof.nickname : nick, avatar: (prof && prof.avatar) || st.avatar || null, country: st.country || null,
+    parcels: Number(st.n) || 0, levels: Number(st.lv) || 0, townCount: Number(st.towns) || 0,
+    towns: towns.map(t => ({ city: t.city, n: Number(t.n) || 0 })), since: st.since == null ? null : Number(st.since),
+    isMe, isFriend, hasAccount: !!prof,
+    presidentOf: prof ? (await presidentTowns(prof.user_id, false)).map(t => t.city) : []
+  };
+}
+async function presidentClaim(req, body) {
+  const user = await needUser(req);
+  if (!PRESIDENT_CREDITS) throw new HttpError(404, 'Este premio está desactivado');
+  const city = String((body && body.city) || '').trim().slice(0, 200);
+  if (!city || city === CITY_NONE) throw new HttpError(400, 'Falta el pueblo');
+  const pack = await ensureUserPack(user);
+  const month = dayKey().slice(0, 7);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT code FROM packs WHERE code = $1 FOR UPDATE', [pack.code]);   // una reclamación a la vez por cuenta
+    const top = (await client.query(`SELECT user_id, COUNT(*) AS n, MIN(created_at) AS first FROM parcels
+      WHERE city = $1 AND user_id IS NOT NULL GROUP BY user_id ORDER BY n DESC, first ASC LIMIT 1`, [city])).rows[0];
+    if (!top || String(top.user_id) !== String(user.id) || Number(top.n) < PRESIDENT_MIN_PARCELS)
+      throw new HttpError(403, 'Solo el presidente de este pueblo puede cobrar el premio');
+    const g = await client.query('INSERT INTO president_grants (city, month, user_id, credits, created_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (city, month) DO NOTHING RETURNING city',
+      [city, month, String(user.id), PRESIDENT_CREDITS, Date.now()]);
+    if (!g.rows[0]) throw new HttpError(409, `El premio de ${city} ya se ha cobrado este mes. ¡Vuelve el mes que viene!`);
+    const up = (await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING credits', [PRESIDENT_CREDITS, pack.code])).rows[0];
+    await client.query('COMMIT');
+    return { ok: true, city, amount: PRESIDENT_CREDITS, credits: Number(up.credits) };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally { client.release(); }
 }
 
 // ---------- Avisos al móvil (notificaciones push) ----------
@@ -1841,6 +1957,19 @@ async function pushRun() {
           payload = { title: `🗓️ Premio del día ${mon.ms.nextDay} del mes`, body: `Hoy te toca: ${mon.text}. ${mon.ms.claimed > 0 ? `Llevas ${mon.ms.claimed} ${mon.ms.claimed === 1 ? 'día' : 'días'} seguidos: ¡no pierdas la racha!` : 'Entra cada día para llegar al premio final.'}`, tag: 'monthly', url: '/' };
           field = 'last_daily_push'; value = day + 'm';
         }
+        // 6) Presidente de un pueblo con el premio del mes sin cobrar: un aviso por mes
+        if (!payload && PRESIDENT_CREDITS > 0) {
+          const pm = day.slice(0, 7);
+          if (!st || st.last_pres_push !== pm) {
+            const pend = await presidentPending(u.user_id);
+            if (pend.length) {
+              const names = pend.slice(0, 2).map(t => t.city).join(' y ') + (pend.length > 2 ? ` y ${pend.length - 2} más` : '');
+              payload = { title: '🏛️ Tu premio de presidente te espera',
+                body: `Eres presidente de ${names}. Entra en Población y cobra tus ${PRESIDENT_CREDITS} créditos de este mes${pend.length > 1 ? ' por cada pueblo' : ''}.`, tag: 'president', url: '/' };
+              field = 'last_pres_push'; value = pm;
+            }
+          }
+        }
         if (!payload) continue;
         if (await pushToUser(u.user_id, payload)) {
           await run(`INSERT INTO push_state (user_id, last_any, unseen, ${field}) VALUES ($1,$2,1,$3)
@@ -1975,7 +2104,10 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/rank/cities') return rankCities(url);
-  if (req.method === 'GET' && pn === '/api/towns') return townsGet(url);
+  if (req.method === 'GET' && pn === '/api/towns') return townsGet(url, req);
+  if (req.method === 'GET' && pn === '/api/player') return playerGet(req, url);
+  if (req.method === 'GET' && pn === '/api/town/president') return presidentGet(req);
+  if (req.method === 'POST' && pn === '/api/town/president/claim') return presidentClaim(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };
 
@@ -2075,6 +2207,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE INDEX IF NOT EXISTS push_subs_user ON push_subs (user_id)');
     await run('ALTER TABLE push_state ADD COLUMN IF NOT EXISTS last_full_push BIGINT');   // aviso "se llena pronto" (una vez por recogida)
     await run('CREATE TABLE IF NOT EXISTS push_state (user_id TEXT PRIMARY KEY, last_seen BIGINT, unseen INT NOT NULL DEFAULT 0, last_any BIGINT, last_prod_push BIGINT, last_daily_push TEXT)');
+    await run('ALTER TABLE push_state ADD COLUMN IF NOT EXISTS last_pres_push TEXT');   // mes del último aviso de premio de presidente
     if (PUSH_ON) { setTimeout(pushRun, 120_000).unref(); setInterval(pushRun, 15 * 60_000).unref(); }   // revisa cada 15 min quién tiene algo pendiente
     const purge = () => run('DELETE FROM chat_msgs WHERE created_at < $1', [Date.now() - CHAT_KEEP_MS]).then(() => run('DELETE FROM chat_reacts WHERE msg_id NOT IN (SELECT id FROM chat_msgs)')).catch(() => {});
     purge(); setInterval(purge, 3600_000).unref();
@@ -2178,6 +2311,7 @@ ready.then(async () => {   // ruleta diaria: una fila por cuenta y día (la clav
   await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS free_spins INT NOT NULL DEFAULT 0');
   await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS free_upgrades INT NOT NULL DEFAULT 0');
   await run('CREATE TABLE IF NOT EXISTS monthly_rewards (user_id TEXT NOT NULL, month TEXT NOT NULL, streak INT NOT NULL DEFAULT 0, last_day TEXT, PRIMARY KEY (user_id, month))');
+  await run('CREATE TABLE IF NOT EXISTS president_grants (city TEXT NOT NULL, month TEXT NOT NULL, user_id TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (city, month))');
 }).catch(e => console.error('No se pudo preparar la ruleta:', e.message));
 
 // Sitio estático en otro dominio: CORS_ORIGINS = direcciones permitidas, separadas por comas (p. ej. https://atlas-terrenos-web.onrender.com)

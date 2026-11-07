@@ -151,6 +151,7 @@
             if (typeof credits !== 'undefined') { credits = j.credits; if (typeof updateCreditUi === 'function') updateCreditUi(); }
             if (window.sfx) sfx('claim');
             b.replaceWith(el('span', 'tw-up', `🎉 +${j.amount} créditos`));
+            check();   // quita el punto rojo y el aviso si ya no queda nada por cobrar
           } catch (e) { b.disabled = false; b.replaceWith(el('span', null, e.message)); }
         });
         d.appendChild(b);
@@ -215,4 +216,64 @@
   });
   document.getElementById('towns-close').addEventListener('click', () => { box.classList.add('hidden'); stop(); });
   box.addEventListener('pointerdown', e => { if (e.target === box) { box.classList.add('hidden'); stop(); } });
+  // ---------- Aviso del premio de presidente: punto rojo + cartel al entrar (una vez al mes por pueblo) hasta que se cobra ----------
+  // El servidor además manda una notificación al móvil, una vez al mes, a quien tenga los avisos activados.
+  const $ = id => document.getElementById(id);
+  const pst = document.createElement('style');
+  pst.textContent = `
+    #towns-dot { position:absolute; top:1px; right:1px; width:13px; height:13px; border-radius:50%; background:#e63946; border:2px solid #fff; animation:dailypulse 1.4s infinite; }
+    #towns-dot.hidden { display:none; }
+    #pres-banner { position:fixed; left:50%; bottom:200px; transform:translateX(-50%); z-index:1250; width:min(92vw,380px); box-sizing:border-box; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 14px; border-radius:16px; background:rgba(8,59,120,.96); color:#fff; font-size:15px; box-shadow:0 4px 18px rgba(0,0,0,.45); }
+    #pres-banner.hidden { display:none !important; }
+    #pres-banner span { flex:1 1 100%; }
+    #pres-banner button { padding:9px 14px; border-radius:999px; border:0; font-size:14px; font-weight:bold; cursor:pointer; background:#ffb703; color:#222; }
+    #pres-banner #pres-banner-x { background:transparent; color:#fff; border:1px solid #fff8; margin-left:auto; }
+    @media (prefers-reduced-motion: reduce) { #towns-dot { animation:none; } }`;
+  document.head.appendChild(pst);
+  const dot = el('span', 'hidden'); dot.id = 'towns-dot'; btn.appendChild(dot);
+  const banner = el('div', 'hidden'); banner.id = 'pres-banner'; banner.setAttribute('role', 'status');
+  const bt = el('span'), bgo = el('button', null, 'Cobrar'), bx = el('button', null, '×');
+  bgo.type = 'button'; bx.type = 'button'; bx.id = 'pres-banner-x'; bx.setAttribute('aria-label', 'Cerrar aviso');
+  banner.append(bt, bgo, bx); document.body.appendChild(banner);
+  bx.addEventListener('click', () => banner.classList.add('hidden'));
+  bgo.addEventListener('click', () => { banner.classList.add('hidden'); btn.click(); });
+
+  let pend = null, annTimer = null, tokenSeen = typeof authToken !== 'undefined' ? authToken : null;
+  const eDot = $('extras-dot');
+  const othersOn = () => ['daily-dot', 'monthly-dot'].some(id => { const d = $(id); return d && !d.classList.contains('hidden'); });
+  function syncDot() {
+    const on = !!(pend && pend.towns.length);
+    dot.classList.toggle('hidden', !on);
+    if (eDot) eDot.classList.toggle('hidden', !on && !othersOn());
+  }
+  // otros módulos (regalo diario, premios del mes) también tocan el punto de Extras: aquí lo mantenemos encendido mientras haya premio
+  if (eDot) new MutationObserver(() => { if (pend && pend.towns.length && eDot.classList.contains('hidden')) eDot.classList.remove('hidden'); }).observe(eDot, { attributes: true, attributeFilter: ['class'] });
+
+  function announce() {
+    if (!pend || !pend.towns.length) { banner.classList.add('hidden'); return; }
+    const key = pend.month + '|' + pend.towns.map(t => t.city).sort().join(',');
+    let seen = null; try { seen = localStorage.getItem('presAnn'); } catch (e) {}
+    if (seen === key || annTimer) return;
+    annTimer = setTimeout(function show() {
+      if (!pend || !pend.towns.length) { annTimer = null; return; }
+      const intro = $('intro');
+      if ((intro && !intro.classList.contains('hidden')) || !box.classList.contains('hidden')) { annTimer = setTimeout(show, 2000); return; }
+      annTimer = null;
+      const names = pend.towns.slice(0, 2).map(t => t.city).join(' y ') + (pend.towns.length > 2 ? ` y ${pend.towns.length - 2} más` : '');
+      bt.replaceChildren(el('b', null, `🏛️ ¡Eres presidente de ${names}!`), document.createElement('br'),
+        document.createTextNode(`Cobra tus ${pend.prize} créditos de este mes${pend.towns.length > 1 ? ' por cada pueblo' : ''}.`));
+      banner.classList.remove('hidden');
+      if (window.sfx) sfx('gift');
+      try { localStorage.setItem('presAnn', key); } catch (e) {}
+    }, 3500);
+  }
+  async function check() {
+    if (typeof authToken === 'undefined' || !authToken) { pend = null; syncDot(); banner.classList.add('hidden'); return; }
+    try { pend = await api('/api/town/president'); } catch (e) { return; }
+    syncDot(); announce();
+  }
+  setInterval(() => { if (typeof authToken !== 'undefined' && authToken !== tokenSeen) { tokenSeen = authToken; pend = null; check(); } }, 2000);
+  setInterval(() => { if (!document.hidden) check(); }, 5 * 60e3);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+  setTimeout(check, 2500);
 })();
