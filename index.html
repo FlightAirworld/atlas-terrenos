@@ -579,12 +579,7 @@
   try { firstTime = localStorage.getItem(KEY) !== '1'; localStorage.setItem(KEY, '1'); } catch (e) {}
   var welcome = document.getElementById('welcome'), welcomeTimer = null;
   function hideWelcome() { welcome.classList.add('hidden'); clearTimeout(welcomeTimer); }
-  function showWelcome() {
-    welcome.classList.remove('hidden');
-    welcomeTimer = setTimeout(hideWelcome, 15000);
-    var m = document.getElementById('map');
-    if (m) m.addEventListener('pointerdown', hideWelcome, { once: true });
-  }
+  function showWelcome() { /* aviso de bienvenida desactivado: el mapa va solo a la ubicación del jugador (ver introFlight en app.js) */ }
   document.getElementById('welcome-x').onclick = hideWelcome;
   document.getElementById('welcome-loc').onclick = function () {
     hideWelcome();
