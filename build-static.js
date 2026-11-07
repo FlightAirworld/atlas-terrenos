@@ -11,7 +11,8 @@ if (!/^https?:\/\/[^/]+/.test(API_BASE)) {
   process.exit(1);
 }
 const OUT = path.join(__dirname, 'dist');
-const EXT = new Set(['.html', '.js', '.css', '.png', '.jpg', '.webp', '.svg', '.ico', '.webmanifest']);
+const EXT = new Set(['.html', '.js', '.css', '.png', '.jpg', '.webp', '.svg', '.ico', '.webmanifest', '.xml']);
+const ROOT_EXTRA = new Set(['robots.txt']);   // .txt solo en la raíz (robots.txt); el resto de .txt no se publica
 const SKIP_ROOT = /^(server\.js|build-static\.js|package(-lock)?\.json)$/;   // lo del servidor no se publica
 
 fs.rmSync(OUT, { recursive: true, force: true });
@@ -23,7 +24,7 @@ let count = 0;
     if (e.name.startsWith('.') || e.name === 'node_modules' || (!rel && e.name === 'dist')) continue;
     const src = path.join(dir, e.name), r = path.join(rel, e.name);
     if (e.isDirectory()) { copy(src, r); continue; }                  // images/ y demás carpetas
-    if (!EXT.has(path.extname(e.name)) || (!rel && SKIP_ROOT.test(e.name))) continue;
+    if (!(EXT.has(path.extname(e.name)) || (!rel && ROOT_EXTRA.has(e.name))) || (!rel && SKIP_ROOT.test(e.name))) continue;
     fs.mkdirSync(path.dirname(path.join(OUT, r)), { recursive: true });
     fs.copyFileSync(src, path.join(OUT, r));
     count++;

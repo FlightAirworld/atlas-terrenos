@@ -2166,7 +2166,7 @@ function readJson(req) {
 
 // ---------- Servidor HTTP + estáticos ----------
 const PUBLIC = __dirname;
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.xml': 'application/xml; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
 
 // Migración automática (inofensiva si la columna ya existe)
 const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').catch(e => console.error('No se pudo añadir la columna house:', e.message))
