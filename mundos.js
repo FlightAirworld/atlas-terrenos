@@ -184,6 +184,13 @@
     .mundo .mundo-rank li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 10px; border-radius: 10px; }
     .mundo .mundo-rank li:nth-child(odd) { background: rgba(255,255,255,.05); }
     .mundo .mundo-rank li.first { font-weight: 800; color: #ffe08a; }
+    .mundo .mundo-rank li.click { cursor: pointer; }
+    .mundo .mundo-rank li.click:active { background: rgba(255,255,255,.18); }
+    @media (hover: hover) { .mundo .mundo-rank li.click:hover { background: rgba(255,255,255,.14); } }
+    .mundo .mundo-claim { display: block; width: 100%; margin-top: 8px; border: 0; border-radius: 99px; padding: 10px 12px; background: #ffd23f; color: #3a2a00; font: 800 15px/1.1 system-ui, sans-serif; cursor: pointer; }
+    .mundo .mundo-claim:disabled { opacity: .6; }
+    .mundo .mundo-ok { margin-top: 8px; font-weight: 800; color: #9be7b8; }
+    .mundo .mundo-hint { display: block; margin-top: 6px; opacity: .8; font-size: 12px; line-height: 1.3; }
     .mundo .mundo-extras { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .mundo .mundo-extras button { border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.08); color: #fff; border-radius: 12px; padding: 10px 8px; font: 700 14px/1.15 system-ui, sans-serif; cursor: pointer; }
     .mundo .mundo-extras button:active { transform: scale(.97); }
@@ -193,7 +200,7 @@
   const EXTRAS = [['daily-btn', '🎁 Regalo diario'], ['roulette-btn', '🎡 Ruleta diaria'], ['monthly-btn', '🗓️ Premios del mes'], ['gift-btn', '💝 Regalar créditos'], ['mine-btn', '🏠 Mis terrenos'], ['howto-btn', '📖 Cómo jugar'], ['share-app-btn', '📤 Compartir']];
   const fmt = n => Number(n || 0).toLocaleString('es');
   const stats = {};   // última respuesta por mundo
-  async function worldInfo(id) {   // trae las estadísticas y pone al presidente bajo el nombre del mundo
+  async function loadWorldStats(id) {   // trae las estadísticas y pone al presidente bajo el nombre del mundo
     try {
       const j = await api('/api/world/stats?world=' + encodeURIComponent(id));
       stats[id] = j;
@@ -213,12 +220,34 @@
       const pc = add('div', 'mundo-pres-card');
       add('span', '', `👑 Presidente de ${name}`, pc);
       add('b', '', j.president ? `${j.president.owner} — ${fmt(j.president.n)} terreno${j.president.n === 1 ? '' : 's'}` : 'Aún nadie. ¡Compra un terreno y serás el primero!', pc);
+      if (j.prize > 0) {
+        if (j.canClaim) {
+          const cb = add('button', 'mundo-claim', `🎁 Cobrar ${j.prize} créditos de este mes`, pc); cb.type = 'button';
+          cb.addEventListener('click', async () => {
+            cb.disabled = true;
+            try {
+              const r = await api('/api/world/president/claim', { method: 'POST', body: { world: id } });
+              if (typeof credits !== 'undefined') { credits = r.credits; if (typeof updateCreditUi === 'function') updateCreditUi(); }
+              if (window.sfx) sfx('claim');
+              cb.replaceWith(Object.assign(document.createElement('span'), { className: 'mundo-ok', textContent: `🎉 +${r.amount} créditos` }));
+              if (stats[id]) { stats[id].canClaim = false; stats[id].claimed = true; }
+            } catch (e) { cb.disabled = false; cb.textContent = e.message; }
+          });
+        } else if (j.claimed) add('div', 'mundo-ok', '✅ Premio de este mes cobrado', pc);
+        else add('small', 'mundo-hint', `El presidente de ${name} cobra ${j.prize} créditos gratis cada mes. Para serlo hay que tener cuenta.`, pc);
+      }
       const nums = add('div', 'mundo-nums');
       [[j.sold, 'terrenos vendidos'], [j.owners, 'propietarios']].forEach(([n, t]) => { const d = add('div', '', null, nums); add('b', '', fmt(n), d); add('span', '', t, d); });
       if (j.mine && j.mine.n) add('div', 'mundo-mine', `🏠 Tienes ${fmt(j.mine.n)} terreno${j.mine.n === 1 ? '' : 's'} aquí · puesto nº ${j.mine.rank}`);
-      add('div', 'mundo-sub', 'Ranking');
+      add('div', 'mundo-sub', 'Ranking · toca un jugador para ir a su terreno');
       const ol = add('ol', 'mundo-rank');
-      j.top.forEach((t, i) => { const li = add('li', i === 0 ? 'first' : '', null, ol); add('span', '', `${i === 0 ? '👑 ' : (i + 1) + '. '}${t.owner}`, li); add('span', '', fmt(t.n), li); });
+      j.top.forEach((t, i) => {
+        const li = add('li', 'click' + (t.president ? ' first' : ''), null, ol);
+        li.tabIndex = 0; li.setAttribute('role', 'button'); li.title = 'Ir a su terreno';
+        add('span', '', `${t.president ? '👑 ' : (i + 1) + '. '}${t.owner}${t.me ? ' (tú)' : ''}`, li); add('span', '', fmt(t.n), li);
+        const go = () => { box.querySelector('.mundo-sheet').classList.add('hidden'); flyToOwner(id, t); };
+        li.addEventListener('click', go); li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+      });
       if (!j.top.length) add('li', '', 'Aún no hay propietarios.', ol);
     }
     add('div', 'mundo-sub', 'Extras');
@@ -234,8 +263,32 @@
     renderSheet(id, stats[id] || null);
     if (!stats[id]) boxes[id].querySelector('.mundo-body').prepend(Object.assign(document.createElement('p'), { textContent: 'Cargando…' }));
     sheet.classList.remove('hidden');
-    renderSheet(id, await worldInfo(id) || stats[id] || null);
+    renderSheet(id, await loadWorldStats(id) || stats[id] || null);
   }
+
+  // Vuela hasta el terreno de un jugador del ranking y lo selecciona
+  function flyToOwner(id, t) {
+    const m = maps[id]; if (!m || t.lat == null) return;
+    const ll = { lng: t.lng, lat: t.lat };
+    m.flyTo({ center: [ll.lng, ll.lat], zoom: 17.5, duration: 2500, essential: true });
+    m.once('moveend', () => { try { selectAt(id, m, ll); } catch (e) {} });
+  }
+  // Enlace directo desde las páginas de cada planeta: /?nocover&mundo=luna[&lat=..&lng=..] viaja al mundo (y a ese terreno) en cuanto se pueda
+  (function deepLink() {
+    const sp = new URLSearchParams(location.search), id = sp.get('mundo');
+    if (!id || !WORLDS[id] || id === 'tierra') return;
+    const lat = parseFloat(sp.get('lat')), lng = parseFloat(sp.get('lng')), has = isFinite(lat) && isFinite(lng);
+    let tries = 0;
+    const t = setInterval(() => {
+      if (++tries > 80) return clearInterval(t);    // 40 s como mucho
+      if (window.coverOpen) return;                  // espera a que se pulse «Jugar» si sale la portada
+      clearInterval(t);
+      setTimeout(() => {
+        if (has) { const after = () => flyToOwner(id, { lat, lng }); pendingGoto = { world: id, lng, lat, after }; }
+        travel(id);
+      }, 1500);
+    }, 500);
+  })();
 
   function build(id) {
     const w = WORLDS[id], note = boxes[id].querySelector('.mundo-note');
@@ -486,7 +539,7 @@
         if (!maps[to]) maps[to] = build(to); else maps[to].resize();
         map = maps[to];
         map.jumpTo({ center: [10, 10], zoom: 0.8 });
-        worldInfo(to);
+        loadWorldStats(to);
       } catch (e) { console.error('[mundos] no se pudo preparar el mapa de ' + to, e); }   // aunque el mapa falle, el viaje termina y se puede volver
     }
     current = to;

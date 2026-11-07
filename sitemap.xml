@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://redecoraelmundo.com/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
+  <url><loc>https://redecoraelmundo.com/mundos/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://redecoraelmundo.com/mundos/luna.html</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://redecoraelmundo.com/mundos/marte.html</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://redecoraelmundo.com/mundos/mercurio.html</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://redecoraelmundo.com/mundos/venus.html</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://redecoraelmundo.com/mundos/jupiter.html</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://redecoraelmundo.com/mundos/saturno.html</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://redecoraelmundo.com/mundos/urano.html</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://redecoraelmundo.com/mundos/neptuno.html</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://redecoraelmundo.com/mundos/pluton.html</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://redecoraelmundo.com/terminos.html</loc><changefreq>yearly</changefreq><priority>0.2</priority></url>
   <url><loc>https://redecoraelmundo.com/privacidad.html</loc><changefreq>yearly</changefreq><priority>0.2</priority></url>
 </urlset>

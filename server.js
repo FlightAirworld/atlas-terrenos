@@ -2115,6 +2115,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/town/president') return presidentGet(req);
   if (req.method === 'POST' && pn === '/api/town/president/claim') return presidentClaim(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/world/stats') return worldStats(url, req);
+  if (req.method === 'POST' && pn === '/api/world/president/claim') return worldPresidentClaim(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/stats')
     return { sold: (await q.count()).n, top: await q.top(), countries: await q.topCountries() };
 
@@ -2413,28 +2414,71 @@ async function sendPlanetTile(req, res, url) {
   res.end(buf);
 }
 
-// ---------- Estadísticas de cada mundo (Luna, Marte, planetas) ----------
-// Mismo estilo que el ranking de la Tierra, pero por mundo. El presidente del mundo es quien más terrenos tiene allí
-// (si hay empate, el que llegó antes). Por ahora es solo un título: no da créditos.
+// ---------- Estadísticas, ranking y presidente de cada mundo (Luna, Marte, planetas) ----------
+// Mismo estilo que los pueblos de la Tierra: el presidente de un mundo es el jugador CON CUENTA que más terrenos tiene allí
+// (si hay empate, el que llegó antes) y cobra PRESIDENT_CREDITS créditos al mes (10 por defecto) por cada mundo.
+// El premio usa la tabla president_grants con la clave «mundo:<id>», así se paga una sola vez al mes por mundo.
+const worldKey = w => 'mundo:' + w;
+const worldCenter = (x, y, world) => { const p = parcelFromXY(x, y, world); return { lat: Math.round((p.south + p.north) / 2 * 1e6) / 1e6, lng: Math.round((p.west + p.east) / 2 * 1e6) / 1e6 }; };
+async function worldPresident(world) {
+  const r = await one(`SELECT user_id, (ARRAY_AGG(owner ORDER BY created_at DESC))[1] AS owner, COUNT(*) AS n, MIN(created_at) AS first
+    FROM parcels WHERE world = $1 AND user_id IS NOT NULL GROUP BY user_id HAVING COUNT(*) >= $2 ORDER BY n DESC, first ASC LIMIT 1`, [world, PRESIDENT_MIN_PARCELS]);
+  return r ? { user_id: String(r.user_id), owner: r.owner, n: Number(r.n) } : null;
+}
 async function worldStats(url, req) {
   const world = cleanWorld(url.searchParams.get('world'));
   if (world === 'tierra') throw new HttpError(400, 'La Tierra tiene su propio ranking');
+  let user = null; try { user = await needUser(req); } catch (e) { /* sin sesión: no hay datos personales */ }
+  const uid = user ? String(user.id) : null;
   const sold = Number((await one('SELECT COUNT(*) AS n FROM parcels WHERE world = $1', [world])).n);
-  const owners = Number((await one('SELECT COUNT(DISTINCT owner) AS n FROM parcels WHERE world = $1', [world])).n);
-  const top = (await all('SELECT owner, COUNT(*) AS n, MIN(created_at) AS first FROM parcels WHERE world = $1 GROUP BY owner ORDER BY n DESC, MIN(created_at) ASC LIMIT 10', [world]))
-    .map(r => ({ owner: r.owner, n: Number(r.n), since: Number(r.first) }));
-  const recent = (await all('SELECT owner, created_at FROM parcels WHERE world = $1 ORDER BY created_at DESC LIMIT 5', [world]))
-    .map(r => ({ owner: r.owner, at: Number(r.created_at) }));
-  let mine = null;
-  try {   // si hay sesión, cuántos terrenos tiene aquí el jugador y en qué puesto va
-    const user = await needUser(req);
+  const owners = Number((await one('SELECT COUNT(DISTINCT COALESCE(user_id::text, owner)) AS n FROM parcels WHERE world = $1', [world])).n);
+  const pres = await worldPresident(world);
+  // Ranking: un puesto por jugador (por cuenta si la tiene, si no por nombre). x,y = su primera parcela, para que al tocarlo el mapa vuele hasta allí
+  const rows = await all(`SELECT (ARRAY_AGG(owner ORDER BY created_at DESC))[1] AS owner, COUNT(*) AS n, MIN(created_at) AS first,
+      (ARRAY_AGG(x ORDER BY created_at ASC))[1] AS x, (ARRAY_AGG(y ORDER BY created_at ASC))[1] AS y,
+      MAX(user_id::text) AS uid
+    FROM parcels WHERE world = $1 GROUP BY COALESCE(user_id::text, 'o:' || owner) ORDER BY n DESC, first ASC LIMIT 10`, [world]);
+  const top = rows.map(r => ({ owner: r.owner, n: Number(r.n), president: !!(pres && r.uid && String(r.uid) === pres.user_id), me: !!(uid && r.uid && String(r.uid) === uid), ...worldCenter(Number(r.x), Number(r.y), world) }));
+  const recent = (await all('SELECT owner, created_at FROM parcels WHERE world = $1 ORDER BY created_at DESC LIMIT 5', [world])).map(r => ({ owner: r.owner, at: Number(r.created_at) }));
+  let mine = null, claim = { prize: PRESIDENT_CREDITS, month: dayKey().slice(0, 7), isPresident: false, canClaim: false, claimed: false };
+  if (user) {
     const n = Number((await one('SELECT COUNT(*) AS n FROM parcels WHERE world = $1 AND user_id = $2', [world, user.id])).n);
-    if (n) {
-      const ahead = Number((await one('SELECT COUNT(*) AS n FROM (SELECT user_id, COUNT(*) AS c, MIN(created_at) AS f FROM parcels WHERE world = $1 AND user_id IS NOT NULL GROUP BY user_id) t WHERE c > $2 OR (c = $2 AND f < (SELECT MIN(created_at) FROM parcels WHERE world = $1 AND user_id = $3))', [world, n, user.id])).n);
-      mine = { n, rank: ahead + 1 };
-    } else mine = { n: 0, rank: null };
-  } catch (e) { /* sin sesión: no hay datos personales */ }
-  return { world, sold, owners, president: top[0] ? { owner: top[0].owner, n: top[0].n } : null, top, recent, mine };
+    let rank = null;
+    if (n) rank = 1 + Number((await one(`SELECT COUNT(*) AS n FROM (SELECT user_id, COUNT(*) AS c, MIN(created_at) AS f FROM parcels WHERE world = $1 AND user_id IS NOT NULL GROUP BY user_id) t
+      WHERE c > $2 OR (c = $2 AND f < (SELECT MIN(created_at) FROM parcels WHERE world = $1 AND user_id = $3))`, [world, n, user.id])).n);
+    mine = { n, rank };
+    if (pres && pres.user_id === uid) {
+      const paid = await one('SELECT 1 AS ok FROM president_grants WHERE city = $1 AND month = $2', [worldKey(world), claim.month]);
+      claim = { ...claim, isPresident: true, claimed: !!paid, canClaim: PRESIDENT_CREDITS > 0 && !paid };
+    }
+  }
+  return { world, sold, owners, president: pres ? { owner: pres.owner, n: pres.n, ...(top.find(t => t.president) || {}) } : null, top, recent, mine, ...claim };
+}
+async function worldPresidentClaim(req, body) {
+  const user = await needUser(req);
+  if (!PRESIDENT_CREDITS) throw new HttpError(404, 'Este premio está desactivado');
+  const world = cleanWorld(body && body.world);
+  if (world === 'tierra') throw new HttpError(400, 'Falta el mundo');
+  const pack = await ensureUserPack(user);
+  const month = dayKey().slice(0, 7), key = worldKey(world);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT code FROM packs WHERE code = $1 FOR UPDATE', [pack.code]);   // una reclamación a la vez por cuenta
+    const top = (await client.query(`SELECT user_id, COUNT(*) AS n, MIN(created_at) AS first FROM parcels
+      WHERE world = $1 AND user_id IS NOT NULL GROUP BY user_id ORDER BY n DESC, first ASC LIMIT 1`, [world])).rows[0];
+    if (!top || String(top.user_id) !== String(user.id) || Number(top.n) < PRESIDENT_MIN_PARCELS)
+      throw new HttpError(403, 'Solo el presidente de este mundo puede cobrar el premio');
+    const g = await client.query('INSERT INTO president_grants (city, month, user_id, credits, created_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (city, month) DO NOTHING RETURNING city',
+      [key, month, String(user.id), PRESIDENT_CREDITS, Date.now()]);
+    if (!g.rows[0]) throw new HttpError(409, 'El premio de este mundo ya se ha cobrado este mes. ¡Vuelve el mes que viene!');
+    const up = (await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING credits', [PRESIDENT_CREDITS, pack.code])).rows[0];
+    await client.query('COMMIT');
+    return { ok: true, world, amount: PRESIDENT_CREDITS, credits: Number(up.credits) };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally { client.release(); }
 }
 
 // Dirección antigua (onrender.com) -> dominio propio. Solo se redirige a quien abre la web en el navegador (una página, GET):
@@ -2488,7 +2532,7 @@ http.createServer(async (req, res) => {
       if (req.method !== 'GET') tileCache.clear();   // una compra, mejora o cambio de casa ya está guardado: las teselas en memoria se vuelven a leer
       return send(200, JSON.stringify(out));
     }
-    let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname));
+    let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname + (url.pathname.endsWith('/') ? 'index.html' : '')));   // /mundos/ -> mundos/index.html
     const rel = path.relative(PUBLIC, file);
     if (!file.startsWith(PUBLIC + path.sep) || /(^|[\\/])(\.|node_modules)/.test(rel) || /^(server\.js|build-static\.js|package(-lock)?\.json)$/.test(rel) || !MIME[path.extname(file)] || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(404, 'No encontrado', 'text/plain');
     return sendStatic(req, res, file);
