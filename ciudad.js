@@ -384,9 +384,42 @@
 
   // ---------- Globos de texto y perros ----------
   const bubbles = [];
+  // Nombres de los jugadores: los de los terrenos que se ven en pantalla (los vecinos de verdad) más una muestra de todos los jugadores del juego
+  // que pide el servidor (/api/names, se renueva solo, así los jugadores nuevos también salen). Los peatones los dicen en sus frases.
+  let allNames = [], namesAt = 0;
+  async function loadNames() {
+    namesAt = Date.now();
+    try { const j = await api('/api/names'); if (j && Array.isArray(j.names)) allNames = j.names.filter(n => typeof n === 'string' && n.length <= 24); } catch (e) {}
+  }
+  function nearNames() {
+    const out = [];
+    if (typeof drawn !== 'undefined') drawn.forEach(d => { if (d && d.p && d.p.owner && out.indexOf(d.p.owner) < 0) out.push(d.p.owner); });
+    return out;
+  }
+  let lastName = '';
+  function someName() {
+    if (Date.now() - namesAt > 240000) loadNames();
+    const near = nearNames();
+    const pool = near.length && (Math.random() < 0.6 || !allNames.length) ? near : allNames;
+    if (!pool.length) return '';
+    let n = pick(pool), t = 0;
+    while (n === lastName && pool.length > 1 && ++t < 6) n = pick(pool);
+    return (lastName = n);
+  }
+  const NAMED = [
+    'Hola {n}, ¿cómo estás?', 'Por fin volviste, {n}', '¡{n}! ¡Cuánto tiempo!', 'Vaya, {n}, ya tienes más casas que yo', 'Te llevo en coche, {n}',
+    'Vamos al súper, {n} 🛒', '{n}, ¿quedamos luego?', '¡Qué casa más bonita la de {n}! 🏠', 'Dicen que {n} ha subido de nivel ⭐', 'Buenos días, {n} ☀️',
+    '{n}, ¿tomamos un café? ☕', 'Ayer vi a {n} por aquí', '¿Sabes algo de {n}?', 'Qué buen vecino es {n}', 'Me encanta el terreno de {n} 😍',
+    '¡Eh, {n}! ¡Espérame!', '{n}, ¡te invito a cenar! 🍽️', 'Mira, ahí va {n} 👋', 'A {n} le salen las cuentas, y bien', 'Oye {n}, ¿me dejas tu parcela? 😄',
+    '¡Felicidades, {n}! 🎉', '{n}, ¡qué ganas de verte!', 'Voy a casa de {n}', 'Cuando sea mayor quiero ser como {n}', '{n} me prometió una barbacoa 🍖',
+    'Saluda a {n} de mi parte', '¿Has visto el barrio de {n}? Impresionante', 'Hoy toca paseo con {n} 🚶', '¡Qué suerte tiene {n}! 🍀', '{n}, ¿vienes al parque? 🌳',
+    'Pásate por mi casa, {n}', 'Esto se lo cuento a {n} 🤫', 'Anda, {n}, ¡qué sorpresa!', 'Te echaba de menos, {n} 🤗', '{n} es el rey del barrio 👑', '{n}, ¡me debes un café!'
+  ];
   function phrase() {
     const r = rainy();
     if (r > 0.25) return pick(['¡Qué chaparrón!', '☔', 'Me estoy empapando', 'Menos mal que traje paraguas', '🌧️']);
+    const n = Math.random() < 0.65 ? someName() : '';
+    if (n) return pick(NAMED).replace(/\{n\}/g, n);
     if (dark() > 0.6) return pick(['Qué tarde es…', '🌙', 'A casa, que ya es hora', '😴', '¿Qué cenamos?', '✨']);
     return pick(['¡Qué buen día!', 'Llego tarde', '🎵', '☕', '¡Hola!', '¿Dónde aparco?', 'Voy al súper 🛒', 'Qué bonito el barrio', '😄', 'Tengo hambre 🍔', '¡Qué calor!', '📱', '¡Feliz día!', 'Mira qué casas 🏠', '🐶', 'Quedamos luego']);
   }
@@ -398,7 +431,7 @@
     if (!c.length) return false;
     const w = pick(c), el = w.mk.getElement(); if (!el) return false;
     const txt = phrase(), b = document.createElement('div'); b.className = 'cb'; b.textContent = txt; el.appendChild(b); w.cb = b;
-    if (window.atlasVoice && !window.earthMuted) window.atlasVoice.speak(txt, w.vp || (w.vp = window.atlasVoice.profile('human')), { vol: 0.85 });   // el peatón dice su frase en voz alta (voices.js)
+    if (window.atlasVoice && !window.earthMuted) window.atlasVoice.speak(txt.replace(/[_.]+/g, ' '), w.vp || (w.vp = window.atlasVoice.profile('human')), { vol: 0.85 });   // el peatón dice su frase en voz alta (voices.js)
     bubbles.push({ w, b, until: performance.now() + 3400 });
     return true;
   }

@@ -1678,6 +1678,26 @@ function groupCities(rows, maxCities = 20, maxOwners = 10) {
   return [...by.values()].sort((a, b) => b.n - a.n || a.city.localeCompare(b.city)).slice(0, maxCities)
     .map(c => ({ ...c, owners: c.owners.sort((a, b) => b.n - a.n || a.owner.localeCompare(b.owner)).slice(0, maxOwners) }));
 }
+// ---------- Nombres de jugadores para que los peatones los digan en sus conversaciones (ciudad.js) ----------
+// Mezcla los apodos de los dueños de terrenos y de los perfiles (jugadores aún sin terreno). Se recalcula cada 5 min, así los jugadores nuevos entran solos.
+let namesCache = { at: 0, list: [] };
+async function namesGet() {
+  const now = Date.now();
+  if (now - namesCache.at < 300_000 && namesCache.list.length) return { names: namesCache.list };
+  const [a, b] = await Promise.all([
+    all('SELECT owner AS n FROM parcels WHERE owner IS NOT NULL GROUP BY owner ORDER BY random() LIMIT 400').catch(() => []),
+    all('SELECT nickname AS n FROM profiles ORDER BY random() LIMIT 400').catch(() => [])
+  ]);
+  const seen = new Set(), list = [];
+  for (const r of [...a, ...b]) {
+    const n = String(r.n || '').trim();
+    if (!n || n.length > 24 || seen.has(n.toLowerCase())) continue;
+    seen.add(n.toLowerCase()); list.push(n);
+  }
+  for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+  namesCache = { at: now, list: list.slice(0, 500) };
+  return { names: namesCache.list };
+}
 async function rankCities(url) {
   const country = cleanCountry(url.searchParams.get('country'));
   if (!country) throw new HttpError(400, 'País no válido');
@@ -2139,6 +2159,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineShown() };
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/names') return namesGet();
   if (req.method === 'GET' && pn === '/api/rank/cities') return rankCities(url);
   if (req.method === 'GET' && pn === '/api/towns') return townsGet(url, req);
   if (req.method === 'GET' && pn === '/api/player') return playerGet(req, url);
