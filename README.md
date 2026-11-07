@@ -213,3 +213,21 @@ Las posiciones de bancos, colas, puertas y chimeneas dentro de cada parcela son 
 - **SRI de las librerías externas:** con internet, ejecuta `node tools/add-sri.js` y sube el `index.html` resultante. Repítelo al cambiar la versión de una librería.
 - **Health check en Render:** Settings > Health Check Path = `/api/health`.
 - **Portada:** al abrir el juego sale una pantalla de título con el botón Jugar (una vez por pestaña; no sale al volver de un pago ni con `?nocover`). Los textos y las imágenes están al principio de `index.html` (`#cover`).
+
+## Otros mundos: Luna, Marte y el resto de planetas
+
+Desde el botón **Mundos** se viaja en cohete a cualquier planeta. En cada uno se pueden comprar parcelas con los mismos créditos, precio, casas, niveles y producción que en la Tierra, pero **cada mundo tiene sus propias parcelas** (la Luna no comparte nada con la Tierra ni con Marte).
+
+- La tabla `parcels` tiene la columna `world` (`tierra`, `luna`, `marte`, `mercurio`, `venus`, `jupiter`, `saturno`, `urano`, `neptuno`, `pluton`). El servidor la crea solo al arrancar (también está en `schema.sql`).
+- En la Tierra el id sigue siendo `x:y`; en los demás mundos es `<mundo>:x:y`.
+- Las parcelas de otros mundos no tienen país ni ciudad: no entran en los rankings por país/ciudad, ni en presidentes de pueblo, Papá Noel, etc. (eso es solo de la Tierra). Sí cuentan para los créditos que producen y para el máximo de terrenos por cuenta.
+- API: `/api/parcel`, `/api/parcels` y `/api/parcels/tile` aceptan `?world=luna`; `POST /api/claim` acepta `world` en el cuerpo.
+- El cliente dibuja las parcelas de cada planeta en `mundos.js` y reutiliza el panel de compra de `app.js`.
+
+### Imágenes de los planetas
+
+`python3 tools/make-planets.py` (necesita `pillow` y `numpy`) genera en `images/planetas/` el dibujo redondo de cada planeta (`<mundo>.webp`) y la textura de su mapa (`mapa-<mundo>.jpg`, solo para los mundos sin mapa real). Son ilustraciones procedurales, no fotos. Si pones tus propios archivos con esos nombres, el juego los usa.
+
+### Sonido del cohete
+
+El motor (`window.rocketEngine` en `sounds.js`) suena sin cortarse desde el despegue hasta que el astronauta toca suelo.

@@ -86,7 +86,7 @@
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const reduced = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  const SPR = {};   // mundo -> ruta de su dibujo real (images/planetas/<mundo>.png), si existe
+  const SPR = {};   // mundo -> ruta de su dibujo real (images/planetas/<mundo>.webp), si existe
   // ---------- Planetas (dibujos para el vuelo y para los botones) ----------
   let pid = 0;
   window.planetSVG = function (w) {
@@ -132,13 +132,13 @@
   const AU = { mercurio: 0.39, venus: 0.72, tierra: 1, luna: 1, marte: 1.52, jupiter: 5.2, saturno: 9.58, urano: 19.2, neptuno: 30.05, pluton: 39.5 };   // distancia al Sol (para el «qué lejos»)
   const NAME = { mercurio: 'Mercurio', venus: 'Venus', tierra: 'la Tierra', luna: 'la Luna', marte: 'Marte', jupiter: 'Júpiter', saturno: 'Saturno', urano: 'Urano', neptuno: 'Neptuno', pluton: 'Plutón' };
   const TRIP = {}; Object.keys(NAME).forEach(k => { TRIP[k] = 'Viajando a ' + NAME[k].replace(/^la /, 'La '); });
-  // Dibujos reales opcionales: si existe images/planetas/<mundo>.png (tierra, luna, marte, jupiter…) se usa en vez del dibujo vectorial
+  // Dibujos reales opcionales: si existe images/planetas/<mundo>.webp (tierra, luna, marte, jupiter…) se usa en vez del dibujo vectorial
   let refreshT = 0;
   function refreshPlanets() {
     clearTimeout(refreshT);
     refreshT = setTimeout(() => document.querySelectorAll('svg[data-planet]').forEach(s => { const id = s.getAttribute('data-planet'); if (SPR[id] && !s.querySelector('image')) s.outerHTML = window.planetSVG(id); }), 50);
   }
-  CHAIN.forEach(id => { const url = 'images/planetas/' + id + '.png', im = new Image(); im.onload = () => { SPR[id] = url; refreshPlanets(); }; im.src = url; });
+  CHAIN.forEach(id => { const url = 'images/planetas/' + id + '.webp', im = new Image(); im.onload = () => { SPR[id] = url; refreshPlanets(); }; im.src = url; });
 
   // Cuanto más lejos, más se queja el astronauta
   function farMsg(d) {
@@ -253,7 +253,7 @@
       wait(1600).then(() => say('1', 'beep'));
       wait(2400).then(() => {
         say('¡Despegue!', 'beepgo');
-        sfx('cohete');
+        try { if (window.rocketEngine) window.rocketEngine.start(); else sfx('cohete'); } catch (e) {}   // el motor sigue sonando hasta que el astronauta aterriza (rocketDrop)
         rocket.classList.add('on'); ov.querySelectorAll('.puff').forEach(p => p.classList.add('on'));
         rocket.firstElementChild.animate([{ transform: 'translateX(-1.5px)' }, { transform: 'translateX(1.5px)' }], { duration: 60, direction: 'alternate', iterations: Infinity });
       });
@@ -285,7 +285,8 @@
   window.rocketDrop = async function (opts) {
     opts = opts || {};
     const tgt = document.getElementById(opts.target || 'map');
-    if (!tgt || !Element.prototype.animate || reduced() || !window.skydive) { if (window.stopMusic) window.stopMusic(); return; }
+    const engine = (fn, v) => { try { if (window.rocketEngine) window.rocketEngine[fn](v); } catch (e) {} };
+    if (!tgt || !Element.prototype.animate || reduced() || !window.skydive) { engine('stop'); if (window.stopMusic) window.stopMusic(); return; }
     const r = tgt.getBoundingClientRect();
     const world = opts.world || (opts.suit ? 'luna' : 'tierra');
     const el = rocketEl(world, 1960);
@@ -299,6 +300,7 @@
     el.animate([{ transform: `translateY(0) scale(${scale})` }, { transform: `translateY(6px) scale(${scale})` }], { duration: 700, direction: 'alternate', iterations: Infinity, easing: 'ease-in-out' });
     await wait(700);
     // el muñeco sale por la parte baja del cohete
+    engine('level', 1.1);   // durante el salto el motor se oye más bajito (así se oye el grito)
     const landed = window.skydive(5000, {
       target: opts.target || 'map', suit: !!opts.suit, startY: top + 200 * scale - 70,
       scream: opts.suit ? 'grito2' : 'grito', shout: opts.suit ? '¡Yujuuu!' : '¡Aaaaah!'
@@ -307,6 +309,6 @@
     sfx('retro');
     el.animate([{ transform: `translateY(0) scale(${scale})` }, { transform: `translateY(${-(top + 300)}px) scale(${scale})` }],
       { duration: 1800, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'forwards' }).onfinish = () => el.remove();
-    await landed;
+    try { await landed; } finally { engine('stop'); }   // el astronauta ya ha aterrizado: se apaga el motor
   };
 })();

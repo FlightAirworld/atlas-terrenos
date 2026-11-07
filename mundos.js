@@ -1,6 +1,7 @@
 'use strict';
-// Mundos: la Luna y Marte, mapas aparte (otra instancia de MapLibre cada uno) que se abren encima del juego con el botón "Mundos".
-// De momento solo se explora; reclamar terrenos en otros mundos vendrá después (parcelas separadas por mundo en la base de datos).
+// Mundos: la Luna, Marte y el resto de planetas, mapas aparte (otra instancia de MapLibre cada uno) que se abren encima del juego con el botón "Mundos".
+// En cada planeta se pueden comprar parcelas con los mismos créditos, precio, casas, niveles y producción que en la Tierra,
+// pero cada mundo tiene SUS parcelas (el servidor las guarda con su campo «world»; id "<mundo>:x:y"). Se usa el mismo panel de compra de app.js.
 // Los viajes (cohete, planetas por el camino y paracaídas) los dibuja viaje.js. Desde cualquier mundo se puede ir a cualquier otro:
 //   Tierra → Luna → Marte están en línea, así que ir de la Tierra a Marte pasa por delante de la Luna.
 (function () {
@@ -60,6 +61,14 @@
     neptuno: G('Neptuno', '#3f63e0', [-60, -22], 'Neptuno:' + GAS,
       [['Gran Mancha Oscura', -60, -22]], bands([['#2c46b8', -46, -34], ['#7fa3ff', 8, 16], ['#2c46b8', 34, 46]]).concat([['#10195e', circ(-60, -22, 8)]]))
   };
+  const R_KM = { tierra: 6371, luna: 1737.4, marte: 3389.5, mercurio: 2439.7, venus: 6051.8, jupiter: 69911, saturno: 58232, urano: 25362, neptuno: 24622, pluton: 1188.3 };   // para el tamaño real de una parcela en metros
+  window.worldInfo = w => ({ name: WORLDS[w] ? WORLDS[w].name : w, radiusKm: R_KM[w] || 6371 });
+  const FLOAT = { jupiter: 1, saturno: 1, urano: 1, neptuno: 1 };   // gigantes gaseosos: sin suelo
+  Object.keys(WORLDS).forEach(k => {
+    const w = WORLDS[k]; if (k === 'tierra') return;
+    w.note = '🏗️ ' + w.name + ': acércate con el zoom y toca un cuadrado para comprar tu parcela' + (FLOAT[k] ? ' (flotante, sobre las nubes)' : '') + '. Aquí las parcelas son solo de este mundo.';
+    w.attr = (w.attr || '').replace(/ ?: mapa ilustrado \(sin imágenes reales\)/, ': mapa ilustrado');
+  });
   const ORDER = ['mercurio', 'venus', 'luna', 'marte', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton'];
   const planet = w => (window.planetSVG ? window.planetSVG(w) : '');
 
@@ -85,6 +94,8 @@
     .mundo .mundo-pin i { width: 12px; height: 12px; border-radius: 50%; background: #ffd23f; border: 2px solid #fff; box-shadow: 0 0 8px rgba(255,210,63,.9); }
     .mundo .mundo-pin span { margin-top: 3px; font: 700 11px/1 system-ui, sans-serif; color: #fff; text-shadow: 0 1px 3px #000, 0 0 6px #000; white-space: nowrap; }
     .mundo .maplibregl-ctrl-attrib { font-size: 10px; }
+    .mundo-owner { padding: 2px 7px; border-radius: 99px; border: 2px solid #fff; background: rgba(0,0,0,.72); color: #fff; font: 700 11px/1.1 system-ui, sans-serif; white-space: nowrap; pointer-events: none; transform: translateY(-3px); }
+    body.en-mundo .panel { z-index: 2100; }   /* el panel de compra va por encima del mapa del planeta */
     #mundos-menu { max-height: calc(100vh - 150px); overflow-y: auto; position: fixed; left: 10px; top: 120px; z-index: 1001; display: none; flex-direction: column; gap: 2px; min-width: 190px; padding: 6px;
       border-radius: 16px; background: var(--mp-bg, #fff); border: 1px solid var(--mp-bd, rgba(0,0,0,.14)); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 14px 34px rgba(0,0,0,.22);
       -webkit-backdrop-filter: blur(14px) saturate(1.5); backdrop-filter: blur(14px) saturate(1.5); transform-origin: top right; }
@@ -159,7 +170,7 @@
           .concat(w.tiles ? [{ id: 'mundo', type: 'raster', source: 'mundo' }] : [])
           .concat([{ id: 'formas', type: 'fill', source: 'formas', paint: { 'fill-color': ['get', 'c'], 'fill-opacity': 0.9 } }])
       },
-      center: w.land, zoom: 0.8, minZoom: 0.6, maxZoom: 10, pitch: 0, attributionControl: { compact: true },
+      center: w.land, zoom: 0.8, minZoom: 0.6, maxZoom: 19, pitch: 0, attributionControl: { compact: true },
       pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5)
     });
     const closeAttrib = () => { const el = boxes[id].querySelector('.maplibregl-ctrl-attrib'); if (el) { el.removeAttribute('open'); el.classList.remove('maplibregl-compact-show'); } };
@@ -170,13 +181,15 @@
       el.innerHTML = '<i></i><span></span>'; el.querySelector('span').textContent = s[0];
       new maplibregl.Marker({ element: el, anchor: 'top' }).setLngLat([s[1], s[2]]).addTo(m);
     });
-    // Textura real opcional (mundos sin teselas): si existe images/planetas/mapa-<mundo>.jpg (.webp/.png), 2:1 equirrectangular, se pone sobre el globo
+    parcelLayer(id, m);   // parcelas de este mundo (cuadrícula, dueños, casas y selección)
+    // Textura real opcional (mundos sin teselas): si existe images/planetas/mapa-<mundo>.jpg (.webp/.png), cuadrada en Mercator (la genera tools/make-planets.py), se pone sobre el globo
     if (!w.tiles) {
       let ready = false, texUrl = null;
       const addTex = () => {
         if (!ready || !texUrl || m.getSource('tex')) return;
         m.addSource('tex', { type: 'image', url: texUrl, coordinates: [[-180, 85.051], [180, 85.051], [180, -85.051], [-180, -85.051]] });
-        m.addLayer({ id: 'tex', type: 'raster', source: 'tex', paint: { 'raster-fade-duration': 0 } });
+        m.addLayer({ id: 'tex', type: 'raster', source: 'tex', paint: { 'raster-fade-duration': 0 } }, m.getLayer('grid') ? 'grid' : undefined);   // por debajo de las parcelas
+        if (m.getLayer('formas')) m.setLayoutProperty('formas', 'visibility', 'none');   // con la textura real sobran las manchas ilustradas
       };
       m.on('load', () => { ready = true; addTex(); });
       const tryTex = i => {
@@ -196,6 +209,149 @@
     return m;
   }
 
+  // ---------- Parcelas en cada mundo ----------
+  // Mismo reparto que en la Tierra: teselas de 16×16 casillas que se piden al servidor (/api/parcels/tile?world=…) y se guardan un minuto.
+  const SHOW_Z = 14, GRID_Z = 15, BUY_Z = 15.5, LABEL_Z = 17, TILE = 16, TILE_TTL = 60000, PAR = 6;
+  const cellSize = () => (typeof cfg !== 'undefined' && cfg && cfg.size) || 0.0005;
+  const ringOf = (x, y) => { const s = cellSize(), w = x * s - 180, so = y * s - 90; return [[w, so], [w + s, so], [w + s, so + s], [w, so + s], [w, so]]; };
+  const colorOf = n => (typeof colorFor === 'function' ? colorFor(n) : '#3ddc97');
+  const houseOf = p => (typeof houseFor === 'function' ? houseFor(p.id, p.house) : 'images/casa-1.webp');
+  const pw = {};   // mundo -> { owned: Map(id -> parcela), tiles: Map, sel, labels, map, ready }
+  const EMPTY = { type: 'FeatureCollection', features: [] };
+  const isMine = id => current === id;
+  // el icono mide justo lo que una parcela en pantalla: 512·0,0005/360·2^z px (imagen de 128 px)
+  const ICON = ['interpolate', ['exponential', 2], ['zoom'], 14, 0.0005 * 512 * Math.pow(2, 14) / 360 / 128, 22, 0.0005 * 512 * Math.pow(2, 22) / 360 / 128];
+
+  function loadHouse(m, url) {   // pinta la foto de la casa en 128×128 y la da de alta como imagen del mapa
+    const tryLoad = u => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = u; });
+    tryLoad(url.replace(/\.webp$/i, '-s.webp')).catch(() => tryLoad(url)).then(im => {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const g = c.getContext('2d'); g.drawImage(im, 0, 0, 128, 128);
+      if (!m.hasImage(url)) m.addImage(url, g.getImageData(0, 0, 128, 128));
+    }).catch(() => {});
+  }
+  function feature(p) {
+    return { type: 'Feature', properties: { pid: p.id, color: colorOf(p.owner || ''), img: houseOf(p) }, geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] } };
+  }
+  let flushT = 0;
+  function flush(id) {
+    clearTimeout(flushT);
+    flushT = setTimeout(() => {
+      const st = pw[id]; if (!st || !st.ready) return;
+      st.map.getSource('parcelas').setData({ type: 'FeatureCollection', features: Array.from(st.owned.values()).map(feature) });
+      labels(id);
+    }, 40);
+  }
+  function labels(id) {   // nombre del dueño y estrellas sobre cada parcela cuando estás muy cerca
+    const st = pw[id]; if (!st) return;
+    st.labels.forEach(l => l.remove()); st.labels = [];
+    const m = st.map; if (!st.ready || m.getZoom() < LABEL_Z) return;
+    const b = m.getBounds(), s = cellSize();
+    let n = 0;
+    st.owned.forEach(p => {
+      if (n >= 80) return;
+      const lng = (p.x + 0.5) * s - 180, lat = p.y * s - 90;
+      if (lng < b.getWest() || lng > b.getEast() || lat < b.getSouth() || lat > b.getNorth()) return;
+      const el = document.createElement('div'); el.className = 'mundo-owner';
+      const lvl = typeof levelOf === 'function' ? levelOf(p) : 1;
+      el.textContent = (p.owner || '') + (lvl > 1 && typeof starsOf === 'function' ? ' ' + starsOf(lvl) : '');
+      el.style.borderColor = colorOf(p.owner || '');
+      st.labels.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([lng, lat]).addTo(m)); n++;
+    });
+  }
+  function grid(id) {   // casillas libres: una cuadrícula fina para ver dónde se puede comprar
+    const st = pw[id]; if (!st || !st.ready) return;
+    const m = st.map, src = m.getSource('grid'); if (!src) return;
+    if (m.getZoom() < GRID_Z) { src.setData(EMPTY); return; }
+    const b = m.getBounds(), s = cellSize();
+    const x0 = Math.floor((Math.max(-180, b.getWest()) + 180) / s), x1 = Math.ceil((Math.min(180, b.getEast()) + 180) / s);
+    const y0 = Math.floor((Math.max(-90, b.getSouth()) + 90) / s), y1 = Math.ceil((Math.min(90, b.getNorth()) + 90) / s);
+    if (x1 - x0 > 90 || y1 - y0 > 90) { src.setData(EMPTY); return; }
+    const w = x0 * s - 180, e = x1 * s - 180, so = y0 * s - 90, n = y1 * s - 90, lines = [];
+    for (let x = x0; x <= x1; x++) lines.push([[x * s - 180, so], [x * s - 180, n]]);
+    for (let y = y0; y <= y1; y++) lines.push([[w, y * s - 90], [e, y * s - 90]]);
+    src.setData({ type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: lines } });
+  }
+  async function loadTiles(id) {
+    const st = pw[id]; if (!st || !st.ready) return;
+    const m = st.map; if (m.getZoom() < SHOW_Z) return;
+    const b = m.getBounds(), s = cellSize(), maxX = Math.round(360 / s) - 1, maxY = Math.round(180 / s) - 1;
+    const cell = (v, off, max) => Math.max(0, Math.min(max, Math.floor((v + off) / s)));
+    const tx0 = Math.floor(cell(b.getWest(), 180, maxX) / TILE), tx1 = Math.floor(cell(b.getEast(), 180, maxX) / TILE);
+    const ty0 = Math.floor(cell(b.getSouth(), 90, maxY) / TILE), ty1 = Math.floor(cell(b.getNorth(), 90, maxY) / TILE);
+    const c = m.getCenter(), cx = Math.floor(cell(c.lng, 180, maxX) / TILE), cy = Math.floor(cell(c.lat, 90, maxY) / TILE);
+    const todo = [];
+    for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) todo.push([tx, ty]);
+    todo.sort((a, d) => Math.hypot(a[0] - cx, a[1] - cy) - Math.hypot(d[0] - cx, d[1] - cy));
+    const queue = todo.slice(0, 36);
+    const one = async (tx, ty) => {
+      const key = tx + ',' + ty, ent = st.tiles.get(key);
+      if (ent && (ent.busy || Date.now() - ent.at < TILE_TTL)) return;
+      st.tiles.set(key, { at: ent ? ent.at : 0, busy: true });
+      try {
+        const r = await fetch(API + '/api/parcels/tile?world=' + encodeURIComponent(id) + '&tx=' + tx + '&ty=' + ty);
+        if (!r.ok) throw new Error('tile');
+        (await r.json()).forEach(p => { p.world = id; st.owned.set(p.id, p); });
+        st.tiles.set(key, { at: Date.now(), busy: false });
+        flush(id);
+      } catch (e) { if (ent) st.tiles.set(key, { at: ent.at, busy: false }); else st.tiles.delete(key); }
+    };
+    await Promise.all(Array.from({ length: Math.min(PAR, queue.length) }, async () => { for (let t; (t = queue.shift());) await one(t[0], t[1]); }));
+  }
+  function setSel(id, p) {
+    const st = pw[id]; if (!st || !st.ready) return;
+    st.map.getSource('sel').setData(p ? { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] } } : EMPTY);
+  }
+  async function selectAt(id, m, ll) {
+    if (m.getZoom() < BUY_Z) { m.flyTo({ center: ll, zoom: BUY_Z + 1.2, essential: true }); return; }   // como en la Tierra: hay que acercarse para comprar
+    const lng = ((ll.lng + 180) % 360 + 360) % 360 - 180;
+    let p; try { p = await api('/api/parcel?world=' + encodeURIComponent(id) + '&lat=' + ll.lat + '&lng=' + lng, { method: 'GET' }); } catch (e) { return; }
+    p.world = id;
+    setSel(id, p);
+    if (window.selectWorldParcel) window.selectWorldParcel(p);
+  }
+  function parcelLayer(id, m) {
+    const st = pw[id] = { owned: new Map(), tiles: new Map(), map: m, ready: false };
+    m.on('load', () => {
+      m.addSource('grid', { type: 'geojson', data: EMPTY });
+      m.addSource('parcelas', { type: 'geojson', data: EMPTY });
+      m.addSource('sel', { type: 'geojson', data: EMPTY });
+      m.addLayer({ id: 'grid', type: 'line', source: 'grid', paint: { 'line-color': '#ffffff', 'line-opacity': 0.3, 'line-width': 1 } });
+      m.addLayer({ id: 'p-fill', type: 'fill', source: 'parcelas', minzoom: SHOW_Z, paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.4 } });
+      m.addLayer({ id: 'p-line', type: 'line', source: 'parcelas', minzoom: SHOW_Z, paint: { 'line-color': ['get', 'color'], 'line-width': 2 } });
+      m.addLayer({ id: 'p-house', type: 'symbol', source: 'parcelas', minzoom: SHOW_Z,
+        layout: { 'icon-image': ['get', 'img'], 'icon-size': ICON, 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-pitch-alignment': 'map', 'icon-rotation-alignment': 'map' } });
+      m.addLayer({ id: 'sel-fill', type: 'fill', source: 'sel', paint: { 'fill-color': '#ffd23f', 'fill-opacity': 0.28 } });
+      m.addLayer({ id: 'sel-line', type: 'line', source: 'sel', paint: { 'line-color': '#ffd23f', 'line-width': 3 } });
+      st.ready = true; flush(id); grid(id); loadTiles(id);
+    });
+    const loading = new Set();
+    m.on('styleimagemissing', e => { if (!loading.has(e.id)) { loading.add(e.id); loadHouse(m, e.id); } });   // la foto de cada casa se carga una vez, cuando hace falta
+    const refresh = () => { grid(id); loadTiles(id); labels(id); };
+    m.on('moveend', refresh); m.on('zoomend', refresh);
+    m.on('click', e => selectAt(id, m, e.lngLat));
+  }
+  window.worldDraw = p => {   // app.js la llama al comprar, cambiar la casa o subir de nivel un terreno de este mundo
+    const st = pw[p.world]; if (!st) return;
+    st.owned.set(p.id, Object.assign({}, st.owned.get(p.id) || {}, p));
+    st.tiles.clear();   // las teselas se vuelven a pedir con calma (así se ve lo que compraron otros)
+    flush(p.world);
+  };
+  window.worldClearSel = () => { Object.keys(pw).forEach(k => setSel(k, null)); };
+  let pendingGoto = null;
+  window.goToWorldParcel = p => {   // desde «Mis terrenos»: viaja al planeta (si hace falta) y se acerca a la parcela
+    const s = cellSize(), ll = { lng: (p.x + 0.5) * s - 180, lat: (p.y + 0.5) * s - 90 };
+    const go = () => { const m = maps[p.world]; if (!m) return; m.flyTo({ center: [ll.lng, ll.lat], zoom: 17.5, duration: 2500, essential: true }); m.once('moveend', () => selectAt(p.world, m, ll)); };
+    if (current === p.world) { go(); return; }
+    pendingGoto = { world: p.world, lng: ll.lng, lat: ll.lat, after: go };
+    travel(p.world);
+  };
+  const showNote = (id, txt, ms) => {
+    const n = boxes[id] && boxes[id].querySelector('.mundo-note'); if (!n) return;
+    n.textContent = txt; n.style.transition = 'opacity .8s'; n.style.opacity = '1';
+    clearTimeout(n._t); if (ms) n._t = setTimeout(() => { n.style.opacity = '0'; }, ms);
+  };
+
   // ---------- Viaje ----------
   // Se despega del mundo actual, se vuela (cartel "Viajando a …" y planetas por el camino) y se baja en paracaídas en el destino:
   // con traje de astronauta en la Luna y en Marte, sin traje al volver a la Tierra.
@@ -205,6 +361,8 @@
     traveling = true;
     const from = current;
     closeLists();
+    if (window.closeWorldPanel) window.closeWorldPanel();   // el panel de compra del mundo que dejamos se cierra
+    if (window.worldClearSel) window.worldClearSel();
     if (to !== 'tierra') earthMute(true);
     const launch = window.rocketLaunch ? window.rocketLaunch(from, to) : Promise.resolve();
     // Debajo de la pantalla del cohete se cambia de mundo
@@ -217,11 +375,19 @@
       map.jumpTo({ center: [10, 10], zoom: 0.8 });
     }
     current = to;
+    document.body.classList.toggle('en-mundo', to !== 'tierra');
+    const goto = pendingGoto && pendingGoto.world === to ? pendingGoto : null; pendingGoto = null;   // «Mis terrenos»: se aterriza ya junto a la parcela
     launch.then(() => {
       if (to === 'tierra') earthMute(false);
-      if (map) map.flyTo({ center: WORLDS[to].land, zoom: 4.2, duration: 6500, essential: true });
+      // Se aterriza a nivel de calle (zoom 16): desde el primer momento se pueden comprar parcelas
+      if (map) map.flyTo({ center: goto ? [goto.lng, goto.lat] : WORLDS[to].land, zoom: 16.2, duration: 6500, essential: true });
       return window.rocketDrop ? window.rocketDrop({ target: to === 'tierra' ? 'map' : 'mundo-map-' + to, suit: to !== 'tierra', world: to }) : null;
-    }).catch(() => {}).then(() => { traveling = false; });
+    }).catch(() => {}).then(() => {
+      traveling = false;
+      try { if (window.rocketEngine) window.rocketEngine.stop(); } catch (e) {}   // por si algo falló antes de aterrizar: el motor nunca se queda sonando
+      if (to !== 'tierra') showNote(to, WORLDS[to].note, 12000);
+      if (goto && goto.after) goto.after();
+    });
   }
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && current !== 'tierra') travel('tierra');

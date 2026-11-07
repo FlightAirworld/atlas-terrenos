@@ -7,10 +7,13 @@
 CREATE TABLE IF NOT EXISTS parcels (
   id TEXT PRIMARY KEY, x INT NOT NULL, y INT NOT NULL, owner TEXT NOT NULL, order_id TEXT, paid TEXT, currency TEXT,
   created_at BIGINT NOT NULL, avatar TEXT, country TEXT, user_id UUID, house TEXT, level SMALLINT NOT NULL DEFAULT 1,
-  level_at BIGINT, city TEXT, city_try BIGINT, rotation SMALLINT NOT NULL DEFAULT 0, house_at BIGINT, house_prev TEXT
+  level_at BIGINT, city TEXT, city_try BIGINT, rotation SMALLINT NOT NULL DEFAULT 0, house_at BIGINT, house_prev TEXT,
+  world TEXT NOT NULL DEFAULT 'tierra'   -- tierra, luna, marte, mercurio, venus, jupiter, saturno, urano, neptuno, pluton (cada mundo tiene sus parcelas; fuera de la Tierra el id es '<mundo>:x:y')
 );
 CREATE INDEX IF NOT EXISTS parcels_country_city ON parcels (country, city);
 CREATE INDEX IF NOT EXISTS parcels_x_y ON parcels (x, y);
+CREATE INDEX IF NOT EXISTS parcels_world_x_y ON parcels (world, x, y);
+ALTER TABLE parcels ADD COLUMN IF NOT EXISTS world TEXT NOT NULL DEFAULT 'tierra';
 
 CREATE TABLE IF NOT EXISTS orders (
   order_id TEXT PRIMARY KEY, parcel_id TEXT NOT NULL, owner TEXT NOT NULL, status TEXT NOT NULL,

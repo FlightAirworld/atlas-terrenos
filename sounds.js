@@ -147,8 +147,8 @@
     if (mode >= 2) startMusic(); else stopMusic();
   }
 
-  // Fuera de la Tierra (window.earthMuted) solo suenan los del viaje: cuenta atrás, cohete, platillos y gritos
-  const TRAVEL_SFX = { beep: 1, beepgo: 1, cohete: 1, retro: 1, grito: 1, grito2: 1, ufo: 1 };
+  // Fuera de la Tierra (window.earthMuted) solo suenan los del viaje (cuenta atrás, cohete, platillos, gritos) y los de la interfaz (clics, seleccionar y comprar)
+  const TRAVEL_SFX = { beep: 1, beepgo: 1, cohete: 1, retro: 1, grito: 1, grito2: 1, ufo: 1, select: 1, claim: 1, coin: 1, error: 1, open: 1, click: 1, pop: 1 };   // + los del panel de compra (comprar un terreno en otro planeta)
   function play(name) {
     if (mode < 1 || (window.earthMuted && !TRAVEL_SFX[name])) return;
     if (!ensure()) return;
@@ -219,6 +219,38 @@
     musicStopped = true;
     if (ctx && musicBus) { musicBus.gain.cancelScheduledValues(ctx.currentTime); musicBus.gain.setTargetAtTime(0, ctx.currentTime, 0.25); }
     setTimeout(stopMusic, 1500);
+  };
+  // Motor del cohete: ruido grave continuo (no se corta solo). Suena desde el despegue hasta que el astronauta aterriza (window.rocketEngine.stop()).
+  // level(v) lo baja o sube (p. ej. durante el paracaídas, para que se oiga el grito). Si nadie lo para, se apaga solo a los 2 minutos.
+  let eng = null, engKill = 0;
+  window.rocketEngine = {
+    start() {
+      if (mode < 1 || !ensure()) return;
+      if (ctx.state === 'suspended') ctx.resume();
+      clearTimeout(engKill); engKill = setTimeout(() => window.rocketEngine.stop(), 120000);
+      if (eng) { eng.g.gain.cancelScheduledValues(ctx.currentTime); eng.g.gain.setTargetAtTime(2.0, ctx.currentTime, 0.2); return; }
+      const t = ctx.currentTime + 0.01;
+      const src = ctx.createBufferSource(); src.buffer = noiseBuf(3); src.loop = true;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(250, t); lp.frequency.exponentialRampToValueAtTime(1500, t + 3.5);   // el rugido se abre al despegar y se queda ahí
+      const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.35; lg.gain.value = 140; lfo.connect(lg); lg.connect(lp.frequency);   // pequeña oscilación para que no suene plano
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(2.0, t + 1.0);
+      src.connect(lp); lp.connect(g); g.connect(sfxBus);
+      const o = ctx.createOscillator(), og = ctx.createGain(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(36, t); o.frequency.linearRampToValueAtTime(66, t + 4);
+      og.gain.setValueAtTime(0.0001, t); og.gain.linearRampToValueAtTime(0.45, t + 1.0);
+      o.connect(og); og.connect(g);
+      src.start(t); o.start(t); lfo.start(t);
+      eng = { g, nodes: [src, o, lfo] };
+    },
+    level(v) { if (eng && ctx) { eng.g.gain.cancelScheduledValues(ctx.currentTime); eng.g.gain.setTargetAtTime(Math.max(0, v), ctx.currentTime, 0.3); } },
+    stop() {
+      clearTimeout(engKill);
+      if (!eng || !ctx) return;
+      const e = eng; eng = null;
+      e.g.gain.cancelScheduledValues(ctx.currentTime); e.g.gain.setTargetAtTime(0, ctx.currentTime, 0.35);   // fundido de salida
+      setTimeout(() => e.nodes.forEach(n => { try { n.stop(); } catch (x) {} }), 2000);
+    }
   };
   window.sfx = play;
   window.soundMode = () => (window.earthMuted ? 0 : mode);   // siempre 2 (lo usan vehicles.js y trains.js para aviones, sirenas y trenes)

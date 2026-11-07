@@ -482,7 +482,9 @@ function updateDetail() {
 }
 gl.on('moveend', updateDetail);
 
+const isOtherWorld = p => !!(p && p.world && p.world !== 'tierra');   // parcela de la Luna, Marte… (cada mundo tiene las suyas)
 function drawOwned(p) {
+  if (isOtherWorld(p)) { if (window.worldDraw) window.worldDraw(p); return; }   // mundos.js la pinta en el mapa del planeta
   if (!glReady) { pendingParcels.set(p.id, p); return; }
   const url = houseFor(p.id, p.house);
   const ex = drawn.get(p.id);
@@ -742,6 +744,7 @@ function setupAdminControls() {
 
       showPanel(selected);
       drawOwned({
+        world: selected.world,
         id: selected.id,
         x: selected.x,
         y: selected.y,
@@ -751,7 +754,7 @@ function setupAdminControls() {
         house: selected.house
       });
 
-      invalidateTile(selected.x, selected.y);
+      if (!isOtherWorld(selected)) invalidateTile(selected.x, selected.y);
       loadStats();
       loadParcels();
 
@@ -790,8 +793,10 @@ function setupAdminControls() {
 }
 function showPanel(p) {
   $('panel').classList.remove('hidden');
-  $('p-title').textContent = `Terreno ${p.id}`;
-  const mLat = Math.round(cfg.size * 111320), mLng = Math.round(cfg.size * 111320 * Math.cos(p.south * Math.PI / 180));
+  const wi = isOtherWorld(p) && window.worldInfo ? window.worldInfo(p.world) : null;   // {name, radiusKm} del planeta
+  $('p-title').textContent = wi ? `Terreno en ${wi.name} · ${p.x}:${p.y}` : `Terreno ${p.id}`;
+  const mPerDeg = wi ? wi.radiusKm * 1000 * Math.PI / 180 : 111320;   // metros por grado en ese mundo
+  const mLat = Math.round(cfg.size * mPerDeg), mLng = Math.round(cfg.size * mPerDeg * Math.cos(p.south * Math.PI / 180));
   $('p-coords').textContent = `Lat ${p.south.toFixed(3)}° · Lng ${p.west.toFixed(3)}° · ~${mLng} × ${mLat} m`;
   setMsg('');
   const owned = !!p.owner;
@@ -813,7 +818,10 @@ function showPanel(p) {
     buildPackPicker();
   }
 }
-$('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; };
+$('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; if (window.worldClearSel) window.worldClearSel(); };
+// Ganchos para mundos.js: abrir el mismo panel de compra con una parcela de otro planeta, y cerrarlo al viajar
+window.selectWorldParcel = p => { selected = p; showPanel(p); sfx('select'); };
+window.closeWorldPanel = () => { $('panel').classList.add('hidden'); if (isOtherWorld(selected)) selected = null; };
 $('gift-owner-btn').onclick = () => { if (selected && selected.owner && window.openGift) openGift(selected.owner); };
 
 // ---------- Nivel del terreno y botón de mejora ----------
@@ -847,7 +855,7 @@ $('upgrade-btn').onclick = async () => {
     if (j.free) window.freeUpgrades = j.freeUpgrades || 0;
     selected.level = j.level;
     showPanel(selected);
-    drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house, level: j.level });
+    drawOwned({ world: selected.world, id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house, level: j.level });
     sfx('claim');
     setMsg(j.free ? `⭐ ¡Nivel ${j.level} GRATIS! Te quedan ${window.freeUpgrades} ${window.freeUpgrades === 1 ? 'mejora gratis' : 'mejoras gratis'}` : `⭐ ¡Nivel ${j.level}! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
     if (window.monthlyRefresh) monthlyRefresh();
@@ -911,7 +919,7 @@ function markHouse(box, current) {
       selected.house = j.house;
       markHouse(editBox, j.house);
       $('p-photo').src = houseFor(selected.id, j.house);
-      drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: j.house, level: selected.level });
+      drawOwned({ world: selected.world, id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: j.house, level: selected.level });
       sfx('claim');
       $('house-pick-wrap').classList.add('hidden');
       setMsg(`🏠 ¡Casa cambiada! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
@@ -1000,7 +1008,7 @@ $('use-credit').onclick = async () => {
     const r = await fetch('/api/claim', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + packCode, ...authHeaders() },
-      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar, country, house: chosenHouse })
+      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar, country, house: chosenHouse, world: selected.world || 'tierra' })
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'No se pudo reclamar');
@@ -1009,8 +1017,8 @@ $('use-credit').onclick = async () => {
     selected.house = chosenHouse; selected.mine = !!authToken;
     showPanel(selected);
     setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉` + (j.referralBonus ? ` 👫 (incluye +${j.referralBonus} de regalo por venir invitado)` : ''), 'ok'); sfx('claim');
-    drawOwned({ id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house });
-    invalidateTile(selected.x, selected.y);
+    drawOwned({ world: selected.world, id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house });
+    if (!isOtherWorld(selected)) invalidateTile(selected.x, selected.y);
     loadStats(); loadParcels(); loadProduction();
   } catch (e) {
     setMsg(e.message, 'err'); sfx('error');
@@ -1571,9 +1579,11 @@ function renderMine(prod, mine) {
     const b = document.createElement('button');
     b.type = 'button';
     b.style.cssText = 'display:block;width:100%;text-align:left;margin:6px 0;padding:10px';
-    b.textContent = `${flagOf(p.country)} ${p.avatar || ''} Terreno ${p.id} · ${starsOf(levelOf(p))} · ${new Date(p.since).toLocaleDateString('es-ES')}`.trim();
+    const wi = isOtherWorld(p) && window.worldInfo ? window.worldInfo(p.world) : null;
+    b.textContent = `${flagOf(p.country)} ${p.avatar || ''} Terreno ${wi ? wi.name + ' ' + p.x + ':' + p.y : p.id} · ${starsOf(levelOf(p))} · ${new Date(p.since).toLocaleDateString('es-ES')}`.trim();
     b.onclick = () => {
       $('mine').classList.add('hidden');
+      if (wi) { if (window.goToWorldParcel) window.goToWorldParcel(p); return; }   // en otro planeta: se viaja hasta él
       const bb = boundsOf(p.x, p.y);
       const ll = L.latLng((bb[0][0] + bb[1][0]) / 2, (bb[0][1] + bb[1][1]) / 2);
       map.flyTo(ll, 18);

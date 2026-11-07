@@ -77,6 +77,7 @@
         sway.cancel();
         el.classList.add('landed');
         if (window.stopMusic) window.stopMusic();   // la música dura lo que dura la caída
+        try { if (window.rocketEngine) window.rocketEngine.stop(); } catch (e) {}   // y el motor del cohete también se apaga al tocar suelo
         if (window.sfx) window.sfx(opts.scream || 'grito');
         try { if (navigator.vibrate) navigator.vibrate([60, 40, 120]); } catch (e) {}
         setTimeout(function () { el.classList.add('bye'); }, 2600);

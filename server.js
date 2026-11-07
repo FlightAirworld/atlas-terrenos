@@ -62,6 +62,10 @@ const REQUIRE_LOGIN = AUTH_ENABLED && process.env.REQUIRE_LOGIN !== '0';     // 
 const SIZE = 0.0005;
 const MAX_X = Math.round(360 / SIZE);   // 360000 columnas
 const MAX_Y = Math.round(180 / SIZE);   // 180000 filas
+// Mundos: cada planeta tiene su propia rejilla de parcelas, independiente de la Tierra (mismas reglas, mismo precio, mismos datos).
+// En la Tierra el id es "x:y" (como siempre); en los demás es "<mundo>:x:y", así que nunca chocan.
+const WORLDS = ['tierra', 'luna', 'marte', 'mercurio', 'venus', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton'];
+const cleanWorld = w => (typeof w === 'string' && WORLDS.includes(w)) ? w : 'tierra';
 
 // ---------- Base de datos ----------
 // Las tablas se crean una sola vez ejecutando schema.sql en el editor SQL de Supabase.
@@ -79,7 +83,7 @@ const isUniqueViolation = e => e && e.code === '23505';
 
 const q = {
   parcelById: id => one('SELECT * FROM parcels WHERE id = $1', [id]),
-  parcelsInBox: (x0, x1, y0, y1) => all('SELECT id, x, y, owner, avatar, country, house, level FROM parcels WHERE x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1]),
+  parcelsInBox: (x0, x1, y0, y1, world = 'tierra') => all('SELECT id, x, y, owner, avatar, country, house, level FROM parcels WHERE world = $5 AND x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1, world]),
   insertParcel: (id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house) =>
     run('INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, house) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', [id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house]),
   activeOrderForParcel: (id, now) => one("SELECT order_id FROM orders WHERE parcel_id = $1 AND status = 'CREATED' AND expires_at > $2", [id, now]),
@@ -175,16 +179,16 @@ async function adminClaimParcel({ lat, lng, owner, avatar, country, house }) {
   };
 }
 // ---------- Utilidades de parcelas ----------
-function parcelFromLatLng(lat, lng) {
+function parcelFromLatLng(lat, lng, world = 'tierra') {
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat >= 90 || lng < -180 || lng >= 180) return null;
   const x = Math.floor((lng + 180) / SIZE);
   const y = Math.floor((lat + 90) / SIZE);
-  return parcelFromXY(x, y);
+  return parcelFromXY(x, y, world);
 }
-function parcelFromXY(x, y) {
+function parcelFromXY(x, y, world = 'tierra') {
   if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= MAX_X || y >= MAX_Y) return null;
   const west = x * SIZE - 180, south = y * SIZE - 90;
-  return { id: `${x}:${y}`, x, y, south, west, north: south + SIZE, east: west + SIZE };
+  return { id: world === 'tierra' ? `${x}:${y}` : `${world}:${x}:${y}`, world, x, y, south, west, north: south + SIZE, east: west + SIZE };
 }
 function cleanName(raw) {
   if (typeof raw !== 'string') return null;
@@ -657,9 +661,10 @@ async function paypalWebhook(req) {
   return { received: true };
 }
 
-async function claimWithCredit(req, { lat, lng, owner, avatar, country, house }) {
+async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, world }) {
   const code = packCodeFrom(req);
-  const p = parcelFromLatLng(Number(lat), Number(lng));
+  world = cleanWorld(world);
+  const p = parcelFromLatLng(Number(lat), Number(lng), world);
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
   const user = await userFrom(req);
   const prof = user && await getProfile(user.id);
@@ -685,13 +690,14 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house })
       if (owned >= MAX_PARCELS_PER_ACCOUNT) throw new HttpError(409, `Has alcanzado el máximo de ${MAX_PARCELS_PER_ACCOUNT} terrenos por cuenta`);
     }
     await client.query(
-      'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id, house) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
-      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), cleanCountry(country), user ? user.id : null, cleanHouse(house)]);
+      'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id, house, world, city) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',
+      // En otros mundos no hay países ni ciudades de la Tierra: sin país y con «Sin ciudad», así no entran en los rankings ni en el geocodificador de ciudades
+      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), world === 'tierra' ? cleanCountry(country) : null, user ? user.id : null, cleanHouse(house), world, world === 'tierra' ? null : CITY_NONE]);
     await client.query('COMMIT');
     let bonus = 0;   // invitación: premio al invitado y a quien le invitó (si no hay invitación, no pasa nada)
     if (user) notifyFriendsOf(user.id, 'claim');   // sin esperar: el aviso no retrasa la respuesta
     if (user) { try { const rr = await rewardReferral(user.id, code); if (rr) bonus = rr.inviteeBonus; } catch (e) { console.error('Invitación:', e.message); } }
-    return { ok: true, parcel: p.id, owner: name, credits: r.rows[0].credits + bonus, referralBonus: bonus };
+    return { ok: true, parcel: p.id, world, owner: name, credits: r.rows[0].credits + bonus, referralBonus: bonus };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Este terreno ya tiene dueño');
@@ -1084,9 +1090,9 @@ async function prodCompute(db, userId, lastCollect, carry, now) {
 
 async function myParcels(req) {
   const user = await needUser(req);
-  const rows = await all('SELECT id, x, y, avatar, country, level, created_at FROM parcels WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200', [user.id]);
+  const rows = await all('SELECT id, x, y, avatar, country, level, created_at, world FROM parcels WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200', [user.id]);
   const total = (await one('SELECT COUNT(*) AS n FROM parcels WHERE user_id = $1', [user.id])).n;
-  return { total, parcels: rows.map(r => ({ id: r.id, x: r.x, y: r.y, avatar: r.avatar, country: r.country, level: r.level, since: r.created_at })) };
+  return { total, parcels: rows.map(r => ({ id: r.id, x: r.x, y: r.y, world: r.world || 'tierra', avatar: r.avatar, country: r.country, level: r.level, since: r.created_at })) };
 }
 
 async function productionGet(req) {
@@ -1421,7 +1427,7 @@ async function friendsList(req) {
   const user = await needUser(req);
   const rows = await all('SELECT f.friend_id, p.nickname FROM friends f JOIN profiles p ON p.user_id::text = f.friend_id WHERE f.user_id = $1 ORDER BY f.created_at DESC', [user.id]);
   const ids = rows.map(r => r.friend_id);
-  const ps = ids.length ? await all('SELECT DISTINCT ON (user_id::text) user_id::text AS uid, x, y, avatar, country FROM parcels WHERE user_id::text = ANY($1::text[]) ORDER BY user_id::text, created_at ASC', [ids]) : [];
+  const ps = ids.length ? await all('SELECT DISTINCT ON (user_id::text) user_id::text AS uid, x, y, avatar, country FROM parcels WHERE world = \'tierra\' AND user_id::text = ANY($1::text[]) ORDER BY user_id::text, created_at ASC', [ids]) : [];
   const byUser = new Map(ps.map(p => [p.uid, p]));
   return {
     friends: rows.map(r => {
@@ -1618,7 +1624,7 @@ async function cityTick() {
   cityBusy = true;
   try {
     for (let i = 0; i < 300; i++) {
-      const p = await one('SELECT id, x, y FROM parcels WHERE city IS NULL AND (city_try IS NULL OR city_try < $1) ORDER BY created_at DESC LIMIT 1', [Date.now() - 3600_000]);
+      const p = await one('SELECT id, x, y FROM parcels WHERE world = \'tierra\' AND city IS NULL AND (city_try IS NULL OR city_try < $1) ORDER BY created_at DESC LIMIT 1', [Date.now() - 3600_000]);
       if (!p) break;
       try {
         const { name, cached } = await reverseCity(p.y * SIZE - 90 + SIZE / 2, p.x * SIZE - 180 + SIZE / 2);
@@ -2075,11 +2081,11 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/admin/stats') return adminStats(req);
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
-    return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, demo: DEMO, stripe: !DEMO && HAS_STRIPE, paypal: !DEMO && HAS_PAYPAL, clientId: (DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, packSize: PACKS[0].credits, packs: PACKS,
+    return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, demo: DEMO, stripe: !DEMO && HAS_STRIPE, paypal: !DEMO && HAS_PAYPAL, clientId: (DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, worlds: WORLDS, packSize: PACKS[0].credits, packs: PACKS,
       maxParcels: MAX_PARCELS_PER_ACCOUNT, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null, googleClientId: AUTH_ENABLED ? GOOGLE_CLIENT_ID : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
-    const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')));
+    const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')), cleanWorld(sp.get('world')));
     if (!p) throw new HttpError(400, 'Coordenadas no válidas');
     const row = await q.parcelById(p.id);
     const user = row && row.user_id ? await userFrom(req) : null;
@@ -2092,7 +2098,7 @@ async function route(req, res, url) {
     if (![s, w, n, e].every(Number.isFinite) || n - s > 0.3 || e - w > 0.3) throw new HttpError(400, 'Zona demasiado grande');
     const x0 = Math.max(0, Math.floor((w + 180) / SIZE)), x1 = Math.min(MAX_X - 1, Math.floor((e + 180) / SIZE));
     const y0 = Math.max(0, Math.floor((s + 90) / SIZE)), y1 = Math.min(MAX_Y - 1, Math.floor((n + 90) / SIZE));
-    return (await q.parcelsInBox(x0, x1, y0, y1)).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country, house: r.house, level: r.level }));
+    return (await q.parcelsInBox(x0, x1, y0, y1, cleanWorld(sp.get('world')))).map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country, house: r.house, level: r.level }));
   }
 
   if (req.method === 'GET' && pn === '/api/santa') return santaGet(req);
@@ -2169,6 +2175,8 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS city TEXT');          // ranking por ciudades
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS city_try BIGINT');
     await run('CREATE INDEX IF NOT EXISTS parcels_country_city ON parcels (country, city)');
+    await run("ALTER TABLE parcels ADD COLUMN IF NOT EXISTS world TEXT NOT NULL DEFAULT 'tierra'");   // mundo de la parcela: tierra, luna, marte…
+    await run('CREATE INDEX IF NOT EXISTS parcels_world_x_y ON parcels (world, x, y)');
     await run('CREATE INDEX IF NOT EXISTS parcels_x_y ON parcels (x, y)');   // el mapa pide parcelas por recuadro (x e y): sin este índice recorría toda la tabla
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_credits INT');   // qué pack se pidió en cada pedido
     await run('ALTER TABLE pack_orders ADD COLUMN IF NOT EXISTS pack_price TEXT');
@@ -2241,7 +2249,7 @@ async function santaStart(force) {
     const last = await one('SELECT MAX(started_at) AS t FROM santa_log');
     if (last && last.t && Date.now() - Number(last.t) < SANTA_EVERY_MS - 5000) return null;
   }
-  const p = await one('SELECT id, x, y, owner, user_id, house FROM parcels WHERE user_id IS NOT NULL ORDER BY random() LIMIT 1');
+  const p = await one('SELECT id, x, y, owner, user_id, house FROM parcels WHERE world = \'tierra\' AND user_id IS NOT NULL ORDER BY random() LIMIT 1');
   if (!p) return null;
   const now = Date.now();
   const row = await one('INSERT INTO santa_log (parcel_id, x, y, owner, user_id, house, started_at) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
@@ -2355,10 +2363,11 @@ const tileCache = new Map();   // "tx,ty" -> { at, body, etag }
 async function sendTile(req, res, url, send) {
   const tx = Number(url.searchParams.get('tx')), ty = Number(url.searchParams.get('ty'));
   if (!Number.isInteger(tx) || !Number.isInteger(ty) || tx < 0 || ty < 0 || tx * TILE >= MAX_X || ty * TILE >= MAX_Y) throw new HttpError(400, 'Tesela no válida');
-  const key = tx + ',' + ty;
+  const world = cleanWorld(url.searchParams.get('world'));
+  const key = world + ':' + tx + ',' + ty;
   let ent = tileCache.get(key);
   if (!ent || Date.now() - ent.at > TILE_TTL_MS) {
-    const rows = await q.parcelsInBox(tx * TILE, tx * TILE + TILE - 1, ty * TILE, ty * TILE + TILE - 1);
+    const rows = await q.parcelsInBox(tx * TILE, tx * TILE + TILE - 1, ty * TILE, ty * TILE + TILE - 1, world);
     const body = JSON.stringify(rows.map(r => ({ id: r.id, x: r.x, y: r.y, owner: r.owner, avatar: r.avatar, country: r.country, house: r.house, level: r.level })));
     ent = { at: Date.now(), body, etag: '"' + require('node:crypto').createHash('md5').update(body).digest('hex').slice(0, 20) + '"' };
     if (tileCache.size > 2000) tileCache.clear();
