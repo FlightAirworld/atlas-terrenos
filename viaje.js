@@ -45,6 +45,7 @@
     #viaje .space { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
     #viaje .body { position: absolute; left: 0; top: 0; width: 100px; height: 100px; margin: -50px 0 0 -50px; will-change: transform, opacity; }
     #viaje .body svg { width: 100%; height: 100%; display: block; overflow: visible; }
+    #viaje .plabel { position: absolute; left: 0; top: 0; white-space: nowrap; pointer-events: none; will-change: transform, opacity; background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.3); color: #fff; border-radius: 99px; padding: 6px 14px; font: 800 17px/1 system-ui, sans-serif; text-shadow: 0 1px 4px #000; }
     #viaje .trip { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 18px); z-index: 4; transform: translate(-50%, -12px); opacity: 0; white-space: nowrap;
       background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.3); color: #fff; border-radius: 99px; padding: 11px 20px; font: 800 20px/1 system-ui, sans-serif; text-shadow: 0 1px 4px #000;
       transition: opacity .6s, transform .6s; }
@@ -180,6 +181,13 @@
         dur = 4400; delay = Math.max(0, st.t - dur / 2); easing = 'cubic-bezier(.5,0,.9,.6)';
       }
       out.push(el.animate(kf, { duration: dur, delay, easing, fill: 'both' }));
+      if (i > 0) {   // el nombre del planeta acompaña a su dibujo (sin crecer con él) mientras se pasa por delante
+        const lab = document.createElement('div'); lab.className = 'plabel'; lab.textContent = NAME[st.w].replace(/^la /, 'La ');
+        space.appendChild(lab);
+        const lk = kf.map(f => { const m = /translate\(([-\d.e]+)px, ([-\d.e]+)px\) scale\(([-\d.e]+)\)/.exec(f.transform); const sc = Number(m[3]);
+          return Object.assign({}, f, { transform: `translate(${m[1]}px, ${Number(m[2]) + 50 * sc + 14}px) translateX(-50%)` }); });
+        out.push(lab.animate(lk, { duration: dur, delay, easing, fill: 'both' }));
+      }
     });
     return out;
   }
