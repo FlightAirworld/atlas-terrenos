@@ -883,6 +883,38 @@ try { const s = localStorage.getItem('avatar'); if (AVATARS.includes(s)) avatar 
 // ---------- Elegir casa ----------
 let chosenHouse = null;   // casa elegida para el terreno que vas a reclamar (null = al azar)
 const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '').replace(/[-_]/g, ' ');
+// Categorías del selector de casas: al tocar una (🎬 Cines, 🏠 Casas…) solo salen las de ese tipo. Lo que no esté aquí va a «Otros» (así las casas nuevas siempre se ven).
+const HOUSE_CATS = [
+  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2', 'burrito-blanco'] },
+  { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica'] },
+  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'condis', 'Farmacia'] },
+  { icon: '🍽️', name: 'Restaurantes', files: ['arcobaleno', 'la-cruilla'] },
+  { icon: '🎬', name: 'Cines', files: ['cine', 'teatro'] },
+  { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros'] },
+  { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin'] },
+  { icon: '⛽', name: 'Motor', files: ['cepsa', 'aurgi'] },
+  { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto'] }
+];
+// Si una casa no está en la lista de arriba, su categoría sale del nombre del archivo: cine-2.webp → Cines, casa-9.webp → Casas, etc.
+const HOUSE_PREFIX = [
+  ['Casas', ['casa', 'chalet', 'villa', 'mansion', 'adosado']],
+  ['Edificios', ['piso', 'edificio', 'torre', 'bloque', 'rascacielos', 'apartamento', 'hotel', 'oficina']],
+  ['Tiendas', ['super', 'supermercado', 'tienda', 'farmacia', 'panaderia', 'banco', 'centro-comercial', 'mercado', 'condis']],
+  ['Restaurantes', ['restaurante', 'cafe', 'cafeteria', 'bar', 'mcdonald', 'pizzeria', 'burger', 'heladeria']],
+  ['Cines', ['cine', 'teatro', 'museo', 'discoteca']],
+  ['Deportes', ['estadio', 'rugby', 'plaza-de-toros', 'futbol', 'baloncesto', 'tenis', 'piscina', 'pabellon', 'gimnasio', 'golf']],
+  ['Parques', ['parque', 'bosque', 'jardin', 'claro', 'cesped', 'desierto', 'lago', 'playa', 'huerto']],
+  ['Motor', ['gasolinera', 'cepsa', 'aurgi', 'taller', 'parking', 'garaje', 'lavadero']],
+  ['Servicios', ['colegio', 'hospital', 'bomberos', 'policia', 'iglesia', 'aeropuerto', 'helipuerto', 'fabrica', 'ayuntamiento', 'estacion']]
+];
+const houseCatOf = h => {
+  const base = h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '');
+  const c = HOUSE_CATS.find(c => c.files.includes(base));
+  if (c) return c.name;
+  const k = base.toLowerCase().replace(/^iso-/, ''), word = k.split(/[-_0-9]/)[0].replace(/s$/, '');
+  const p = HOUSE_PREFIX.find(([, keys]) => keys.some(w => word === w.replace(/s$/, '') || k.startsWith(w + '-')));
+  return p ? p[0] : 'Otros';
+};
 function buildHousePicker(box, onPick, withRandom) {
   box.replaceChildren();
   const add = (value, content, label) => {
@@ -897,7 +929,28 @@ function buildHousePicker(box, onPick, withRandom) {
     i.src = sizedUrl(h, 't'); i.alt = ''; i.loading = 'lazy';
     i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;display:block';
     add(h, i, houseName(h));
+    box.lastChild.dataset.cat = houseCatOf(h);
   });
+  // Fila de categorías encima de las casas
+  const prev = box.previousElementSibling; if (prev && prev.classList.contains('house-cats')) prev.remove();
+  const present = new Set([...box.children].map(b => b.dataset.cat).filter(Boolean));
+  const list = HOUSE_CATS.filter(c => present.has(c.name)).map(c => ({ key: c.name, label: c.icon + ' ' + c.name }));
+  if (present.has('Otros')) list.push({ key: 'Otros', label: '📦 Otros' });
+  list.unshift({ key: '', label: '✨ Todas' });
+  const row = document.createElement('div'); row.className = 'house-cats';
+  row.style.cssText = 'display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:2px 3px 6px';
+  const show = key => {
+    [...box.children].forEach(b => { b.style.display = !key || !b.dataset.cat || b.dataset.cat === key ? '' : 'none'; });   // el 🎲 (sin categoría) siempre se ve
+    [...row.children].forEach(c => { c.style.background = c.dataset.key === key ? '#ffb703' : ''; c.style.color = c.dataset.key === key ? '#111' : ''; });
+    box.scrollLeft = 0;
+  };
+  list.forEach(c => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = c.label; b.dataset.key = c.key;
+    b.style.cssText = 'flex:0 0 auto;padding:6px 10px;border-radius:999px;font-size:13px;white-space:nowrap';
+    b.onclick = () => show(c.key); row.appendChild(b);
+  });
+  box.before(row); show('');
 }
 function markHouse(box, current) {
   [...box.children].forEach(b => { b.style.outline = (b.dataset.house || '') === (current || '') ? '3px solid #ffb703' : ''; });
