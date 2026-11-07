@@ -2378,6 +2378,40 @@ async function sendTile(req, res, url, send) {
   return send(200, ent.body, undefined, extra);
 }
 
+// ---------- Teselas de la Luna y Marte (proxy de OpenPlanetaryMap) ----------
+// El navegador pide /api/moon-tile/{z}/{x}/{y}.png y /api/mars-tile/... (ver mundos.js); el servidor las descarga de OpenPlanetaryMap y las guarda en memoria.
+// Si OpenPlanetaryMap cambia de dirección, se puede cambiar sin tocar el código con las variables MOON_TILES_URL y MARS_TILES_URL ({z}/{x}/{y}).
+const PLANET_TILES = {
+  moon: process.env.MOON_TILES_URL || 'https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-moon-basemap-v0-1/all/{z}/{x}/{y}.png',
+  mars: process.env.MARS_TILES_URL || 'https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-mars-basemap-v0-2/all/{z}/{x}/{y}.png'
+};
+const planetTileCache = new Map();   // "moon/3/4/5" -> Buffer
+const PLANET_TILE_MAX = 1500;
+async function sendPlanetTile(req, res, url) {
+  const m = /^\/api\/(moon|mars)-tile\/(\d+)\/(\d+)\/(\d+)\.png$/.exec(url.pathname);
+  const fail = (status, msg) => { res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(msg); };
+  if (!m) return fail(404, 'Tesela no válida');
+  const body = m[1], z = Number(m[2]), x = Number(m[3]), y = Number(m[4]);
+  if (z > 7 || x >= 2 ** z || y >= 2 ** z) return fail(404, 'Tesela fuera de rango');
+  const key = body + '/' + z + '/' + x + '/' + y;
+  let buf = planetTileCache.get(key);
+  if (!buf) {
+    const ac = new AbortController(), to = setTimeout(() => ac.abort(), 10000);
+    try {
+      const r = await fetch(PLANET_TILES[body].replace('{z}', z).replace('{x}', x).replace('{y}', y), { signal: ac.signal, headers: { 'User-Agent': 'redecoraelmundo.com tile proxy' } });
+      if (!r.ok) throw new Error('upstream ' + r.status);
+      buf = Buffer.from(await r.arrayBuffer());
+      if (planetTileCache.size >= PLANET_TILE_MAX) planetTileCache.delete(planetTileCache.keys().next().value);
+      planetTileCache.set(key, buf);
+    } catch (e) {
+      console.error('[planet-tile]', key, e.message);
+      return fail(502, 'No se pudo obtener la tesela');   // 502 y no 404: así el cliente se entera del fallo
+    } finally { clearTimeout(to); }
+  }
+  res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=604800, immutable', 'Cross-Origin-Resource-Policy': 'cross-origin', 'X-Content-Type-Options': 'nosniff' });
+  res.end(buf);
+}
+
 // Dirección antigua (onrender.com) -> dominio propio. Solo se redirige a quien abre la web en el navegador (una página, GET):
 // la API, las imágenes y el sitio estático atlas-terrenos-web siguen funcionando igual y no se rompe ningún enlace de datos.
 const OLD_HOST = 'atlas-terrenos.onrender.com', NEW_ORIGIN = 'https://redecoraelmundo.com';
@@ -2422,6 +2456,7 @@ http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/chat/stream') return chatStream(req, res, url);   // conexión larga (SSE) del chat   // conexión larga (SSE): no pasa por route()
     if (req.method === 'POST' && url.pathname === '/api/webhooks/stripe') return send(200, JSON.stringify(await stripeWebhook(req)));   // antes de route(): necesitan el cuerpo sin tocar para comprobar la firma
     if (req.method === 'POST' && url.pathname === '/api/webhooks/paypal') return send(200, JSON.stringify(await paypalWebhook(req)));
+    if (req.method === 'GET' && /^\/api\/(moon|mars)-tile\//.test(url.pathname)) return await sendPlanetTile(req, res, url);   // teselas de la Luna y Marte (imágenes, no JSON)
     if (req.method === 'GET' && url.pathname === '/api/parcels/tile') return await sendTile(req, res, url, send);   // await: así un error 400 lo recoge el catch de abajo
     if (url.pathname.startsWith('/api/')) {
       const out = await route(req, res, url);

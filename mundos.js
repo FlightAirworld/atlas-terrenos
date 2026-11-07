@@ -202,7 +202,7 @@
     // Si en unos segundos no ha llegado ninguna tesela, se avisa (con el motivo, para poder arreglarlo)
     let got = false, lastErr = '';
     m.on('data', e => { if (e.sourceId === 'mundo' && e.tile) got = true; });
-    m.on('error', e => { if (e && e.sourceId === 'mundo') lastErr = String((e.error && (e.error.status || e.error.message)) || ''); });
+    m.on('error', e => { if (e && e.sourceId === 'mundo') lastErr = String((e.error && (e.error.status || e.error.message)) || ''); else if (e && e.error) console.warn('[mundos] ' + id, e.error); });
     setTimeout(() => {
       if (w.tiles && !got) note.textContent = 'No se pudo cargar el mapa de ' + w.name + (lastErr ? ' (' + lastErr + ')' : '') + '. Inténtalo de nuevo en un rato.';
     }, 8000);
@@ -356,6 +356,21 @@
   // Se despega del mundo actual, se vuela (cartel "Viajando a …" y planetas por el camino) y se baja en paracaídas en el destino:
   // con traje de astronauta en la Luna y en Marte, sin traje al volver a la Tierra.
   let current = 'tierra', traveling = false;
+  // Aterrizaje del mapa: vuelo suave hasta el punto de llegada. Si el vuelo no arranca o no termina (mapa sin tamaño, error al dibujar…),
+  // pasados unos segundos se salta directamente al destino: así nunca se queda el planeta «pillado» a mil kilómetros de altura.
+  function land(map, center) {
+    const ZOOM = 16.2, MS = 6500;
+    let done = false;
+    const finish = () => { if (done) return; done = true; clearTimeout(guard); };
+    const jump = () => { if (done) return; finish(); try { map.stop(); map.jumpTo({ center, zoom: ZOOM }); } catch (e) { console.error('[mundos] aterrizaje', e); } };
+    const guard = setTimeout(jump, MS + 4000);
+    try {
+      map.resize();   // por si el tamaño cambió mientras el cohete tapaba el mapa (barra del navegador en el móvil)
+      map.once('moveend', finish);
+      map.flyTo({ center, zoom: ZOOM, duration: MS, essential: true });
+      setTimeout(() => { if (!done && Math.abs(map.getZoom() - 0.8) < 0.05) jump(); }, 1500);   // a los 1,5 s el zoom ni se ha movido: el vuelo no ha arrancado
+    } catch (e) { console.error('[mundos] flyTo', e); jump(); }
+  }
   function travel(to) {
     if (traveling || !WORLDS[to] || to === current) return;
     traveling = true;
@@ -370,19 +385,22 @@
     let map = null;
     if (to !== 'tierra') {
       boxes[to].classList.remove('hidden');
-      if (!maps[to]) maps[to] = build(to); else maps[to].resize();
-      map = maps[to];
-      map.jumpTo({ center: [10, 10], zoom: 0.8 });
+      try {
+        if (!maps[to]) maps[to] = build(to); else maps[to].resize();
+        map = maps[to];
+        map.jumpTo({ center: [10, 10], zoom: 0.8 });
+      } catch (e) { console.error('[mundos] no se pudo preparar el mapa de ' + to, e); }   // aunque el mapa falle, el viaje termina y se puede volver
     }
     current = to;
     document.body.classList.toggle('en-mundo', to !== 'tierra');
     const goto = pendingGoto && pendingGoto.world === to ? pendingGoto : null; pendingGoto = null;   // «Mis terrenos»: se aterriza ya junto a la parcela
-    launch.then(() => {
+    const cap = (p, ms) => Promise.race([p, new Promise(r => setTimeout(r, ms))]);   // si algo no termina, el viaje sigue igualmente
+    cap(launch, 60000).then(() => {
       if (to === 'tierra') earthMute(false);
       // Se aterriza a nivel de calle (zoom 16): desde el primer momento se pueden comprar parcelas
-      if (map) map.flyTo({ center: goto ? [goto.lng, goto.lat] : WORLDS[to].land, zoom: 16.2, duration: 6500, essential: true });
-      return window.rocketDrop ? window.rocketDrop({ target: to === 'tierra' ? 'map' : 'mundo-map-' + to, suit: to !== 'tierra', world: to }) : null;
-    }).catch(() => {}).then(() => {
+      if (map) land(map, goto ? [goto.lng, goto.lat] : WORLDS[to].land);
+      return window.rocketDrop ? cap(window.rocketDrop({ target: to === 'tierra' ? 'map' : 'mundo-map-' + to, suit: to !== 'tierra', world: to }), 30000) : null;
+    }).catch(e => console.error('[mundos] viaje', e)).then(() => {
       traveling = false;
       try { if (window.rocketEngine) window.rocketEngine.stop(); } catch (e) {}   // por si algo falló antes de aterrizar: el motor nunca se queda sonando
       if (to !== 'tierra') showNote(to, WORLDS[to].note, 12000);
