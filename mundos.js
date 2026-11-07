@@ -280,6 +280,7 @@
     const tx0 = Math.floor(cell(b.getWest(), 180, maxX) / TILE), tx1 = Math.floor(cell(b.getEast(), 180, maxX) / TILE);
     const ty0 = Math.floor(cell(b.getSouth(), 90, maxY) / TILE), ty1 = Math.floor(cell(b.getNorth(), 90, maxY) / TILE);
     const c = m.getCenter(), cx = Math.floor(cell(c.lng, 180, maxX) / TILE), cy = Math.floor(cell(c.lat, 90, maxY) / TILE);
+    if ((tx1 - tx0 + 1) * (ty1 - ty0 + 1) > 400) return;   // límites absurdos (mapa muy alejado o proyección en transición): no se recorre nada, así el móvil no se bloquea
     const todo = [];
     for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) todo.push([tx, ty]);
     todo.sort((a, d) => Math.hypot(a[0] - cx, a[1] - cy) - Math.hypot(d[0] - cx, d[1] - cy));
@@ -333,7 +334,16 @@
     const refresh = () => { step(grid); step(loadTiles); step(labels); };
     let moveT = 0;
     const refreshLive = () => { if (moveT) return; moveT = setTimeout(() => { moveT = 0; step(grid); }, 120); };
+    // El globo 3D solo se usa de lejos. Cerca del suelo (parcelas, cuadrícula, texturas enormes) se pasa a mapa plano: se ve igual y no se bloquea al moverte.
+    const proj = () => {
+      try {
+        const z = m.getZoom(), cur = m.getProjection && m.getProjection(), isGlobe = !cur || cur.type === 'globe';
+        if (z > 9 && isGlobe) m.setProjection({ type: 'mercator' });
+        else if (z < 4 && !isGlobe) m.setProjection({ type: 'globe' });
+      } catch (e) { console.warn('[mundos] proyección', e); }
+    };
     m.on('moveend', refresh); m.on('zoomend', refresh); m.on('move', refreshLive);
+    m.on('zoomend', proj); m.on('moveend', proj);
     ['dragPan', 'touchZoomRotate', 'scrollZoom', 'doubleClickZoom'].forEach(h => { try { if (m[h]) m[h].enable(); } catch (e) {} });
     m.on('click', e => selectAt(id, m, e.lngLat));
   }
