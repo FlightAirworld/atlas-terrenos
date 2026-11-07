@@ -1405,9 +1405,16 @@ async function initGoogleId() {
         if (error) setLoginMsg(error.message, 'err'); else setLoginMsg('');
       }
     });
-    google.accounts.id.renderButton(box, { type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', logo_alignment: 'left', width: 260, locale: 'es' });
-    box.classList.remove('hidden'); box.style.display = 'flex';
-    $('login-google').classList.add('hidden');
+    // El botón que se ve es el nuestro (con la «G» de index.html). El de Google va encima, invisible, para recibir el toque:
+    // así se conserva el inicio de sesión con tu dominio, pero con tu diseño.
+    const btn = $('login-google');
+    const wrap = document.createElement('div'); wrap.style.cssText = 'position:relative;width:100%';
+    btn.parentNode.insertBefore(wrap, btn); wrap.appendChild(btn); wrap.appendChild(box);
+    box.classList.remove('hidden');
+    box.style.cssText = 'position:absolute;inset:0;opacity:.01;overflow:hidden;display:flex;align-items:center;justify-content:center;z-index:2;pointer-events:none;min-height:0';
+    const inner = document.createElement('div'); inner.style.transform = 'scaleY(1.5)'; box.appendChild(inner);   // el botón de Google mide 40 px: se estira para tapar el nuestro
+    google.accounts.id.renderButton(inner, { type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', logo_alignment: 'left', width: 400, locale: 'es' });
+    setTimeout(() => { if (inner.querySelector('iframe')) box.style.pointerEvents = 'auto'; else box.remove(); }, 1000);   // si el de Google no carga, queda el botón de siempre
   } catch (e) { /* se queda el botón de siempre */ }
 }
 $('login-google').onclick = async () => {
