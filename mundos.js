@@ -133,17 +133,40 @@
     window.earthMuted = !!v;
     try { if (window.weatherMute) window.weatherMute(!!v); if (v && window.cityAudio) window.cityAudio.level(0); } catch (e) {}
   }
+  // Iconos de línea para la barra de arriba
+  const SV = d => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+  const IC = {
+    chart: SV('<path d="M5 20v-6M12 20V5M19 20v-9"/>'),
+    list: SV('<path d="M4 6h16M4 12h16M4 18h10"/>'),
+    globe: SV('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>'),
+    info: SV('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>').replace('<svg ', '<svg class="mundo-i" ')
+  };
+  // Ficha de cada mundo (al tocar el nombre del planeta): [tipo, descripción, diámetro, distancia, gravedad, día, año, temperatura, lunas, dato curioso]
+  const INFO = {
+    luna: ['Satélite natural de la Tierra', 'La Luna es el único satélite natural de la Tierra. Entre 1969 y 1972 alunizaron en ella seis misiones Apolo.', '3.474 km', '384.400 km de la Tierra', '1,62 m/s² (una sexta parte de la Tierra)', '29,5 días terrestres', '27,3 días (una vuelta a la Tierra)', 'de −173 °C a 127 °C', 'Ninguna', 'Desde la Tierra siempre vemos la misma cara de la Luna.'],
+    marte: ['Planeta rocoso', 'Marte es el cuarto planeta del Sistema Solar y se le llama el planeta rojo por el óxido de hierro de su superficie.', '6.779 km', '227,9 millones de km del Sol', '3,71 m/s² (38 % de la Tierra)', '24 h 37 min', '687 días terrestres', 'media de −63 °C', '2: Fobos y Deimos', 'Tiene el volcán más alto del Sistema Solar: el Monte Olimpo, de unos 22 km.'],
+    mercurio: ['Planeta rocoso', 'Mercurio es el planeta más cercano al Sol y el más pequeño del Sistema Solar.', '4.879 km', '57,9 millones de km del Sol', '3,70 m/s² (38 % de la Tierra)', 'Un día solar dura 176 días terrestres', '88 días terrestres', 'de −180 °C a 430 °C', 'Ninguna', 'Un día solar en Mercurio dura el doble que su año.'],
+    venus: ['Planeta rocoso', 'Venus es el planeta más caliente del Sistema Solar por el efecto invernadero de su densa atmósfera.', '12.104 km', '108,2 millones de km del Sol', '8,87 m/s² (90 % de la Tierra)', '243 días terrestres (gira al revés que la Tierra)', '225 días terrestres', 'unos 465 °C', 'Ninguna', 'En Venus un día dura más que un año.'],
+    jupiter: ['Gigante gaseoso', 'Júpiter es el planeta más grande del Sistema Solar. Su Gran Mancha Roja es una tormenta gigante que lleva siglos activa.', '139.820 km', '778,5 millones de km del Sol', '24,79 m/s² (2,5 veces la Tierra)', '9 h 56 min', 'casi 12 años terrestres', 'unos −110 °C en las nubes', 'Más de 90 conocidas', 'Dentro de Júpiter cabrían más de 1.300 Tierras.'],
+    saturno: ['Gigante gaseoso', 'Saturno es el segundo planeta más grande y es famoso por sus anillos de hielo y roca.', '116.460 km', '1.434 millones de km del Sol', '10,44 m/s² (1,1 veces la Tierra)', '10 h 33 min', 'unos 29 años terrestres', 'unos −140 °C en las nubes', 'Más de 140 conocidas, como Titán', 'Saturno es menos denso que el agua: flotaría en un océano gigante.'],
+    urano: ['Gigante helado', 'Urano es un gigante helado que gira prácticamente tumbado sobre su órbita.', '50.724 km', '2.871 millones de km del Sol', '8,69 m/s² (89 % de la Tierra)', '17 h 14 min', '84 años terrestres', 'unos −195 °C', 'Más de 25 conocidas', 'Su eje está inclinado unos 98 grados.'],
+    neptuno: ['Gigante helado', 'Neptuno es el planeta más lejano del Sol. La sonda Voyager 2 lo visitó en 1989 y vio su Gran Mancha Oscura.', '49.244 km', '4.495 millones de km del Sol', '11,15 m/s² (1,1 veces la Tierra)', '16 h 6 min', '165 años terrestres', 'unos −200 °C', 'Al menos 14 conocidas, como Tritón', 'Tiene los vientos más rápidos del Sistema Solar, de más de 2.000 km/h.'],
+    pluton: ['Planeta enano', 'Plutón es un planeta enano desde 2006. La sonda New Horizons pasó junto a él en 2015 y descubrió su gran «corazón» de hielo.', '2.377 km', '5.906 millones de km del Sol (media)', '0,62 m/s² (6 % de la Tierra)', '6,4 días terrestres', '248 años terrestres', 'unos −230 °C', '5: Caronte, Estigia, Nix, Cerbero e Hidra', 'Su «corazón» está formado por Tombaugh Regio y Sputnik Planitia.']
+  };
   ORDER.forEach(id => {
     const w = WORLDS[id], box = document.createElement('div');
     box.id = 'mundo-' + id; box.className = 'mundo hidden'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', w.name);
     box.innerHTML = `<div class="mundo-map" id="mundo-map-${id}"></div>
-      <div class="mundo-top"><div class="mundo-title">${planet(id)}<span></span></div><div class="mundo-gos"></div><button type="button" class="mundo-pres hidden" data-nosound></button></div>
+      <div class="mundo-top"><button type="button" class="mundo-title" data-nosound>${planet(id)}<span></span>${IC.info}</button><div class="mundo-gos"></div><button type="button" class="mundo-pres hidden" data-nosound></button></div>
       <div class="mundo-note"></div>
       <div class="mundo-sheet hidden"><div class="mundo-card"><button type="button" class="mundo-x" aria-label="Cerrar">×</button><h2 class="mundo-h"></h2><div class="mundo-body"></div></div></div>`;
     box.querySelector('.mundo-title span').textContent = w.name;
+    const ttl = box.querySelector('.mundo-title'); ttl.setAttribute('aria-label', 'Información de ' + w.name); ttl.addEventListener('click', () => openInfo(id));
     box.querySelector('.mundo-note').textContent = w.note;
     const gos = box.querySelector('.mundo-gos');   // solo un botón «Mundos»; la lista de planetas se despliega al tocarlo
-    gos.innerHTML = '<button type="button" class="mundo-go mundo-xtra" data-nosound><span>📊 Extras</span></button><button type="button" class="mundo-go mundo-menus" data-nosound><span>📋 Menús</span></button><button type="button" class="mundo-go mundo-drop" data-nosound aria-haspopup="true" aria-expanded="false"><span>🌎 Mundos</span><b>▾</b></button><div class="mundo-list"></div>';
+    gos.innerHTML = '<button type="button" class="mundo-tb mundo-xtra" data-nosound aria-label="Extras" title="Extras">' + IC.chart + '<span class="tb-l">Extras</span></button>'
+      + '<button type="button" class="mundo-tb mundo-menus" data-nosound aria-label="Menús" title="Menús">' + IC.list + '<span class="tb-l">Menús</span></button>'
+      + '<button type="button" class="mundo-tb mundo-drop" data-nosound aria-haspopup="true" aria-expanded="false" aria-label="Mundos" title="Mundos">' + IC.globe + '<span class="tb-l tb-w">Mundos</span><b>▾</b></button><div class="mundo-list"></div>';
     gos.querySelector('.mundo-xtra').addEventListener('click', () => openSheet(id));
     gos.querySelector('.mundo-menus').addEventListener('click', () => openMenus(id));
     box.querySelector('.mundo-pres').addEventListener('click', () => openSheet(id));
@@ -165,8 +188,28 @@
   // ---------- Estadísticas, presidente y Extras de cada mundo (todos menos la Tierra, que tiene los suyos) ----------
   const css2 = document.createElement('style');
   css2.textContent = `
-    .mundo .mundo-gos { gap: 8px; }
-    .mundo .mundo-pres { flex-basis: auto; order: 3; align-self: flex-start; border: 1px solid rgba(255,210,63,.55); background: rgba(0,0,0,.6); color: #ffe08a; border-radius: 99px; padding: 6px 12px; font: 800 13px/1 system-ui, sans-serif; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mundo .mundo-top { flex-wrap: nowrap; justify-content: flex-start; gap: 8px; }
+    .mundo .mundo-title, .mundo .mundo-gos { height: 40px; background: rgba(10,14,28,.62); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.2); box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+    .mundo .mundo-title { color: #fff; cursor: pointer; padding: 0 12px 0 10px; flex: 0 1 auto; min-width: 0; white-space: nowrap; }
+    .mundo .mundo-title:active { transform: scale(.97); }
+    .mundo .mundo-title .mundo-i { width: 16px; height: 16px; opacity: .65; }
+    .mundo .mundo-gos { border-radius: 99px; flex: none; gap: 0; }
+    .mundo .mundo-tb { display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 12px; border: 0; background: transparent; color: #fff; font: 700 13px/1 system-ui, sans-serif; cursor: pointer; }
+    .mundo .mundo-tb svg { width: 18px; height: 18px; flex: none; display: block; }
+    .mundo .mundo-tb:active { background: rgba(255,255,255,.16); }
+    .mundo .mundo-xtra { border-radius: 99px 0 0 99px; }
+    .mundo .mundo-drop { border-radius: 0 99px 99px 0; }
+    .mundo .mundo-menus, .mundo .mundo-drop { border-left: 1px solid rgba(255,255,255,.16); }
+    @media (max-width: 459px) { .mundo .mundo-tb .tb-l { display: none; } .mundo .mundo-tb .tb-w { display: inline; } .mundo .mundo-tb { padding: 0 11px; } }
+    @media (max-width: 384px) { .mundo .mundo-tb .tb-w { display: none; } }
+    .mundo .mundo-facts { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; margin: 12px 0; }
+    .mundo .mundo-facts dt { opacity: .7; }
+    .mundo .mundo-facts dd { margin: 0; font-weight: 700; text-align: right; }
+    .mundo .mundo-kind { margin: 0 0 6px; font: 800 12px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .06em; opacity: .65; }
+    .mundo .mundo-fun { margin: 10px 0 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.07); }
+    .mundo .mundo-play { display: block; width: 100%; border: 0; border-radius: 99px; padding: 12px; background: #3ddc97; color: #04281d; font: 800 15px/1 system-ui, sans-serif; cursor: pointer; }
+    .mundo .mundo-pres.fade { opacity: 0; }
+    .mundo .mundo-pres { position: absolute; left: 12px; top: 100%; margin-top: 8px; max-width: calc(100% - 24px); transition: opacity .4s; border: 1px solid rgba(255,210,63,.55); background: rgba(0,0,0,.6); color: #ffe08a; border-radius: 99px; padding: 6px 12px; font: 800 13px/1 system-ui, sans-serif; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .mundo .mundo-pres.hidden { display: none; }
     .mundo .mundo-sheet { position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; }
     .mundo .mundo-sheet.hidden { display: none; }
@@ -212,9 +255,16 @@
       stats[id] = j;
       const chip = boxes[id].querySelector('.mundo-pres');
       chip.textContent = j.president ? `👑 Presidente de ${WORLDS[id].name}: ${j.president.owner} · ${fmt(j.president.n)}` : `👑 ${WORLDS[id].name} aún no tiene presidente: ¡sé el primero!`;
-      chip.classList.remove('hidden');
       return j;
     } catch (e) { return null; }
+  }
+  async function flashPresident(id) {   // al aterrizar: el presidente se ve 5 segundos y se quita solo
+    const j = await loadWorldStats(id); if (!j || current !== id) return;
+    const chip = boxes[id].querySelector('.mundo-pres');
+    clearTimeout(chip._t1); clearTimeout(chip._t2);
+    chip.classList.remove('hidden', 'fade');
+    chip._t1 = setTimeout(() => chip.classList.add('fade'), 4600);
+    chip._t2 = setTimeout(() => chip.classList.add('hidden'), 5000);
   }
   function renderSheet(id, j) {
     const box = boxes[id], body = box.querySelector('.mundo-body'), name = WORLDS[id].name;
@@ -272,8 +322,24 @@
     renderSheet(id, await loadWorldStats(id) || stats[id] || null);
   }
 
+  // Ficha del planeta: sale al tocar su nombre (arriba a la izquierda)
+  function openInfo(id) {
+    const I = INFO[id]; if (!I) return;
+    const box = boxes[id], sheet = box.querySelector('.mundo-sheet'), body = box.querySelector('.mundo-body');
+    box.querySelector('.mundo-h').textContent = WORLDS[id].name; body.replaceChildren();
+    const add = (tag, cls, text, parent) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; (parent || body).appendChild(el); return el; };
+    add('p', 'mundo-kind', I[0]); add('p', '', I[1]);
+    const dl = add('dl', 'mundo-facts');
+    [['Diámetro', I[2]], [id === 'luna' ? 'Distancia' : 'Distancia al Sol', I[3]], ['Gravedad', I[4]], ['Un día', I[5]], ['Un año', I[6]], ['Temperatura', I[7]], ['Lunas', I[8]]]
+      .forEach(([k, v]) => { add('dt', '', k, dl); add('dd', '', v, dl); });
+    add('p', 'mundo-fun', '💡 ' + I[9]);
+    const go = add('button', 'mundo-play', '🚀 Jugar en ' + WORLDS[id].name.replace(/^La /, 'la ')); go.type = 'button';
+    go.addEventListener('click', () => openMenus(id, true));
+    sheet.classList.remove('hidden');
+  }
+
   // Pestaña «Menús» de cada planeta: dentro está la página del planeta («Jugar en la Luna», «Jugar en Marte»…), que se abre sin salir del juego
-  function openMenus(id) {
+  function openMenus(id, direct) {
     const box = boxes[id], sheet = box.querySelector('.mundo-sheet'), body = box.querySelector('.mundo-body'), h = box.querySelector('.mundo-h');
     const label = 'Jugar en ' + WORLDS[id].name.replace(/^La /, 'la ');
     function list() {
@@ -289,7 +355,7 @@
       const f = document.createElement('iframe'); f.className = 'mundo-frame'; f.title = label; f.loading = 'lazy'; f.src = '/mundo-' + id + '.html';
       body.append(back, f);
     }
-    list();
+    if (direct) page(); else list();
     sheet.classList.remove('hidden');
   }
 
@@ -581,7 +647,7 @@
     }).catch(e => console.error('[mundos] viaje', e)).then(() => {
       traveling = false;
       try { if (window.rocketEngine) window.rocketEngine.stop(); } catch (e) {}   // por si algo falló antes de aterrizar: el motor nunca se queda sonando
-      if (to !== 'tierra') showNote(to, WORLDS[to].note, 12000);
+      if (to !== 'tierra') { showNote(to, WORLDS[to].note, 12000); flashPresident(to); }
       if (goto && goto.after) goto.after();
     });
   }
