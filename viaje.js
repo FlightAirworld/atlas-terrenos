@@ -53,6 +53,12 @@
     ${SURF_CSS}
     #viaje .tripsub { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 72px); z-index: 4; transform: translate(-50%, -8px); opacity: 0; white-space: nowrap; color: #fff; background: rgba(0,0,0,.4); border-radius: 99px; padding: 7px 14px; font: 700 16px/1 system-ui, sans-serif; text-shadow: 0 1px 4px #000; transition: opacity .6s, transform .6s; }
     #viaje .tripsub.show { opacity: 1; transform: translate(-50%, 0); }
+    #viaje .ufo { position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; will-change: transform; }
+    #viaje .ufo svg { width: 100%; height: auto; display: block; overflow: visible; filter: drop-shadow(0 4px 6px rgba(0,0,0,.4)); }
+    #viaje .ufo .ufo-l { animation: ufoBlink .5s infinite alternate; }
+    @keyframes ufoBlink { from { opacity: .3; } to { opacity: 1; } }
+    #viaje .ufo .say { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 12px; opacity: 0; white-space: nowrap; background: #fff; color: #111; border-radius: 14px; padding: 8px 12px; font: 800 15px/1.1 system-ui, sans-serif; box-shadow: 0 3px 10px rgba(0,0,0,.45); }
+    #viaje .ufo .say::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -7px; border: 7px solid transparent; border-top-color: #fff; }
     #viaje .puff.on { animation: viajePuff 2.4s ease-out forwards; }
     @keyframes viajePuff { 0% { opacity: .9; transform: translate(0,0) scale(.5); } 100% { opacity: 0; transform: translate(var(--dx), -20px) scale(4); } }`;
   document.head.appendChild(st);
@@ -168,6 +174,34 @@
     return out;
   }
 
+  // Platillos volantes con marcianos: salen en los viajes muy largos (no si el destino es la Tierra o la Luna) y preguntan adónde vas
+  const SAY = ['¿A dónde vas, terrícola?', '¡EH! ¿DÓNDE VAS?', '¿DÓNDE VAS TÚ?', '¡Aquí no se puede pasar!', '¿Y tú de dónde sales?', '¡Estás muy lejos de casa!'];
+  const ALIEN = ['#7be07b', '#b48cff', '#ff9ccf', '#7fd8ff'], LIGHTS = ['#ff4d4d', '#ffd23f', '#5cff7a', '#4dc9ff', '#ff7bd5'];
+  const ufoSVG = c => `<svg viewBox="0 0 120 80" aria-hidden="true">
+    <path d="M38 40 C38 4 82 4 82 40Z" fill="rgba(170,235,255,.5)" stroke="#d6f6ff" stroke-width="2"/>
+    <path d="M53 20 L49 8 M67 20 L71 8" stroke="${c}" stroke-width="2.5" stroke-linecap="round"/><circle cx="49" cy="8" r="3" fill="#ffd23f"/><circle cx="71" cy="8" r="3" fill="#ffd23f"/>
+    <ellipse cx="60" cy="30" rx="12" ry="13" fill="${c}" stroke="rgba(0,0,0,.35)" stroke-width="1.5"/>
+    <ellipse cx="54" cy="29" rx="3.6" ry="6" fill="#111" transform="rotate(22 54 29)"/><ellipse cx="66" cy="29" rx="3.6" ry="6" fill="#111" transform="rotate(-22 66 29)"/>
+    <path d="M56 37 Q60 40 64 37" stroke="rgba(0,0,0,.5)" fill="none" stroke-width="1.6" stroke-linecap="round"/>
+    <ellipse cx="60" cy="46" rx="52" ry="14" fill="#aeb8c8" stroke="#6b768a" stroke-width="2"/><ellipse cx="60" cy="53" rx="32" ry="8" fill="#7d889c"/>
+    ${[22, 41, 60, 79, 98].map((x, k) => `<circle class="ufo-l" style="animation-delay:${k * 0.12}s" cx="${x}" cy="${46 + (k % 2 ? 1 : 0)}" r="3.6" fill="${LIGHTS[k]}"/>`).join('')}</svg>`;
+  function ufos(ov, rocket, total, dist, W, H) {
+    const n = Math.min(6, Math.max(1, Math.round(dist / 3))), gap = Math.max(2200, (total - 4200) / n), dur = 5200;
+    for (let i = 0; i < n; i++) wait(5600 + 800 + i * gap).then(() => {
+      const el = document.createElement('div'), w = 80 + Math.random() * 50, dir = i % 2 ? -1 : 1;
+      const y = 150 + Math.random() * Math.max(50, H * 0.52 - 150), x0 = dir > 0 ? -w - 40 : W + 40, x1 = dir > 0 ? W + 40 : -w - 40;
+      el.className = 'ufo'; el.style.width = w + 'px';
+      el.innerHTML = ufoSVG(ALIEN[i % ALIEN.length]) + '<div class="say"></div>';
+      el.querySelector('.say').textContent = i === 0 ? '¿DÓNDE VAS...?' : SAY[Math.floor(Math.random() * SAY.length)];
+      ov.insertBefore(el, rocket);
+      el.animate([{ transform: `translate(${x0}px, ${y}px)` }, { transform: `translate(${(x0 + x1) / 2}px, ${y - 22}px)`, offset: 0.5 }, { transform: `translate(${x1}px, ${y + 6}px)` }], { duration: dur, fill: 'both' });
+      el.firstElementChild.animate([{ transform: 'rotate(-6deg)' }, { transform: 'rotate(6deg)' }], { duration: 700, direction: 'alternate', iterations: Infinity, easing: 'ease-in-out' });
+      el.querySelector('.say').animate([{ opacity: 0 }, { opacity: 1, offset: 0.18 }, { opacity: 1, offset: 0.82 }, { opacity: 0 }], { duration: dur, fill: 'both' });
+      sfx('ufo');
+      setTimeout(() => el.remove(), dur + 300);
+    });
+  }
+
   let launching = false;
   window.rocketLaunch = function (from, to) {
     from = CHAIN.includes(from) ? from : 'tierra';
@@ -208,6 +242,7 @@
         ov.querySelector('.stars').animate([{ transform: 'translateY(0)' }, { transform: 'translateY(25%)' }], { duration: 2600 + trip.total + 600, fill: 'forwards' });
       });
       wait(5600).then(() => flyBy(ov, rocket, trip, W, H));
+      if (to !== 'tierra' && to !== 'luna' && dist >= 3) ufos(ov, rocket, trip.total, dist, W, H);
       trip.stops.slice(1, -1).forEach(s => wait(5600 + s.t - 600).then(() => { banner.textContent = 'Pasando por ' + NAME[s.w]; }));
       wait(5600 + trip.total - 2200).then(() => { banner.textContent = TRIP[to]; if (dist >= 4) sub.textContent = '¡Ya casi llegamos!'; });
       if (dist >= 4) wait(5600 + trip.total * 0.5).then(() => { sub.textContent = '¿Falta mucho…?'; });

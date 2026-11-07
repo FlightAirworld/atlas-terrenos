@@ -66,6 +66,7 @@
     },
     // Cuenta atrás del cohete
     beep:   t => tone(sfxBus, 'sine', 880, t, 0.14, 0.5),
+    ufo: t => { tone(sfxBus, 'sine', 640, t, 0.55, 0.3, { slideTo: 330 }); tone(sfxBus, 'sine', 330, t + 0.5, 0.55, 0.3, { slideTo: 700 }); tone(sfxBus, 'triangle', 1280, t, 1.05, 0.06); },
     beepgo: t => tone(sfxBus, 'sine', 1320, t, 0.5, 0.55),
     // Despegue: rugido de ruido que se abre y retumbo grave
     cohete: t => {
@@ -146,8 +147,10 @@
     if (mode >= 2) startMusic(); else stopMusic();
   }
 
+  // Fuera de la Tierra (window.earthMuted) solo suenan los del viaje: cuenta atrás, cohete, platillos y gritos
+  const TRAVEL_SFX = { beep: 1, beepgo: 1, cohete: 1, retro: 1, grito: 1, grito2: 1, ufo: 1 };
   function play(name) {
-    if (mode < 1) return;
+    if (mode < 1 || (window.earthMuted && !TRAVEL_SFX[name])) return;
     if (!ensure()) return;
     if (ctx.state === 'suspended') ctx.resume();
     const f = SFX[name]; if (f) f(ctx.currentTime + 0.01);
@@ -193,17 +196,17 @@
   window.cityAudio = {
     level(v) {
       if (!ctx) return;
-      if (mode < 1 || ctx.state !== 'running') { if (amb) amb.g.gain.setTargetAtTime(0, ctx.currentTime, 0.4); return; }
+      if (window.earthMuted || mode < 1 || ctx.state !== 'running') { if (amb) amb.g.gain.setTargetAtTime(0, ctx.currentTime, 0.4); return; }
       ambStart(); amb.g.gain.setTargetAtTime(Math.max(0, Math.min(1, v)) * 0.16, ctx.currentTime, 0.8);
     },
     horn(vol, close) {
-      if (!ctx || mode < 1 || ctx.state !== 'running') return;
+      if (!ctx || window.earthMuted || mode < 1 || ctx.state !== 'running') return;
       const t = ctx.currentTime + 0.02, bus = close ? sfxBus : farBus(), d = 0.2 + Math.random() * 0.2;
       tone(bus, 'square', 415, t, d, 0.2 * vol); tone(bus, 'square', 523, t, d, 0.16 * vol);
       if (Math.random() < 0.5) { tone(bus, 'square', 415, t + d + 0.12, d, 0.2 * vol); tone(bus, 'square', 523, t + d + 0.12, d, 0.16 * vol); }
     },
     bells(n, vol) {
-      if (!ctx || mode < 1 || ctx.state !== 'running') return;
+      if (!ctx || window.earthMuted || mode < 1 || ctx.state !== 'running') return;
       for (let i = 0; i < Math.min(12, n); i++) {
         const t = ctx.currentTime + 0.1 + i * 1.7;
         [[196, 1], [392, 0.5], [588, 0.3], [1180, 0.12]].forEach(([f, a]) => tone(farBus(), 'sine', f, t, 2.6, 0.5 * a * (vol || 1), { attack: 0.005 }));
@@ -218,5 +221,5 @@
     setTimeout(stopMusic, 1500);
   };
   window.sfx = play;
-  window.soundMode = () => mode;   // siempre 2 (lo usan vehicles.js y trains.js para aviones, sirenas y trenes)
+  window.soundMode = () => (window.earthMuted ? 0 : mode);   // siempre 2 (lo usan vehicles.js y trains.js para aviones, sirenas y trenes)
 })();

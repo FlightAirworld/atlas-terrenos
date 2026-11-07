@@ -127,6 +127,7 @@
     src.connect(lp); lp.connect(g); g.connect(master);
     src.start(now); src.stop(now + dur + 0.1);
   }
+  window.weatherMute = v => { muted = !!v; if (ac && master) master.gain.setTargetAtTime(muted ? 0 : 0.9, ac.currentTime, 0.2); };   // mundos.js la usa para callar la lluvia fuera de la Tierra
   // El navegador solo permite audio tras un gesto del usuario
   ['pointerdown', 'keydown', 'touchstart'].forEach(ev => addEventListener(ev, function once() {
     if (on) initAudio();

@@ -72,7 +72,12 @@
     .mundo .mundo-top > * { pointer-events: auto; }
     .mundo .mundo-title { background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.25); border-radius: 99px; padding: 8px 14px; font: 800 15px/1 system-ui, sans-serif; display: flex; align-items: center; gap: 8px; }
     .mundo .mundo-title svg, .mundo-go svg, #mundos-menu svg { width: 22px; height: 22px; flex: none; display: block; }
-    .mundo .mundo-gos { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
+    .mundo .mundo-gos { position: relative; display: flex; justify-content: flex-end; }
+    .mundo .mundo-drop b { font-size: 13px; margin-left: 2px; }
+    .mundo .mundo-list { display: none; position: absolute; right: 0; top: calc(100% + 8px); flex-direction: column; align-items: stretch; gap: 6px; max-height: calc(100vh - 150px); overflow-y: auto; padding: 2px; }
+    .mundo .mundo-list.open { display: flex; animation: mundosIn .17s cubic-bezier(.2,.85,.25,1) both; }
+    .mundo .mundo-list .mundo-go { white-space: nowrap; background: rgba(0,0,0,.75); }
+    .mundo .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group { margin-bottom: 120px; }
     .mundo-go { border: 1px solid rgba(255,255,255,.28); border-radius: 99px; padding: 6px 12px 6px 7px; background: rgba(0,0,0,.55); color: #fff; font: 800 14px/1 system-ui, sans-serif; cursor: pointer; display: flex; align-items: center; gap: 7px; }
     .mundo-go:active { transform: scale(.96); }
     .mundo .mundo-note { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.2); border-radius: 14px; padding: 10px 14px; font: 600 14px/1.35 system-ui, sans-serif; text-align: center; z-index: 2; pointer-events: none; }
@@ -110,6 +115,13 @@
 
   // ---------- Un mapa por mundo ----------
   const boxes = {}, maps = {};
+  function closeLists() { document.querySelectorAll('.mundo-list.open').forEach(l => { l.classList.remove('open'); const d = l.parentNode.querySelector('.mundo-drop'); if (d) d.setAttribute('aria-expanded', 'false'); }); }
+  document.addEventListener('pointerdown', e => { if (!e.target.closest || !e.target.closest('.mundo-gos')) closeLists(); });
+  // Los sonidos de la Tierra (ciudad, tráfico, trenes, lluvia, clics) se callan fuera de ella; solo suenan los del viaje
+  function earthMute(v) {
+    window.earthMuted = !!v;
+    try { if (window.weatherMute) window.weatherMute(!!v); if (v && window.cityAudio) window.cityAudio.level(0); } catch (e) {}
+  }
   ORDER.forEach(id => {
     const w = WORLDS[id], box = document.createElement('div');
     box.id = 'mundo-' + id; box.className = 'mundo hidden'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', w.name);
@@ -118,12 +130,16 @@
       <div class="mundo-note"></div>`;
     box.querySelector('.mundo-title span').textContent = w.name;
     box.querySelector('.mundo-note').textContent = w.note;
+    const gos = box.querySelector('.mundo-gos');   // solo un botón «Mundos»; la lista de planetas se despliega al tocarlo
+    gos.innerHTML = '<button type="button" class="mundo-go mundo-drop" data-nosound aria-haspopup="true" aria-expanded="false"><span>🌎 Mundos</span><b>▾</b></button><div class="mundo-list"></div>';
+    const list = gos.querySelector('.mundo-list'), drop = gos.querySelector('.mundo-drop');
+    drop.addEventListener('click', () => { const o = !list.classList.contains('open'); closeLists(); if (o) { list.classList.add('open'); drop.setAttribute('aria-expanded', 'true'); } });
     ['tierra'].concat(ORDER).filter(o => o !== id).forEach(o => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'mundo-go'; b.setAttribute('data-nosound', ''); b.setAttribute('aria-label', 'Viajar a ' + WORLDS[o].name);
       b.innerHTML = planet(o) + '<span></span>'; b.lastChild.textContent = WORLDS[o].short;
       b.addEventListener('click', () => travel(o));
-      box.querySelector('.mundo-gos').appendChild(b);
+      list.appendChild(b);
     });
     document.body.appendChild(box);
     boxes[id] = box;
@@ -172,6 +188,8 @@
     if (traveling || !WORLDS[to] || to === current) return;
     traveling = true;
     const from = current;
+    closeLists();
+    if (to !== 'tierra') earthMute(true);
     const launch = window.rocketLaunch ? window.rocketLaunch(from, to) : Promise.resolve();
     // Debajo de la pantalla del cohete se cambia de mundo
     if (boxes[from]) boxes[from].classList.add('hidden');
@@ -184,6 +202,7 @@
     }
     current = to;
     launch.then(() => {
+      if (to === 'tierra') earthMute(false);
       if (map) map.flyTo({ center: WORLDS[to].land, zoom: 4.2, duration: 6500, essential: true });
       return window.rocketDrop ? window.rocketDrop({ target: to === 'tierra' ? 'map' : 'mundo-map-' + to, suit: to !== 'tierra', world: to }) : null;
     }).catch(() => {}).then(() => { traveling = false; });
