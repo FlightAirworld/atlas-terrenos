@@ -327,8 +327,14 @@
     });
     const loading = new Set();
     m.on('styleimagemissing', e => { if (!loading.has(e.id)) { loading.add(e.id); loadHouse(m, e.id); } });   // la foto de cada casa se carga una vez, cuando hace falta
-    const refresh = () => { grid(id); loadTiles(id); labels(id); };
-    m.on('moveend', refresh); m.on('zoomend', refresh);
+    // Cada paso va en su try: si uno falla, los demás (y el movimiento del mapa) siguen. La cuadrícula también se redibuja mientras te mueves
+    // (antes solo al terminar el movimiento, y por eso quedaba un rectángulo fijo que no cubría toda la pantalla).
+    const step = f => { try { f(id); } catch (e) { console.error('[mundos] ' + id, e); } };
+    const refresh = () => { step(grid); step(loadTiles); step(labels); };
+    let moveT = 0;
+    const refreshLive = () => { if (moveT) return; moveT = setTimeout(() => { moveT = 0; step(grid); }, 120); };
+    m.on('moveend', refresh); m.on('zoomend', refresh); m.on('move', refreshLive);
+    ['dragPan', 'touchZoomRotate', 'scrollZoom', 'doubleClickZoom'].forEach(h => { try { if (m[h]) m[h].enable(); } catch (e) {} });
     m.on('click', e => selectAt(id, m, e.lngLat));
   }
   window.worldDraw = p => {   // app.js la llama al comprar, cambiar la casa o subir de nivel un terreno de este mundo
@@ -366,7 +372,7 @@
     const guard = setTimeout(jump, MS + 4000);
     try {
       map.resize();   // por si el tamaño cambió mientras el cohete tapaba el mapa (barra del navegador en el móvil)
-      map.once('moveend', finish);
+      map.once('moveend', () => { finish(); try { map.triggerRepaint(); } catch (e) {} });
       map.flyTo({ center, zoom: ZOOM, duration: MS, essential: true });
       setTimeout(() => { if (!done && Math.abs(map.getZoom() - 0.8) < 0.05) jump(); }, 1500);   // a los 1,5 s el zoom ni se ha movido: el vuelo no ha arrancado
     } catch (e) { console.error('[mundos] flyTo', e); jump(); }
@@ -411,5 +417,6 @@
     if (e.key === 'Escape' && current !== 'tierra') travel('tierra');
     else if (e.key === 'Escape') setMenu(false);
   });
+  window.mundoMaps = maps;   // consola: mundoMaps.marte.getZoom(), .isMoving()…
   window.travelTo = travel;   // por si se quiere probar desde la consola: travelTo('marte')
 })();
