@@ -243,8 +243,8 @@ let detailQueued = false;
 const ROAD_WIDTH = { motorway: 16, trunk: 14, primary: 12, secondary: 10, tertiary: 9, minor: 7 };   // ancho total, en metros
 // ---------- Calles horizontales entre filas de casas ----------
 // Cada SYNTH_EVERY filas de parcelas se traza una calle horizontal justo en la frontera entre dos filas.
-// SYNTH_EVERY = 1 → una calle entre cada fila; 2 → una cada dos filas; 0 → desactivadas.
-const SYNTH_EVERY = 1, SYNTH_HALF_M = 3.5, SYNTH_MIN_Z = 15, SYNTH_MAX_LINES = 150;
+// SYNTH_EVERY = 1 → una calle entre cada fila; 2 → una cada dos filas; 0 → desactivadas (ahora desactivadas: solo se ven las calles reales del mapa de la Tierra).
+const SYNTH_EVERY = 0, SYNTH_HALF_M = 3.5, SYNTH_MIN_Z = 15, SYNTH_MAX_LINES = 150;
 function synthLat(y) { return y * cfg.size - 90; }
 function synthLines(w, e, s, n) {
   const out = [];
