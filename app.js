@@ -1270,7 +1270,14 @@ $('rank-close').onclick = () => $('rank').classList.add('hidden');
 $('locate').onclick = () => {
   if (!navigator.geolocation) return alert('Tu navegador no permite geolocalización');
   navigator.geolocation.getCurrentPosition(
-    pos => { const ll = L.latLng(pos.coords.latitude, pos.coords.longitude); map.flyTo(ll, 18); map.once('moveend', () => selectAt(ll)); },
+    pos => {
+      const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
+      // Estés donde estés en el mundo, al volver a tu ubicación el paracaidista siempre baja en paracaídas hasta ella
+      const FLIGHT_MS = 6500;
+      map.flyTo(ll, 18, { duration: FLIGHT_MS });
+      if (window.skydive) window.skydive(FLIGHT_MS, { target: 'map' });
+      map.once('moveend', () => selectAt(ll));
+    },
     () => alert('No se pudo obtener tu ubicación. Revisa los permisos del navegador.'),
     { enableHighAccuracy: true, timeout: 10000 });
 };
