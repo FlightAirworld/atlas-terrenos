@@ -1897,7 +1897,10 @@ async function fightStart(req, body) {
 async function fightRank(req) {
   if (!FIGHT_ON) return { on: false };
   const month = dayKey().slice(0, 7);
-  const rows = await all(`SELECT s.user_id AS uid, s.wins, s.losses, pr.nickname, pr.avatar FROM fight_stats s
+  const rows = await all(`SELECT s.user_id AS uid, s.wins, s.losses, pr.nickname, pr.avatar,
+                          (SELECT p.country FROM parcels p WHERE p.user_id::text = s.user_id AND p.country IS NOT NULL ORDER BY p.created_at LIMIT 1) AS country,
+                          (SELECT COALESCE(SUM(t.wins), 0) FROM fight_stats t WHERE t.user_id = s.user_id) AS trophies
+                          FROM fight_stats s
                           LEFT JOIN profiles pr ON pr.user_id::text = s.user_id
                           WHERE s.month = $1 ORDER BY s.wins DESC, s.losses ASC, s.last_at ASC LIMIT 20`, [month]);
   const me = await userFrom(req);
@@ -1906,12 +1909,13 @@ async function fightRank(req) {
   if (myId) {
     const s = await one('SELECT wins, losses, last_at FROM fight_stats WHERE user_id = $1 AND month = $2', [myId, month]);
     if (s) {
+      const tr = await one('SELECT COALESCE(SUM(wins), 0) AS n FROM fight_stats WHERE user_id = $1', [myId]);
       const r = await one(`SELECT COUNT(*) AS n FROM fight_stats WHERE month = $1 AND (wins > $2 OR (wins = $2 AND (losses < $3 OR (losses = $3 AND last_at < $4))))`,
         [month, s.wins, s.losses, s.last_at]);
-      mine = { pos: Number(r.n) + 1, wins: Number(s.wins), losses: Number(s.losses) };
+      mine = { pos: Number(r.n) + 1, wins: Number(s.wins), losses: Number(s.losses), trophies: Number(tr.n) || 0 };
     }
   }
-  return { on: true, month, top: rows.map((r, i) => ({ pos: i + 1, nick: r.nickname || 'Jugador', avatar: r.avatar || null, wins: Number(r.wins), losses: Number(r.losses), me: r.uid === myId })), mine };
+  return { on: true, month, top: rows.map((r, i) => ({ pos: i + 1, nick: r.nickname || 'Jugador', avatar: r.avatar || null, country: r.country || null, trophies: Number(r.trophies) || 0, wins: Number(r.wins), losses: Number(r.losses), me: r.uid === myId })), mine };
 }
 
 // ---------- Población del juego por pueblos ----------

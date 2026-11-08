@@ -158,7 +158,7 @@
   // El puntito de «Extras» se enciende si hay algo que recoger en cualquiera de estos botones (regalo diario, ruleta, premios del mes)
   window.syncExtrasDot = () => {
     const e = $id('extras-dot'); if (!e) return;
-    const on = ['daily-dot', 'monthly-dot', 'roulette-dot'].some(id => { const d = $id(id); return d && !d.classList.contains('hidden'); });
+    const on = ['daily-dot', 'monthly-dot', 'roulette-dot', 'fight-dot'].some(id => { const d = $id(id); return d && !d.classList.contains('hidden'); });
     e.classList.toggle('hidden', !on);
   };
   let tokenSeen = null;

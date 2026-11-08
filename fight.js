@@ -11,6 +11,18 @@
   const $ = id => document.getElementById(id);
   const btn = $('fight-btn');
   if (!btn) return;
+  // ---------- Puntito rojo: tienes combates disponibles hoy (y al menos un terreno para luchar). También enciende el de «Extras» ----------
+  const dot = document.createElement('span'); dot.id = 'fight-dot'; dot.className = 'hidden'; btn.appendChild(dot);
+  const setDot = on => { dot.classList.toggle('hidden', !on); if (window.syncExtrasDot) window.syncExtrasDot(); };
+  async function checkDot() {
+    if (typeof authToken === 'undefined' || !authToken) return setDot(false);
+    try { const j = await api('/api/fight', { method: 'GET' }); setDot(!!(j.on && j.left > 0 && j.parcels && j.parcels.length)); } catch (e) { /* sin conexión: se deja como está */ }
+  }
+  window.fightRefresh = checkDot;
+  let tokenSeen = null;
+  setInterval(() => { if (typeof authToken !== 'undefined' && authToken !== tokenSeen) { tokenSeen = authToken; checkDot(); } }, 2000);   // entrar / salir de la cuenta
+  setInterval(() => { if (!document.hidden) checkDot(); }, 5 * 60e3);                                                                   // día nuevo = luchas nuevas
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDot(); });
   const fmt = n => (typeof fmtNum === 'function' ? fmtNum(n) : String(n));
   const EL = { fuego: ['🔥', '#e8590c'], planta: ['🌿', '#2f9e44'], agua: ['💧', '#1c7ed6'] };
   const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -42,6 +54,12 @@
     #fg-rank { width: 100%; border-collapse: collapse; margin-top: 8px; }
     #fg-rank td, #fg-rank th { padding: 6px 4px; border-bottom: 1px solid #8883; text-align: left; font-size: 14px; }
     #fg-rank tr.me { background: #ffd43b44; font-weight: 800; }
+    #fg-rank td:nth-child(n+3), #fg-rank th:nth-child(n+3) { text-align: center; white-space: nowrap; }
+    #fg-rank td:nth-child(2) { word-break: break-word; }
+    #fight-btn { position: relative; }
+    #fight-dot { position: absolute; top: 1px; right: 1px; width: 13px; height: 13px; border-radius: 50%; background: #e63946; border: 2px solid #fff; animation: dailypulse 1.4s infinite; }
+    #fight-dot.hidden { display: none; }
+    @media (prefers-reduced-motion: reduce) { #fight-dot { animation: none; } }
     #fg-stage { position: fixed; inset: 0; z-index: 2500; background: #000; touch-action: none; }
     #fg-cv { width: 100%; height: 100%; display: block; }
     #fg-skip { position: absolute; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 8px 14px; border-radius: 20px; border: 1px solid #fff6; background: #0009; color: #fff; font-weight: 700; cursor: pointer; }`;
@@ -112,6 +130,7 @@
       if (!state.on) { $('fg-info').textContent = 'El campeonato no está disponible ahora.'; return; }
       if (!state.parcels.some(p => p.id === selected)) selected = state.parcels[0] ? state.parcels[0].id : null;
       renderInfo(); renderGrid(); refreshGo();
+      setDot(!!(state.left > 0 && state.parcels.length));
     } catch (e) { $('fg-info').textContent = e.message; $('fg-go').disabled = true; }
   }
 
@@ -463,7 +482,54 @@
     const g = c.createLinearGradient(0, BL[1], 0, FL[1]); g.addColorStop(0, '#1d2f6e'); g.addColorStop(1, '#2d4aa6');
     c.fillStyle = g; c.beginPath(); c.moveTo(BL[0], BL[1]); c.lineTo(BR[0], BR[1]); c.lineTo(FR[0], FR[1]); c.lineTo(FL[0], FL[1]); c.closePath(); c.fill();
     c.strokeStyle = '#fff6'; c.lineWidth = 3; c.stroke();
-    c.save(); c.translate(500, 425); c.scale(1, 0.32); c.fillStyle = '#ffffff22'; c.font = '900 120px system-ui, sans-serif'; c.textAlign = 'center'; c.fillText('ATLAS', 0, 40); c.restore();
+    drawFloorLogo(c);
+  }
+
+  // ---- Marca del juego: logo + «Redecora El Mundo 🌎» (en la pared de fondo, en colores, y pintado en la lona) ----
+  const LOGO = new Image(); LOGO.src = 'images/icon-192.png';
+  const logoOk = () => LOGO.complete && LOGO.naturalWidth > 0;
+  const GAME = 'Redecora El Mundo';
+  const RAINBOW = ['#ff4d4d', '#ff9f1c', '#ffd43b', '#51cf66', '#22b8cf', '#4c8dff', '#b36bff', '#ff6bd6'];
+  function rainbowText(c, txt, cx, y, size) {   // letras de colores, centradas en cx (el espacio no consume color)
+    c.font = `900 ${size}px system-ui, sans-serif`; c.textAlign = 'left'; c.textBaseline = 'middle';
+    const ws = [...txt].map(ch => c.measureText(ch).width), tot = ws.reduce((a, b) => a + b, 0);
+    let x = cx - tot / 2, k = 0;
+    [...txt].forEach((ch, i) => {
+      if (ch !== ' ') { c.lineWidth = size * 0.12; c.strokeStyle = '#0b0b14'; c.strokeText(ch, x, y); c.fillStyle = RAINBOW[k++ % RAINBOW.length]; c.fillText(ch, x, y); }
+      x += ws[i];
+    });
+    return tot;
+  }
+  let wallCache = null;
+  function wallBanner() {   // el cartel se pinta una sola vez en un lienzo aparte (el brillo es caro de repetir en cada fotograma)
+    if (wallCache || !logoOk()) return wallCache;
+    const W = 860, H = 170, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#0d0f1ccc'; c.beginPath(); c.roundRect(6, 6, W - 12, H - 12, 26); c.fill();
+    c.lineWidth = 5; const g = c.createLinearGradient(0, 0, W, 0); RAINBOW.forEach((col, i) => g.addColorStop(i / (RAINBOW.length - 1), col));
+    c.strokeStyle = g; c.shadowColor = '#ffffffaa'; c.shadowBlur = 14; c.stroke(); c.shadowBlur = 0;
+    const ls = 120; c.save(); c.beginPath(); c.roundRect(28, (H - ls) / 2, ls, ls, 22); c.clip(); c.drawImage(LOGO, 28, (H - ls) / 2, ls, ls); c.restore();
+    let size = 76; c.font = `900 ${size}px system-ui, sans-serif`;
+    const room = W - 28 - ls - 24 - 100;   // lo que queda entre el logo y el borde derecho (con hueco para el globo)
+    while (c.measureText(GAME).width > room && size > 24) { size -= 2; c.font = `900 ${size}px system-ui, sans-serif`; }
+    const tw = c.measureText(GAME).width, cx = 28 + ls + 24 + tw / 2;
+    c.shadowColor = '#ffffff66'; c.shadowBlur = 8; rainbowText(c, GAME, cx, H / 2 + 2, size); c.shadowBlur = 0;
+    c.font = `${Math.round(size * 0.95)}px system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🌎', W - 56, H / 2 + 4);
+    return (wallCache = cv);
+  }
+  function drawWall(c) {   // pared negra de detrás del público: el cartel va justo encima de las primeras filas
+    const b = wallBanner(); if (!b) return;
+    const w = 780, h = w * b.height / b.width;
+    c.save(); c.globalAlpha = 0.95; c.drawImage(b, 500 - w / 2, 160 - h, w, h); c.restore();
+  }
+  function drawFloorLogo(c) {   // pintado en la lona, en perspectiva y dentro de las cuerdas
+    c.save(); c.translate(500, 425); c.scale(1, 0.32); c.textAlign = 'left'; c.textBaseline = 'middle';
+    const ls = 110; let size = 64; c.font = `900 ${size}px system-ui, sans-serif`;
+    while (c.measureText(GAME).width > 430 && size > 20) { size -= 2; c.font = `900 ${size}px system-ui, sans-serif`; }
+    const tw = c.measureText(GAME).width, tot = (logoOk() ? ls + 22 : 0) + tw, x0 = -tot / 2;
+    if (logoOk()) { c.globalAlpha = 0.38; c.save(); c.beginPath(); c.roundRect(x0, -ls / 2, ls, ls, 20); c.clip(); c.drawImage(LOGO, x0, -ls / 2, ls, ls); c.restore(); }
+    c.globalAlpha = 0.42; c.fillStyle = '#ffffff'; c.fillText(GAME, x0 + (logoOk() ? ls + 22 : 0), 4);
+    c.restore();
   }
 
   function drawLights(c, t, exc, flash, W, H, X, Y) {            // focos que se mueven + foco central + destello al golpear
@@ -595,6 +661,7 @@
         const u = phase === 'intro' ? -99 : t - plan.D, cer = u > -0.3;                  // u: segundos desde el final del combate
         const cam = camAt(u, W, H, s);                                                   // sin ceremonia la cámara es la de siempre (zoom 1 centrada)
         c.save(); c.translate(W / 2 + (Math.random() - 0.5) * shake, H / 2 + (Math.random() - 0.5) * shake); c.scale(s * cam.z, s * cam.z); c.translate(-cam.cx, -cam.cy);
+        drawWall(c);                                                                      // cartel del juego en la pared negra
         for (const p of crowd) if (!p.front && p.y < 300) drawPerson(c, p, t, exc);       // público del fondo
         drawRingFloor(c);
         for (const p of crowd) if (!p.front && p.y >= 300) drawPerson(c, p, t, exc);      // público de los lados
@@ -723,6 +790,7 @@
     busy = false; renderInfo(); refreshGo();
     const last = $('fg-last');
     tab(2);                                                    // al terminar, vuelve a la clasificación
+    checkDot();   // gastó una lucha: el puntito se apaga si ya no quedan
     last.textContent = j.won ? `🏆 ¡Has ganado! +${j.prize} ${j.prize === 1 ? 'crédito' : 'créditos'}` : `💥 Ha ganado ${j.foe.owner || 'tu rival'}. ¡Otra vez será!`;
   }
 
@@ -736,14 +804,14 @@
       list.textContent = '';
       if (!j.top.length) { list.textContent = 'Todavía no ha luchado nadie este mes. ¡Sé el primero!'; return; }
       const t = document.createElement('table'); t.id = 'fg-rank';
-      const hd = t.createTHead().insertRow(); ['#', 'Jugador', '✅', '❌'].forEach(h => { const th = document.createElement('th'); th.textContent = h; hd.appendChild(th); });
+      const hd = t.createTHead().insertRow(); ['#', 'Jugador', '🏆', '✅', '❌'].forEach(h => { const th = document.createElement('th'); th.textContent = h; hd.appendChild(th); });
       const tb = t.createTBody();
       for (const r of j.top) {
         const tr = tb.insertRow(); if (r.me) tr.className = 'me';
-        [r.pos === 1 ? '🥇' : r.pos === 2 ? '🥈' : r.pos === 3 ? '🥉' : String(r.pos), r.nick, String(r.wins), String(r.losses)].forEach(v => { tr.insertCell().textContent = v; });
+        [r.pos === 1 ? '🥇' : r.pos === 2 ? '🥈' : r.pos === 3 ? '🥉' : String(r.pos), [typeof flagOf === 'function' ? flagOf(r.country) : '', r.nick].filter(Boolean).join(' '), String(r.trophies || 0), String(r.wins), String(r.losses)].forEach(v => { tr.insertCell().textContent = v; });
       }
       list.appendChild(t);
-      if (j.mine && !j.top.some(r => r.me)) { const p = document.createElement('p'); p.textContent = `Tu puesto: #${j.mine.pos} (${j.mine.wins} ✅ ${j.mine.losses} ❌)`; list.appendChild(p); }
+      if (j.mine && !j.top.some(r => r.me)) { const p = document.createElement('p'); p.textContent = `Tu puesto: #${j.mine.pos} (${j.mine.trophies || 0} 🏆 ${j.mine.wins} ✅ ${j.mine.losses} ❌)`; list.appendChild(p); }
     } catch (e) { list.textContent = e.message; }
   }
 
