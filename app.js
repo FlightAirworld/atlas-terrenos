@@ -817,6 +817,7 @@ function showPanel(p) {
   } else {
     buildPackPicker();
   }
+  if (window.retosPanel) window.retosPanel(p);   // botón ❤️ «Me gusta» (retos.js)
 }
 $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; if (window.worldClearSel) window.worldClearSel(); };
 // Ganchos para mundos.js: abrir el mismo panel de compra con una parcela de otro planeta, y cerrarlo al viajar
@@ -1651,7 +1652,7 @@ function renderMine(prod, mine) {
     b.type = 'button';
     b.style.cssText = 'display:block;width:100%;text-align:left;margin:6px 0;padding:10px';
     const wi = isOtherWorld(p) && window.worldInfo ? window.worldInfo(p.world) : null;
-    b.textContent = `${flagOf(p.country)} ${p.avatar || ''} Terreno ${wi ? wi.name + ' ' + p.x + ':' + p.y : p.id} · ${starsOf(levelOf(p))} · ${new Date(p.since).toLocaleDateString('es-ES')}`.trim();
+    b.textContent = `${flagOf(p.country)} ${p.avatar || ''} Terreno ${wi ? wi.name + ' ' + p.x + ':' + p.y : p.id} · ${starsOf(levelOf(p))} · ${new Date(p.since).toLocaleDateString('es-ES')}${p.likes ? ' · ❤️ ' + p.likes : ''}`.trim();
     b.onclick = () => {
       $('mine').classList.add('hidden');
       if (wi) { if (window.goToWorldParcel) window.goToWorldParcel(p); return; }   // en otro planeta: se viaja hasta él

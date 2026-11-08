@@ -843,6 +843,7 @@ async function dailyClaim(req) {
     'UPDATE packs SET credits = credits + $1, last_daily = $2, streak = $3 WHERE code = $4 AND last_daily IS DISTINCT FROM $2 RETURNING credits, streak',
     [info.next, today, info.newStreak, code]);
   if (!up) throw new HttpError(409, 'Ya has reclamado el regalo de hoy');
+  userFrom(req).then(u => { if (u) track(u.id, 'daily'); }).catch(() => {});
   return { ok: true, code, credits: up.credits, reward: info.next, streak: up.streak, newCode: false };
 }
 
@@ -892,6 +893,7 @@ async function rouletteSpin(req) {
                         credits = credits + floor(roulette_carry + $1)::int
        WHERE code = $2 RETURNING credits, roulette_carry, free_spins`, [prize, pack.code])).rows[0];
     await client.query('COMMIT');
+    track(user.id, 'roulette');
     return { ok: true, prize, credits: Number(up.credits), carry: Number(up.roulette_carry), extra: Number(up.free_spins) || 0, usedExtra: doneToday };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -1080,6 +1082,7 @@ async function upgradeParcel(req, { id, from }) {
     await client.query('UPDATE parcels SET level = $1, level_at = $2 WHERE id = $3', [level + 1, Date.now(), String(id)]);
     await client.query('COMMIT');
     notifyFriendsOf(user.id, 'level', level + 1);
+    track(user.id, 'upgrade');
     return { ok: true, level: level + 1, credits: r.rows[0].credits, cost, free, freeUpgrades: freeLeft };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -1119,9 +1122,9 @@ async function prodCompute(db, userId, lastCollect, carry, now) {
 
 async function myParcels(req) {
   const user = await needUser(req);
-  const rows = await all('SELECT id, x, y, avatar, country, level, created_at, world FROM parcels WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200', [user.id]);
+  const rows = await all('SELECT id, x, y, avatar, country, level, created_at, world, (SELECT COUNT(*) FROM parcel_likes l WHERE l.parcel_id = parcels.id) AS likes FROM parcels WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200', [user.id]);
   const total = (await one('SELECT COUNT(*) AS n FROM parcels WHERE user_id = $1', [user.id])).n;
-  return { total, parcels: rows.map(r => ({ id: r.id, x: r.x, y: r.y, world: r.world || 'tierra', avatar: r.avatar, country: r.country, level: r.level, since: r.created_at })) };
+  return { total, parcels: rows.map(r => ({ id: r.id, x: r.x, y: r.y, world: r.world || 'tierra', avatar: r.avatar, country: r.country, level: r.level, since: r.created_at, likes: Number(r.likes) || 0 })) };
 }
 
 async function productionGet(req) {
@@ -1148,6 +1151,7 @@ async function productionCollect(req) {
       'UPDATE packs SET credits = credits + $1, last_collect = $2, prod_carry = $3 WHERE code = $4 RETURNING credits',
       [amount, now, Math.max(0, st.total - amount), p.code]);
     await client.query('COMMIT');
+    track(user.id, 'collect');
     return { ok: true, collected: amount, credits: up.rows[0].credits };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -1418,6 +1422,7 @@ async function chatSend(req, body) {
     [zone, user.id, prof.nickname, avatar, country, text, now, at.lat, at.lng]);
   const msg = { id: Number(row.id), nick: prof.nickname, avatar, country, text, t: now, r: {}, mine: null };
   chatPublish(at, msg);
+  track(user.id, 'chat');
   return { ok: true, message: msg };
 }
 // Reaccionar con un emoji (uno por persona y mensaje; tocar el mismo otra vez lo quita)
@@ -1639,7 +1644,7 @@ async function reverseCity(lat, lng) {
   const key = Math.round(lat / 0.005) + ',' + Math.round(lng / 0.005);
   if (cityCache.has(key)) return { name: cityCache.get(key), cached: true };
   const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=es&lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}`,
-    { headers: { 'User-Agent': 'atlas-terrenos/1.0 (' + (process.env.CITY_CONTACT || 'https://atlas-terrenos.onrender.com') + ')' }, signal: AbortSignal.timeout(10_000) });
+    { headers: { 'User-Agent': 'redecora-el-mundo/1.0 (' + (process.env.CITY_CONTACT || 'https://redecoraelmundo.com') + ')' }, signal: AbortSignal.timeout(10_000) });
   if (!r.ok) throw new Error('Nominatim ' + r.status);
   const a = ((await r.json()) || {}).address || {};
   const name = String(a.city || a.town || a.village || a.municipality || a.hamlet || a.county || '').trim().slice(0, 80) || CITY_NONE;
@@ -1869,7 +1874,7 @@ try { webpush = require('web-push'); } catch { /* sin el paquete: avisos desacti
 const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '', VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
 const PUSH_ON = !!(webpush && VAPID_PUBLIC && VAPID_PRIVATE);
 if (PUSH_ON) {
-  try { webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'https://atlas-terrenos.onrender.com', VAPID_PUBLIC, VAPID_PRIVATE); }
+  try { webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:terrenosatlas@gmail.com', VAPID_PUBLIC, VAPID_PRIVATE); }
   catch (e) { console.error('Claves VAPID no válidas, avisos desactivados:', e.message); }
 }
 const PUSH_QUIET_FROM = 10, PUSH_QUIET_TO = 21, PUSH_GAP_MS = 6 * 3600_000, PUSH_MAX_UNSEEN = 3, PUSH_MAX_SUBS = 5;
@@ -2139,8 +2144,12 @@ async function route(req, res, url) {
     if (!p) throw new HttpError(400, 'Coordenadas no válidas');
     const row = await q.parcelById(p.id);
     const user = row && row.user_id ? await userFrom(req) : null;
+    const hasOwner = !!(row && row.user_id);
+    const likes = hasOwner ? Number((await one('SELECT COUNT(*) AS n FROM parcel_likes WHERE parcel_id = $1', [p.id])).n) : 0;
+    const liked = !!(user && hasOwner && await one('SELECT 1 AS x FROM parcel_likes WHERE parcel_id = $1 AND user_id = $2', [p.id, user.id]));
+    if (user && hasOwner && row.user_id !== user.id) trackVisit(user.id, p.id);   // misión «visita terrenos de otros»
     return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null, avatar: row ? row.avatar : null, country: row ? row.country : null,
-      house: row ? row.house : null, level: row ? row.level : null, mine: !!(user && row && row.user_id === user.id), giftable: !!(row && row.user_id) };
+      house: row ? row.house : null, level: row ? row.level : null, mine: !!(user && row && row.user_id === user.id), giftable: hasOwner, likes, liked };
   }
 
   if (req.method === 'GET' && pn === '/api/parcels') {
@@ -2160,6 +2169,11 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/names') return namesGet();
+  if (req.method === 'GET' && pn === '/api/retos') return retosGet(req);
+  if (req.method === 'POST' && pn === '/api/retos/claim') return retosClaim(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/retos/seen') return retosSeen(req);
+  if (req.method === 'POST' && pn === '/api/like') return likePost(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/likes/top') return likesTop();
   if (req.method === 'GET' && pn === '/api/rank/cities') return rankCities(url);
   if (req.method === 'GET' && pn === '/api/towns') return townsGet(url, req);
   if (req.method === 'GET' && pn === '/api/player') return playerGet(req, url);
@@ -2273,8 +2287,190 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     const purge = () => run('DELETE FROM chat_msgs WHERE created_at < $1', [Date.now() - CHAT_KEEP_MS]).then(() => run('DELETE FROM chat_reacts WHERE msg_id NOT IN (SELECT id FROM chat_msgs)')).catch(() => {});
     purge(); setInterval(purge, 3600_000).unref();
     if (CITY_GEOCODE) { setTimeout(cityTick, 5000).unref(); setInterval(cityTick, 20_000).unref(); }   // pone ciudad a los terrenos que no la tienen
-  }).catch(e => console.error('No se pudo crear la tabla del chat:', e.message));
+  }).catch(e => console.error('No se pudo crear la tabla del chat:', e.message))
+  .then(async () => {   // retos: misiones, logros y "me gusta" (no hacen nada si ya existen)
+    await run('CREATE TABLE IF NOT EXISTS mission_progress (user_id TEXT NOT NULL, period TEXT NOT NULL, key TEXT NOT NULL, n INT NOT NULL DEFAULT 0, claimed BOOLEAN NOT NULL DEFAULT false, PRIMARY KEY (user_id, period, key))');
+    await run('CREATE TABLE IF NOT EXISTS achievements (user_id TEXT NOT NULL, key TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, key))');
+    await run('CREATE TABLE IF NOT EXISTS parcel_likes (parcel_id TEXT NOT NULL, user_id TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (parcel_id, user_id))');
+    await run('CREATE INDEX IF NOT EXISTS parcel_likes_at ON parcel_likes (created_at)');
+    await run('CREATE INDEX IF NOT EXISTS parcel_likes_user ON parcel_likes (user_id)');
+    await run('CREATE TABLE IF NOT EXISTS retos_seen (user_id TEXT PRIMARY KEY, likes_seen BIGINT NOT NULL DEFAULT 0)');
+    for (const t of ['mission_progress', 'achievements', 'parcel_likes', 'retos_seen']) await run(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});   // solo el servidor accede (la clave pública no)
+    const purgeMissions = () => run("DELETE FROM mission_progress WHERE period < $1 AND period NOT LIKE 'W%'", [new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10)]).catch(() => {});
+    purgeMissions(); setInterval(purgeMissions, 6 * 3600_000).unref();
+  }).catch(e => console.error('No se pudieron crear las tablas de retos:', e.message));
 
+
+// ---------- Retos: misiones diarias y semanales, logros y "me gusta" en terrenos ----------
+// Las recompensas son pequeñas (créditos decimales que se suman a la producción y se recogen con el resto). RETOS_SCALE las multiplica
+// (1 por defecto; 0 las quita; 2 las dobla). Las misiones se anotan solas con track() cuando el jugador hace cada cosa; los logros se
+// calculan con una sola consulta de estadísticas; los "me gusta" son permanentes (uno por jugador y terreno) para que no se puedan repetir.
+const RETOS_SCALE = Math.max(0, Number(process.env.RETOS_SCALE ?? 1) || 0);
+const rew = n => Math.round(n * RETOS_SCALE * 10000) / 10000;
+const DAILY_POOL = [
+  { key: 'collect', icon: '🎟️', text: 'Recoge los créditos de tus terrenos', target: 1, reward: 0.005 },
+  { key: 'like', icon: '❤️', text: 'Da «me gusta» a 3 terrenos de otros jugadores', target: 3, reward: 0.005 },
+  { key: 'visit', icon: '🔎', text: 'Visita 3 terrenos de otros jugadores', target: 3, reward: 0.005 },
+  { key: 'daily', icon: '🎁', text: 'Reclama tu regalo diario', target: 1, reward: 0.003 },
+  { key: 'roulette', icon: '🎡', text: 'Gira la ruleta diaria', target: 1, reward: 0.003 },
+  { key: 'chat', icon: '💬', text: 'Escribe un mensaje en el chat', target: 1, reward: 0.003 }
+];
+const WEEKLY_MISSIONS = [
+  { key: 'w_days', icon: '📅', text: 'Recoge tus créditos 5 días distintos', target: 5, reward: 0.03 },
+  { key: 'w_like', icon: '💖', text: 'Da «me gusta» a 15 terrenos', target: 15, reward: 0.03 },
+  { key: 'w_upgrade', icon: '⭐', text: 'Sube un terreno de nivel', target: 1, reward: 0.05 }
+];
+const DAILY_BONUS = 0.01;      // por completar y reclamar las 3 misiones del día
+const DAILY_COUNT = 3;
+const weekKey = () => { const d = new Date(dayKey() + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return 'W' + d.toISOString().slice(0, 10); };   // lunes de esta semana
+const hashStr = t => { let h = 2166136261; for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 16777619) >>> 0; return h; };
+const dailyFor = (uid, day) => DAILY_POOL.map(m => ({ m, h: hashStr(uid + '|' + day + '|' + m.key) })).sort((a, b) => a.h - b.h).slice(0, DAILY_COUNT).map(x => x.m);   // 3 misiones distintas para cada jugador y día
+
+const ACHIEVEMENTS = (() => {
+  const A = (key, icon, name, text, reward, prog) => ({ key, icon, name, text, reward, prog });
+  const n = (v, t) => [Math.min(Number(v) || 0, t), t];
+  return [
+    A('p1', '🏡', 'Primer terreno', 'Reclama tu primer terreno', 0.01, s => n(s.parcels, 1)),
+    A('p5', '🏘️', 'Pequeño propietario', 'Ten 5 terrenos', 0.02, s => n(s.parcels, 5)),
+    A('p10', '🏰', 'Terrateniente', 'Ten 10 terrenos', 0.05, s => n(s.parcels, 10)),
+    A('p25', '👑', 'Magnate', 'Ten 25 terrenos', 0.15, s => n(s.parcels, 25)),
+    A('c3', '🧳', 'Trotamundos', 'Ten terrenos en 3 países distintos', 0.05, s => n(s.countries, 3)),
+    A('c5', '🌍', 'Dueño del mundo', 'Ten terrenos en 5 países distintos', 0.1, s => n(s.countries, 5)),
+    A('w2', '🚀', 'Astronauta', 'Ten un terreno fuera de la Tierra', 0.05, s => n(s.worlds - 1, 1)),
+    A('l3', '⬆️', 'Mejorista', 'Sube un terreno al nivel 3', 0.03, s => n(s.maxlevel, 3)),
+    A('l5', '🌟', 'Cinco estrellas', 'Sube un terreno al nivel 5', 0.1, s => n(s.maxlevel, 5)),
+    A('s7', '🔥', 'Constante', 'Racha de 7 días con el regalo diario', 0.03, s => n(s.streak, 7)),
+    A('s30', '⚡', 'Imparable', 'Racha de 30 días con el regalo diario', 0.15, s => n(s.streak, 30)),
+    A('r1', '💗', 'Querido', 'Recibe tu primer «me gusta»', 0.01, s => n(s.likes_in, 1)),
+    A('r10', '😍', 'Popular', 'Recibe 10 «me gusta»', 0.05, s => n(s.likes_in, 10)),
+    A('r50', '🤩', 'Famoso', 'Recibe 50 «me gusta»', 0.15, s => n(s.likes_in, 50)),
+    A('g10', '🤗', 'Amable', 'Da «me gusta» a 10 terrenos', 0.02, s => n(s.likes_out, 10)),
+    A('gift', '💝', 'Generoso', 'Regala créditos a otro jugador', 0.02, s => n(s.gifts, 1)),
+    A('chat', '💬', 'Sociable', 'Escribe en el chat', 0.01, s => n(s.chats, 1)),
+    A('pres', '🏛️', 'Presidente', 'Sé presidente de un pueblo', 0.1, s => n(s.pres, 1)),
+    A('m10', '🎯', 'Trabajador', 'Completa 10 misiones', 0.03, s => n(s.missions, 10)),
+    A('m50', '🏅', 'Campeón de retos', 'Completa 50 misiones', 0.1, s => n(s.missions, 50))
+  ];
+})();
+
+async function grantCarry(userId, amount) {   // suma créditos decimales a la producción del jugador (se recogen con el resto)
+  const a = rew(amount); if (!(a > 0)) return;
+  await ensureUserPack({ id: userId });
+  await run('UPDATE packs SET prod_carry = COALESCE(prod_carry, 0) + $1 WHERE user_id = $2', [a, userId]);
+}
+function track(userId, key, by = 1) {   // anota una acción para las misiones; no espera ni falla (nunca retrasa la acción del jugador)
+  if (!userId) return;
+  const bump = (period, k) => run('INSERT INTO mission_progress (user_id, period, key, n) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, period, key) DO UPDATE SET n = mission_progress.n + $4 RETURNING n', [userId, period, k, by]);
+  (async () => {
+    const r = await bump(dayKey(), key);
+    if (key === 'collect' && r.rows[0] && r.rows[0].n === by) await bump(weekKey(), 'w_days');   // primer cobro del día
+    if (key === 'like') await bump(weekKey(), 'w_like');
+    if (key === 'upgrade') await bump(weekKey(), 'w_upgrade');
+  })().catch(e => console.error('track:', e.message));
+}
+const visitSeen = new Set();
+function trackVisit(userId, parcelId) {   // visitar un terreno cuenta una vez por jugador, terreno y día
+  const k = userId + '|' + dayKey() + '|' + parcelId;
+  if (visitSeen.has(k)) return;
+  if (visitSeen.size > 20000) visitSeen.clear();
+  visitSeen.add(k); track(userId, 'visit');
+}
+
+async function achStats(uid) {
+  return one(`SELECT
+    (SELECT COUNT(*) FROM parcels WHERE user_id = $1::uuid) AS parcels,
+    (SELECT COUNT(DISTINCT country) FROM parcels WHERE user_id = $1::uuid AND country IS NOT NULL) AS countries,
+    (SELECT COUNT(DISTINCT world) FROM parcels WHERE user_id = $1::uuid) AS worlds,
+    (SELECT COALESCE(MAX(level), 1) FROM parcels WHERE user_id = $1::uuid) AS maxlevel,
+    (SELECT COALESCE(MAX(streak), 0) FROM packs WHERE user_id = $1::uuid) AS streak,
+    (SELECT COUNT(*) FROM parcel_likes l JOIN parcels p ON p.id = l.parcel_id WHERE p.user_id = $1::uuid) AS likes_in,
+    (SELECT COUNT(*) FROM parcel_likes WHERE user_id = $2) AS likes_out,
+    (SELECT COUNT(*) FROM gifts WHERE from_user = $2) AS gifts,
+    (SELECT COUNT(*) FROM chat_msgs WHERE user_id = $2) AS chats,
+    (SELECT COUNT(*) FROM president_grants WHERE user_id = $2) AS pres,
+    (SELECT COUNT(*) FROM mission_progress WHERE user_id = $2 AND claimed AND key <> 'd_bonus') AS missions`, [uid, uid]);
+}
+
+async function retosGet(req) {
+  const user = await needUser(req);
+  const uid = user.id, day = dayKey(), week = weekKey();
+  const stats = await achStats(uid);
+  const have = new Set((await all('SELECT key FROM achievements WHERE user_id = $1', [uid])).map(r => r.key));
+  const newAch = [];
+  for (const a of ACHIEVEMENTS) {   // desbloquea (y paga) los logros que ya cumple; el INSERT … ON CONFLICT evita pagar dos veces
+    const [cur, tgt] = a.prog(stats);
+    if (cur >= tgt && !have.has(a.key)) {
+      const ins = await run('INSERT INTO achievements (user_id, key, created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [uid, a.key, Date.now()]);
+      if (ins.rowCount) { await grantCarry(uid, a.reward); newAch.push({ key: a.key, icon: a.icon, name: a.name, reward: rew(a.reward) }); }
+      have.add(a.key);
+    }
+  }
+  const prog = new Map((await all('SELECT period, key, n, claimed FROM mission_progress WHERE user_id = $1 AND period IN ($2,$3)', [uid, day, week])).map(r => [r.period + '|' + r.key, r]));
+  const line = (m, period) => { const r = prog.get(period + '|' + m.key); return { key: m.key, icon: m.icon, text: m.text, target: m.target, n: Math.min(r ? Number(r.n) : 0, m.target), claimed: !!(r && r.claimed), reward: rew(m.reward) }; };
+  const daily = dailyFor(uid, day).map(m => line(m, day));
+  const bonusRow = prog.get(day + '|d_bonus');
+  const seen = await one('SELECT likes_seen FROM retos_seen WHERE user_id = $1', [uid]);
+  const unseen = Number((await one('SELECT COUNT(*) AS n FROM parcel_likes l JOIN parcels p ON p.id = l.parcel_id WHERE p.user_id = $1::uuid AND l.created_at > $2', [uid, seen ? Number(seen.likes_seen) : 0])).n);
+  return {
+    daily, bonus: { reward: rew(DAILY_BONUS), claimed: !!(bonusRow && bonusRow.claimed), ready: daily.every(d => d.claimed) },
+    weekly: WEEKLY_MISSIONS.map(m => line(m, week)),
+    achievements: ACHIEVEMENTS.map(a => { const [cur, target] = a.prog(stats); return { key: a.key, icon: a.icon, name: a.name, text: a.text, reward: rew(a.reward), unlocked: have.has(a.key), cur, target }; }),
+    newAch, likesIn: Number(stats.likes_in), likesOut: Number(stats.likes_out), likesUnseen: unseen
+  };
+}
+
+async function retosClaim(req, body) {
+  const user = await needUser(req), uid = user.id, key = String(body && body.key || ''), day = dayKey();
+  let reward;
+  if (key === 'd_bonus') {
+    const keys = dailyFor(uid, day).map(m => m.key);
+    const done = Number((await one('SELECT COUNT(*) AS n FROM mission_progress WHERE user_id = $1 AND period = $2 AND key = ANY($3::text[]) AND claimed', [uid, day, keys])).n);
+    if (done < keys.length) throw new HttpError(409, 'Reclama primero las 3 misiones de hoy');
+    const ins = await run('INSERT INTO mission_progress (user_id, period, key, n, claimed) VALUES ($1,$2,$3,1,true) ON CONFLICT DO NOTHING', [uid, day, key]);
+    if (!ins.rowCount) throw new HttpError(409, 'Ya has reclamado el bonus de hoy');
+    reward = DAILY_BONUS;
+  } else {
+    const wk = WEEKLY_MISSIONS.find(m => m.key === key), dm = dailyFor(uid, day).find(m => m.key === key);
+    const m = wk || dm;
+    if (!m) throw new HttpError(404, 'Esa misión no existe');
+    const up = await one('UPDATE mission_progress SET claimed = true WHERE user_id = $1 AND period = $2 AND key = $3 AND NOT claimed AND n >= $4 RETURNING n', [uid, wk ? weekKey() : day, key, m.target]);
+    if (!up) throw new HttpError(409, 'Esta misión aún no está completada o ya la reclamaste');
+    reward = m.reward;
+  }
+  await grantCarry(uid, reward);
+  return { ok: true, reward: rew(reward) };
+}
+async function retosSeen(req) { const u = await needUser(req); await run('INSERT INTO retos_seen (user_id, likes_seen) VALUES ($1,$2) ON CONFLICT (user_id) DO UPDATE SET likes_seen = $2', [u.id, Date.now()]); return { ok: true }; }
+
+const likeNotified = new Map();
+async function likePost(req, body) {
+  const user = await needUser(req);
+  if (rateHit('like:' + user.id, 60_000) > 30) throw new HttpError(429, 'Vas muy rápido. Espera un minuto');
+  const id = String(body && body.id || '');
+  const par = id && await one('SELECT id, user_id, owner FROM parcels WHERE id = $1', [id]);
+  if (!par) throw new HttpError(404, 'Ese terreno no existe');
+  if (!par.user_id) throw new HttpError(409, 'Este terreno no tiene un dueño con cuenta');
+  if (String(par.user_id) === String(user.id)) throw new HttpError(409, 'No puedes darte «me gusta» a tu propio terreno');
+  const ins = await run('INSERT INTO parcel_likes (parcel_id, user_id, created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [id, user.id, Date.now()]);
+  const likes = Number((await one('SELECT COUNT(*) AS n FROM parcel_likes WHERE parcel_id = $1', [id])).n);
+  if (ins.rowCount) {
+    track(user.id, 'like');
+    const k = String(par.user_id), now = Date.now();   // aviso al móvil del dueño (como mucho uno cada 6 h por dueño)
+    if (PUSH_ON && now - (likeNotified.get(k) || 0) > 6 * 3600_000) {
+      likeNotified.set(k, now); if (likeNotified.size > 5000) likeNotified.clear();
+      getProfile(user.id).then(me => pushSocial(par.user_id, { title: '❤️ Le gusta tu terreno', body: `${me ? me.nickname : 'Alguien'} ha dado «me gusta» a tu terreno.`, tag: 'like', url: '/' })).catch(() => {});
+    }
+  }
+  return { ok: true, liked: true, likes, added: !!ins.rowCount };
+}
+let topLikesCache = { at: 0, list: [] };
+async function likesTop() {
+  if (Date.now() - topLikesCache.at < 120_000) return { top: topLikesCache.list };
+  const rows = await all(`SELECT p.id, p.x, p.y, p.owner, p.avatar, p.country, p.house, p.level, p.world, COUNT(*) AS n
+    FROM parcel_likes l JOIN parcels p ON p.id = l.parcel_id WHERE l.created_at > $1 GROUP BY p.id ORDER BY n DESC, MAX(l.created_at) DESC LIMIT 10`, [Date.now() - 7 * 24 * HOUR_MS]);
+  topLikesCache = { at: Date.now(), list: rows.map(r => ({ id: r.id, x: r.x, y: r.y, world: r.world || 'tierra', owner: r.owner, avatar: r.avatar, country: r.country, house: r.house, level: r.level, likes: Number(r.n) })) };
+  return { top: topLikesCache.list };
+}
 
 // ---------- Papá Noel ----------
 // Cada SANTA_EVERY_MIN minutos (60 por defecto) llega Papá Noel volando en su trineo, aterriza en la casa de un jugador con cuenta

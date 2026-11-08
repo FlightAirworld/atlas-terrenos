@@ -111,6 +111,14 @@ CREATE TABLE IF NOT EXISTS santa_notices (
 );
 CREATE INDEX IF NOT EXISTS santa_notices_user ON santa_notices (user_id, seen);
 
+-- Retos: misiones diarias/semanales, logros y "me gusta" en terrenos
+CREATE TABLE IF NOT EXISTS mission_progress (user_id TEXT NOT NULL, period TEXT NOT NULL, key TEXT NOT NULL, n INT NOT NULL DEFAULT 0, claimed BOOLEAN NOT NULL DEFAULT false, PRIMARY KEY (user_id, period, key));
+CREATE TABLE IF NOT EXISTS achievements (user_id TEXT NOT NULL, key TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, key));
+CREATE TABLE IF NOT EXISTS parcel_likes (parcel_id TEXT NOT NULL, user_id TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (parcel_id, user_id));
+CREATE INDEX IF NOT EXISTS parcel_likes_at ON parcel_likes (created_at);
+CREATE INDEX IF NOT EXISTS parcel_likes_user ON parcel_likes (user_id);
+CREATE TABLE IF NOT EXISTS retos_seen (user_id TEXT PRIMARY KEY, likes_seen BIGINT NOT NULL DEFAULT 0);
+
 -- RLS activado en todas (sin políticas: solo el servidor accede, con DATABASE_URL)
 DO $$ DECLARE t TEXT; BEGIN
   FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
