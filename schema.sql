@@ -126,6 +126,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS clans_name_lower ON clans (lower(name));
 CREATE TABLE IF NOT EXISTS clan_members (user_id TEXT PRIMARY KEY, clan_id BIGINT NOT NULL, joined_at BIGINT NOT NULL);
 CREATE INDEX IF NOT EXISTS clan_members_clan ON clan_members (clan_id);
 
+-- Pase Oro y diario
+CREATE TABLE IF NOT EXISTS passes (user_id TEXT PRIMARY KEY, until BIGINT NOT NULL, bought_at BIGINT NOT NULL, times INT NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS activity_seen (user_id TEXT PRIMARY KEY, seen_at BIGINT NOT NULL DEFAULT 0);
+
 -- RLS activado en todas (sin políticas: solo el servidor accede, con DATABASE_URL)
 DO $$ DECLARE t TEXT; BEGIN
   FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP

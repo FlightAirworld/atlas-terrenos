@@ -886,8 +886,10 @@ let chosenHouse = null;   // casa elegida para el terreno que vas a reclamar (nu
 // Casas que el servidor acepta pero que no estaban en el selector, y casas de eventos activos (se rellenan solas desde /api/events).
 // OJO: HOUSES NO se toca (el reparto al azar de las parcelas sin casa elegida depende de su orden y tamaño).
 const EXTRA_HOUSES = ['images/cesped-2.webp', 'images/parque-picnic.webp', 'images/desierto-1.webp', 'images/desierto-2.webp', 'images/prado.webp', 'images/claro-bosque.webp', 'images/parque-futbol.webp', 'images/mar.webp', 'images/mar-peces.webp'];
+// Casas del Pase Oro 👑 (mismas que GOLD_HOUSES de server.js). Sin pase salen con candado; window.atlasGold lo pone retos.js.
+const GOLD_HOUSES = ['images/casa-2.webp', 'images/casa-3.webp', 'images/rascacielos.webp', 'images/parque-atracciones.webp', 'images/puerto.webp', 'images/aeropuerto.webp', 'images/ayuntamiento.webp', 'images/banco.webp', 'images/hospital.webp', 'images/iglesia.webp', 'images/piscina.webp', 'images/estacion.webp'];
 let eventHouses = [];
-const pickableHouses = () => HOUSES.concat(EXTRA_HOUSES, eventHouses);
+const pickableHouses = () => HOUSES.concat(EXTRA_HOUSES, GOLD_HOUSES, eventHouses);
 const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '').replace(/[-_]/g, ' ');
 // Categorías del selector de casas: al tocar una (🎬 Cines, 🏠 Casas…) solo salen las de ese tipo. Lo que no esté aquí va a «Otros» (así las casas nuevas siempre se ven).
 const HOUSE_CATS = [
@@ -900,6 +902,7 @@ const HOUSE_CATS = [
   { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
   { icon: '⛽', name: 'Motor', files: ['cepsa', 'aurgi'] },
   { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto'] },
+  { icon: '👑', name: 'Oro', files: GOLD_HOUSES.map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) },
   { icon: '🎉', name: 'Eventos', files: [] }   // casas de edición limitada del evento activo (se rellena sola)
 ];
 // Si una casa no está en la lista de arriba, su categoría sale del nombre del archivo: cine-2.webp → Cines, casa-9.webp → Casas, etc.
@@ -929,7 +932,11 @@ function buildHousePicker(box, onPick, withRandom) {
     const b = document.createElement('button');
     b.type = 'button'; b.dataset.house = value || ''; b.title = label; b.setAttribute('aria-label', label);
     b.style.cssText = 'flex:0 0 auto;width:52px;height:52px;padding:2px;border-radius:10px;font-size:22px';
-    b.append(content); b.onclick = () => onPick(value); box.appendChild(b);
+    b.append(content);
+    const locked = value && GOLD_HOUSES.includes(value) && !window.atlasGold;
+    if (locked) { b.style.position = 'relative'; b.style.opacity = '.6'; const k = document.createElement('span'); k.textContent = '🔒'; k.style.cssText = 'position:absolute;right:2px;top:0;font-size:14px'; b.append(k); }
+    b.onclick = () => { if (locked) { setMsg('👑 Casa del Pase Oro: consíguelo en 🎯 Retos → 👑 Pase Oro', 'err'); if (window.openRetos) window.openRetos('p'); return; } onPick(value); };
+    box.appendChild(b);
   };
   if (withRandom) add(null, '🎲', 'Al azar');
   pickableHouses().forEach(h => {

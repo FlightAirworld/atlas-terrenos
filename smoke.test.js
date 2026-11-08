@@ -52,3 +52,12 @@ test('toda casa del selector (app.js) la acepta el servidor (server.js)', () => 
   // el reparto al azar del servidor (álbum) debe ser idéntico al de HOUSES de app.js
   assert.deepEqual(list(server, 'const CLIENT_RANDOM_POOL = ['), list(app, 'const HOUSES = ['));
 });
+
+test('las casas del Pase Oro son las mismas en app.js y server.js, y existen sus imágenes', () => {
+  const grab = (src, from) => { const i = src.indexOf(from); return [...src.slice(i, src.indexOf('];', i)).matchAll(/'(images\/[^']+)'/g)].map(m => m[1]); };
+  const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8'), server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+  const a = grab(app, 'const GOLD_HOUSES = ['), s = grab(server, 'const GOLD_HOUSES = [');
+  assert.ok(a.length >= 6);
+  assert.deepEqual(a, s);
+  for (const h of a) for (const suf of ['', '-s', '-m', '-t']) assert.ok(fs.existsSync(path.join(root, h.replace(/\.webp$/, suf + '.webp'))), 'falta ' + h + suf);
+});

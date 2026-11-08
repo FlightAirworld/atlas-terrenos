@@ -32,8 +32,8 @@
     #retos-dot { position:absolute; top:2px; right:2px; width:14px; height:14px; border-radius:50%; background:#e63946; border:2px solid #fff; animation:dailypulse 1.4s infinite; }
     .mp-ic #retos-dot { top:-3px !important; right:-3px !important; }
     #retos .modal-card { max-height: min(90vh, 760px); overflow-y: auto; }
-    #retos .rtabs { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:6px 0 10px; }
-    #retos .rtabs button { flex:1; width:auto !important; margin:0 !important; padding:7px 4px; font-weight:700; font-size:13px; }
+    #retos .rtabs { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:6px 0 10px; }
+    #retos .rtabs button { flex:1; width:auto !important; margin:0 !important; padding:6px 2px; font-weight:700; font-size:11.5px; line-height:1.2; white-space:pre-line; }
     #retos .rtabs button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
     #retos h3 { margin:14px 0 6px; font-size:15px; }
     #retos .rnote { font-size:12px; margin:0 0 6px; }
@@ -65,6 +65,12 @@
     #retos .emo button { width:38px !important; height:38px; padding:0 !important; margin:0 !important; font-size:20px; }
     #retos .emo button.on { outline:3px solid #ffb703; }
     #retos .me { border-color:var(--accent); }
+    #rt-dnew:not(:empty) { margin-left:3px; background:#e63946; color:#fff; border-radius:99px; padding:0 5px; font-size:10px; }
+    #retos .gold { border-color:#ffb703; background:linear-gradient(135deg,#fff8e1,#fff); }
+    #retos .onb { border-color:var(--accent); }
+    #retos .step { display:flex; gap:8px; align-items:flex-start; padding:3px 0; font-size:14px; }
+    #retos .step.done { opacity:.6; text-decoration:line-through; }
+    #retos .step i { font-style:normal; flex:none; }
     #like-btn { width:100%; padding:9px; margin:2px 0 6px; font-weight:700; }
     #like-btn.liked { background:#ffe3e6; border-color:#e63946; color:#c1121f; }
   `;
@@ -79,7 +85,7 @@
       '<button id="retos-close" class="close" type="button" aria-label="Cerrar">×</button>' +
       '<h2 id="retos-title">🎯 Retos</h2>' +
       '<p id="retos-sum" class="rnote muted"></p>' +
-      '<div class="rtabs"><button id="rt-m" type="button" class="on">🎯 Misiones</button><button id="rt-a" type="button">🏆 Logros</button><button id="rt-b" type="button">📚 Álbum</button><button id="rt-c" type="button">👥 Clan</button><button id="rt-e" type="button">🎉 Eventos</button><button id="rt-l" type="button">❤️ Populares</button></div>' +
+      '<div class="rtabs"><button id="rt-m" type="button" class="on">🎯\nMisiones</button><button id="rt-a" type="button">🏆\nLogros</button><button id="rt-b" type="button">📚\nÁlbum</button><button id="rt-c" type="button">👥\nClan</button><button id="rt-e" type="button">🎉\nEventos</button><button id="rt-l" type="button">❤️\nPopulares</button><button id="rt-p" type="button">👑\nPase Oro</button><button id="rt-d" type="button">📰\nDiario<span id="rt-dnew"></span></button></div>' +
       '<div id="retos-body"></div>' +
       '<p id="retos-msg" class="msg" aria-live="polite"></p>' +
     '</div>';
@@ -104,6 +110,7 @@
   function renderMissions() {
     body.replaceChildren();
     if (!data) return;
+    const ob = onboardingCard(); if (ob) body.append(ob);
     body.append(el('h3', '', '📅 Misiones de hoy'), el('p', 'rnote muted', 'Son nuevas cada día. Completa las 3 y reclama el bonus.'));
     data.daily.forEach(m => body.append(missionRow(m)));
     const b = data.bonus, r = el('div', 'rrow' + (b.claimed ? ' done' : '') + (b.ready && !b.claimed ? ' ok' : ''));
@@ -146,6 +153,69 @@
       body.append(b);
     });
   }
+  // ---- 🚀 Primeros pasos (solo cuentas nuevas) ----
+  function onboardingCard() {
+    const o = data && data.onboarding; if (!o) return null;
+    const r = el('div', 'rrow onb'), head = el('div', 'rtop'), t = el('div', 'rt');
+    const tl = el('div'); tl.append(el('b', '', `🚀 Primeros pasos · ${o.done}/${o.total}`));
+    t.append(tl, el('small', '', 'Completa la guía y gana +0,05 🎟️'));
+    head.append(t);
+    const bar = el('div', 'rbar'), fill = el('i'); fill.style.width = Math.round(o.done / o.total * 100) + '%'; bar.append(fill);
+    r.append(head, bar);
+    let first = true;
+    o.steps.forEach(st => {
+      const line = el('div', 'step' + (st.done ? ' done' : ''));
+      line.append(el('i', '', st.done ? '✅' : '⬜'));
+      const txt = el('div', ''); txt.append(el('span', '', `${st.icon} ${st.text}`));
+      if (!st.done && first) { txt.append(el('br'), el('small', '', st.hint)); first = false; }
+      line.append(txt); r.append(line);
+    });
+    return r;
+  }
+
+  // ---- 👑 Pase Oro ----
+  async function buyPass() {
+    const p = data && data.pass; if (!p || busy) return;
+    if (!confirm(`${p.active ? 'Renovar' : 'Comprar'} el Pase Oro cuesta ${p.cost} ${p.cost === 1 ? 'crédito' : 'créditos'} y dura ${p.days} días. ¿Continuar?`)) return;
+    busy = true; say('');
+    try {
+      const j = await api('/api/pass/buy', { method: 'POST', body: {} });
+      if (typeof credits !== 'undefined') { try { credits = j.credits; if (typeof updateCreditUi === 'function') updateCreditUi(); } catch (e) {} }
+      say('👑 ¡Pase Oro activado! Ya puedes elegir sus casas exclusivas', 'ok'); try { sfx('claim'); } catch (e) {}
+    } catch (e) { say(e.message, 'err'); }
+    busy = false; await refresh();
+  }
+  function renderPass() {
+    body.replaceChildren();
+    const p = data && data.pass; if (!p) return;
+    const box = el('div', 'rrow gold');
+    box.append(el('div', 'rtop', '👑 Pase Oro'));
+    const ul = el('div', 'rnote'); ul.style.lineHeight = '1.5';
+    [`🏠 ${p.houses.length} casas exclusivas (rascacielos, aeropuerto, parque de atracciones…)`, `🎁 Bonus diario: +${nf(p.dailyReward)} 🎟️ cada día`, '👑 Una corona junto a tu nombre en tus terrenos', `📅 Dura ${p.days} días y se acumula si lo renuevas`, '🏡 Las casas que pongas con el pase son tuyas para siempre'].forEach(x => ul.append(el('div', '', x)));
+    box.append(ul);
+    box.append(el('p', 'rnote', p.active ? `✅ Activo: te ${p.daysLeft === 1 ? 'queda 1 día' : 'quedan ' + p.daysLeft + ' días'}` : 'Todavía no tienes el pase'));
+    const b = el('button', 'primary rbtn', `${p.active ? '🔄 Renovar (+' + p.days + ' días)' : '👑 Conseguir el Pase Oro'} · ${p.cost} 🎟️`); b.type = 'button'; b.style.textAlign = 'center'; b.disabled = busy; b.onclick = buyPass;
+    box.append(b); body.append(box);
+    if (p.active) body.append(missionRow({ key: 'p_daily', icon: '🎁', text: 'Bonus diario del Pase Oro', target: 1, n: 1, claimed: p.dailyClaimed, reward: p.dailyReward }));
+    body.append(el('h3', '', '🏠 Casas del Pase Oro'), thumbs(p.houses.map(h => ({ img: h.img, owned: p.active || h.owned }))));
+    body.append(el('p', 'rnote muted', 'Se eligen al reclamar un terreno o al cambiar la casa (categoría 👑 Oro). Sin pase salen con un candado 🔒.'));
+  }
+
+  // ---- 📰 Diario ----
+  const ago = ms => { const m = Math.max(0, Math.round((Date.now() - ms) / 60000)); return m < 1 ? 'ahora' : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`; };
+  let diary = null;
+  async function renderDiary() {
+    body.replaceChildren(el('p', 'rnote muted', 'Cargando…'));
+    try { diary = await api('/api/activity', { method: 'GET' }); } catch (e) { diary = null; }
+    if (tab !== 'd') return;
+    body.replaceChildren();
+    if (!diary) { body.append(el('p', 'muted', 'No se pudo cargar el diario.')); return; }
+    body.append(el('p', 'rnote muted', diary.unread ? `🆕 ${diary.unread} ${diary.unread === 1 ? 'novedad' : 'novedades'} desde tu última visita` : 'Aquí verás lo que pasa mientras no estás.'));
+    if (!diary.items.length) body.append(el('p', 'muted', 'Todavía no hay novedades. Cuando alguien te dé «me gusta» o te regale créditos, saldrá aquí.'));
+    diary.items.forEach(i => { const r = el('div', 'rrow' + (i.fresh ? ' ok' : '')), t = el('div', 'rt'); t.append(el('div', '', i.text), el('small', '', (i.fresh ? '🆕 ' : '') + (i.kind === 'event' ? 'ahora' : ago(i.at)))); r.append(t); body.append(r); });
+    if (diary.unread) { try { await api('/api/activity/seen', { method: 'POST', body: {} }); } catch (e) {} setTimeout(() => refresh(), 400); }
+  }
+
   // ---- 📚 Álbum: una casilla por casa; el sello se gana con la primera casa de cada categoría ----
   const thumbs = list => { const w = el('div', 'thumbs'); list.forEach(h => { const sp = el('span', h.owned ? 'yes' : 'no'); const i = document.createElement('img'); i.src = sizedUrl(h.img, 't'); i.alt = ''; i.title = String(h.img).replace(/^images\//, '').replace(/\.webp$/i, '').replace(/[-_]/g, ' '); sp.append(i); w.append(sp); }); return w; };
   function renderAlbum() {
@@ -249,9 +319,9 @@
   }
 
   function render() {
-    ['m', 'a', 'b', 'c', 'e', 'l'].forEach(k => $('rt-' + k).classList.toggle('on', tab === k));
+    ['m', 'a', 'b', 'c', 'e', 'l', 'p', 'd'].forEach(k => $('rt-' + k).classList.toggle('on', tab === k));
     sum.textContent = data ? `🎟️ Los premios se suman a tu producción: se recogen con el resto de créditos.` : '';
-    if (tab === 'm') renderMissions(); else if (tab === 'a') renderAch(); else if (tab === 'b') renderAlbum(); else if (tab === 'c') renderClan(); else if (tab === 'e') renderEvents(); else renderLikes();
+    if (tab === 'm') renderMissions(); else if (tab === 'a') renderAch(); else if (tab === 'b') renderAlbum(); else if (tab === 'c') renderClan(); else if (tab === 'e') renderEvents(); else if (tab === 'p') renderPass(); else if (tab === 'd') renderDiary(); else renderLikes();
   }
 
   // ---- Datos ----
@@ -259,7 +329,8 @@
     if (!data) return 0;
     const m = [...data.daily, ...data.weekly].filter(x => x.n >= x.target && !x.claimed).length;
     const ev = (data.events || []).filter(e => e.active && e.mission && e.mission.n >= 1 && !e.mission.claimed).length;
-    return m + ev + (data.bonus.ready && !data.bonus.claimed ? 1 : 0);
+    const gold = data.pass && data.pass.active && !data.pass.dailyClaimed ? 1 : 0;
+    return m + ev + gold + (data.activityUnread > 0 ? 1 : 0) + (data.bonus.ready && !data.bonus.claimed ? 1 : 0);
   }
   function setDot() {
     dot.classList.toggle('hidden', !(authToken && readyCount() > 0));
@@ -276,9 +347,18 @@
     try {
       data = await api('/api/retos', { method: 'GET' }); lastFetch = Date.now();
       setDot();
-      if (!modal.classList.contains('hidden')) render();
+      const dn = $('rt-dnew'); if (dn) dn.textContent = data.activityUnread > 0 ? String(data.activityUnread) : '';
+      const goldNow = !!(data.pass && data.pass.active);
+      if (goldNow !== !!window.atlasGold) { window.atlasGold = goldNow; if (window.rebuildHousePickers) try { window.rebuildHousePickers(); } catch (e) {} }   // los candados del selector de casas
+      if (!modal.classList.contains('hidden') && tab !== 'd') render();
       (data.newAlbum || []).forEach((a, i) => setTimeout(() => { toast(`${a.text} · +${nf(a.reward)} 🎟️`, 6000); try { sfx('claim'); } catch (e) {} }, i * 6500));
       (data.newAch || []).forEach((a, i) => setTimeout(() => { toast(`🏆 ¡Logro desbloqueado! ${a.icon} ${a.name} · +${nf(a.reward)} 🎟️`, 7000); try { sfx('claim'); } catch (e) {} }, ((data.newAlbum || []).length + i) * 6500 + 3000));
+      if (announce && data.onboarding && data.onboarding.done < data.onboarding.total) {   // una sola vez por dispositivo
+        let seenOnb = false; try { seenOnb = localStorage.getItem('retosOnb') === '1'; localStorage.setItem('retosOnb', '1'); } catch (e) {}
+        if (!seenOnb) setTimeout(() => toast('🚀 Tienes una guía de primeros pasos en 🎯 Retos: ¡te llevará 5 minutos!', 8000), 2500);
+      } else if (announce && data.activityUnread > 0 && !(data.newAch || []).length && !(data.likesUnseen > 0)) {
+        toast(`📰 Tienes ${data.activityUnread} ${data.activityUnread === 1 ? 'novedad' : 'novedades'} en 🎯 Retos → Diario`, 7000);
+      }
       if (announce && data.likesUnseen > 0 && !(data.newAch || []).length) {
         toast(`❤️ ${data.likesUnseen === 1 ? 'A 1 persona le gustó' : 'A ' + data.likesUnseen + ' personas les gustaron'} tus terrenos`, 7000);
         api('/api/retos/seen', { method: 'POST', body: {} }).catch(() => {});
@@ -296,12 +376,14 @@
     busy = false; await refresh();
   }
 
-  function open() {
+  function open(k) {
+    if (k) tab = k;
     if (!authToken) return openLogin('Entra con tu cuenta para ver tus misiones y logros 🎯');
     say(''); modal.classList.remove('hidden'); top = null; render(); refresh();
   }
   const close = () => modal.classList.add('hidden');
-  btn.addEventListener('click', open);
+  window.openRetos = k => open(typeof k === 'string' ? k : null);
+  btn.addEventListener('click', () => open());
   $('retos-close').onclick = close;
   modal.addEventListener('click', e => { if (e.target === modal) close(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) close(); });
@@ -311,6 +393,8 @@
   $('rt-c').onclick = () => { tab = 'c'; say(''); render(); };
   $('rt-e').onclick = () => { tab = 'e'; say(''); render(); };
   $('rt-l').onclick = () => { tab = 'l'; say(''); render(); };
+  $('rt-p').onclick = () => { tab = 'p'; say(''); render(); };
+  $('rt-d').onclick = () => { tab = 'd'; say(''); render(); };
 
   // Entrar / salir de la cuenta, volver a la pestaña y cada pocos minutos
   setInterval(() => {
@@ -321,7 +405,7 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden && authToken) setTimeout(() => refresh(), 500); });
 
   // Cuando el jugador hace algo que cuenta para una misión o un logro, se vuelve a mirar (sin tocar el código de cada acción)
-  const WATCH = ['/api/production/collect', '/api/parcel/upgrade', '/api/claim', '/api/chat/send', '/api/gifts/send', '/api/roulette/spin', '/api/daily/claim', '/api/like', '/api/parcel/house', '/api/clans'];
+  const WATCH = ['/api/production/collect', '/api/parcel/upgrade', '/api/claim', '/api/chat/send', '/api/gifts/send', '/api/roulette/spin', '/api/daily/claim', '/api/like', '/api/parcel/house', '/api/clans', '/api/pass'];
   const f0 = window.fetch;
   if (typeof f0 === 'function') {
     window.fetch = function (input, init) {
@@ -347,7 +431,7 @@
     like.disabled = !!p.liked; like.className = p.liked ? 'liked' : '';
     like.textContent = p.liked ? `❤️ Te gusta${n}` : `🤍 Me gusta${n}`;
   }
-  window.retosPanel = paintLike;   // lo llama showPanel() de app.js cada vez que se abre un terreno
+  window.retosPanel = p => { paintLike(p); const o = $('p-owner'); if (o && p && p.gold && o.textContent && !o.textContent.startsWith('👑')) o.textContent = '👑 ' + o.textContent; };   // lo llama showPanel() de app.js cada vez que se abre un terreno
   like.addEventListener('click', async () => {
     const p = window.selected !== undefined ? window.selected : (typeof selected !== 'undefined' ? selected : null);
     if (!p || !p.id) return;

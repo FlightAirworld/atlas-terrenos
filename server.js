@@ -211,13 +211,25 @@ function eventInfo(e) {   // estado de un evento hoy: activo, días que quedan o
 const eventsWithHouses = () => EVENTS.filter(e => e.houses.length);
 const eventOfHouse = h => EVENTS.find(e => e.houses.includes(h));
 const eventPeriod = (e, info) => `E:${e.key}:${info.startYear}`;
+// Casas del Pase Oro 👑: solo se pueden elegir con el pase activo (quien ya la tiene se la queda). Las imágenes ya están en images/.
+const GOLD_HOUSES = ['images/casa-2.webp', 'images/casa-3.webp', 'images/rascacielos.webp', 'images/parque-atracciones.webp', 'images/puerto.webp', 'images/aeropuerto.webp', 'images/ayuntamiento.webp', 'images/banco.webp', 'images/hospital.webp', 'images/iglesia.webp', 'images/piscina.webp', 'images/estacion.webp'];
 const cleanHouse = h => {
   h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h;
   if (HOUSES.includes(h)) return h;
+  if (GOLD_HOUSES.includes(h)) return null;   // las del Pase Oro pasan por cleanHouseFor (comprueba el pase)
   const e = eventOfHouse(h);
   return e && eventInfo(e).active ? h : null;   // las casas de evento solo se pueden elegir mientras dura el evento
 };
 const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
+
+async function cleanHouseFor(house, user) {   // como cleanHouse, pero también deja elegir las casas del Pase Oro si el jugador lo tiene activo
+  const h = typeof house === 'string' ? house.replace(/\.png$/i, '.webp') : house;
+  if (GOLD_HOUSES.includes(h)) {
+    if (!user || !(await hasPass(user.id))) throw new HttpError(409, 'Esta casa es del Pase Oro 👑. Consíguelo en 🎯 Retos → 👑 Pase');
+    return h;
+  }
+  return cleanHouse(house);
+}
 
 // ---------- Seguridad de administrador ----------
 function isAdmin(req) {
@@ -781,6 +793,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
   const p = parcelFromLatLng(Number(lat), Number(lng), world);
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
   const user = await userFrom(req);
+  const chosenHouse = await cleanHouseFor(house, user);   // lanza un aviso claro si es una casa del Pase Oro y no lo tiene
   const prof = user && await getProfile(user.id);
   const vip = code && await one('SELECT fixed_nick, fixed_country FROM packs WHERE code = $1 AND fixed_nick IS NOT NULL', [code]);
   const name = vip ? vip.fixed_nick : prof ? prof.nickname : cleanName(owner);   // pack VIP o cuenta: siempre sale el apodo fijo
@@ -809,7 +822,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
     await client.query(
       'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id, house, world, city) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',
       // En otros mundos no hay países ni ciudades de la Tierra: sin país y con «Sin ciudad», así no entran en los rankings ni en el geocodificador de ciudades
-      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), world === 'tierra' ? cleanCountry(country) : null, user ? user.id : null, cleanHouse(house), world, world === 'tierra' ? null : CITY_NONE]);
+      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), world === 'tierra' ? cleanCountry(country) : null, user ? user.id : null, chosenHouse, world, world === 'tierra' ? null : CITY_NONE]);
     await client.query('COMMIT');
     let bonus = 0;   // invitación: premio al invitado y a quien le invitó (si no hay invitación, no pasa nada)
     if (user) notifyFriendsOf(user.id, 'claim');   // sin esperar: el aviso no retrasa la respuesta
@@ -828,7 +841,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
 const HOUSE_COST = Math.max(0, Math.floor(Number(process.env.HOUSE_COST ?? 1)));
 async function setHouse(req, { id, house }) {
   const user = await needUser(req);
-  const h = cleanHouse(house);
+  const h = await cleanHouseFor(house, user);
   if (!h) throw new HttpError(eventOfHouse(house) ? 409 : 400, eventOfHouse(house) ? 'Esta casa es de un evento que ya terminó. ¡Vuelve el año que viene!' : 'Casa no válida');
   const pack = await ensureUserPack(user);
   const client = await pool.connect();
@@ -2236,7 +2249,8 @@ async function route(req, res, url) {
     const likes = hasOwner ? Number((await one('SELECT COUNT(*) AS n FROM parcel_likes WHERE parcel_id = $1', [p.id])).n) : 0;
     const liked = !!(user && hasOwner && await one('SELECT 1 AS x FROM parcel_likes WHERE parcel_id = $1 AND user_id = $2', [p.id, user.id]));
     if (user && hasOwner && row.user_id !== user.id) trackVisit(user.id, p.id);   // misión «visita terrenos de otros»
-    return { ...p, owner: row ? row.owner : null, since: row ? row.created_at : null, avatar: row ? row.avatar : null, country: row ? row.country : null,
+    const gold = hasOwner ? await hasPass(row.user_id) : false;
+    return { ...p, gold, owner: row ? row.owner : null, since: row ? row.created_at : null, avatar: row ? row.avatar : null, country: row ? row.country : null,
       house: row ? row.house : null, level: row ? row.level : null, mine: !!(user && row && row.user_id === user.id), giftable: hasOwner, likes, liked };
   }
 
@@ -2263,6 +2277,9 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/like') return likePost(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/likes/top') return likesTop();
   if (req.method === 'GET' && pn === '/api/events') return eventsPublic();
+  if (req.method === 'POST' && pn === '/api/pass/buy') return passBuy(req);
+  if (req.method === 'GET' && pn === '/api/activity') return activityGet(req);
+  if (req.method === 'POST' && pn === '/api/activity/seen') return activitySeen(req);
   if (req.method === 'GET' && pn === '/api/clans') return clansGet(req);
   if (req.method === 'POST' && pn === '/api/clans/create') return clanCreate(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/clans/join') return clanJoin(req, await readJson(req));
@@ -2396,7 +2413,9 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE TABLE IF NOT EXISTS clan_members (user_id TEXT PRIMARY KEY, clan_id BIGINT NOT NULL, joined_at BIGINT NOT NULL)');
     await run('CREATE INDEX IF NOT EXISTS clan_members_clan ON clan_members (clan_id)');
     await run('CREATE INDEX IF NOT EXISTS parcels_user_idx ON parcels (user_id)');
-    for (const t of ['mission_progress', 'achievements', 'parcel_likes', 'retos_seen', 'album_claims', 'clans', 'clan_members']) await run(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});   // solo el servidor accede (la clave pública no)
+    await run('CREATE TABLE IF NOT EXISTS passes (user_id TEXT PRIMARY KEY, until BIGINT NOT NULL, bought_at BIGINT NOT NULL, times INT NOT NULL DEFAULT 1)');
+    await run('CREATE TABLE IF NOT EXISTS activity_seen (user_id TEXT PRIMARY KEY, seen_at BIGINT NOT NULL DEFAULT 0)');
+    for (const t of ['mission_progress', 'achievements', 'parcel_likes', 'retos_seen', 'album_claims', 'clans', 'clan_members', 'passes', 'activity_seen']) await run(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});   // solo el servidor accede (la clave pública no)
     const purgeMissions = () => run("DELETE FROM mission_progress WHERE period < $1 AND period NOT LIKE 'W%'", [new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10)]).catch(() => {});
     purgeMissions(); setInterval(purgeMissions, 6 * 3600_000).unref();
   }).catch(e => console.error('No se pudieron crear las tablas de retos:', e.message));
@@ -2452,6 +2471,7 @@ const ACHIEVEMENTS = (() => {
     A('alb3', '📚', 'Coleccionista', 'Ten casas de 3 categorías distintas', 0.03, s => n(s.cats, 3)),
     A('alb6', '📖', 'Gran coleccionista', 'Ten casas de 6 categorías distintas', 0.08, s => n(s.cats, 6)),
     A('clan', '👥', 'En equipo', 'Únete a un clan', 0.02, s => n(s.inclan, 1)),
+    A('pass', '👑', 'Pase Oro', 'Consigue el Pase Oro', 0.05, s => n(s.passes, 1)),
     A('m10', '🎯', 'Trabajador', 'Completa 10 misiones', 0.03, s => n(s.missions, 10)),
     A('m50', '🏅', 'Campeón de retos', 'Completa 50 misiones', 0.1, s => n(s.missions, 50))
   ];
@@ -2493,7 +2513,8 @@ async function achStats(uid) {
     (SELECT COUNT(*) FROM chat_msgs WHERE user_id = $2) AS chats,
     (SELECT COUNT(*) FROM president_grants WHERE user_id = $2) AS pres,
     (SELECT COUNT(*) FROM mission_progress WHERE user_id = $2 AND claimed AND key <> 'd_bonus') AS missions,
-    (SELECT COUNT(*) FROM clan_members WHERE user_id = $2) AS inclan`, [uid, uid]);
+    (SELECT COUNT(*) FROM clan_members WHERE user_id = $2) AS inclan,
+    (SELECT COUNT(*) FROM passes WHERE user_id = $2) AS passes`, [uid, uid]);
 }
 
 async function retosGet(req) {
@@ -2502,7 +2523,9 @@ async function retosGet(req) {
   const owned = await ownedHouses(uid), album = albumBuild(owned), alb = await albumPay(uid, album);
   const stats = await achStats(uid);
   stats.cats = album.filter(c => c.stamp).length;
-  const achList = ACHIEVEMENTS.concat(eventsWithHouses().map(e => ({ key: 'ev_' + e.key, icon: e.icon, name: 'Edición ' + e.name, text: `Consigue la casa de ${e.name} (edición limitada)`, reward: 0.1, prog: () => [e.houses.some(h => owned.has(h)) ? 1 : 0, 1] })));
+  const onb = await onboardingFor(uid, stats);
+  stats.onb = onb.done;
+  const achList = ACHIEVEMENTS.concat(onb.show ? [{ key: 'onb', icon: '🚀', name: 'Primeros pasos', text: 'Completa la guía de primeros pasos', reward: 0.05, prog: s => [Math.min(Number(s.onb) || 0, 6), 6] }] : []).concat(eventsWithHouses().map(e => ({ key: 'ev_' + e.key, icon: e.icon, name: 'Edición ' + e.name, text: `Consigue la casa de ${e.name} (edición limitada)`, reward: 0.1, prog: () => [e.houses.some(h => owned.has(h)) ? 1 : 0, 1] })));
   const have = new Set((await all('SELECT key FROM achievements WHERE user_id = $1', [uid])).map(r => r.key));
   const newAch = [];
   for (const a of achList) {   // desbloquea (y paga) los logros que ya cumple; el INSERT … ON CONFLICT evita pagar dos veces
@@ -2525,6 +2548,9 @@ async function retosGet(req) {
     achievements: achList.map(a => { const [cur, target] = a.prog(stats); return { key: a.key, icon: a.icon, name: a.name, text: a.text, reward: rew(a.reward), unlocked: have.has(a.key), cur, target }; }),
     album: { cats: album, all: alb.all, stamp: ALBUM_STAMP, full: ALBUM_FULL, allReward: rew(ALBUM_ALL), have: owned.size, total: HOUSES.length }, newAlbum: alb.fresh,
     events: await eventsFor(uid, owned),
+    onboarding: onb.show ? { steps: onb.steps, done: onb.done, total: onb.total } : null,
+    pass: await passInfo(uid, owned),
+    activityUnread: (await activityItems(uid)).unread,
     newAch, likesIn: Number(stats.likes_in), likesOut: Number(stats.likes_out), likesUnseen: unseen
   };
 }
@@ -2539,6 +2565,11 @@ async function retosClaim(req, body) {
     const ins = await run('INSERT INTO mission_progress (user_id, period, key, n, claimed) VALUES ($1,$2,$3,1,true) ON CONFLICT DO NOTHING', [uid, day, key]);
     if (!ins.rowCount) throw new HttpError(409, 'Ya has reclamado el bonus de hoy');
     reward = DAILY_BONUS;
+  } else if (key === 'p_daily') {
+    if (!(await hasPass(uid))) throw new HttpError(409, 'Necesitas el Pase Oro activo');
+    const ins = await run("INSERT INTO mission_progress (user_id, period, key, n, claimed) VALUES ($1,$2,'pass',1,true) ON CONFLICT DO NOTHING", [uid, day]);
+    if (!ins.rowCount) throw new HttpError(409, 'Ya reclamaste el bonus del pase de hoy');
+    reward = PASS_DAILY;
   } else if (key.startsWith('e_')) {
     const e = eventsWithHouses().find(x => 'e_' + x.key === key), info = e && eventInfo(e);
     if (!e || !info.active) throw new HttpError(404, 'Ese evento no está activo');
@@ -2605,7 +2636,7 @@ const houseBase = h => String(h).replace(/^images\//, '').replace(/\.(png|webp)$
 const catOfHouse = h => { const b = houseBase(h), c = HOUSE_CATS.find(c => c.files.includes(b)); return c ? c.name : 'Otros'; };
 function houseSeen(id, house) {   // la casa que ve el jugador en un terreno: la elegida, o la del reparto al azar (misma fórmula que houseFor de app.js)
   const h = typeof house === 'string' ? house.replace(/\.png$/i, '.webp') : house;
-  if (h && (HOUSES.includes(h) || eventOfHouse(h))) return h;
+  if (h && (HOUSES.includes(h) || GOLD_HOUSES.includes(h) || eventOfHouse(h))) return h;
   let x = 2166136261; for (const c of String(id)) x = Math.imul(x ^ c.charCodeAt(0), 16777619) >>> 0;
   return CLIENT_RANDOM_POOL[(x >>> 16) % CLIENT_RANDOM_POOL.length];
 }
@@ -2783,6 +2814,81 @@ async function clanAdminDelete(req, body) {
   if (!Number.isFinite(id) || id < 1) throw new HttpError(400, 'Clan no válido');
   await run('DELETE FROM clan_members WHERE clan_id = $1', [id]); await run('DELETE FROM clans WHERE id = $1', [id]); clanDirty();
   return { ok: true };
+}
+
+// ---------- Pase Oro 👑 (se compra con créditos: así no toca el sistema de pagos) ----------
+// Dura PASS_DAYS días (se acumula si se renueva, hasta 60 días por delante). Da: casas exclusivas (GOLD_HOUSES), un bonus diario y el 👑 junto al nombre.
+const PASS_COST = Math.max(0, Number(process.env.PASS_COST ?? 3));
+const PASS_DAYS = Math.max(1, Number(process.env.PASS_DAYS ?? 30));
+const PASS_DAILY = 0.03;
+async function hasPass(uid) { if (!uid) return false; const r = await one('SELECT until FROM passes WHERE user_id = $1', [String(uid)]); return !!(r && Number(r.until) > Date.now()); }
+async function passInfo(uid, owned) {
+  const r = await one('SELECT until, times FROM passes WHERE user_id = $1', [uid]), now = Date.now();
+  const active = !!(r && Number(r.until) > now);
+  const claimed = active && !!(await one("SELECT 1 AS x FROM mission_progress WHERE user_id = $1 AND period = $2 AND key = 'pass' AND claimed", [uid, dayKey()]));
+  return { cost: PASS_COST, days: PASS_DAYS, active, until: r ? Number(r.until) : 0, daysLeft: active ? Math.ceil((Number(r.until) - now) / 86400000) : 0, dailyReward: rew(PASS_DAILY), dailyClaimed: claimed,
+    houses: GOLD_HOUSES.map(h => ({ img: h, owned: owned.has(h) })) };
+}
+async function passBuy(req) {
+  const user = await needUser(req), pack = await ensureUserPack(user), now = Date.now();
+  const cur = await one('SELECT until FROM passes WHERE user_id = $1', [String(user.id)]);
+  if (cur && Number(cur.until) - now > 60 * 86400000) throw new HttpError(409, 'Ya tienes Pase Oro para más de 2 meses');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [PASS_COST, pack.code]);
+    if (!r.rows[0]) throw new HttpError(402, 'NO TIENES CRÉDITOS PARA EL PASE. COMPRA CRÉDITOS.');
+    const up = (await client.query(`INSERT INTO passes (user_id, until, bought_at, times) VALUES ($1, $2::bigint + $3::bigint, $2, 1)
+      ON CONFLICT (user_id) DO UPDATE SET until = GREATEST(passes.until, $2::bigint) + $3::bigint, bought_at = $2, times = passes.times + 1 RETURNING until`, [String(user.id), now, PASS_DAYS * 86400000])).rows[0];
+    await client.query('COMMIT');
+    return { ok: true, credits: r.rows[0].credits, until: Number(up.until) };
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+}
+
+// ---------- Diario: «qué ha pasado mientras no estabas» (se arma al leerlo con lo que ya se guarda: sin ganchos ni tabla propia de sucesos) ----------
+const achNameOf = key => { const a = ACHIEVEMENTS.find(x => x.key === key); if (a) return `${a.icon} ${a.name}`; const e = EVENTS.find(x => 'ev_' + x.key === key); return e ? `${e.icon} Edición ${e.name}` : null; };
+async function activityItems(uid) {
+  const seen = await one('SELECT seen_at FROM activity_seen WHERE user_id = $1', [uid]), seenAt = seen ? Number(seen.seen_at) : 0;
+  const [likes, gifts, ach, alb, joins] = await Promise.all([
+    all(`SELECT l.created_at AS at, pr.nickname AS nick FROM parcel_likes l JOIN parcels p ON p.id = l.parcel_id LEFT JOIN profiles pr ON pr.user_id = l.user_id WHERE p.user_id = $1::uuid ORDER BY l.created_at DESC LIMIT 30`, [uid]),
+    all('SELECT from_nick, credits, created_at AS at FROM gifts WHERE to_user = $1 ORDER BY id DESC LIMIT 20', [uid]),
+    all('SELECT key, created_at AS at FROM achievements WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20', [uid]),
+    all('SELECT key, created_at AS at FROM album_claims WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20', [uid]),
+    all(`SELECT pr.nickname AS nick, m.joined_at AS at, c.name FROM clan_members me JOIN clan_members m ON m.clan_id = me.clan_id AND m.user_id <> me.user_id JOIN clans c ON c.id = me.clan_id LEFT JOIN profiles pr ON pr.user_id = m.user_id WHERE me.user_id = $1 ORDER BY m.joined_at DESC LIMIT 10`, [uid])
+  ]);
+  const items = [];
+  likes.forEach(r => items.push({ kind: 'like', at: Number(r.at), text: `❤️ ${r.nick || 'Alguien'} ha dado «me gusta» a uno de tus terrenos` }));
+  gifts.forEach(r => items.push({ kind: 'gift', at: Number(r.at), text: `💝 ${r.from_nick || 'Alguien'} te ha regalado ${Number(r.credits)} ${Number(r.credits) === 1 ? 'crédito' : 'créditos'}` }));
+  ach.forEach(r => { const n = achNameOf(r.key); if (n) items.push({ kind: 'ach', at: Number(r.at), text: `🏆 Logro desbloqueado: ${n}` }); });
+  alb.forEach(r => { const k = String(r.key), t = k === 'all' ? '🏅 ¡Álbum completo!' : k.startsWith('full:') ? `⭐ Categoría ${k.slice(5)} completa` : k.startsWith('cat:') ? `📚 Sello de ${k.slice(4)}` : null; if (t) items.push({ kind: 'album', at: Number(r.at), text: t }); });
+  joins.forEach(r => items.push({ kind: 'clan', at: Number(r.at), text: `👥 ${r.nick || 'Un jugador'} se ha unido a tu clan ${r.name}` }));
+  items.sort((a, b) => b.at - a.at);
+  const top = items.slice(0, 40).map(i => ({ ...i, fresh: i.at > seenAt }));
+  return { items: top, unread: top.filter(i => i.fresh).length };
+}
+async function activityGet(req) {
+  const user = await needUser(req), a = await activityItems(user.id);
+  const live = eventsWithHouses().map(e => ({ e, i: eventInfo(e) })).filter(x => x.i.active).map(x => ({ kind: 'event', at: Date.now(), fresh: false, text: `${x.e.icon} ¡${x.e.name} está activo! ${x.i.daysLeft === 0 ? 'Hoy es el último día' : 'Quedan ' + x.i.daysLeft + (x.i.daysLeft === 1 ? ' día' : ' días')} para conseguir su casa de edición limitada` }));
+  return { items: live.concat(a.items), unread: a.unread };
+}
+async function activitySeen(req) { const u = await needUser(req); await run('INSERT INTO activity_seen (user_id, seen_at) VALUES ($1,$2) ON CONFLICT (user_id) DO UPDATE SET seen_at = $2', [String(u.id), Date.now()]); return { ok: true }; }
+
+// ---------- Primeros pasos para cuentas nuevas ----------
+async function onboardingFor(uid, stats) {
+  const prof = await one('SELECT created_at FROM profiles WHERE user_id = $1', [uid]);
+  const show = !prof || Number(prof.created_at) > Date.now() - 14 * 86400000;   // solo cuentas de menos de 14 días (o que aún no eligieron apodo)
+  if (!show) return { show: false, done: 0, total: 6, steps: [] };
+  const x = await one(`SELECT (SELECT COUNT(*) FROM parcels WHERE user_id = $1::uuid AND house IS NOT NULL) AS housed,
+    (SELECT COUNT(*) FROM mission_progress WHERE user_id = $2 AND key = 'collect') AS collected, (SELECT COUNT(*) FROM mission_progress WHERE user_id = $2 AND key = 'daily') AS daily`, [uid, uid]);
+  const steps = [
+    { icon: '🧑', text: 'Elige tu apodo', hint: 'Se pide una sola vez al entrar y no se puede cambiar', done: !!prof },
+    { icon: '🏡', text: 'Reclama tu primer terreno', hint: 'Toca un sitio del mapa que no tenga dueño y pulsa «Reclamar»', done: Number(stats.parcels) > 0 },
+    { icon: '🏠', text: 'Elige la casa de tu terreno', hint: 'En tu terreno: «Cambiar casa». Hay categorías para encontrarla antes', done: Number(x.housed) > 0 },
+    { icon: '🎟️', text: 'Recoge tus primeros créditos', hint: 'Tus casas producen créditos cada hora: pulsa el contador de arriba para recogerlos', done: Number(x.collected) > 0 },
+    { icon: '❤️', text: 'Dale «me gusta» a un terreno de otro jugador', hint: 'Toca el terreno de alguien y pulsa «Me gusta»', done: Number(stats.likes_out) > 0 },
+    { icon: '🎁', text: 'Reclama tu regalo diario', hint: 'El botón 🎁 de Extras. Si vuelves cada día, la racha da más premio', done: Number(x.daily) > 0 }
+  ];
+  return { show: true, done: steps.filter(s => s.done).length, total: steps.length, steps };
 }
 
 // ---------- Papá Noel ----------
