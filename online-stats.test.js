@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { countryOf, tally } = require('../online-stats');
+const { countryOf, tally } = require('./online-stats');
 
 test('País: manda la cabecera del proxy; si no hay, el país elegido en el juego; si no, nada', () => {
   assert.strictEqual(countryOf({ 'cf-ipcountry': 'pt' }, 'ES'), 'PT');

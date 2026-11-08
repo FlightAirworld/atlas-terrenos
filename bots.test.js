@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const bots = require('../bots');
+const bots = require('./bots');
 
 const REQUIRED = ['FR', 'AU', 'DE', 'RU', 'CN', 'JP', 'IT', 'MX', 'BR', 'ES', 'PT', 'BE', 'IN', 'SE', 'CH', 'MA'];
 const km = (la1, lo1, la2, lo2) => {
