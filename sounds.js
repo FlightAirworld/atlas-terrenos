@@ -1,4 +1,36 @@
 'use strict';
+// Ajustes de sonido por categorías (botón 🔊 Sonidos del Menú). Se guardan en el navegador. Todo activado por defecto.
+// window.soundOn('coches') -> true/false · window.soundPrefs.set('coches', false) · window.soundPrefs.onChange(fn(cat, valor))
+(function () {
+  const KEY = 'soundPrefs';
+  const CATS = [
+    ['musica', '🎵', 'Música'],
+    ['efectos', '🔔', 'Efectos y botones'],
+    ['gente', '🧑‍🤝‍🧑', 'Gente y voces'],
+    ['coches', '🚗', 'Coches, bocinas y sirenas'],
+    ['trenes', '🚆', 'Trenes'],
+    ['aviones', '✈️', 'Aviones y helicópteros'],
+    ['animales', '🐕', 'Animales'],
+    ['marcianos', '👽', 'Marcianos y platillos'],
+    ['lluvia', '⛈️', 'Lluvia y truenos'],
+    ['campanas', '⛪', 'Campanas']
+  ];
+  let st = {};
+  try { st = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { st = {}; }
+  const subs = [];
+  const prefs = {
+    cats: CATS,
+    get: c => st[c] !== false,
+    set(c, v) {
+      st[c] = !!v;
+      try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {}
+      subs.forEach(f => { try { f(c, !!v); } catch (e) {} });
+    },
+    onChange: f => { subs.push(f); }
+  };
+  window.soundPrefs = prefs;
+  window.soundOn = c => prefs.get(c);
+})();
 // Música y efectos de sonido generados con Web Audio (sin archivos externos).
 // Ya no hay botón de sonido: siempre efectos y música. La música suena en la portada y mientras baja el paracaidista, y se corta al aterrizar (window.stopMusic()).
 (function () {
@@ -135,7 +167,7 @@
     if (ctx.state === 'suspended') return;
     if (nextTime < ctx.currentTime) nextTime = ctx.currentTime + 0.05;
     while (nextTime < ctx.currentTime + 0.6) {
-      if (!introPlaying() && !document.hidden) playStep(step, nextTime);   // no suena sobre el vídeo ni en segundo plano
+      if (!introPlaying() && !document.hidden && window.soundOn('musica')) playStep(step, nextTime);   // no suena sobre el vídeo ni en segundo plano
       nextTime += EIGHTH; step++;
     }
   }
@@ -149,8 +181,9 @@
 
   // Fuera de la Tierra (window.earthMuted) solo suenan los del viaje (cuenta atrás, cohete, platillos, gritos) y los de la interfaz (clics, seleccionar y comprar)
   const TRAVEL_SFX = { beep: 1, beepgo: 1, cohete: 1, retro: 1, grito: 1, grito2: 1, ufo: 1, select: 1, claim: 1, coin: 1, error: 1, open: 1, click: 1, pop: 1 };   // + los del panel de compra (comprar un terreno en otro planeta)
+  const SFX_CAT = { ufo: 'marcianos' };   // el resto de efectos cuentan como «Efectos y botones»
   function play(name) {
-    if (mode < 1 || (window.earthMuted && !TRAVEL_SFX[name])) return;
+    if (mode < 1 || (window.earthMuted && !TRAVEL_SFX[name]) || !window.soundOn(SFX_CAT[name] || 'efectos')) return;
     if (!ensure()) return;
     if (ctx.state === 'suspended') ctx.resume();
     const f = SFX[name]; if (f) f(ctx.currentTime + 0.01);
@@ -185,13 +218,20 @@
     const src = ctx.createBufferSource(); src.buffer = noiseBuf(3); src.loop = true;
     const g = ctx.createGain(); g.gain.value = 0; g.connect(master);
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
-    const rg = ctx.createGain(); rg.gain.value = 0.9; src.connect(lp); lp.connect(rg); rg.connect(g);                 // tráfico lejano
+    const rg = ctx.createGain(); rg.gain.value = 0.9; const trG = ctx.createGain(); trG.connect(g); src.connect(lp); lp.connect(rg); rg.connect(trG);   // tráfico lejano (categoría «coches»)
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7;
-    const mg = ctx.createGain(); mg.gain.value = 0.35; src.connect(bp); bp.connect(mg); mg.connect(g);               // murmullo de gente
+    const mg = ctx.createGain(); mg.gain.value = 0.35; const crG = ctx.createGain(); crG.connect(g); src.connect(bp); bp.connect(mg); mg.connect(crG);   // murmullo de gente (categoría «gente»)
     const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.23; lg.gain.value = 0.25; lfo.connect(lg); lg.connect(mg.gain);
     src.start(); lfo.start();
-    amb = { g };
+    amb = { g, trG, crG };
+    ambPrefs();
   }
+  function ambPrefs() {
+    if (!amb || !ctx) return;
+    amb.trG.gain.setTargetAtTime(window.soundOn('coches') ? 1 : 0, ctx.currentTime, 0.2);
+    amb.crG.gain.setTargetAtTime(window.soundOn('gente') ? 1 : 0, ctx.currentTime, 0.2);
+  }
+  window.soundPrefs.onChange(ambPrefs);
   function farBus() { if (!far) { far = ctx.createBiquadFilter(); far.type = 'lowpass'; far.frequency.value = 1500; far.connect(sfxBus); } return far; }
   window.cityAudio = {
     level(v) {
@@ -200,13 +240,13 @@
       ambStart(); amb.g.gain.setTargetAtTime(Math.max(0, Math.min(1, v)) * 0.16, ctx.currentTime, 0.8);
     },
     horn(vol, close) {
-      if (!ctx || window.earthMuted || mode < 1 || ctx.state !== 'running') return;
+      if (!ctx || window.earthMuted || mode < 1 || ctx.state !== 'running' || !window.soundOn('coches')) return;
       const t = ctx.currentTime + 0.02, bus = close ? sfxBus : farBus(), d = 0.2 + Math.random() * 0.2;
       tone(bus, 'square', 415, t, d, 0.2 * vol); tone(bus, 'square', 523, t, d, 0.16 * vol);
       if (Math.random() < 0.5) { tone(bus, 'square', 415, t + d + 0.12, d, 0.2 * vol); tone(bus, 'square', 523, t + d + 0.12, d, 0.16 * vol); }
     },
     bells(n, vol) {
-      if (!ctx || window.earthMuted || mode < 1 || ctx.state !== 'running') return;
+      if (!ctx || window.earthMuted || mode < 1 || ctx.state !== 'running' || !window.soundOn('campanas')) return;
       for (let i = 0; i < Math.min(12, n); i++) {
         const t = ctx.currentTime + 0.1 + i * 1.7;
         [[196, 1], [392, 0.5], [588, 0.3], [1180, 0.12]].forEach(([f, a]) => tone(farBus(), 'sine', f, t, 2.6, 0.5 * a * (vol || 1), { attack: 0.005 }));
@@ -225,7 +265,7 @@
   let eng = null, engKill = 0;
   window.rocketEngine = {
     start() {
-      if (mode < 1 || !ensure()) return;
+      if (mode < 1 || !window.soundOn('efectos') || !ensure()) return;
       if (ctx.state === 'suspended') ctx.resume();
       clearTimeout(engKill); engKill = setTimeout(() => window.rocketEngine.stop(), 120000);
       if (eng) { eng.g.gain.cancelScheduledValues(ctx.currentTime); eng.g.gain.setTargetAtTime(2.0, ctx.currentTime, 0.2); return; }

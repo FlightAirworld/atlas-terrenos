@@ -43,7 +43,7 @@
   let gen = 0, pend = 0;   // gen sube con cada stop(); pend cuenta frases esperando su turno
   function speak(text, p, o) {
     o = o || {}; p = p || profile('human');
-    if (off || !hasTTS || document.hidden) return false;
+    if (off || !hasTTS || document.hidden || !catOn(p.k === 'alien' ? 'marcianos' : 'gente')) return false;
     const t = clean(text); if (!t || !/[\p{L}\p{N}]/u.test(t)) return false;
     const busy = ss.speaking || ss.pending || pend > 0;
     if (busy && !o.force) return false;   // una sola voz a la vez: los pensamientos sueltos se saltan si alguien ya está hablando
@@ -124,9 +124,11 @@
     // león
     roar: (d, t, v) => { noise(d, t, 0.9, 0.45 * v, 450); tone(d, 'sawtooth', 120, 55, t, 0.9, 0.35 * v, { vib: [28, 25], lp: 700 }); }
   };
+  const SFX_CAT = { chirp: 'marcianos', ufoIn: 'marcianos', ufoOut: 'marcianos', ufoFly: 'marcianos', thud: 'marcianos' };   // lo demás (bichos y león) = «animales»
+  const catOn = c => !window.soundOn || window.soundOn(c);
   function sfx(name, o) {
     o = o || {};
-    if (off || document.hidden || !SFX[name] || !ac()) return;
+    if (off || document.hidden || !SFX[name] || !catOn(SFX_CAT[name] || 'animales') || !ac()) return;
     try { if (ctx.state === 'suspended') ctx.resume(); SFX[name](out(o), ctx.currentTime + 0.01, clamp(o.vol == null ? 1 : o.vol, 0.05, 1.5), o); } catch (e) {}
   }
   // Qué suena según lo que «dice» el bichito
@@ -135,6 +137,8 @@
     const n = /blup/.test(t) ? 'blup' : /bz/.test(t) ? 'bzzz' : /ñic|nic/.test(t) ? 'nic' : /miau/.test(t) ? 'miau' : /pi{2,}/.test(t) ? 'piii' : /glub/.test(t) ? 'glub' : /hip/.test(t) ? 'hip' : /splosh/.test(t) ? 'splosh' : 'blup';
     sfx(n, { vol });
   }
+
+  if (window.soundPrefs) window.soundPrefs.onChange((c, v) => { if (!v && (c === 'gente' || c === 'marcianos')) stop(); });   // al apagar las voces, se corta la que esté hablando
 
   window.atlasVoice = {
     profile, speak, stop, sfx, critter,

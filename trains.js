@@ -212,7 +212,7 @@
     if (on) initAudio();
     if (ac) ['pointerdown', 'keydown', 'touchstart'].forEach(e => removeEventListener(e, once));
   }, { passive: true }));
-  const sfxOn = () => (window.soundMode ? window.soundMode() : 2) >= 1;
+  const sfxOn = () => (window.soundMode ? window.soundMode() : 2) >= 1 && (!window.soundOn || window.soundOn('trenes'));
   function noise() {
     if (noiseBuf || !ac) return noiseBuf;
     const n = ac.sampleRate * 2, b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0);

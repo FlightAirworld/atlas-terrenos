@@ -72,7 +72,7 @@
 
   // ---------- Sonido (Web Audio, sin archivos) ----------
   let ac = null;
-  const soundOn = () => { const b = $id('sound-btn'); return !(b && /🔇|🔈/.test(b.textContent)); };   // respeta el botón 🔊 del menú
+  const soundOn = () => !window.soundOn || window.soundOn('efectos');   // respeta 🔊 Sonidos del menú (Efectos y botones)
   function audio() {
     if (!soundOn()) return null;
     try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch (e) { return null; }

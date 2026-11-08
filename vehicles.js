@@ -733,6 +733,7 @@
   const T_APP = 10, T_GROUND = 8, T_TAKEOFF = 3.2, T_LEAVE = 11, ROTOR_DEG = 1400;
   const sm = x => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
   const sfxOn = () => (window.soundMode ? window.soundMode() : 2) >= 1;
+  const planeOn = () => sfxOn() && (!window.soundOn || window.soundOn('aviones'));   // aviones y helicópteros
   let volOn = null;
   function syncVol() {
     if (!ac || !bus) return;
@@ -875,7 +876,7 @@
       if (u >= 1) { removePlane(i); continue; }
       const x = p.a[0] + (p.b[0] - p.a[0]) * u, y = p.a[1] + (p.b[1] - p.a[1]) * u;
       p.el.style.transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0)`;
-      if (p.snd && ac) planeSoundUpdate(p.snd, u, sfxOn() ? 1 : 0, clamp((x - size.x / 2) / (size.x / 2), -1, 1) * 0.9);
+      if (p.snd && ac) planeSoundUpdate(p.snd, u, planeOn() ? 1 : 0, clamp((x - size.x / 2) / (size.x / 2), -1, 1) * 0.9);
     }
   }
 
@@ -1233,7 +1234,7 @@
       }
       if (A.snd && ac && su !== null) {
         const pt = map.latLngToContainerPoint(A.mk.getLatLng());
-        const vol = clamp(1.2 - Math.hypot(pt.x - cx, pt.y - cy) / half, 0.08, 1) * fade * (sfxOn() ? 1 : 0);
+        const vol = clamp(1.2 - Math.hypot(pt.x - cx, pt.y - cy) / half, 0.08, 1) * fade * (planeOn() ? 1 : 0);
         planeSoundUpdate(A.snd, su, vol, clamp((pt.x - cx) / cx, -1, 1) * 0.85);
       }
     }
@@ -1316,7 +1317,7 @@
       }
       if (H.snd && ac) {
         const pt = map.latLngToContainerPoint(H.mk.getLatLng());
-        const vol = clamp(1.2 - Math.hypot(pt.x - cx, pt.y - cy) / half, 0.08, 1) * fade * (sfxOn() ? 1 : 0);
+        const vol = clamp(1.2 - Math.hypot(pt.x - cx, pt.y - cy) / half, 0.08, 1) * fade * (planeOn() ? 1 : 0);
         heliSoundUpdate(H.snd, rpm, vol, clamp((pt.x - cx) / cx, -1, 1) * 0.85);
       }
     }
@@ -1419,7 +1420,7 @@
           const edge = Math.min(1, (v.total - v.s) * scale / 120);
           const vol = clamp(1.15 - Math.hypot(pt.x - cx, pt.y - cy) / half, 0.12, 1) * fade * edge;
           if (!v.sirenObj && ac) v.sirenObj = makeSiren();
-          updateSiren(v, ac ? vol : 0, clamp((pt.x - cx) / cx, -1, 1) * 0.8);
+          updateSiren(v, ac && (!window.soundOn || window.soundOn('coches')) ? vol : 0, clamp((pt.x - cx) / cx, -1, 1) * 0.8);
         }
         const step = v.speed * SPD * dt / scale;
         v.s += step;

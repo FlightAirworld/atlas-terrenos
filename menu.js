@@ -415,3 +415,91 @@ body.mp-z1 .ts-pd{opacity:0 !important;pointer-events:none !important}`;
   applyShadow();
   setTimeout(applyShadow, 4000);   // por si la capa de sombra aún no existía al arrancar
 })();
+
+// ====================================================================================================
+// Botón "Sonidos" (dentro del Menú): ventana con un interruptor por categoría (música, efectos, gente, coches,
+// trenes, aviones, animales, marcianos, lluvia, campanas). Los ajustes viven en sounds.js (window.soundPrefs)
+// y se guardan en el navegador.
+// ====================================================================================================
+(function () {
+  const btn = document.getElementById('sounds-btn');
+  const P = window.soundPrefs;
+  if (!btn || !P) return;
+
+  const st = document.createElement('style');
+  st.id = 'sounds-css';
+  st.textContent = `
+#sounds-modal{z-index:5300}
+#sounds-modal .modal-card{max-height:min(86vh,640px);overflow-y:auto;padding:18px 16px 16px}
+#sounds-modal h2{margin:0 0 4px;font-size:20px}
+#sounds-modal .snd-sub{margin:0 0 10px;font-size:13px;opacity:.75}
+#sounds-modal .snd-all{display:flex;gap:8px;margin:0 0 8px}
+#sounds-modal .snd-all button{flex:1;height:38px;border-radius:10px;border:1px solid var(--mp-bd,rgba(0,0,0,.18));background:transparent;color:inherit;font:700 13px system-ui,sans-serif;cursor:pointer}
+#sounds-modal .snd-row{display:flex;align-items:center;gap:12px;padding:8px 4px;border-radius:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+#sounds-modal .snd-row:active{background:var(--mp-hover,rgba(0,0,0,.06))}
+#sounds-modal .snd-ic{flex:none;width:36px;height:36px;border-radius:11px;background:var(--mp-tile,rgba(8,127,91,.14));display:inline-flex;align-items:center;justify-content:center;font-size:19px}
+#sounds-modal .snd-name{flex:1;font-size:15px;font-weight:600}
+#sounds-modal .snd-sw{position:relative;flex:none;width:46px;height:28px}
+#sounds-modal .snd-sw input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+#sounds-modal .snd-sw i{position:absolute;inset:0;border-radius:99px;background:rgba(120,120,120,.45);transition:background .15s ease;pointer-events:none}
+#sounds-modal .snd-sw i::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .15s ease}
+#sounds-modal .snd-sw input:checked + i{background:var(--mp-acc,#087f5b)}
+#sounds-modal .snd-sw input:checked + i::after{transform:translateX(18px)}
+#sounds-modal .snd-sw input:focus-visible + i{outline:2px solid var(--mp-acc,#087f5b);outline-offset:2px}
+#sounds-modal .primary{width:100%;margin-top:12px}
+@media (prefers-reduced-motion:reduce){#sounds-modal .snd-sw i,#sounds-modal .snd-sw i::after{transition:none}}`;
+  document.head.appendChild(st);
+
+  const box = document.createElement('div');
+  box.id = 'sounds-modal'; box.className = 'modal hidden';
+  box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-labelledby', 'sounds-title');
+  box.innerHTML = `
+    <div class="modal-card">
+      <button id="sounds-close" class="close" type="button" aria-label="Cerrar">×</button>
+      <h2 id="sounds-title">🔊 Sonidos</h2>
+      <p class="snd-sub">Activa o desactiva cada tipo de sonido.</p>
+      <div class="snd-all"><button type="button" data-all="1">Activar todo</button><button type="button" data-all="0">Silenciar todo</button></div>
+      <div id="sounds-list"></div>
+      <button id="sounds-ok" class="primary" type="button">Listo</button>
+    </div>`;
+  document.body.appendChild(box);
+
+  const list = box.querySelector('#sounds-list');
+  P.cats.forEach(([id, icon, name]) => {
+    const row = document.createElement('label');
+    row.className = 'snd-row';
+    row.innerHTML = `<span class="snd-ic" aria-hidden="true">${icon}</span><span class="snd-name">${name}</span><span class="snd-sw"><input type="checkbox" role="switch" data-cat="${id}"><i></i></span>`;
+    list.appendChild(row);
+  });
+
+  const inputs = () => [...list.querySelectorAll('input[data-cat]')];
+  function sync() {
+    inputs().forEach(i => { i.checked = P.get(i.dataset.cat); i.setAttribute('aria-checked', i.checked ? 'true' : 'false'); });
+    const anyOn = P.cats.some(c => P.get(c[0]));
+    btn.setAttribute('aria-pressed', anyOn ? 'true' : 'false');
+    const ic = btn.querySelector('.mp-ic') || btn;
+    ic.textContent = anyOn ? '🔊' : '🔇';
+  }
+  list.addEventListener('change', e => {
+    const i = e.target.closest('input[data-cat]'); if (!i) return;
+    P.set(i.dataset.cat, i.checked);
+    sync();
+    if (i.checked && window.sfx && P.get('efectos')) window.sfx('click');
+  });
+  box.querySelectorAll('.snd-all button').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const v = b.dataset.all === '1';
+    P.cats.forEach(c => P.set(c[0], v));
+    sync();
+  }));
+
+  const open = () => { sync(); box.classList.remove('hidden'); box.querySelector('.modal-card').scrollTop = 0; };
+  const close = () => box.classList.add('hidden');
+  btn.addEventListener('click', open);
+  box.querySelector('#sounds-close').addEventListener('click', close);
+  box.querySelector('#sounds-ok').addEventListener('click', close);
+  box.addEventListener('click', e => { if (e.target === box) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !box.classList.contains('hidden')) close(); });
+  P.onChange(sync);
+  sync();
+})();

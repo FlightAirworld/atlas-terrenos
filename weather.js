@@ -110,8 +110,9 @@
     rainSrc.connect(hp); hp.connect(lp); lp.connect(rainGain); rainGain.connect(master);
     rainSrc.start();
   }
+  const rainOk = () => !window.soundOn || window.soundOn('lluvia');
   function thunder(vol, dist) {
-    if (!ac || muted || !on) return;
+    if (!ac || muted || !on || !rainOk()) return;
     const now = ac.currentTime, dur = 2.6 + dist * 2.4;
     const src = ac.createBufferSource(); src.buffer = noiseBuffer(Math.ceil(dur) + 1);
     const lp = ac.createBiquadFilter(); lp.type = 'lowpass';
@@ -147,7 +148,7 @@
     const goal = storm ? 1 : 0;
     intensity += Math.sign(goal - intensity) * Math.min(Math.abs(goal - intensity), dt / 6);   // ~6 s de transición
     const k = 0.3 + 0.7 * intensity;           // las nubes nunca desaparecen del todo
-    if (ac && rainGain) rainGain.gain.setTargetAtTime(0.07 * intensity, ac.currentTime, 0.4);
+    if (ac && rainGain) rainGain.gain.setTargetAtTime(rainOk() ? 0.07 * intensity : 0, ac.currentTime, 0.4);
 
     // tono de tormenta
     if (intensity > 0.01) { ctx.fillStyle = `rgba(20,30,50,${0.16 * intensity})`; ctx.fillRect(0, 0, W, H); }
