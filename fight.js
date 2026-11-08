@@ -823,12 +823,13 @@
   $('fg-t1').onclick = () => tab(1);
   $('fg-t2').onclick = () => tab(2);
   $('fg-go').onclick = go;
-  const close = () => { if (!busy) box.classList.add('hidden'); };
+  const close = () => { if (!busy) { box.classList.add('hidden'); if (window.fightMute) window.fightMute(false); } };   // al salir vuelve el sonido de la ciudad
   $('fg-close').onclick = close;
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !box.classList.contains('hidden')) close(); });
   btn.addEventListener('click', () => {
     if (!authToken) { openLogin('Entra para luchar en el campeonato 🥊'); return; }
     $('fg-last').textContent = '';
+    if (window.fightMute) window.fightMute(true);              // en el campeonato solo suena el combate, no la ciudad
     box.classList.remove('hidden'); tab(1); load();
   });
 })();

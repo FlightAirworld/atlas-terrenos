@@ -167,7 +167,7 @@
     if (ctx.state === 'suspended') return;
     if (nextTime < ctx.currentTime) nextTime = ctx.currentTime + 0.05;
     while (nextTime < ctx.currentTime + 0.6) {
-      if (!introPlaying() && !document.hidden && window.soundOn('musica')) playStep(step, nextTime);   // no suena sobre el vídeo ni en segundo plano
+      if (!window.fightMuted && !introPlaying() && !document.hidden && window.soundOn('musica')) playStep(step, nextTime);   // no suena sobre el vídeo ni en segundo plano
       nextTime += EIGHTH; step++;
     }
   }
@@ -183,7 +183,7 @@
   const TRAVEL_SFX = { beep: 1, beepgo: 1, cohete: 1, retro: 1, grito: 1, grito2: 1, ufo: 1, select: 1, claim: 1, coin: 1, error: 1, open: 1, click: 1, pop: 1 };   // + los del panel de compra (comprar un terreno en otro planeta)
   const SFX_CAT = { ufo: 'marcianos' };   // el resto de efectos cuentan como «Efectos y botones»
   function play(name) {
-    if (mode < 1 || (window.earthMuted && !TRAVEL_SFX[name]) || !window.soundOn(SFX_CAT[name] || 'efectos')) return;
+    if (window.fightMuted || mode < 1 || (window.earthMuted && !TRAVEL_SFX[name]) || !window.soundOn(SFX_CAT[name] || 'efectos')) return;
     if (!ensure()) return;
     if (ctx.state === 'suspended') ctx.resume();
     const f = SFX[name]; if (f) f(ctx.currentTime + 0.01);
@@ -236,17 +236,17 @@
   window.cityAudio = {
     level(v) {
       if (!ctx) return;
-      if (window.earthMuted || mode < 1 || ctx.state !== 'running') { if (amb) amb.g.gain.setTargetAtTime(0, ctx.currentTime, 0.4); return; }
+      if (window.fightMuted || window.earthMuted || mode < 1 || ctx.state !== 'running') { if (amb) amb.g.gain.setTargetAtTime(0, ctx.currentTime, 0.4); return; }
       ambStart(); amb.g.gain.setTargetAtTime(Math.max(0, Math.min(1, v)) * 0.16, ctx.currentTime, 0.8);
     },
     horn(vol, close) {
-      if (!ctx || window.earthMuted || mode < 1 || ctx.state !== 'running' || !window.soundOn('coches')) return;
+      if (!ctx || window.fightMuted || window.earthMuted || mode < 1 || ctx.state !== 'running' || !window.soundOn('coches')) return;
       const t = ctx.currentTime + 0.02, bus = close ? sfxBus : farBus(), d = 0.2 + Math.random() * 0.2;
       tone(bus, 'square', 415, t, d, 0.2 * vol); tone(bus, 'square', 523, t, d, 0.16 * vol);
       if (Math.random() < 0.5) { tone(bus, 'square', 415, t + d + 0.12, d, 0.2 * vol); tone(bus, 'square', 523, t + d + 0.12, d, 0.16 * vol); }
     },
     bells(n, vol) {
-      if (!ctx || window.earthMuted || mode < 1 || ctx.state !== 'running' || !window.soundOn('campanas')) return;
+      if (!ctx || window.fightMuted || window.earthMuted || mode < 1 || ctx.state !== 'running' || !window.soundOn('campanas')) return;
       for (let i = 0; i < Math.min(12, n); i++) {
         const t = ctx.currentTime + 0.1 + i * 1.7;
         [[196, 1], [392, 0.5], [588, 0.3], [1180, 0.12]].forEach(([f, a]) => tone(farBus(), 'sine', f, t, 2.6, 0.5 * a * (vol || 1), { attack: 0.005 }));
@@ -293,5 +293,15 @@
     }
   };
   window.sfx = play;
-  window.soundMode = () => (window.earthMuted ? 0 : mode);   // siempre 2 (lo usan vehicles.js y trains.js para aviones, sirenas y trenes)
+  // Campeonato de luchas (fight.js): mientras está abierto solo suena el combate (que usa su propio audio), no la ciudad
+  window.fightMute = function (v) {
+    v = !!v; window.fightMuted = v;
+    try {
+      if (ctx && musicBus) { musicBus.gain.cancelScheduledValues(ctx.currentTime); musicBus.gain.setTargetAtTime(v || musicStopped ? 0 : 0.22, ctx.currentTime, 0.2); }
+      if (v && window.cityAudio) window.cityAudio.level(0);
+      if (window.weatherMute) window.weatherMute(v || !!window.earthMuted);
+      if (v && window.atlasVoice) window.atlasVoice.stop();
+    } catch (e) {}
+  };
+  window.soundMode = () => (window.earthMuted || window.fightMuted ? 0 : mode);   // siempre 2 (lo usan vehicles.js y trains.js para aviones, sirenas y trenes)
 })();

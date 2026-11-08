@@ -42,7 +42,7 @@
   let gen = 0, pend = 0;   // gen sube con cada stop(); pend cuenta frases esperando su turno
   function speak(text, p, o) {
     o = o || {}; p = p || profile('human');
-    if (off || !hasTTS || document.hidden || !catOn(p.k === 'alien' ? 'marcianos' : 'gente')) return false;
+    if (off || window.fightMuted || !hasTTS || document.hidden || !catOn(p.k === 'alien' ? 'marcianos' : 'gente')) return false;
     const t = clean(text); if (!t || !/[\p{L}\p{N}]/u.test(t)) return false;
     const busy = ss.speaking || ss.pending || pend > 0;
     if (busy && !o.force) return false;   // una sola voz a la vez: los pensamientos sueltos se saltan si alguien ya está hablando
@@ -125,7 +125,7 @@
   const catOn = c => !window.soundOn || window.soundOn(c);
   function sfx(name, o) {
     o = o || {};
-    if (off || document.hidden || !SFX[name] || !catOn(SFX_CAT[name] || 'animales') || !ac()) return;
+    if (off || window.fightMuted || document.hidden || !SFX[name] || !catOn(SFX_CAT[name] || 'animales') || !ac()) return;
     try { if (ctx.state === 'suspended') ctx.resume(); SFX[name](out(o), ctx.currentTime + 0.01, clamp(o.vol == null ? 1 : o.vol, 0.05, 1.5), o); } catch (e) {}
   }
   // Qué suena según lo que «dice» el bichito
