@@ -146,3 +146,7 @@ DO $$ DECLARE t TEXT; BEGIN
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
   END LOOP;
 END $$;
+
+-- Jugadores automáticos (Francóis 🇫🇷): una fila por bot y día, así solo reclama una parcela al día
+CREATE TABLE IF NOT EXISTS bot_runs (bot TEXT NOT NULL, day TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (bot, day));
+ALTER TABLE bot_runs ENABLE ROW LEVEL SECURITY;

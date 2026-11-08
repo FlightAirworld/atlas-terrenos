@@ -246,3 +246,26 @@ El apodo queda **reservado**: nadie más puede usarlo como nombre al reclamar ni
 ### Sonido del cohete
 
 El motor (`window.rocketEngine` en `sounds.js`) suena sin cortarse desde el despegue hasta que el astronauta toca suelo.
+
+## Jugadores automáticos 🌍 (uno por país)
+
+16 jugadores anónimos con su bandera que reclaman **una parcela al día cada uno, al azar y siempre dentro de su país** (`bots.js` + datos en `bots-data.js`):
+
+| País | Jugador | País | Jugador |
+|---|---|---|---|
+| 🇫🇷 Francia | Francóis | 🇪🇸 España | Manolo |
+| 🇦🇺 Australia | Bruce | 🇵🇹 Portugal | Tiago |
+| 🇩🇪 Alemania | Günther | 🇧🇪 Bélgica | Jef |
+| 🇷🇺 Rusia | Dmitri | 🇮🇳 India | Raj |
+| 🇨🇳 China | Wei | 🇸🇪 Suecia | Sven |
+| 🇯🇵 Japón | Haruto | 🇨🇭 Suiza | Ueli |
+| 🇮🇹 Italia | Luca | 🇲🇦 Marruecos | Youssef |
+| 🇲🇽 México | Alejandro | 🇧🇷 Brasil | João |
+
+- Sin cuenta: no cobran, no reciben ni gastan créditos y no pueden ser presidentes de pueblo. Salen en el mapa y en el ranking con su nombre.
+- No usan coordenadas al azar: eligen un municipio del interior de una lista (lejos de costas y fronteras) y se desplazan como mucho 1,4 km del centro (0,8 km en Portugal, Bélgica y Suiza). Además cada país tiene una caja de seguridad.
+- Una vez al día, a una hora distinta cada día (08:00-22:00 en la zona horaria de su país). La tabla `bot_runs` impide que reclamen dos veces el mismo día aunque se reinicie el servidor.
+- La casa es al azar y el pueblo lo pone `cityTick` solo.
+- Variables: `BOTS=off` los apaga todos; `BOTS_OFF=DE,RU` apaga solo los de esos países; `BOT_NAME_DE=Hans` cambia un nombre (`FRANCOIS_NAME` para Francia); `FRANCOIS=off` apaga solo a Francóis.
+- Quitar las parcelas de uno: `DELETE FROM parcels WHERE currency = 'BOT' AND country = 'DE';` (todos: sin el filtro de país).
+- Para añadir otro país, copia un bloque de `bots-data.js` y pon municipios del interior.
