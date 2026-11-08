@@ -343,7 +343,7 @@ const cents = price => Math.round(Number(price) * 100);
 // ---------- API ----------
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 // Cartas coleccionables (cards-server.js): se monta la primera vez que se usa, cuando ya existen run, all, dayKey, numEnv y rateHit
-const cardsMod = () => cardsMod.m || (cardsMod.m = require('./cards-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, numEnv }));
+const cardsMod = () => cardsMod.m || (cardsMod.m = require('./cards-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, numEnv, pushSocial: (...a) => pushSocial(...a), pushToUser: (...a) => pushToUser(...a) }));
 
 // ---------- Packs de terrenos (créditos) ----------
 const newPackCode = () => crypto.randomBytes(8).toString('hex').toUpperCase().match(/.{4}/g).join('-');
@@ -2465,6 +2465,12 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/cards/trades') return cardsMod().trades(req);
   if (req.method === 'POST' && pn === '/api/cards/trade') return cardsMod().trade(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/cards/trade/answer') return cardsMod().answer(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/cards/ranking') return cardsMod().ranking(req);
+  if (req.method === 'GET' && pn === '/api/cards/player') return cardsMod().player(req, sp);
+  if (req.method === 'GET' && pn === '/api/cards/notifs') return cardsMod().notifs(req, sp);
+  if (req.method === 'POST' && pn === '/api/cards/notifs/seen') return cardsMod().notifsSeen(req);
+  if (req.method === 'GET' && pn === '/api/cards/auction') return cardsMod().auction(req);
+  if (req.method === 'POST' && pn === '/api/cards/auction/bid') return cardsMod().bid(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/gifts') return giftsGet(req, sp);
   if (req.method === 'POST' && pn === '/api/gifts/send') return giftSend(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/gifts/seen') return giftsSeen(req);
@@ -2525,7 +2531,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE TABLE IF NOT EXISTS owner_grants (user_id TEXT NOT NULL, month TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, month))');
     if (OWNER_MONTHLY && OWNER_USER_ID) { setTimeout(ownerTick, 20_000).unref(); setInterval(ownerTick, HOUR_MS).unref(); }
   }).catch(e => console.error('No se pudieron crear las tablas de regalos / paga mensual:', e.message))
-  .then(() => cardsMod().init()).catch(e => console.error('No se pudieron crear las tablas de cartas:', e.message))
+  .then(() => cardsMod().init()).then(() => cardsMod().ON && cardsMod().init2()).catch(e => console.error('No se pudieron crear las tablas de cartas:', e.message))
   .then(() => bots.start({ run, q, parcelFromLatLng, isUniqueViolation }))
   .then(async () => {   // tablas de "Invita y gana" (no hacen nada si ya existen)
     await run('CREATE TABLE IF NOT EXISTS ref_codes (code TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, created_at BIGINT NOT NULL, last_ip TEXT)');

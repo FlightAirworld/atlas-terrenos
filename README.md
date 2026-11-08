@@ -38,6 +38,14 @@ Presidente de pueblo: el jugador con cuenta que más terrenos tiene en un pueblo
 
 Otras variables: `DATABASE_URL` (obligatoria), `ADMIN_TOKEN`, `PACKS` (packs a la venta, `créditos:precio` separados por comas; por defecto `50:1,150:2,300:3,500:4`; sustituye a `PRICE` y `PACK_SIZE`), `CURRENCY` (EUR), `PORT` (3000).
 
+## Cartas: ranking, compra, avisos y Carta Negra 🖤
+
+- **Ver las cartas de otros jugadores:** 🃏 Cartas → *🏆 Ranking de jugadores*. Lista por países (con bandera) a los jugadores con más cartas; al tocar un nombre se despliegan todas sus cartas. Desde ahí se puede ofrecer créditos por una carta (*💰 Ofrecer comprar*) o proponer un cambio. Si el dueño acepta, los créditos pasan a su cuenta y la carta a la del comprador en una sola transacción; el comprador debe tener los créditos en ese momento.
+- **Punto rojo 🔴** en el botón 🃏 (y en «Extras») cuando alguien quiere comprarte o cambiarte una carta, te la venden, te rechazan una oferta, te superan en la puja o ganas la Carta Negra. Se apaga al abrir las Cartas (las novedades salen en *🔔 Novedades*). También se manda aviso al móvil si tiene los avisos activados.
+- **Carta Negra:** una carta única al mes (negra, letras doradas, todo a 100 y con Carisma), en *🖤 Carta Negra · puja*. Cada mes sale otra distinta. Quien más puje se la queda; la puja se cierra **el último día del mes a medianoche** (zona `DAILY_TZ`, por defecto Europe/Madrid) y el servidor la cierra solo (comprueba cada minuto, también si estuvo apagado). Los créditos **se descuentan al cerrar**; si el mejor postor ya no los tiene, pasa al siguiente. El ganador recibe «¡Enhorabuena!» con el punto rojo. Las Cartas Negras no se compran ni se cambian y aparecen en un apartado propio (*🖤 Mis Cartas Negras* y en el desplegable de cada jugador).
+- Variables opcionales: `CARDS_BLACK_MIN` (puja de salida, 100), `CARDS_BLACK_STEP` (subida mínima entre pujas, 1), `CARDS_PRICE_MAX` (máximo en una oferta de compra, 1.000.000).
+- Si prefieres crear las tablas a mano: `migration-cards.sql` (el servidor también las crea solo al arrancar).
+
 ## Cómo funciona
 
 - El mundo es una rejilla de parcelas de 0,001° (~111 m). Cada una tiene id `x:y` calculado desde lat/lng.

@@ -66,5 +66,52 @@
       serial: String(id).padStart(5, '0') + '/' + TOTAL };
   }
 
-  return { TOTAL, GROUP, GROUPS, SEASONS, RARITIES, valid, groupOf, posOf, rarityIndexOf, cardInfo };
+  // ---------- CARTA NEGRA 🖤: una carta única al mes que se consigue por puja (no sale en sobres ni se intercambia) ----------
+  // Todo al máximo (100) y con Carisma, que las normales no tienen. Se dibuja negra con letras doradas (ver cards.js).
+  const BLACKS = [['🐉', 'Dragón de Ébano'], ['🦅', 'Águila de Obsidiana'], ['🐺', 'Lobo de la Noche Eterna'], ['🦁', 'León de Azabache'],
+    ['🐍', 'Serpiente del Abismo'], ['🦇', 'Murciélago Sombra Dorada'], ['🐯', 'Tigre de Medianoche'], ['🦉', 'Búho del Eclipse'],
+    ['🐻', 'Oso del Cráter Negro'], ['🦂', 'Escorpión de Ónix'], ['🐎', 'Corcel del Ocaso'], ['🦈', 'Tiburón de Aguas Negras']];
+  const monthRe = /^(\d{4})-(0[1-9]|1[0-2])$/;
+  const validMonth = m => monthRe.test(String(m));
+  function blackInfo(month) {   // month = 'AAAA-MM'. Meses seguidos → cartas distintas (12 nombres que se repiten con otra edición cada año)
+    if (!validMonth(month)) return null;
+    const [, y, mm] = monthRe.exec(month), idx = (Number(y) * 12 + Number(mm) - 1) % BLACKS.length, cr = BLACKS[idx];
+    return { special: true, black: true, month, id: 'N' + month, season: 'NEGRA', rarity: 'negra', rarityName: 'Carta Negra · Única', gold: true,
+      c1: '#050505', c2: '#1c1608', name: cr[1], emoji: cr[0], element: '🌑', elementName: 'Oscuridad',
+      fuerza: 100, defensa: 100, velocidad: 100, suerte: 100, carisma: 100, poder: 100, edition: 'Edición ' + month };
+  }
+  // Mes (AAAA-MM) de un instante según una zona horaria, y cuándo acaba ese mes (= empieza el siguiente, a las 00:00 de esa zona)
+  const monthKeyOf = (ms, tz) => new Date(ms).toLocaleDateString('en-CA', { timeZone: tz || 'Europe/Madrid' }).slice(0, 7);
+  function nextMonthKey(key) { const [, y, m] = monthRe.exec(key); return Number(m) === 12 ? (Number(y) + 1) + '-01' : y + '-' + String(Number(m) + 1).padStart(2, '0'); }
+  function tzOffsetMs(ms, tz) {   // cuánto adelanta la zona sobre UTC en ese instante
+    const t = Math.floor(ms / 1000) * 1000;
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      .formatToParts(new Date(t)).filter(x => x.type !== 'literal').map(x => [x.type, Number(x.value)]));
+    return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - t;
+  }
+  function monthStartMs(key, tz) {   // instante en que empieza el día 1 de ese mes a las 00:00 en esa zona (con horario de verano)
+    tz = tz || 'Europe/Madrid';
+    const [, y, m] = monthRe.exec(key), guess = Date.UTC(Number(y), Number(m) - 1, 1);
+    let res = guess - tzOffsetMs(guess, tz); const off2 = tzOffsetMs(res, tz);
+    if (guess - off2 !== res) res = guess - off2;
+    return res;
+  }
+  const monthEndMs = (key, tz) => monthStartMs(nextMonthKey(key), tz);
+
+  // Ordena las pujas: la mejor de cada jugador, de mayor a menor; si empatan gana quien pujó antes
+  function rankBids(bids) {
+    const best = new Map();
+    for (const b of bids) { const c = best.get(b.user_id); if (!c || b.amount > c.amount || (b.amount === c.amount && b.created_at < c.created_at)) best.set(b.user_id, b); }
+    return [...best.values()].sort((a, b) => b.amount - a.amount || a.created_at - b.created_at);
+  }
+  // Recorre las pujas de mejor a peor y se queda con la primera que se pueda cobrar (charge(puja) → true si se cobró).
+  // Así, si el que iba ganando se ha gastado los créditos, la carta pasa al siguiente en vez de quedar desierta.
+  async function pickWinner(bids, charge) {
+    const skipped = [];
+    for (const b of rankBids(bids)) { if (await charge(b)) return { winner: b, skipped }; skipped.push(b); }
+    return { winner: null, skipped };
+  }
+
+  return { TOTAL, GROUP, GROUPS, SEASONS, RARITIES, valid, groupOf, posOf, rarityIndexOf, cardInfo,
+    BLACKS, validMonth, blackInfo, monthKeyOf, nextMonthKey, monthStartMs, monthEndMs, rankBids, pickWinner };
 });

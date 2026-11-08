@@ -1,13 +1,16 @@
 'use strict';
 // CARTAS 🃏 (botón en Extras): sobres, "Ver Carta" y colección de la temporada (100 grupos de 100 cartas).
 // El servidor decide qué carta sale (ver cards-server.js); aquí solo se dibuja y se anima. Las cartas se calculan con cards-core.js.
-// Usa globals de app.js: authToken, openLogin(), api(), updateCreditUi(), sfx().
+// Pantallas: inicio (sobres, intercambios, colección), 🏆 ranking de jugadores por país (ver sus cartas y ofrecer comprarlas) y 🖤 puja mensual de la Carta Negra.
+// Usa globals de app.js: authToken, openLogin(), api(), updateCreditUi(), refreshCredits(), flagOf(), countryName(), sfx().
 (function () {
   const btn = document.getElementById('cards-btn');
   if (!btn || !window.CardsCore) return;
   const C = window.CardsCore, $ = id => document.getElementById(id);
   const nf = n => Number(n).toLocaleString('es-ES');
-  let S = null, group = 1, busy = false, T = [], pendingOffer = 0;
+  let S = null, group = 1, busy = false, T = [], pendingOffer = 0, view = 'home', prefill = null, tradeMsg = null, aucTimer = null;
+  const flag = c => { try { return flagOf(c) || ''; } catch (e) { return ''; } };
+  const ctryName = c => { try { return countryName(c); } catch (e) { return c; } };
 
   const st = document.createElement('style');
   st.textContent = `
@@ -44,32 +47,77 @@
     #cards .msg { min-height: 1.2em; }
     #cards .ms { font-size: 12px; margin: 4px 0; }
     #cards .tform { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; align-items: center; margin: 6px 0; }
-    #cards .tform input { width: 110px; padding: 6px; }
+    #cards .tform input { width: 128px; padding: 6px; }
     #cards .trow { border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; margin: 6px 0; font-size: 13px; }
     #cards .trow .crow { margin: 4px 0 0; }
     @media (max-width: 480px) { #cards .grid { grid-template-columns: repeat(5, 1fr); } #cards .slot { font-size: 19px; } }
+    /* Cabecera fija: el botón Volver atrás y los avisos (errores / «Oferta enviada») se ven siempre, aunque estés abajo del todo */
+    #cards-head { position: sticky; top: -20px; z-index: 6; background: var(--bg); margin: -20px -24px 8px; padding: 12px 24px 4px; border-radius: 14px 14px 0 0; }
+    #cards .chbar { display: flex; align-items: center; padding-right: 34px; }
+    #cards .cback { font-weight: 800; padding: 6px 12px; }
+    #cards #cards-msg { margin: 6px 0 0; font-weight: 600; }
+    #cards #cards-msg:not(:empty) { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 88%, var(--accent)); }
+    #cards .cnav { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+    #cards .cnav button { flex: 1 1 150px; font-weight: 800; padding: 10px 8px; }
+    #cards .cnav button.blk, #cards button.blk { background: #0a0a0a; color: #ffd54a; border-color: #d4a017; }
+    #cards .news { text-align: left; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin: 8px 0; font-size: 13px; }
+    #cards .news div { padding: 3px 0; } #cards .news div.new { font-weight: 700; } #cards .news div.new::before { content: '🔴 '; }
+    #cards .tmsg { font-size: 13px; margin: 4px 0; }
+    /* Carta Negra: fondo negro y letras doradas */
+    #cards .card.negra { background: radial-gradient(circle at 30% 18%, #2b2410, #000 62%); color: #ffd54a; border-color: #d4a017;
+      box-shadow: 0 0 22px 4px rgba(212,160,23,.6), 0 8px 22px rgba(0,0,0,.6); }
+    #cards .card.negra .ctop, #cards .card.negra .cname, #cards .card.negra .crar, #cards .card.negra .cfoot { color: #ffd54a; text-shadow: 0 0 6px rgba(255,200,40,.45); }
+    #cards .card.negra .cart { background: rgba(255,213,74,.08); border: 1px solid rgba(255,213,74,.4); }
+    #cards .card.negra .cstats { background: rgba(255,213,74,.08); border: 1px solid rgba(255,213,74,.35); color: #ffd54a; }
+    #cards .card.negra::after { content: ''; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 38%, rgba(255,213,74,.35) 50%, transparent 62%);
+      background-size: 250% 100%; animation: cshine 3.2s linear infinite; pointer-events: none; }
+    /* Ranking */
+    #cards .rc { display: flex; justify-content: space-between; align-items: baseline; font-weight: 800; margin: 16px 0 4px; text-align: left; font-size: 15px; }
+    #cards .rc small { font-weight: 600; color: var(--muted); }
+    #cards .rp { display: flex; width: 100%; justify-content: space-between; gap: 8px; text-align: left; padding: 8px 10px; margin: 3px 0; font-weight: 700; }
+    #cards .rp.me { border-color: var(--accent); }
+    #cards .rp .n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #cards .rpanel { border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin: 2px 0 8px; }
+    #cards .mini { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin: 6px 0; }
+    #cards .mini button { width: 42px; height: 50px; padding: 0; border-radius: 6px; border: 2px solid var(--c1); background: var(--c2); color: #1b1b1b; font-size: 21px; line-height: 1.05; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    #cards .mini button small { font-size: 9px; font-weight: 700; }
+    #cards .mini button.sel { outline: 3px solid var(--accent); }
+    #cards .mini button.blk { background: #0a0a0a; color: #ffd54a; border-color: #d4a017; }
+    #cards .rpanel h4 { margin: 10px 0 2px; font-size: 13px; }
+    /* Subasta */
+    #cards .count { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 4px 0; }
+    #cards .hist { text-align: left; font-size: 13px; border: 1px solid var(--line); border-radius: 10px; padding: 4px 10px; }
+    #cards .hist div { padding: 4px 0; border-bottom: 1px solid var(--line); } #cards .hist div:last-child { border-bottom: 0; }
+    #cards-dot { position: absolute; top: 1px; right: 1px; width: 13px; height: 13px; border-radius: 50%; background: #e63946; border: 2px solid #fff; animation: dailypulse 1.4s infinite; }
+    #cards-dot.hidden { display: none; }
+    .mp-ic #cards-dot { top: -3px !important; right: -3px !important; }
+    @media (prefers-reduced-motion: reduce) { #cards-dot, #cards .card.negra::after { animation: none; } }
   `;
   document.head.appendChild(st);
 
   const modal = document.createElement('div');
   modal.id = 'cards'; modal.className = 'modal hidden';
   modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'cards-title');
-  modal.innerHTML = '<div class="modal-card"><button id="cards-close" class="close" type="button" aria-label="Cerrar">×</button>' +
-    '<h2 id="cards-title">🃏 Cartas</h2><p id="cards-meta" class="cmeta muted"></p><p id="cards-msg" class="msg" aria-live="polite"></p>' +
-    '<div id="cards-stage"></div><div id="cards-shop"></div><div id="cards-trades"></div><h3>📚 Mi colección</h3><div id="cards-sel" class="crow"></div><div id="cards-grid" class="grid"></div><div id="cards-view"></div></div>';
+  modal.innerHTML = '<div class="modal-card"><div id="cards-head"><div class="chbar"><button id="cards-back" class="cback" type="button">← Volver atrás</button></div>' +
+    '<button id="cards-close" class="close" type="button" aria-label="Cerrar">×</button><p id="cards-msg" class="msg" role="status" aria-live="polite"></p></div>' +
+    '<h2 id="cards-title">🃏 Cartas</h2><p id="cards-meta" class="cmeta muted"></p>' +
+    '<div id="cards-home"><div class="cnav"><button id="cards-go-rank" type="button">🏆 Ranking de jugadores</button><button id="cards-go-auc" class="blk" type="button">🖤 Carta Negra · puja</button></div><div id="cards-news"></div>' +
+    '<div id="cards-stage"></div><div id="cards-shop"></div><div id="cards-trades"></div><h3>📚 Mi colección</h3><div id="cards-sel" class="crow"></div><div id="cards-grid" class="grid"></div><div id="cards-view"></div>' +
+    '<div id="cards-black"></div></div><div id="cards-rank" class="hidden"></div><div id="cards-auc" class="hidden"></div></div>';
   document.body.appendChild(modal);
   const say = (t, kind = '') => { const m = $('cards-msg'); m.textContent = t || ''; m.className = 'msg ' + kind; };
 
   function cardEl(info, flip) {   // dibuja una carta (todo con textContent: nada se interpreta como HTML)
     const d = document.createElement('div');
-    d.className = 'card ' + info.rarity + (flip ? ' flip' : '');
+    d.className = 'card ' + info.rarity + (flip ? ' flip' : '');   // la Carta Negra usa la clase «negra»
     d.style.setProperty('--c1', info.c1); d.style.setProperty('--c2', info.c2);
     const add = (cls, text, parent) => { const e = document.createElement('div'); e.className = cls; e.textContent = text; (parent || d).appendChild(e); return e; };
     const top = add('ctop', '', d); const a = document.createElement('span'); a.textContent = info.element + ' ' + info.elementName; const b = document.createElement('span'); b.textContent = '⚡ ' + info.poder; top.append(a, b);
-    add('cart', info.emoji); add('cname', info.name); add('crar', (info.gold ? '👑 ' : '') + info.rarityName);
+    add('cart', info.emoji); add('cname', info.name); add('crar', (info.special ? '🖤 ' : info.gold ? '👑 ' : '') + info.rarityName);
     const stats = add('cstats', '');
-    [['💪 Fuerza', info.fuerza], ['🛡️ Defensa', info.defensa], ['💨 Velocidad', info.velocidad], ['🍀 Suerte', info.suerte]].forEach(([k, v]) => { const s = document.createElement('span'); s.textContent = k + ' ' + v; stats.appendChild(s); });
-    const foot = add('cfoot', '', d); const f1 = document.createElement('span'); f1.textContent = 'Nº ' + info.serial; const f2 = document.createElement('span'); f2.textContent = 'Grupo ' + info.group; foot.append(f1, f2);
+    [['💪 Fuerza', info.fuerza], ['🛡️ Defensa', info.defensa], ['💨 Velocidad', info.velocidad], ['🍀 Suerte', info.suerte]]
+      .concat(info.special ? [['😎 Carisma', info.carisma], ['⚡ Poder', info.poder]] : []).forEach(([k, v]) => { const s = document.createElement('span'); s.textContent = k + ' ' + v; stats.appendChild(s); });
+    const foot = add('cfoot', '', d); const f1 = document.createElement('span'); f1.textContent = info.special ? 'ÚNICA' : 'Nº ' + info.serial; const f2 = document.createElement('span'); f2.textContent = info.special ? info.month : 'Grupo ' + info.group; foot.append(f1, f2);
     return d;
   }
 
@@ -155,55 +203,251 @@
     }
   }
 
+  // Mensaje junto al formulario de ofertas (se conserva aunque la lista se vuelva a dibujar)
+  const tsay = (text, kind = '') => { tradeMsg = text ? { text, kind } : null; const m = document.querySelector('#cards-trades .tmsg'); if (m) { m.textContent = text || ''; m.className = 'tmsg msg ' + kind; } say(text, kind); };
+  const toastMsg = t => { try { if (window.giftToast) window.giftToast(t, 8000); } catch (e) {} };
+  const money = n => nf(n) + ' 🎟️';
+  function describe(x) {   // texto de una oferta abierta (intercambio, regalo o compra con créditos)
+    const oi = x.offer ? C.cardInfo(x.offer, S.season) : null, wi = x.want ? C.cardInfo(x.want, S.season) : null;
+    const c = (i, n) => i.emoji + ' ' + i.name + ' (Nº ' + n + ')';
+    if (x.price) return x.dir === 'in' ? x.from + ' quiere comprarte ' + (wi ? c(wi, x.want) : 'una carta') + ' por ' + money(x.price) : 'Ofreces ' + money(x.price) + ' a ' + x.to + ' por ' + (wi ? c(wi, x.want) : 'una carta');
+    return (x.dir === 'in' ? x.from + ' te ofrece ' : 'Ofreces a ' + x.to + ': ') + (oi ? c(oi, x.offer) + ', ' + oi.rarityName : '?') + (wi ? ' a cambio de ' + c(wi, x.want) : ' como regalo');
+  }
+
   function tradesUi() {
     const el = $('cards-trades'); el.replaceChildren();
     const h = document.createElement('h3'); h.textContent = '🔁 Intercambios' + (S.tradesIn ? ' · ' + S.tradesIn + ' para ti' : ''); el.appendChild(h);
     const f = document.createElement('div'); f.className = 'tform';
-    const nick = document.createElement('input'); nick.placeholder = 'Apodo'; nick.maxLength = 30; nick.autocapitalize = 'off';
+    const nick = document.createElement('input'); nick.placeholder = 'Apodo'; nick.maxLength = 30; nick.autocapitalize = 'off'; nick.setAttribute('aria-label', 'Apodo del jugador');
     const off = document.createElement('select'); off.setAttribute('aria-label', 'Tu carta');
     S.owned.forEach(o => { const i = C.cardInfo(o.id, S.season), op = document.createElement('option'); op.value = o.id; op.textContent = 'Doy: ' + i.emoji + ' ' + i.name + ' Nº ' + o.id; if (o.id === pendingOffer) op.selected = true; off.appendChild(op); });
-    const want = document.createElement('input'); want.type = 'number'; want.min = 1; want.max = S.total; want.placeholder = 'Nº que quiero'; want.inputMode = 'numeric';
+    const want = document.createElement('input'); want.type = 'number'; want.min = 1; want.max = S.total; want.placeholder = 'Nº que quiero'; want.inputMode = 'numeric'; want.setAttribute('aria-label', 'Número de carta que quieres');
+    if (prefill) { nick.value = prefill.nick; want.value = prefill.want; prefill = null; }
     const go = document.createElement('button'); go.type = 'button'; go.className = 'primary'; go.textContent = 'Enviar oferta';
     go.onclick = async () => {
-      if (busy) return; busy = true; say('');
-      try { await api('/api/cards/trade', { method: 'POST', body: { nick: nick.value, offer: Number(off.value), want: want.value ? Number(want.value) : 0 } }); say(want.value ? 'Oferta enviada 👍' : 'Regalo enviado 👍 (si lo aceptan, la carta será suya)'); pendingOffer = 0; await loadTrades(); }
-      catch (e) { say(e.message, 'err'); } finally { busy = false; }
+      if (busy) return;
+      if (!nick.value.trim()) { tsay('Escribe el apodo del jugador', 'err'); nick.focus(); return; }
+      busy = true; tsay('Enviando…');
+      try {
+        await api('/api/cards/trade', { method: 'POST', body: { nick: nick.value, offer: Number(off.value), want: want.value ? Number(want.value) : 0 } });
+        tsay(want.value ? 'Oferta enviada a ' + nick.value.trim() + ' 👍 Te avisaremos cuando conteste.' : 'Regalo enviado a ' + nick.value.trim() + ' 👍 (si lo aceptan, la carta será suya)', 'ok'); pendingOffer = 0; await loadTrades();
+      } catch (e) { tsay(e.message, 'err'); } finally { busy = false; }
     };
     if (!S.owned.length) { const p = document.createElement('p'); p.className = 'cmeta muted'; p.textContent = 'Cuando tengas cartas podrás cambiarlas por las de otros jugadores. Deja «Nº que quiero» vacío para regalarla.'; el.appendChild(p); }
     else { f.append(nick, off, want, go); el.appendChild(f); const t = document.createElement('p'); t.className = 'cmeta muted'; t.textContent = 'Deja «Nº que quiero» vacío para regalar la carta. Necesitas una cuenta con 24 h.'; el.appendChild(t); }
+    const how = document.createElement('p'); how.className = 'cmeta';
+    const hb = document.createElement('button'); hb.type = 'button'; hb.textContent = '🏆 ¿Qué cartas tienen los demás? Ver ranking'; hb.onclick = () => go2('rank'); how.appendChild(hb); el.appendChild(how);
+    const tm = document.createElement('p'); tm.className = 'tmsg msg' + (tradeMsg && tradeMsg.kind ? ' ' + tradeMsg.kind : ''); tm.setAttribute('role', 'status'); tm.textContent = tradeMsg ? tradeMsg.text : ''; el.appendChild(tm);
     T.forEach(x => {
       const r = document.createElement('div'); r.className = 'trow';
-      const oi = C.cardInfo(x.offer, S.season), wi = x.want ? C.cardInfo(x.want, S.season) : null;
-      const txt = document.createElement('div');
-      txt.textContent = (x.dir === 'in' ? x.from + ' te ofrece ' : 'Ofreces a ' + x.to + ': ') + oi.emoji + ' ' + oi.name + ' (Nº ' + x.offer + ', ' + oi.rarityName + ')' + (wi ? ' a cambio de ' + wi.emoji + ' ' + wi.name + ' (Nº ' + x.want + ')' : ' como regalo');
+      const txt = document.createElement('div'); txt.textContent = describe(x);
       const row = document.createElement('div'); row.className = 'crow';
-      const mk = (label, action) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.onclick = () => answerTrade(x.id, action); row.appendChild(b); };
-      if (x.dir === 'in') { mk('✅ Aceptar', 'accept'); mk('❌ Rechazar', 'reject'); } else mk('Cancelar oferta', 'cancel');
+      const mk = (label, action) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.onclick = () => answerTrade(x, action); row.appendChild(b); };
+      if (x.dir === 'in') { mk(x.price ? '✅ Vender' : '✅ Aceptar', 'accept'); mk('❌ Rechazar', 'reject'); } else mk('Cancelar oferta', 'cancel');
       r.append(txt, row); el.appendChild(r);
     });
   }
   async function loadTrades() { try { T = (await api('/api/cards/trades')).trades || []; } catch (e) { T = []; } tradesUi(); }
-  async function answerTrade(id, action) {
-    if (busy) return; busy = true; say('');
+  async function answerTrade(x, action) {
+    if (busy) return;
+    if (action === 'accept' && x.price && !confirm('¿Vender ' + (x.want ? C.cardInfo(x.want, S.season).name + ' (Nº ' + x.want + ')' : 'la carta') + ' a ' + x.from + ' por ' + nf(x.price) + ' créditos?')) return;
+    busy = true; say('');
     try {
-      const r = await api('/api/cards/trade/answer', { method: 'POST', body: { id, action } }); S = r;
-      say(action === 'accept' ? '¡Intercambio hecho! 🎉' + ((r.rewards || []).length ? ' Premio de grupo conseguido 🎁' : '') : action === 'reject' ? 'Oferta rechazada' : 'Oferta cancelada');
+      const r = await api('/api/cards/trade/answer', { method: 'POST', body: { id: x.id, action } }); S = r;
+      say(action === 'accept' ? (x.price ? '¡Vendida! Has ganado ' + money(x.price) + ' 🎉' : '¡Intercambio hecho! 🎉') + ((r.rewards || []).length ? ' Premio de grupo conseguido 🎁' : '') : action === 'reject' ? 'Oferta rechazada' : 'Oferta cancelada', action === 'accept' ? 'ok' : '');
+      try { refreshCredits(); } catch (e) {}
       render(); await loadTrades();
     } catch (e) { say(e.message, 'err'); } finally { busy = false; }
   }
 
+  // ---------- 🔴 Novedades (alguien quiere comprarte / cambiarte una carta, te han vendido una, subasta…) ----------
+  async function loadNews() {
+    const el = $('cards-news'); if (!el) return;
+    try {
+      const j = await api('/api/cards/notifs'); el.replaceChildren();
+      if (!j.items || !j.items.length) { setDot(false); return; }
+      const box = document.createElement('div'); box.className = 'news';
+      const h = document.createElement('b'); h.textContent = '🔔 Novedades'; box.appendChild(h);
+      j.items.slice(0, 8).forEach(n => { const d = document.createElement('div'); d.className = n.seen ? '' : 'new'; d.textContent = n.text; box.appendChild(d); });
+      el.appendChild(box);
+      if (j.unseen) { api('/api/cards/notifs/seen', { method: 'POST', body: {} }).catch(() => {}); setDot(false); }   // ya las has visto: se apaga el punto rojo
+    } catch (e) { /* sin conexión: no pasa nada */ }
+  }
+
+  // ---------- 🏆 Ranking de jugadores por país ----------
+  function go2(v) {   // cambia de pantalla dentro de Cartas
+    view = v; clearInterval(aucTimer); say('');
+    ['home', 'rank', 'auc'].forEach(k => $('cards-' + k).classList.toggle('hidden', k !== v));
+    $('cards-title').textContent = v === 'rank' ? '🏆 Ranking de jugadores' : v === 'auc' ? '🖤 Carta Negra' : '🃏 Cartas';
+    $('cards-meta').classList.toggle('hidden', v !== 'home');
+    modal.querySelector('.modal-card').scrollTop = 0;
+    if (v === 'rank') rankUi(); else if (v === 'auc') aucUi();
+  }
+  const mkp = (cls, text) => { const p = document.createElement('p'); p.className = cls; p.textContent = text; return p; };
+  function tile(info, label, onclick) {   // casilla pequeña de una carta
+    const b = document.createElement('button'); b.type = 'button'; b.title = info.name; b.setAttribute('aria-label', info.name + (label ? ' ' + label : ''));
+    if (info.special) b.className = 'blk'; else { b.style.setProperty('--c1', info.c1); b.style.setProperty('--c2', info.c2); }
+    b.append(info.emoji); const sm = document.createElement('small'); sm.textContent = label; b.appendChild(sm); b.onclick = onclick; return b;
+  }
+  async function rankUi() {
+    const el = $('cards-rank'); el.replaceChildren(mkp('cmeta muted', 'Toca el nombre de un jugador para ver todas sus cartas y ofrecerle comprar la que quieras.'), mkp('cmeta', 'Cargando…'));
+    let R;
+    try { R = await api('/api/cards/ranking'); } catch (e) { say(e.message, 'err'); el.replaceChildren(mkp('cmeta muted', 'No se pudo cargar el ranking.')); return; }
+    el.replaceChildren(mkp('cmeta muted', 'Toca el nombre de un jugador para ver todas sus cartas y ofrecerle comprar la que quieras.'));
+    if (!R.countries.length) { el.appendChild(mkp('cmeta', 'Todavía nadie tiene cartas.')); return; }
+    R.countries.forEach(g => {
+      const hd = document.createElement('div'); hd.className = 'rc';
+      const a = document.createElement('span'); a.textContent = g.country ? flag(g.country) + ' ' + ctryName(g.country) : '🌍 Sin país';
+      const b = document.createElement('small'); b.textContent = nf(g.total) + (g.total === 1 ? ' carta' : ' cartas'); hd.append(a, b); el.appendChild(hd);
+      g.players.forEach((pl, i) => {
+        const row = document.createElement('button'); row.type = 'button'; row.className = 'rp' + (pl.me ? ' me' : ''); row.setAttribute('aria-expanded', 'false');
+        const l = document.createElement('span'); l.textContent = (i + 1) + '. ' + (pl.avatar ? pl.avatar + ' ' : '') + pl.nick + (pl.me ? ' (tú)' : '');
+        const r = document.createElement('span'); r.className = 'n'; r.textContent = (pl.black ? '🖤' + pl.black + ' · ' : '') + nf(pl.count) + ' 🃏'; row.append(l, r);
+        const panel = document.createElement('div'); panel.className = 'rpanel hidden'; let loaded = false;
+        row.onclick = () => {
+          const open = panel.classList.toggle('hidden') === false; row.setAttribute('aria-expanded', open ? 'true' : 'false');
+          if (open && !loaded) { loaded = true; fillPlayer(panel, pl.nick).catch(() => { loaded = false; }); }
+        };
+        el.append(row, panel);
+      });
+    });
+  }
+  async function fillPlayer(panel, nick) {
+    panel.replaceChildren(mkp('cmeta', 'Cargando cartas…'));
+    let P;
+    try { P = await api('/api/cards/player?nick=' + encodeURIComponent(nick)); } catch (e) { panel.replaceChildren(mkp('cmeta', e.message)); say(e.message, 'err'); throw e; }
+    panel.replaceChildren(mkp('cmeta', P.nick + ' tiene ' + nf(P.cards.length) + (P.cards.length === 1 ? ' carta' : ' cartas') + (P.me ? ' (son las tuyas)' : '. Toca una para verla y ofrecerle comprarla.')));
+    const detail = document.createElement('div'), mini = document.createElement('div'); mini.className = 'mini';
+    const pick = (btn, node) => { panel.querySelectorAll('.mini button.sel').forEach(x => x.classList.remove('sel')); btn.classList.add('sel'); detail.replaceChildren(node); };
+    P.cards.forEach(id => { const info = C.cardInfo(id, P.season), t = tile(info, String(id), () => pick(t, cardWithBuy(P, id, info))); mini.appendChild(t); });
+    panel.append(mini);
+    const bh = document.createElement('h4'); bh.textContent = '🖤 Cartas Negras de ' + (P.me ? 'tu colección' : P.nick); panel.appendChild(bh);   // este tipo de carta tiene su propio apartado
+    if (!P.black.length) panel.appendChild(mkp('cmeta muted', 'Ninguna todavía.'));
+    else { const bm = document.createElement('div'); bm.className = 'mini'; P.black.forEach(b => { const info = C.blackInfo(b.month), t = tile(info, b.month.slice(2), () => pick(t, blackWrap(info, b))); bm.appendChild(t); }); panel.appendChild(bm); }
+    panel.appendChild(detail);
+  }
+  function blackWrap(info, b) { const w = document.createElement('div'); w.appendChild(cardEl(info, true)); w.appendChild(mkp('cmeta', '🖤 Única · ganada con una puja de ' + money(b.bid) + '. No se puede comprar ni cambiar.')); return w; }
+  function cardWithBuy(P, id, info) {   // la carta abierta + formulario para ofrecer créditos por ella
+    const w = document.createElement('div'); w.appendChild(cardEl(info, true));
+    if (P.me) { w.appendChild(mkp('cmeta', 'Esta carta es tuya.')); return w; }
+    const f = document.createElement('div'); f.className = 'tform';
+    const price = document.createElement('input'); price.type = 'number'; price.min = 1; price.step = 1; price.inputMode = 'numeric'; price.placeholder = '🎟️ Créditos'; price.setAttribute('aria-label', 'Créditos que ofreces');
+    const buy = document.createElement('button'); buy.type = 'button'; buy.className = 'primary'; buy.textContent = '💰 Ofrecer comprar';
+    const swap = document.createElement('button'); swap.type = 'button'; swap.textContent = '🔁 Proponer cambio';
+    const m = mkp('tmsg msg', '');
+    buy.onclick = async () => {
+      if (busy) return; const n = Math.floor(Number(price.value));
+      if (!Number.isFinite(n) || n < 1) { m.textContent = 'Escribe cuántos créditos ofreces'; m.className = 'tmsg msg err'; say(m.textContent, 'err'); price.focus(); return; }
+      busy = true; m.textContent = 'Enviando…'; m.className = 'tmsg msg'; say('');
+      try {
+        await api('/api/cards/trade', { method: 'POST', body: { nick: P.nick, want: id, price: n } });
+        m.textContent = '💰 Oferta enviada: ' + money(n) + ' por ' + info.name + ' (Nº ' + id + '). ' + P.nick + ' recibirá un aviso.'; m.className = 'tmsg msg ok'; say('Oferta de compra enviada a ' + P.nick + ' 👍', 'ok');
+        price.value = ''; loadTrades();
+      } catch (e) { m.textContent = e.message; m.className = 'tmsg msg err'; say(e.message, 'err'); } finally { busy = false; }
+    };
+    swap.onclick = () => { prefill = { nick: P.nick, want: id }; go2('home'); tradesUi(); $('cards-trades').scrollIntoView({ behavior: 'smooth' }); };
+    f.append(price, buy); w.append(mkp('cmeta', 'Tienes ' + money(S ? S.credits : 0) + '. Si acepta, los créditos pasan a su cuenta y la carta a la tuya.'), f, swap, m);
+    return w;
+  }
+
+  // ---------- 🖤 Puja mensual de la Carta Negra ----------
+  const monthName = m => { try { return new Date(m + '-15T12:00:00').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }); } catch (e) { return m; } };
+  async function aucUi() {
+    const el = $('cards-auc'); clearInterval(aucTimer); el.replaceChildren(mkp('cmeta', 'Cargando…'));
+    let A;
+    try { A = await api('/api/cards/auction'); } catch (e) { say(e.message, 'err'); el.replaceChildren(mkp('cmeta muted', 'No se pudo cargar la puja.')); return; }
+    paintAuction(el, A);
+  }
+  function paintAuction(el, A) {
+    clearInterval(aucTimer); el.replaceChildren();
+    el.appendChild(mkp('cmeta muted', 'Una carta única, negra y con letras de oro, al máximo de poder, fuerza y carisma. Solo existe una: se la queda quien más puje. La puja se cierra el último día de cada mes y al mes siguiente sale otra carta negra distinta.'));
+    const h = document.createElement('h3'); h.textContent = '🖤 Carta de ' + monthName(A.month); el.appendChild(h);
+    el.appendChild(cardEl(A.card, true));
+    const cd = document.createElement('div'); cd.className = 'count'; cd.setAttribute('aria-live', 'off'); el.appendChild(cd);
+    const off = A.now - Date.now();
+    const tick = () => {
+      const ms = A.endsAt - (Date.now() + off);
+      if (ms <= 0) { clearInterval(aucTimer); cd.textContent = '⏳ Cerrando la puja…'; setTimeout(() => { if (view === 'auc' && !modal.classList.contains('hidden')) aucUi(); }, 3000); return; }
+      const d = Math.floor(ms / 864e5), hh = Math.floor(ms / 36e5) % 24, mm = Math.floor(ms / 6e4) % 60, ss = Math.floor(ms / 1e3) % 60, z = n => String(n).padStart(2, '0');
+      cd.textContent = '⏳ ' + (d ? d + ' d ' : '') + z(hh) + ':' + z(mm) + ':' + z(ss);
+    };
+    tick(); aucTimer = setInterval(tick, 1000);
+    el.appendChild(mkp('cmeta', A.topNick ? '🏆 Mejor puja: ' + A.topNick + ' · ' + money(A.topAmount) + (A.iLead ? ' (¡vas ganando tú!)' : '') + ' · ' + A.bidders + (A.bidders === 1 ? ' jugador puja' : ' jugadores pujan') : 'Aún nadie ha pujado. Sale a ' + money(A.startBid) + '.'));
+    if (A.myBid) el.appendChild(mkp('cmeta', 'Tu puja: ' + money(A.myBid)));
+    el.appendChild(mkp('cmeta', 'Tienes ' + money(A.credits)));
+    const f = document.createElement('div'); f.className = 'tform';
+    const amt = document.createElement('input'); amt.type = 'number'; amt.min = A.minBid; amt.step = 1; amt.inputMode = 'numeric'; amt.placeholder = 'Mínimo ' + nf(A.minBid); amt.setAttribute('aria-label', 'Créditos que pujas');
+    const go = document.createElement('button'); go.type = 'button'; go.className = 'primary blk'; go.textContent = '🖤 Pujar';
+    const q = document.createElement('div'); q.className = 'crow';
+    [0, 10, 50, 100].forEach(x => { const b = document.createElement('button'); b.type = 'button'; b.textContent = x ? '+' + x : 'Mínimo'; b.onclick = () => { amt.value = A.minBid + x; }; q.appendChild(b); });
+    const m = mkp('tmsg msg', '');
+    go.onclick = async () => {
+      if (busy) return; const n = Math.floor(Number(amt.value));
+      if (!Number.isFinite(n) || n < A.minBid) { m.textContent = 'Tu puja debe ser de al menos ' + nf(A.minBid) + ' créditos'; m.className = 'tmsg msg err'; say(m.textContent, 'err'); amt.focus(); return; }
+      if (!confirm('¿Pujar ' + nf(n) + ' créditos por la Carta Negra? Solo se te cobrarán si ganas, cuando acabe la puja.')) return;
+      busy = true; m.textContent = 'Pujando…'; m.className = 'tmsg msg';
+      try { const r = await api('/api/cards/auction/bid', { method: 'POST', body: { amount: n } }); say('🖤 ¡Puja de ' + nf(n) + ' créditos hecha! Vas ganando.', 'ok'); try { sfx('coin'); } catch (e) {} paintAuction(el, r); }
+      catch (e) { m.textContent = e.message; m.className = 'tmsg msg err'; say(e.message, 'err'); } finally { busy = false; }
+    };
+    f.append(amt, go); el.append(f, q, m);
+    el.appendChild(mkp('cmeta muted', 'Los créditos no se gastan al pujar: se descuentan solo si ganas, cuando se cierra la puja. Ten los créditos disponibles hasta entonces; si te quedas sin ellos, la carta pasa al siguiente que más haya pujado. Si ganas, te avisamos con un punto rojo.'));
+    const hh = document.createElement('h3'); hh.textContent = '🏛️ Ganadores anteriores'; el.appendChild(hh);
+    const hist = document.createElement('div'); hist.className = 'hist';
+    if (!A.history.length) hist.textContent = 'Todavía no ha terminado ninguna puja.';
+    A.history.forEach(x => { const d = document.createElement('div'); d.textContent = x.emoji + ' ' + x.name + ' · ' + monthName(x.month) + ' — ' + (x.nick ? '🏆 ' + x.nick + ' (' + money(x.bid) + ')' : 'sin pujas'); hist.appendChild(d); });
+    el.appendChild(hist);
+  }
+
+  // Mis Cartas Negras (apartado propio dentro de la colección)
+  function blackSection() {
+    const el = $('cards-black'); el.replaceChildren();
+    const h = document.createElement('h3'); h.textContent = '🖤 Mis Cartas Negras'; el.appendChild(h);
+    if (!S.black || !S.black.length) { el.appendChild(mkp('cmeta muted', 'Aún no tienes ninguna. Se ganan en la puja mensual de la Carta Negra.')); return; }
+    const mini = document.createElement('div'); mini.className = 'mini';
+    S.black.forEach(b => { const info = C.blackInfo(b.month), t = tile(info, b.month.slice(2), () => { const v = $('cards-view'); v.replaceChildren(blackWrap(info, b)); v.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }); mini.appendChild(t); });
+    el.appendChild(mini);
+  }
+
   function render() {
     $('cards-meta').textContent = S.seasonName + ' · Tienes ' + S.owned.length + ' · Ya repartidas en el juego: ' + nf(S.minted) + ' de ' + nf(S.total);
-    stage(); shop(); collection(); tradesUi();
+    stage(); shop(); collection(); blackSection(); tradesUi();
   }
   async function load() {
-    try { S = await api('/api/cards'); if (!S.on) { say('Las cartas están desactivadas', 'err'); return; } say(''); $('cards-view').replaceChildren(); render(); loadTrades(); }
+    try { S = await api('/api/cards'); if (!S.on) { say('Las cartas están desactivadas', 'err'); return; } say(''); $('cards-view').replaceChildren(); render(); loadTrades(); loadNews(); }
     catch (e) { say(e.message, 'err'); }
   }
+
+  // ---------- Punto rojo en el botón 🃏 (y en «Extras») ----------
+  const dot = document.createElement('span'); dot.id = 'cards-dot'; dot.className = 'hidden'; dot.setAttribute('aria-hidden', 'true'); btn.appendChild(dot);
+  const prevSync = window.syncExtrasDot;   // el puntito de «Extras» también se enciende con los avisos de cartas
+  window.syncExtrasDot = () => { if (prevSync) prevSync(); const e = $('extras-dot'); if (e && !dot.classList.contains('hidden')) e.classList.remove('hidden'); };
+  function setDot(on) { dot.classList.toggle('hidden', !on); if (window.syncExtrasDot) window.syncExtrasDot(); }
+  let lastToast = 0, tokenSeen = null;
+  async function pollNotifs() {
+    if (typeof authToken === 'undefined' || !authToken) { setDot(false); return; }
+    if (document.hidden || !modal.classList.contains('hidden')) return;   // con la ventana abierta, las novedades salen ahí dentro
+    try {
+      const j = await api('/api/cards/notifs?brief=1'); if (j.on === false) return;
+      setDot(j.unseen > 0);
+      const f = (j.fresh || [])[0];
+      if (f && f.id !== lastToast) { lastToast = f.id; toastMsg('🃏 ' + f.text); }
+    } catch (e) { /* sin conexión: se reintenta */ }
+  }
+  (window.apiReady || Promise.resolve()).then(() => { setTimeout(pollNotifs, 4000); setInterval(pollNotifs, 60000); });
+  setInterval(() => { if (typeof authToken !== 'undefined' && authToken !== tokenSeen) { tokenSeen = authToken; pollNotifs(); } }, 2000);   // entrar / salir de la cuenta
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(pollNotifs, 500); });
+
+  // ---------- Abrir / cerrar / volver ----------
+  const close = () => { clearInterval(aucTimer); modal.classList.add('hidden'); setTimeout(pollNotifs, 300); };
+  const back = () => { if (view !== 'home') go2('home'); else close(); };   // dentro de ranking o puja vuelve a Cartas; en Cartas, vuelve al mapa
   btn.addEventListener('click', () => {
     if (typeof authToken !== 'undefined' && !authToken) { openLogin(); return; }
-    modal.classList.remove('hidden'); load();
+    modal.classList.remove('hidden'); go2('home'); load();
   });
-  $('cards-close').onclick = () => modal.classList.add('hidden');
-  modal.addEventListener('click', e => { if (e.target === modal) modal.classList.add('hidden'); });
+  $('cards-close').onclick = close;
+  $('cards-back').onclick = back;
+  $('cards-go-rank').onclick = () => go2('rank');
+  $('cards-go-auc').onclick = () => go2('auc');
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) back(); });
 })();
