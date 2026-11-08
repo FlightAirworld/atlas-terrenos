@@ -1812,6 +1812,108 @@ async function rankCities(url) {
   return { country, cities: groupCities(rows), other };
 }
 
+// ---------- Campeonato de luchas (cartas) ----------
+// Cada terreno es una carta: poder = FIGHT_BASE + nivel × FIGHT_PER_LEVEL, con un elemento que sale del id del terreno (no cambia):
+// 🔥 fuego gana a 🌿 planta, 🌿 planta gana a 💧 agua, 💧 agua gana a 🔥 fuego (la ventaja multiplica el poder por FIGHT_ELEMENT_BONUS).
+// El jugador elige con qué terreno lucha; el RIVAL lo elige el servidor (terreno de otro jugador, de nivel parecido), así no se pueden
+// montar granjas de créditos con cuentas propias. El resultado también lo decide el servidor: probabilidad = poder / (poder + poder rival),
+// siempre entre 25 % y 75 %. Si gana quien ataca, recibe FIGHT_PRIZE créditos. Tope: FIGHT_DAILY_MAX luchas por cuenta y día.
+// El rival no pierde nada ni se entera. Clasificación por temporada mensual (victorias, y a igualdad menos derrotas).
+// Variables: FIGHT=off (apaga el campeonato), FIGHT_PRIZE (1), FIGHT_DAILY_MAX (3), FIGHT_MIN_AGE_HOURS (24), FIGHT_BASE (10),
+// FIGHT_PER_LEVEL (2), FIGHT_ELEMENT_BONUS (1.25), FIGHT_LEVEL_RANGE (5: diferencia de nivel buscada para el rival).
+const FIGHT_ON = String(process.env.FIGHT || '').toLowerCase() !== 'off';
+const FIGHT_PRIZE = Math.floor(numEnv('FIGHT_PRIZE', 1));
+const FIGHT_DAILY_MAX = Math.max(1, Math.floor(numEnv('FIGHT_DAILY_MAX', 3)));
+const FIGHT_MIN_AGE_H = numEnv('FIGHT_MIN_AGE_HOURS', 24);
+const FIGHT_BASE = numEnv('FIGHT_BASE', 10), FIGHT_PER_LEVEL = numEnv('FIGHT_PER_LEVEL', 2);
+const FIGHT_ELEMENT_BONUS = Math.max(1, numEnv('FIGHT_ELEMENT_BONUS', 1.25));
+const FIGHT_LEVEL_RANGE = Math.max(0, Math.floor(numEnv('FIGHT_LEVEL_RANGE', 5)));
+const FIGHT_ELEMENTS = ['fuego', 'planta', 'agua'];                         // el índice i gana al i+1 (y agua, el último, gana a fuego)
+const fightElement = id => { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 3; };
+const fightPower = level => FIGHT_BASE + Math.max(1, Number(level) || 1) * FIGHT_PER_LEVEL;
+const fightCard = r => ({ id: r.id, level: Number(r.level) || 1, element: FIGHT_ELEMENTS[fightElement(r.id)], power: fightPower(r.level), house: r.house || null, avatar: r.avatar || null, owner: r.owner || null });
+
+async function fightGet(req) {
+  if (!FIGHT_ON) return { on: false };
+  const user = await needUser(req);
+  const uid = String(user.id), today = dayKey(), month = today.slice(0, 7);
+  const used = Number((await one('SELECT COUNT(*) AS n FROM fights WHERE attacker_user = $1 AND day = $2', [uid, today])).n);
+  const rows = await all('SELECT id, level, house, avatar, owner FROM parcels WHERE user_id = $1 ORDER BY level DESC, created_at LIMIT 100', [user.id]);
+  const st = await one('SELECT wins, losses FROM fight_stats WHERE user_id = $1 AND month = $2', [uid, month]);
+  return { on: true, prize: FIGHT_PRIZE, max: FIGHT_DAILY_MAX, used, left: Math.max(0, FIGHT_DAILY_MAX - used), month,
+    wins: st ? Number(st.wins) : 0, losses: st ? Number(st.losses) : 0, parcels: rows.map(fightCard) };
+}
+
+async function fightStart(req, body) {
+  if (!FIGHT_ON) throw new HttpError(404, 'El campeonato está apagado');
+  const user = await needUser(req);
+  const pack = await ensureUserPack(user);
+  const uid = String(user.id), today = dayKey(), month = today.slice(0, 7);
+  const parcelId = String((body && body.parcelId) || '').slice(0, 64);
+  if (!parcelId) throw new HttpError(400, 'Elige un terreno para luchar');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const pk = (await client.query('SELECT code, created_at FROM packs WHERE code = $1 FOR UPDATE', [pack.code])).rows[0];   // una lucha a la vez por cuenta: así el tope diario no se salta con peticiones a la vez
+    if (FIGHT_MIN_AGE_H > 0 && Date.now() - Number(pk.created_at || 0) < FIGHT_MIN_AGE_H * HOUR_MS)
+      throw new HttpError(403, `Tu cuenta debe tener al menos ${FIGHT_MIN_AGE_H} h para entrar en el campeonato`);
+    const used = Number((await client.query('SELECT COUNT(*) AS n FROM fights WHERE attacker_user = $1 AND day = $2', [uid, today])).rows[0].n);
+    if (used >= FIGHT_DAILY_MAX) throw new HttpError(429, `Hoy ya has hecho tus ${FIGHT_DAILY_MAX} luchas. ¡Vuelve mañana!`);
+    const mine = (await client.query('SELECT id, level, house, avatar, owner FROM parcels WHERE id = $1 AND user_id = $2', [parcelId, user.id])).rows[0];
+    if (!mine) throw new HttpError(404, 'Ese terreno no es tuyo');
+    const L = Number(mine.level) || 1;
+    // Rival: terreno de otro jugador, de nivel parecido, y de un jugador al que hoy aún no te has enfrentado; si no hay, el de nivel más cercano
+    const pick = `SELECT id, level, house, avatar, owner, user_id::text AS uid FROM parcels
+                  WHERE user_id IS NOT NULL AND user_id::text <> $1
+                    AND user_id::text NOT IN (SELECT defender_user FROM fights WHERE attacker_user = $1 AND day = $2)`;
+    let foe = (await client.query(`${pick} AND level BETWEEN $3 AND $4 ORDER BY random() LIMIT 1`, [uid, today, L - FIGHT_LEVEL_RANGE, L + FIGHT_LEVEL_RANGE])).rows[0];
+    if (!foe) foe = (await client.query(`${pick} ORDER BY ABS(level - $3), random() LIMIT 1`, [uid, today, L])).rows[0];
+    if (!foe) throw new HttpError(409, 'Ahora mismo no hay rivales disponibles. Prueba más tarde');
+    // Combate
+    const a = fightElement(mine.id), d = fightElement(foe.id);
+    let atk = fightPower(mine.level), def = fightPower(foe.level);
+    if ((a + 1) % 3 === d) atk *= FIGHT_ELEMENT_BONUS;           // mi elemento gana al suyo
+    else if ((d + 1) % 3 === a) def *= FIGHT_ELEMENT_BONUS;      // el suyo gana al mío
+    const p = Math.min(0.75, Math.max(0.25, atk / (atk + def)));
+    const won = crypto.randomInt(0, 1_000_000) / 1_000_000 < p;
+    const prize = won ? FIGHT_PRIZE : 0;
+    const now = Date.now();
+    await client.query('INSERT INTO fights (day, attacker_user, attacker_parcel, defender_user, defender_parcel, chance, won, prize, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [today, uid, mine.id, foe.uid, foe.id, Math.round(p * 100), won, prize, now]);
+    await client.query(`INSERT INTO fight_stats (user_id, month, wins, losses, last_at) VALUES ($1,$2,$3,$4,$5)
+                        ON CONFLICT (user_id, month) DO UPDATE SET wins = fight_stats.wins + $3, losses = fight_stats.losses + $4, last_at = $5`,
+      [uid, month, won ? 1 : 0, won ? 0 : 1, now]);
+    const up = (await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING credits', [prize, pack.code])).rows[0];
+    const st = (await client.query('SELECT wins, losses FROM fight_stats WHERE user_id = $1 AND month = $2', [uid, month])).rows[0];
+    await client.query('COMMIT');
+    return { ok: true, won, chance: Math.round(p * 100), prize, credits: Number(up.credits), mine: fightCard(mine), foe: fightCard(foe),
+      used: used + 1, max: FIGHT_DAILY_MAX, left: Math.max(0, FIGHT_DAILY_MAX - used - 1), wins: Number(st.wins), losses: Number(st.losses) };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally { client.release(); }
+}
+
+async function fightRank(req) {
+  if (!FIGHT_ON) return { on: false };
+  const month = dayKey().slice(0, 7);
+  const rows = await all(`SELECT s.user_id AS uid, s.wins, s.losses, pr.nickname, pr.avatar FROM fight_stats s
+                          LEFT JOIN profiles pr ON pr.user_id::text = s.user_id
+                          WHERE s.month = $1 ORDER BY s.wins DESC, s.losses ASC, s.last_at ASC LIMIT 20`, [month]);
+  const me = await userFrom(req);
+  const myId = me ? String(me.id) : null;
+  let mine = null;
+  if (myId) {
+    const s = await one('SELECT wins, losses, last_at FROM fight_stats WHERE user_id = $1 AND month = $2', [myId, month]);
+    if (s) {
+      const r = await one(`SELECT COUNT(*) AS n FROM fight_stats WHERE month = $1 AND (wins > $2 OR (wins = $2 AND (losses < $3 OR (losses = $3 AND last_at < $4))))`,
+        [month, s.wins, s.losses, s.last_at]);
+      mine = { pos: Number(r.n) + 1, wins: Number(s.wins), losses: Number(s.losses) };
+    }
+  }
+  return { on: true, month, top: rows.map((r, i) => ({ pos: i + 1, nick: r.nickname || 'Jugador', avatar: r.avatar || null, wins: Number(r.wins), losses: Number(r.losses), me: r.uid === myId })), mine };
+}
+
 // ---------- Población del juego por pueblos ----------
 // Cada terreno aporta habitantes (POP_PER_PARCEL, 4 por defecto) y cada nivel de mejora suma POP_PER_LEVEL (2). La población de un pueblo
 // es la suma de sus terrenos, así que crece sola cada vez que alguien reclama o mejora uno. El nombre real del pueblo sale de la ciudad
@@ -2303,6 +2405,9 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/daily') return dailyGet(req);
   if (req.method === 'POST' && pn === '/api/daily/claim') return dailyClaim(req);
   if (req.method === 'GET' && pn === '/api/roulette') return rouletteGet(req);
+  if (req.method === 'GET' && pn === '/api/fight') return fightGet(req);
+  if (req.method === 'POST' && pn === '/api/fight/start') return fightStart(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/fight/rank') return fightRank(req);
   if (req.method === 'POST' && pn === '/api/roulette/spin') return rouletteSpin(req);
   if (req.method === 'GET' && pn === '/api/monthly') return monthlyGet(req);
   if (req.method === 'POST' && pn === '/api/monthly/claim') return monthlyClaim(req);
@@ -2993,6 +3098,14 @@ ready.then(async () => {   // ruleta diaria: una fila por cuenta y día (la clav
   await run('CREATE TABLE IF NOT EXISTS monthly_rewards (user_id TEXT NOT NULL, month TEXT NOT NULL, streak INT NOT NULL DEFAULT 0, last_day TEXT, PRIMARY KEY (user_id, month))');
   await run('CREATE TABLE IF NOT EXISTS president_grants (city TEXT NOT NULL, month TEXT NOT NULL, user_id TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (city, month))');
 }).catch(e => console.error('No se pudo preparar la ruleta:', e.message));
+
+ready.then(async () => {   // campeonato de luchas: historial de combates y victorias por mes
+  await run('CREATE TABLE IF NOT EXISTS fights (id BIGSERIAL PRIMARY KEY, day TEXT NOT NULL, attacker_user TEXT NOT NULL, attacker_parcel TEXT NOT NULL, defender_user TEXT NOT NULL, defender_parcel TEXT NOT NULL, chance SMALLINT NOT NULL, won BOOLEAN NOT NULL, prize INT NOT NULL DEFAULT 0, created_at BIGINT NOT NULL)');
+  await run('CREATE INDEX IF NOT EXISTS fights_attacker_day ON fights (attacker_user, day)');
+  await run('CREATE TABLE IF NOT EXISTS fight_stats (user_id TEXT NOT NULL, month TEXT NOT NULL, wins INT NOT NULL DEFAULT 0, losses INT NOT NULL DEFAULT 0, last_at BIGINT NOT NULL, PRIMARY KEY (user_id, month))');
+  await run('CREATE INDEX IF NOT EXISTS fight_stats_rank ON fight_stats (month, wins DESC, losses, last_at)');
+  await run('CREATE INDEX IF NOT EXISTS parcels_user_level ON parcels (level) WHERE user_id IS NOT NULL');
+}).catch(e => console.error('No se pudo preparar el campeonato:', e.message));
 
 // Sitio estático en otro dominio: CORS_ORIGINS = direcciones permitidas, separadas por comas (p. ej. https://atlas-terrenos-web.onrender.com)
 const CORS_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(x => x.trim().replace(/\/+$/, '')).filter(Boolean);

@@ -130,6 +130,16 @@ CREATE INDEX IF NOT EXISTS clan_members_clan ON clan_members (clan_id);
 CREATE TABLE IF NOT EXISTS passes (user_id TEXT PRIMARY KEY, until BIGINT NOT NULL, bought_at BIGINT NOT NULL, times INT NOT NULL DEFAULT 1);
 CREATE TABLE IF NOT EXISTS activity_seen (user_id TEXT PRIMARY KEY, seen_at BIGINT NOT NULL DEFAULT 0);
 
+CREATE TABLE IF NOT EXISTS fights (
+  id BIGSERIAL PRIMARY KEY, day TEXT NOT NULL, attacker_user TEXT NOT NULL, attacker_parcel TEXT NOT NULL, defender_user TEXT NOT NULL,
+  defender_parcel TEXT NOT NULL, chance SMALLINT NOT NULL, won BOOLEAN NOT NULL, prize INT NOT NULL DEFAULT 0, created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS fights_attacker_day ON fights (attacker_user, day);
+CREATE TABLE IF NOT EXISTS fight_stats (
+  user_id TEXT NOT NULL, month TEXT NOT NULL, wins INT NOT NULL DEFAULT 0, losses INT NOT NULL DEFAULT 0, last_at BIGINT NOT NULL, PRIMARY KEY (user_id, month)
+);
+CREATE INDEX IF NOT EXISTS fight_stats_rank ON fight_stats (month, wins DESC, losses, last_at);
+
 -- RLS activado en todas (sin políticas: solo el servidor accede, con DATABASE_URL)
 DO $$ DECLARE t TEXT; BEGIN
   FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
