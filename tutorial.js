@@ -43,8 +43,8 @@
     { icon: '🗺️', title: 'Muévete por el mapa', stage: 'move', text: 'Arrastra con el dedo para moverte y pellizca (o usa la rueda del ratón) para acercarte. Acércate hasta ver las parcelas y la vida de la ciudad.' },
     { icon: '☰', title: 'El Menú', target: '#menu-btn', text: 'Aquí está el Menú: 📍 tu ubicación, 🔍 buscar cualquier lugar, 🏆 ranking, 💬 chat de la zona, 🌎 Mundos (¡puedes viajar a la Luna!) y 🔊 Sonidos.' },
     { icon: '🔍', title: 'Viaja a una ciudad', sim: 'search', text: 'Para ir a cualquier sitio usa 🔍 buscar (en el Menú): escribes una ciudad y el mapa vuela hasta allí. Vamos a una ciudad de ejemplo.' },
-    { icon: '🧭', title: 'Acércate a una manzana', sim: 'zoom', text: 'Haz zoom hasta ver las manzanas entre las calles. Dentro de cada manzana están las parcelas, los terrenos que puedes comprar.' },
-    { icon: '🟩', title: 'Terreno libre, sin casa', sim: 'lot', text: 'Así se ve un terreno libre a pie de calle: solo hierba y el borde de la parcela, sin ninguna casa. Mide unos 45 × 56 m y no tiene dueño todavía.' },
+    { icon: '🧭', title: 'Acércate a un terreno vacío', real: 'block', sim: 'zoom', ms: 7500, text: 'Vamos a volar a un terreno de verdad, sin casas. Haz zoom hasta verlo a pie de suelo para que te lo explique encima.' },
+    { icon: '🟩', title: 'Terreno libre, sin casa', real: 'ground', sim: 'lot', ms: 9000, text: 'Así se ve un terreno libre a pie de calle: solo hierba y el borde de la parcela, sin ninguna casa. Mide unos 45 × 56 m y no tiene dueño todavía.' },
     { icon: '👆', title: 'Elige un terreno libre', sim: 'tap', text: 'Toca cualquier parcela libre del mapa. Se abrirá un panel con sus datos. Una vez comprada, nadie más puede quitártela.' },
     { icon: '🏠', title: 'Hazlo tuyo', sim: 'claim', ms: 10500, text: 'En el panel escribe el nombre que verá la gente, elige tu casa y pulsa «Reclamar este terreno». Cuesta créditos 🎟️.' },
     { icon: '🏡', title: '¡Tu casa aparece!', sim: 'built', ms: 8000, text: 'Al reclamarlo, tu casa aparece al instante en el mapa con tu nombre. Solo es tuya: nadie puede quitártela.' },
@@ -172,7 +172,16 @@ body.tut-nohouses .owner-label{opacity:0}
 #tut-sim[data-ph=built] .ssp{animation:sim-sp 1.4s 1.6s ease-out both}
 #tut-sim .ssp.a{margin:-60px 0 0 -60px}#tut-sim .ssp.b{margin:-50px 0 0 40px;animation-delay:1.8s}#tut-sim .ssp.c{margin:-90px 0 0 -8px;animation-delay:2s}
 @keyframes sim-sp{0%{opacity:0;transform:translateY(10px) scale(.4)}40%{opacity:1}100%{opacity:0;transform:translateY(-26px) scale(1.3)}}
-@media (prefers-reduced-motion:reduce){#tut-spot,#tut-spot.pulse,#tut-card,#tut-arrow,#tut-stage *,#tut-sim,#tut-sim *{animation:none !important;transition:none !important}.ssp{display:none}#tut-sim .sx-type{width:auto;border:0}#tut-sim .mp-type{width:auto;border:0}#tut-sim[data-ph=lot] .bub{opacity:1}#tut-sim[data-ph=built] .hs.mine,#tut-sim[data-ph=nb] .hs{opacity:1}}`;
+#tut-lot{position:fixed;inset:0;z-index:4994;pointer-events:none;display:none}
+#tut-lot.show{display:block}
+#tut-lot svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+#tut-lot polygon{fill:rgba(255,232,163,.28);stroke:#ffb703;stroke-width:3;stroke-dasharray:7 5;stroke-linejoin:round;animation:lot-dash 1.2s linear infinite}
+@keyframes lot-dash{to{stroke-dashoffset:-24}}
+#tut-lot .lot-tag{position:absolute;transform:translate(-50%,-100%);padding:6px 12px;border-radius:12px;background:#0b3d2e;color:#fff;font:800 14px system-ui,sans-serif;white-space:nowrap;box-shadow:0 4px 12px #0006;opacity:0;transition:opacity .5s}
+#tut-lot .lot-tag.on{opacity:1}
+#tut-card .tut-voice{min-height:36px;min-width:36px;padding:0 8px;border-radius:999px;border:1px solid #fff8;background:transparent;color:#fff;font:700 16px system-ui,sans-serif;cursor:pointer}
+#tut-card .tut-topr{display:flex;gap:6px;align-items:center}
+@media (prefers-reduced-motion:reduce){#tut-lot polygon{animation:none !important}#tut-spot,#tut-spot.pulse,#tut-card,#tut-arrow,#tut-stage *,#tut-sim,#tut-sim *{animation:none !important;transition:none !important}.ssp{display:none}#tut-sim .sx-type{width:auto;border:0}#tut-sim .mp-type{width:auto;border:0}#tut-sim[data-ph=lot] .bub{opacity:1}#tut-sim[data-ph=built] .hs.mine,#tut-sim[data-ph=nb] .hs{opacity:1}}`;
   document.head.appendChild(css);
 
   let idx = -1, el = 0, dur = 0, full = '', timer = null, started = false, ended = false;
@@ -265,7 +274,7 @@ body.tut-nohouses .owner-label{opacity:0}
   function showSim(ph, d) {
     if (!sim) {
       sim = document.createElement('div'); sim.id = 'tut-sim'; sim.setAttribute('aria-hidden', 'true'); sim.setAttribute('data-notranslate', '');
-      sim.dataset.ph = 'start'; sim.innerHTML = cityHTML(); document.body.appendChild(sim);
+      sim.dataset.ph = ph === 'search' || ph === 'zoom' ? 'start' : ph; sim.innerHTML = cityHTML(); document.body.appendChild(sim);
       void sim.offsetWidth;                                  // fija el punto de partida de la cámara para que la transición se vea
     }
     sim.style.setProperty('--d', d + 's');
@@ -273,10 +282,123 @@ body.tut-nohouses .owner-label{opacity:0}
   }
   function hideSim() { if (sim) { sim.remove(); sim = null; } }
 
+  // ---------- Mapa REAL: vuelo a un terreno libre de verdad y zoom a pie de suelo ----------
+  // Se busca (con /api/parcel) una parcela sin dueño cerca de donde está el mapa. Si algo falla (sin red, sin config), se usa la ciudad simulada.
+  let lot = null, lotP = null, lotEl = null, lotFrom = null, lotAway = false;
+  async function findFreeLot() {
+    try {
+      if (typeof gl === 'undefined' || !gl || typeof cfg === 'undefined' || !cfg || !cfg.size || typeof api !== 'function') return null;
+      const c = gl.getCenter(), sz = cfg.size, cx = Math.floor((c.lng + 180) / sz), cy = Math.floor((c.lat + 90) / sz);
+      const offs = [[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1], [2, 0], [0, 2], [-2, 0], [0, -2], [2, 2], [-2, -2]];
+      for (const [dx, dy] of offs) {
+        const x = cx + dx, y = cy + dy, lng = (x + 0.5) * sz - 180, lat = (y + 0.5) * sz - 90;
+        let p = null; try { p = await api('/api/parcel?lat=' + lat + '&lng=' + lng, { method: 'GET' }); } catch (e) { continue; }
+        if (p && !p.owner) return { x, y, sz, lng, lat };
+      }
+    } catch (e) {}
+    return null;
+  }
+  function prefetchLot() { if (!lotP) lotP = findFreeLot().then(r => { lot = r; return r; }); return lotP; }
+
+  function lotCorners() {
+    const w = lot.x * lot.sz - 180, e = w + lot.sz, s = lot.y * lot.sz - 90, n = s + lot.sz;
+    return [[w, n], [e, n], [e, s], [w, s]];
+  }
+  function drawLot() {
+    if (!lotEl || !lot || typeof gl === 'undefined' || !gl) return;
+    try {
+      const pts = lotCorners().map(c => gl.project(c)), r = gl.getContainer().getBoundingClientRect();
+      lotEl.querySelector('polygon').setAttribute('points', pts.map(p => (p.x + r.left).toFixed(1) + ',' + (p.y + r.top).toFixed(1)).join(' '));
+      const cx = (pts[0].x + pts[1].x) / 2 + r.left, top = Math.min(pts[0].y, pts[1].y) + r.top;
+      const tag = lotEl.querySelector('.lot-tag'); tag.style.left = cx + 'px'; tag.style.top = (top - 8) + 'px';
+    } catch (e) {}
+  }
+  function showLot(on, tag) {
+    if (!on && !lotEl) return;
+    if (!lotEl) {
+      lotEl = document.createElement('div'); lotEl.id = 'tut-lot'; lotEl.setAttribute('aria-hidden', 'true'); lotEl.setAttribute('data-notranslate', '');
+      lotEl.innerHTML = '<svg><polygon points=""/></svg><div class="lot-tag"></div>';
+      document.body.appendChild(lotEl);
+      try { gl.on('move', drawLot); gl.on('resize', drawLot); } catch (e) {}
+    }
+    lotEl.classList.toggle('show', !!on);
+    const t = lotEl.querySelector('.lot-tag'); t.textContent = tag ? T('Sin casa, sin dueño') : ''; t.classList.toggle('on', !!tag);
+    drawLot();
+  }
+  function flyReal(mode) {   // 'block' = vista de manzana; 'ground' = a pie de suelo (inclinado si el jugador tiene la vista 3D)
+    try {
+      if (!lotFrom) { const c = gl.getCenter(); lotFrom = { center: [c.lng, c.lat], zoom: gl.getZoom(), pitch: gl.getPitch(), bearing: gl.getBearing() }; }
+      lotAway = true;
+      const flat = typeof flatView !== 'undefined' && flatView;
+      const pad = { top: 60, bottom: Math.min(300, Math.round(innerHeight * 0.4)), left: 0, right: 0 };   // deja libre la tarjeta de abajo
+      const g = mode === 'ground';
+      gl.flyTo({ center: [lot.lng, lot.lat], zoom: g ? 19.2 : 17.2, pitch: flat ? 0 : (g ? 60 : 30), bearing: g && !flat ? -15 : 0, padding: pad, duration: g ? 4200 : 3800, essential: true });
+    } catch (e) {}
+  }
+  function flyBack(ms) {   // al acabar la parte real, el mapa vuelve a donde estaba el jugador
+    if (!lotAway || !lotFrom) return;
+    lotAway = false;
+    try { gl.flyTo({ center: lotFrom.center, zoom: lotFrom.zoom, pitch: lotFrom.pitch, bearing: lotFrom.bearing, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: ms == null ? 2200 : ms, essential: true }); } catch (e) {}
+  }
+
+  // ---------- Narrador: voz masculina en el idioma / país del jugador ----------
+  // El idioma sale de i18n (elegido en el menú, o el del navegador, o el país por zona horaria). La región (es-MX, en-GB, pt-PT…) sale de los idiomas del navegador.
+  // Los navegadores no dicen si una voz es de hombre o mujer: se elige por nombre conocido y, si no hay pistas, se baja el tono.
+  const LOCALE = { es: 'es-ES', en: 'en-US', pt: 'pt-BR', fr: 'fr-FR', de: 'de-DE', it: 'it-IT' };
+  const MALE = /\b(jorge|diego|juan|carlos|pablo|enrique|raul|raúl|miguel|andres|andrés|alvaro|álvaro|david|daniel|alex|mark|james|george|thomas|fred|aaron|arthur|guy|rishi|ryan|oliver|luca|cosimo|giorgio|antonio|felipe|luciano|ricardo|cristiano|markus|stefan|hans|jan|conrad|claude|henri|paul|thierry|nicolas|mathieu|male|masculin|hombre)\b/i;
+  const FEMALE = /\b(monica|mónica|paulina|helena|lucia|lucía|sabina|laura|marisol|female|femenin|mujer|samantha|karen|moira|tessa|zira|susan|hazel|catherine|amelie|amélie|audrey|julie|marie|virginia|elsa|federica|alice|paola|anna|petra|vicki|maria|maría|luciana|francisca|joana)\b/i;
+  let narrOn = true, talking = false, talkGen = 0;
+  try { narrOn = localStorage.getItem('tutVoice') !== '0' && !(window.atlasVoice && window.atlasVoice.muted); } catch (e) {}
+  const hasTTS = !!window.speechSynthesis && !!window.SpeechSynthesisUtterance;
+  const curLang = () => { const l = window.i18n && window.i18n.lang; return LOCALE[l] ? l : 'es'; };
+  function regionLocale(l) {   // p. ej. es-MX si el navegador dice es-MX; si no, el de por defecto
+    try { for (const x of (navigator.languages || [navigator.language || ''])) if (String(x).toLowerCase().startsWith(l + '-')) return String(x).replace('_', '-'); } catch (e) {}
+    return LOCALE[l];
+  }
+  function pickNarrator() {
+    const l = curLang(), want = regionLocale(l).toLowerCase();
+    let vs = []; try { vs = (speechSynthesis.getVoices() || []).filter(v => String(v.lang).toLowerCase().replace('_', '-').startsWith(l)); } catch (e) {}
+    if (!vs.length) return { voice: null, lang: regionLocale(l), male: false };
+    const sc = v => {
+      const lg = String(v.lang).toLowerCase().replace('_', '-');
+      return (lg === want ? 4 : 0) + (MALE.test(v.name) ? 5 : 0) - (FEMALE.test(v.name) ? 8 : 0) + (v.localService ? 1 : 0);
+    };
+    vs.sort((a, b) => sc(b) - sc(a));
+    return { voice: vs[0], lang: vs[0].lang, male: MALE.test(vs[0].name) && !FEMALE.test(vs[0].name) };
+  }
+  function cleanSpeech(t) {
+    return String(t).replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, ' ').replace(/[«»]/g, '"').replace(/\s+/g, ' ').trim();
+  }
+  function narrate(text) {
+    narrStop();
+    if (!hasTTS || !narrOn || document.hidden) return;
+    const my = ++talkGen, t = cleanSpeech(text); if (!t) return;
+    const go = () => {
+      if (my !== talkGen || ended) return;
+      try {
+        const n = pickNarrator(), u = new SpeechSynthesisUtterance(t);
+        u.lang = n.lang; if (n.voice) u.voice = n.voice;
+        u.rate = 1; u.pitch = n.male ? 0.95 : 0.7; u.volume = 1;   // sin pista de género: tono grave para que suene a hombre
+        u.onstart = () => { if (my === talkGen) talking = true; };
+        u.onend = u.onerror = () => { if (my === talkGen) talking = false; };
+        talking = true;
+        speechSynthesis.speak(u);
+      } catch (e) { talking = false; }
+    };
+    try { if (window.atlasVoice) window.atlasVoice.stop(); } catch (e) {}   // calla a los vecinos para que se oiga al narrador
+    setTimeout(go, 250);   // deja tiempo a que cancel() termine
+    try { if (!speechSynthesis.getVoices().length) speechSynthesis.addEventListener('voiceschanged', () => { if (my === talkGen && !talking) go(); }, { once: true }); } catch (e) {}
+  }
+  function narrStop() { talkGen++; talking = false; try { if (hasTTS) speechSynthesis.cancel(); } catch (e) {} }
+  function paintVoiceBtn() { const b = card && card.querySelector('.tut-voice'); if (b) { b.textContent = narrOn ? '🔊' : '🔇'; b.setAttribute('aria-label', narrOn ? T('Voz activada') : T('Voz desactivada')); } }
+
   function finish() {
     if (ended) return;
     ended = true;
+    narrStop(); flyBack(1800);
+    if (lotEl) { try { gl.off('move', drawLot); gl.off('resize', drawLot); } catch (e) {} lotEl.remove(); lotEl = null; }
     clearInterval(timer); timer = null;
+
     removeEventListener('resize', place); document.removeEventListener('keydown', onKey);
     showHouses(); hideSim();
     document.body.classList.remove('tut-on');
@@ -308,23 +430,34 @@ body.tut-nohouses .owner-label{opacity:0}
     dur = Math.max(s.ms || 0, 3000 + full.length * 55);
     if (!s.houses) hideHouses(); else showHouses();
     card.innerHTML = `
-      <div class="tut-top"><span class="tut-step">${n + 1} / ${STEPS.length}</span><button type="button" class="tut-skip">Saltar tutorial</button></div>
+      <div class="tut-top"><span class="tut-step">${n + 1} / ${STEPS.length}</span><span class="tut-topr">${hasTTS ? '<button type="button" class="tut-voice"></button>' : ''}<button type="button" class="tut-skip">${T('Saltar tutorial')}</button></span></div>
       <h3 data-notranslate></h3>
       <p data-notranslate><span class="sr"></span><span aria-hidden="true"><span class="on"></span><span class="off"></span></span></p>
-      ${s.extra || s.last ? `<div class="tut-btns">${s.extra ? `<button type="button" class="tut-extra">${s.extra.label}</button>` : ''}<button type="button" class="tut-next">¡A jugar!</button></div>` : ''}
+      ${s.extra || s.last ? `<div class="tut-btns">${s.extra ? `<button type="button" class="tut-extra">${T(s.extra.label)}</button>` : ''}<button type="button" class="tut-next">${T('¡A jugar!')}</button></div>` : ''}
       <div class="tut-bar" aria-hidden="true"><i></i></div>
       <div class="tut-dots" aria-hidden="true">${STEPS.map((_, k) => `<i${k === n ? ' class="on"' : ''}></i>`).join('')}</div>`;
     card.querySelector('h3').textContent = s.icon + ' ' + T(s.title);
     card.querySelector('.sr').textContent = full;
     card.querySelector('.off').textContent = full;
     card.querySelector('.tut-skip').onclick = finish;
+    const vb = card.querySelector('.tut-voice');
+    if (vb) vb.onclick = () => { narrOn = !narrOn; try { localStorage.setItem('tutVoice', narrOn ? '1' : '0'); } catch (e) {} if (narrOn) narrate(T(STEPS[idx].text)); else narrStop(); paintVoiceBtn(); };
+    paintVoiceBtn();
     const nx = card.querySelector('.tut-next'); if (nx) nx.onclick = finish;
     const x = card.querySelector('.tut-extra'); if (x) x.onclick = () => { try { s.extra.run(); } catch (e) {} };
     card.style.animation = 'none'; void card.offsetWidth; card.style.animation = '';
     // Escenario con animación (se vuelve a crear en cada escena para que la animación empiece de cero)
     stage.className = ''; stage.innerHTML = '';
     if (s.stage) { stage.style.setProperty('--d', (dur / 1000) + 's'); stage.innerHTML = STAGE[s.stage](); stage.className = 'show'; }
-    if (s.sim) showSim(s.sim, dur / 1000); else hideSim();
+    if (n >= 2 && !lotP) prefetchLot();   // mientras se lee el menú, se busca un terreno libre de verdad
+    const real = s.real && lot && typeof gl !== 'undefined' && gl;
+    if (real) { hideSim(); showLot(true, s.real === 'ground'); flyReal(s.real); }
+    else {
+      showLot(false);
+      if (!s.real && !s.sim) flyBack();   // pasos con el mapa real otra vez: vuelve a donde estaba el jugador
+      if (s.sim) showSim(s.sim, dur / 1000); else hideSim();
+    }
+    narrate(full);
     spot.classList.toggle('pulse', !!s.target);
     place();
     paint();
@@ -345,9 +478,10 @@ body.tut-nohouses .owner-label{opacity:0}
     if (logged()) { finish(); return; }                                          // al iniciar sesión, el tutorial se quita
     const hide = modalOpen() || document.hidden;                                  // si hay una ventana abierta (p. ej. el inicio de sesión), se aparta y el guion espera
     card.style.display = hide ? 'none' : ''; spot.style.visibility = hide ? 'hidden' : '';
-    stage.style.visibility = hide ? 'hidden' : ''; arrow.style.visibility = hide ? 'hidden' : ''; shield.style.display = hide ? 'none' : '';
+    stage.style.visibility = hide ? 'hidden' : ''; if (lotEl) lotEl.style.visibility = hide ? 'hidden' : ''; arrow.style.visibility = hide ? 'hidden' : ''; shield.style.display = hide ? 'none' : '';
     if (sim) sim.style.visibility = hide ? 'hidden' : '';
-    if (hide) return;
+    if (hide) { if (talking) narrStop(); return; }
+    if (el >= dur && talking && el < dur + 9000) { el += TICK; paint(); return; }   // el narrador no se corta: se espera a que termine la frase (máx. 9 s)
     el += TICK;
     paint();
     if (el >= dur) { if (idx >= STEPS.length - 1) finish(); else enter(idx + 1); }
