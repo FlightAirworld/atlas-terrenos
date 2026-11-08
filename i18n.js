@@ -190,6 +190,7 @@
     r('Campeonato de luchas', 'Fighting championship', 'Campeonato de lutas', 'Championnat de combats', 'Kampfmeisterschaft', 'Campionato di lotta'),
     r('Luchar', 'Fight', 'Lutar', 'Combattre', 'Kämpfen', 'Combatti'),
     r('🥊 ¡Luchar!', '🥊 Fight!', '🥊 Lutar!', '🥊 Combattre !', '🥊 Kämpfen!', '🥊 Combatti!'),
+    r('Saltar ⏭', 'Skip ⏭', 'Pular ⏭', 'Passer ⏭', 'Überspringen ⏭', 'Salta ⏭'),
     r('Clasificación', 'Leaderboard', 'Classificação', 'Classement', 'Rangliste', 'Classifica'),
     r('Elige tu carta (tu terreno):', 'Pick your card (your plot):', 'Escolha sua carta (seu terreno):', 'Choisissez votre carte (votre terrain) :', 'Wähle deine Karte (dein Grundstück):', 'Scegli la tua carta (il tuo terreno):'),
     r('⏳ Vuelve mañana', '⏳ Come back tomorrow', '⏳ Volte amanhã', '⏳ Revenez demain', '⏳ Komm morgen wieder', '⏳ Torna domani'),
