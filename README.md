@@ -200,8 +200,8 @@ Las posiciones de bancos, colas, puertas y chimeneas dentro de cada parcela son 
 1. En Telegram habla con **@BotFather**, escribe `/newbot`, elige nombre y copia el **token**.
 2. Abre tu bot nuevo y escríbele cualquier mensaje (por ejemplo "hola").
 3. Abre en el navegador `https://api.telegram.org/bot<TOKEN>/getUpdates` y copia el número de `"chat":{"id":...}`.
-4. En Render > Environment añade `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID` y guarda.
-5. Recibirás un mensaje por cada compra y cuando un jugador se conecte (máx. uno por jugador cada 6 h).
+4. En Render > Environment añade `TELEGRAM_TOKEN` (vale también `TELEGRAM_BOT_TOKEN`) y `TELEGRAM_CHAT_ID` y guarda.
+5. Recibirás un mensaje al arrancar el servidor, por cada compra, por cada jugador nuevo, por los errores de pago y con el chat del juego (`TELEGRAM_CHAT=off` lo apaga).
 
 ## Mantenimiento y despliegue
 

@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { Pool, types } = require('pg');
+const telegram = require('./telegram');   // avisos al móvil del dueño (TELEGRAM_TOKEN y TELEGRAM_CHAT_ID; sin ellas queda apagado)
 const ambient = require('./ambient');   // jugadores y mensajes de chat simulados (AMBIENT=off para apagarlo)
 
 types.setTypeParser(20, Number);   // BIGINT (created_at, COUNT) -> número, no texto
@@ -430,6 +431,7 @@ async function profileSet(req, { nickname }) {
   if (await nickReserved(name)) throw new HttpError(409, 'Ese apodo ya está en uso. Elige otro');
   try {
     await run('INSERT INTO profiles (user_id, nickname, created_at) VALUES ($1,$2,$3)', [user.id, name, Date.now()]);
+    telegram.notify(`🆕 Jugador nuevo: ${name}`);
   } catch (e) {
     if (!isUniqueViolation(e)) throw e;
     if (await getProfile(user.id)) throw new HttpError(409, 'Tu apodo ya está fijado y no se puede cambiar');
@@ -625,6 +627,7 @@ async function deliverPack(orderId, packCredits, user, captureId) {
     const done = await client.query("UPDATE pack_orders SET status = 'PAID', code = $1, capture_id = $3 WHERE order_id = $2 AND status = 'PROCESSING' RETURNING order_id", [code, orderId, captureId || null]);
     if (!done.rows[0]) throw new Error('El pedido ya no estaba reservado');
     await client.query('COMMIT');
+    one('SELECT pack_price FROM pack_orders WHERE order_id = $1', [orderId]).then(o => telegram.notify(`💰 Compra: pack de ${packCredits} créditos${o && o.pack_price != null ? ' por ' + Number(o.pack_price).toFixed(2) + ' ' + CURRENCY : ''} (${user ? 'con cuenta' : 'sin cuenta'})`)).catch(() => {});
     return { code, credits };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -1523,6 +1526,7 @@ async function chatSend(req, body) {
     [zone, user.id, prof.nickname, avatar, country, text, now, at.lat, at.lng]);
   const msg = { id: Number(row.id), nick: prof.nickname, avatar, country, text, t: now, r: {}, mine: null };
   chatPublish(at, msg);
+  telegram.chat(zone, prof.nickname, text);
   track(user.id, 'chat');
   return { ok: true, message: msg };
 }
@@ -3342,6 +3346,7 @@ const httpServer = http.createServer(async (req, res) => {
   }
 }).listen(PORT, () => {
   console.log(`Redecora El Mundo en http://localhost:${PORT}  [${DEMO ? 'MODO DEMO (sin cobro real)' : [HAS_STRIPE ? 'Stripe ' + (STRIPE_SECRET_KEY.includes('_live_') ? 'LIVE' : 'test') : null, HAS_PAYPAL ? 'PayPal ' + PAYPAL_ENV : null].filter(Boolean).join(' + ')}]  packs ${PACKS.map(p => p.credits + '=' + p.price).join(', ')} ${CURRENCY}`);
+  telegram.start('Redecora El Mundo');
 });
 
 // Render manda SIGTERM al reiniciar o desplegar: se dejan de aceptar peticiones, se cierra la base de datos y se sale limpio (a los 8 s se sale igualmente).

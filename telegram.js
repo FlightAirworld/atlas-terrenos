@@ -1,12 +1,12 @@
 // Avisos por Telegram al dueño del juego (compras, reembolsos, errores, jugadores nuevos, chat).
 // Variables de entorno (Render > Environment):
-//   TELEGRAM_TOKEN    token que te dio @BotFather
+//   TELEGRAM_TOKEN    token que te dio @BotFather (también vale TELEGRAM_BOT_TOKEN)
 //   TELEGRAM_CHAT_ID  tu chat_id (escribe /start a tu bot y abre https://api.telegram.org/bot<TOKEN>/getUpdates)
 //   TELEGRAM_CHAT=off  (opcional) no reenviar el chat del juego
 // Sin las dos primeras variables, todo esto queda apagado y no estorba.
 'use strict';
 
-const TOKEN = (process.env.TELEGRAM_TOKEN || '').trim();
+const TOKEN = (process.env.TELEGRAM_TOKEN || process.env.TELEGRAM_BOT_TOKEN || '').trim();   // vale cualquiera de los dos nombres
 const CHAT_ID = (process.env.TELEGRAM_CHAT_ID || '').trim();
 const ON = !!(TOKEN && CHAT_ID);
 const CHAT_ON = ON && String(process.env.TELEGRAM_CHAT || '').toLowerCase() !== 'off';
