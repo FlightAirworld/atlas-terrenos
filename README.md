@@ -187,6 +187,19 @@ Las posiciones de bancos, colas, puertas y chimeneas dentro de cada parcela son 
 - Límites contra abuso (cuentas falsas pasándose los regalos de bienvenida): `GIFT_MAX` (500 por regalo), `GIFT_DAILY_MAX` (1000 cada 24 h), `GIFT_MIN_AGE_HOURS` (la cuenta debe tener 24 h) y 8 regalos por minuto. `GIFT=off` apaga los regalos. **El dueño no tiene ninguno de estos límites.**
 - Tablas nuevas (se crean solas al arrancar; `migration-gifts.sql` es lo mismo por si prefieres ejecutarlo a mano): `gifts` y `owner_grants`.
 
+## Cartas coleccionables 🃏 (`cards-core.js`, `cards-server.js`, `cards.js`)
+
+- Botón 🃏 en **Extras**. Colección de temporada de **10.000 cartas únicas**: 100 grupos ("niveles") de 100. Cada número existe **una sola vez** en todo el juego (clave primaria `(season, card_id)`): si alguien saca la nº 4321, ya nadie más puede tenerla.
+- Rarezas por grupo (posición 1-100): 1-60 común, 61-85 rara, 86-95 épica, 96-99 legendaria y la **100 = Legendaria de Oro** (100 doradas en total, todas con nombre distinto). Cada carta tiene elemento (🔥🌿💧 como las luchas), Fuerza, Defensa, Velocidad, Suerte y Poder; cuanto más alto el grupo, más fuertes.
+- Las cartas **no se guardan**: salen siempre igual a partir de su número y de la temporada (`cards-core.js`). En la base solo se guarda quién tiene cada número.
+- Los sobres salen cerrados; se pulsa **Abrir sobre** y después **Ver Carta**. El servidor elige la carta entre las que nadie ha sacado, con la probabilidad de cada sobre (bronce / plata / oro, ver `PACKS` en `cards-server.js`).
+- Cómo se ganan: sobre de bronce gratis cada día, un sobre de bronce cada 3 victorias del mes en el campeonato 🥊, o se compran con créditos. Para dar sobres desde otro sitio (misiones, álbum, subir de nivel…) basta llamar a `cardsMod().grantPack(userId, 'bronce', 'motivo')`.
+- Variables: `CARDS=off` apaga las cartas, `CARDS_SEASON` (por defecto `T1`; al cambiarla empieza una colección nueva con otras cartas, y la anterior se conserva), `CARDS_COST_BRONCE` / `CARDS_COST_PLATA` / `CARDS_COST_ORO` (precio en créditos: 2 / 8 / 30), `CARDS_BUY_DAILY_MAX` (20 sobres comprados cada 24 h).
+- **Premios por grupo:** con 10 cartas de un grupo → sobre de bronce, 25 → plata, 50 → oro y 100 (grupo completo) → sobre de oro + `CARDS_GROUP_CREDITS` créditos (100 por defecto). Se cobran solos, una sola vez por jugador, grupo y premio (`card_claims`).
+- **Intercambios:** se ofrece una carta propia a otro jugador por su apodo, a cambio de una carta suya (poniendo su número) o como regalo (sin número). Máximo 10 ofertas abiertas; la cuenta debe tener `CARDS_TRADE_MIN_AGE_H` horas (24). Al aceptar, las dos cartas cambian de dueño en una sola transacción: nunca se pierde ni se duplica una carta.
+- **Cartas en las luchas 🥊:** antes de luchar se puede elegir una carta de refuerzo. Suma al poder del terreno un % igual a su Poder × `FIGHT_CARD_BONUS` (0,35 → una carta de Poder 90 da +31 %) y su elemento sustituye al del terreno para la ventaja 🔥>🌿>💧. El servidor comprueba que la carta es tuya; las probabilidades siguen limitadas entre 25 % y 75 %. `FIGHT_CARD_BONUS=0` lo apaga. La carta no se gasta.
+- Tablas nuevas (se crean solas; `migration-cards.sql` es lo mismo): `card_owned`, `card_packs`, `card_daily`, `card_claims`, `card_trades`.
+
 ## Paga mensual del dueño
 
 - El dueño recibe `OWNER_MONTHLY_CREDITS` créditos (**10.000** por defecto) una vez al mes (el mes cambia según `DAILY_TZ`).

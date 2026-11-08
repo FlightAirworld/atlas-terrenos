@@ -342,6 +342,8 @@ const cents = price => Math.round(Number(price) * 100);
 
 // ---------- API ----------
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
+// Cartas coleccionables (cards-server.js): se monta la primera vez que se usa, cuando ya existen run, all, dayKey, numEnv y rateHit
+const cardsMod = () => cardsMod.m || (cardsMod.m = require('./cards-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, numEnv }));
 
 // ---------- Packs de terrenos (créditos) ----------
 const newPackCode = () => crypto.randomBytes(8).toString('hex').toUpperCase().match(/.{4}/g).join('-');
@@ -1844,6 +1846,7 @@ const FIGHT_DAILY_MAX = Math.max(1, Math.floor(numEnv('FIGHT_DAILY_MAX', 3)));
 const FIGHT_MIN_AGE_H = numEnv('FIGHT_MIN_AGE_HOURS', 24);
 const FIGHT_BASE = numEnv('FIGHT_BASE', 10), FIGHT_PER_LEVEL = numEnv('FIGHT_PER_LEVEL', 2);
 const FIGHT_ELEMENT_BONUS = Math.max(1, numEnv('FIGHT_ELEMENT_BONUS', 1.25));
+const FIGHT_CARD_BONUS = numEnv('FIGHT_CARD_BONUS', 0.35);   // 0 = las cartas no dan ventaja en las luchas
 const FIGHT_LEVEL_RANGE = Math.max(0, Math.floor(numEnv('FIGHT_LEVEL_RANGE', 5)));
 const FIGHT_ELEMENTS = ['fuego', 'planta', 'agua'];                         // el índice i gana al i+1 (y agua, el último, gana a fuego)
 const fightElement = id => { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 3; };
@@ -1887,8 +1890,17 @@ async function fightStart(req, body) {
     if (!foe) foe = (await client.query(`${pick} ORDER BY ABS(level - $3), random() LIMIT 1`, [uid, today, L])).rows[0];
     if (!foe) throw new HttpError(409, 'Ahora mismo no hay rivales disponibles. Prueba más tarde');
     // Combate
-    const a = fightElement(mine.id), d = fightElement(foe.id);
-    let atk = fightPower(mine.level), def = fightPower(foe.level);
+    // 🃏 Carta de refuerzo (opcional): suma hasta FIGHT_CARD_BONUS (35 % por defecto) a tu poder según el Poder de la carta, y pone su elemento
+    let cardUsed = null;
+    const cardId = Math.floor(Number(body && body.cardId)) || 0;
+    if (cardId && FIGHT_CARD_BONUS > 0 && cardsMod().ON) {
+      const cm = cardsMod();
+      if (!(await client.query('SELECT 1 FROM card_owned WHERE season = $1 AND card_id = $2 AND user_id = $3', [cm.SEASON, cardId, uid])).rows.length) throw new HttpError(403, 'Esa carta no es tuya');
+      const ci = require('./cards-core').cardInfo(cardId, cm.SEASON);
+      cardUsed = { id: cardId, name: ci.name, emoji: ci.emoji, poder: ci.poder, elementIdx: ci.elementIdx, pct: Math.round(ci.poder * FIGHT_CARD_BONUS) };
+    }
+    const a = cardUsed ? cardUsed.elementIdx : fightElement(mine.id), d = fightElement(foe.id);
+    let atk = fightPower(mine.level) * (cardUsed ? 1 + cardUsed.pct / 100 : 1), def = fightPower(foe.level);
     if ((a + 1) % 3 === d) atk *= FIGHT_ELEMENT_BONUS;           // mi elemento gana al suyo
     else if ((d + 1) % 3 === a) def *= FIGHT_ELEMENT_BONUS;      // el suyo gana al mío
     const p = Math.min(0.75, Math.max(0.25, atk / (atk + def)));
@@ -1903,7 +1915,9 @@ async function fightStart(req, body) {
     const up = (await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING credits', [prize, pack.code])).rows[0];
     const st = (await client.query('SELECT wins, losses FROM fight_stats WHERE user_id = $1 AND month = $2', [uid, month])).rows[0];
     await client.query('COMMIT');
-    return { ok: true, won, chance: Math.round(p * 100), prize, credits: Number(up.credits), mine: fightCard(mine), foe: fightCard(foe),
+    let cardPack = false;
+    if (won && Number(st.wins) % 3 === 0) cardPack = !!(await cardsMod().grantPack(uid, 'bronce', 'lucha').catch(() => null));   // 🃏 cada 3 victorias del mes, un sobre
+    return { ok: true, won, cardPack, chance: Math.round(p * 100), prize, credits: Number(up.credits), mine: { ...fightCard(mine), element: FIGHT_ELEMENTS[a] || fightCard(mine).element }, foe: fightCard(foe), card: cardUsed,
       used: used + 1, max: FIGHT_DAILY_MAX, left: Math.max(0, FIGHT_DAILY_MAX - used - 1), wins: Number(st.wins), losses: Number(st.losses) };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
@@ -2444,6 +2458,13 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/friends') return friendsList(req);
   if (req.method === 'POST' && pn === '/api/friends/add') return friendsAdd(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/friends/remove') return friendsRemove(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/cards') return cardsMod().get(req);
+  if (req.method === 'POST' && pn === '/api/cards/daily') return cardsMod().daily(req);
+  if (req.method === 'POST' && pn === '/api/cards/buy') return cardsMod().buy(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/cards/open') return cardsMod().open(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/cards/trades') return cardsMod().trades(req);
+  if (req.method === 'POST' && pn === '/api/cards/trade') return cardsMod().trade(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/cards/trade/answer') return cardsMod().answer(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/gifts') return giftsGet(req, sp);
   if (req.method === 'POST' && pn === '/api/gifts/send') return giftSend(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/gifts/seen') return giftsSeen(req);
@@ -2504,6 +2525,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE TABLE IF NOT EXISTS owner_grants (user_id TEXT NOT NULL, month TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, month))');
     if (OWNER_MONTHLY && OWNER_USER_ID) { setTimeout(ownerTick, 20_000).unref(); setInterval(ownerTick, HOUR_MS).unref(); }
   }).catch(e => console.error('No se pudieron crear las tablas de regalos / paga mensual:', e.message))
+  .then(() => cardsMod().init()).catch(e => console.error('No se pudieron crear las tablas de cartas:', e.message))
   .then(() => bots.start({ run, q, parcelFromLatLng, isUniqueViolation }))
   .then(async () => {   // tablas de "Invita y gana" (no hacen nada si ya existen)
     await run('CREATE TABLE IF NOT EXISTS ref_codes (code TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, created_at BIGINT NOT NULL, last_ip TEXT)');

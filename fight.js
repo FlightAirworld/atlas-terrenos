@@ -118,6 +118,7 @@
     '<div id="fg-tabs"><button type="button" id="fg-t1" class="on">' + ico('swords') + '<span>Luchar</span></button><button type="button" id="fg-t2">' + ico('trophy') + '<span>Clasificación</span></button></div>' +
     '<div id="fg-v1"><p id="fg-out" aria-live="polite"></p>' +
     '<p class="muted" id="fg-pick">Elige tu carta (tu terreno):</p><div class="fg-grid" id="fg-grid"></div>' +
+    '<p class="muted" id="fg-cardlab">🃏 Carta de refuerzo (opcional): suma poder y pone su elemento</p><select id="fg-card" aria-label="Carta de refuerzo"><option value="0">Sin carta</option></select>' +
     '<button id="fg-go" type="button" disabled>' + ico('fist') + '<span>¡Luchar!</span></button></div>' +
     '<div id="fg-v2" class="hidden"><p id="fg-last" aria-live="polite"></p><p class="muted" id="fg-season"></p><div id="fg-ranklist"></div></div>' +
     '<p class="muted fg-help">' + ico('flame', 'el-fuego') + ' gana a ' + ico('leaf', 'el-planta') + ' · ' + ico('leaf', 'el-planta') + ' gana a ' + ico('drop', 'el-agua') + ' · ' + ico('drop', 'el-agua') + ' gana a ' + ico('flame', 'el-fuego') + '. El rival lo elige el sistema (otro jugador de nivel parecido) y no pierde nada. El combate se ve en el ring, dura unos 15 segundos y se juega solo.</p>' +
@@ -153,7 +154,20 @@
       c.addEventListener('click', () => { if (busy) return; selected = p.id; renderGrid(); refreshGo(); });
       grid.appendChild(c);
     }
+    fillCards();
     $('fg-pick').textContent = state.parcels.length ? 'Elige tu carta (tu terreno):' : 'Necesitas al menos un terreno para luchar.';
+  }
+  let myCards = null;   // cartas del jugador (se piden una vez al abrir el campeonato)
+  async function fillCards() {
+    const sel = $('fg-card'), lab = $('fg-cardlab'); if (!sel || !lab) return;
+    if (myCards === null) { myCards = []; try { if (window.CardsCore && authToken) { const j = await api('/api/cards', { method: 'GET' }); if (j.on) myCards = (j.owned || []).map(o => ({ id: o.id, season: j.season })); } } catch (e) {} }
+    const keep = sel.value; sel.textContent = '';
+    const none = document.createElement('option'); none.value = '0'; none.textContent = 'Sin carta'; sel.appendChild(none);
+    myCards.map(m => window.CardsCore.cardInfo(m.id, m.season)).sort((x, y) => y.poder - x.poder).forEach(i => {
+      const o = document.createElement('option'); o.value = i.id; o.textContent = i.emoji + ' ' + i.name + ' · ' + i.element + ' ⚡' + i.poder + ' (+' + Math.round(i.poder * 0.35) + '%)'; sel.appendChild(o);
+    });
+    sel.value = [...sel.options].some(o => o.value === keep) ? keep : '0';
+    const has = myCards.length > 0; sel.classList.toggle('hidden', !has); lab.classList.toggle('hidden', !has);
   }
   function refreshGo() {
     const g = $('fg-go');
@@ -926,7 +940,7 @@
     busy = true; refreshGo(); $('fg-out').textContent = '';
     initAudio();                                               // el audio se activa con el toque del jugador (los móviles lo exigen)
     let j;
-    try { j = await api('/api/fight/start', { method: 'POST', body: { parcelId: selected } }); }
+    try { j = await api('/api/fight/start', { method: 'POST', body: { parcelId: selected, cardId: Number(($('fg-card') || {}).value) || 0 } }); }
     catch (e) { busy = false; $('fg-out').textContent = e.message; await load(); return; }
     credits = j.credits; updateCreditUi();                     // el servidor ya ha decidido y guardado el combate: se actualiza aunque se cierre la pestaña
     Object.assign(state, { used: j.used, left: j.left, wins: j.wins, losses: j.losses });
@@ -937,6 +951,7 @@
     checkDot();   // gastó una lucha: el puntito se apaga si ya no quedan
     last.textContent = ''; last.className = j.won ? 'win' : 'lose'; last.insertAdjacentHTML('afterbegin', ico(j.won ? 'trophy' : 'x'));
     last.append(j.won ? `¡Has ganado! +${j.prize} ${j.prize === 1 ? 'crédito' : 'créditos'}` : `Ha ganado ${j.foe.owner || 'tu rival'}. ¡Otra vez será!`);
+    if (j.card) last.append(` 🃏 ${j.card.name}: +${j.card.pct}% de poder`);
   }
 
   async function loadRank() {
