@@ -1,17 +1,12 @@
 'use strict';
 // Animales por el mapa:
 //  - Perros y gatos que pasean por las aceras (siguen las calles reales, igual que la gente de people.js).
-//  - Un león que de vez en cuando aparece, persigue a un peatón y se lo "come" (el peatón desaparece con una nube y el león dice ¡ÑAM!).
-//    Es dibujo infantil, sin sangre. Cuando se harta (3 peatones) se marcha.
 // Se activan y desactivan con el mismo botón de la gente (🚶).
-// Para probar sin esperar, en la consola: spawnLion()
 (function () {
   if (typeof map === 'undefined' || !map) return;
   const MIN_ZOOM = 16, REF_Z = 17;
   const SMALL = Math.min(innerWidth, innerHeight) < 600;
   const MAX_PETS = SMALL ? 4 : 7;
-  const LION_SPEED = 56;                 // px de pantalla por segundo (la gente va a 14-22)
-  const LION_EVERY = [50, 90];           // segundos entre apariciones
   const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   const peopleBtn = document.getElementById('people-btn');
   const isOn = () => !peopleBtn || peopleBtn.getAttribute('aria-pressed') !== 'false';
@@ -23,12 +18,7 @@
     .an-in svg { overflow: visible; }
     .an-in.flip svg { transform: scaleX(-1); }
     .an-in.still { animation: none; }
-    .an-say { position: absolute; left: 50%; top: -14px; transform: translateX(-50%); white-space: nowrap; font: 800 10px system-ui, sans-serif;
-      background: #fff; color: #c92a2a; padding: 1px 5px; border-radius: 99px; box-shadow: 0 1px 3px rgba(0,0,0,.35); opacity: 0; transition: opacity .15s; }
-    .an-in.say .an-say { opacity: 1; }
-    .an-puff { font-size: 22px; line-height: 1; animation: anpuff .8s ease-out forwards; }
     @keyframes anbob { from { transform: translateY(0); } to { transform: translateY(-1.4px); } }
-    @keyframes anpuff { from { transform: scale(.5); opacity: 1; } to { transform: scale(1.7) translateY(-8px); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .an-in { animation: none; } }`;
   document.head.appendChild(st);
   map.createPane('animals');
@@ -74,21 +64,6 @@
       <circle cx="18" cy="7.2" r=".6" fill="#222"/><circle cx="20.4" cy="7.2" r=".6" fill="#222"/>
       <circle cx="19.2" cy="8.4" r=".5" fill="#e07a8a"/></svg>`;
   }
-  function lionSVG() {
-    const tan = '#d9a441', mane = '#8a4b1b';
-    return `<svg width="42" height="30" viewBox="0 0 42 30" aria-hidden="true">
-      <ellipse cx="21" cy="27.5" rx="15" ry="2" fill="rgba(0,0,0,.28)"/>
-      <path d="M7 15 Q0 12 2 5" stroke="${tan}" stroke-width="2.2" fill="none" stroke-linecap="round"/><circle cx="2" cy="5" r="2.3" fill="${mane}"/>
-      ${leg(10, 19, 27, '#b8862e', 3, 26, .42, false)}${leg(13.5, 19, 27, '#b8862e', 3, 26, .42, true)}
-      ${leg(26, 19, 27, tan, 3, 26, .42, true)}${leg(29.5, 19, 27, tan, 3, 26, .42, false)}
-      <ellipse cx="19" cy="16" rx="13" ry="6.8" fill="${tan}"/>
-      <circle cx="30" cy="13.5" r="9" fill="${mane}"/>
-      <circle cx="32" cy="14.5" r="5.6" fill="#e6b95c"/>
-      <circle cx="27.6" cy="8" r="2" fill="${mane}"/><circle cx="35.6" cy="8.4" r="2" fill="${mane}"/>
-      <circle cx="33.8" cy="13" r="1" fill="#222"/><ellipse cx="36.8" cy="15.4" rx="1.5" ry="1.1" fill="#3b2a20"/>
-      <path d="M33.6 17.6 Q35.4 19 37 17.6" stroke="#3b2a20" stroke-width=".8" fill="none"/></svg>`;
-  }
-
   // ---------- Trayectos por las aceras (igual que people.js) ----------
   function place(w) {
     const P = w.path;
@@ -127,82 +102,9 @@
   }
   function removePet(i) { map.removeLayer(pets[i].mk); pets.splice(i, 1); }
 
-  // ---------- El león ----------
-  let lion = null, nextLion = rnd(12, 25);
-
-  function puffAt(x, y) {
-    const mk = L.marker(toLL(x, y), { icon: L.divIcon({ className: 'an', iconSize: [24, 24], iconAnchor: [12, 16], html: '<div class="an-puff">💨</div>' }),
-      pane: 'animals', interactive: false, keyboard: false }).addTo(map);
-    setTimeout(() => map.removeLayer(mk), 900);
-  }
-  function preyList() {
-    const ws = window.peopleWalkers || [];
-    const view = map.getBounds().pad(0.1);
-    return ws.filter(w => w.age > 3 && w.mk && view.contains(map.unproject(L.point(w.x, w.y), REF_Z)));
-  }
-  function nearestPrey(from) {
-    let best = null, bd = 1e12;
-    for (const w of preyList()) { const d = (w.x - from.x) ** 2 + (w.y - from.y) ** 2; if (d < bd) { bd = d; best = w; } }
-    return best;
-  }
-  function spawnLion() {
-    if (lion) return false;
-    const z = map.getZoom(); if (z < MIN_ZOOM) return false;
-    const preys = preyList(); if (!preys.length) return false;
-    const target = pick(preys), scale = Math.pow(2, z - REF_Z), a = rnd(0, Math.PI * 2), r = 190 / scale;
-    const icon = L.divIcon({ className: 'an', iconSize: [42, 30], iconAnchor: [21, 27],
-      html: `<div class="an-in" style="opacity:0">${lionSVG()}<span class="an-say">¡ÑAM!</span></div>` });
-    lion = { x: target.x + Math.cos(a) * r, y: target.y + Math.sin(a) * r, target, state: 'chase', t: 0, eaten: 0, age: 0, el: null, flip: null,
-      fade: 0, mk: null, leaveTo: null };
-    lion.mk = L.marker(toLL(lion.x, lion.y), { icon, pane: 'animals', interactive: false, keyboard: false }).addTo(map);
-    return true;
-  }
-  window.spawnLion = spawnLion;
-  function removeLion() { if (lion) { map.removeLayer(lion.mk); lion = null; } nextLion = rnd(LION_EVERY[0], LION_EVERY[1]); }
-
-  function updateLion(dt, scale) {
-    const L_ = lion; L_.age += dt;
-    if (!L_.el) { const e = L_.mk.getElement(); L_.el = e && e.firstChild; }
-    const sp = LION_SPEED / scale, catchD = 13 / scale;
-    let moving = false;
-    if (L_.state === 'chase') {
-      if (!L_.target || (window.peopleWalkers || []).indexOf(L_.target) < 0) L_.target = nearestPrey(L_);
-      if (!L_.target || L_.age > 50 || L_.eaten >= 3) { L_.state = 'leave'; }
-      else {
-        const dx = L_.target.x - L_.x, dy = L_.target.y - L_.y, d = Math.hypot(dx, dy) || 1;
-        if (d < catchD) {
-          puffAt(L_.target.x, L_.target.y);
-          if (window.peopleKill) window.peopleKill(L_.target);
-          L_.target = null; L_.eaten++; L_.state = 'eat'; L_.t = 1.4;
-          if (L_.el) L_.el.classList.add('say', 'still');
-          if (window.atlasVoice) { window.atlasVoice.roar(0.9); window.atlasVoice.speak('¡Aaaaah!', window.atlasVoice.profile('human'), { force: true }); }   // rugido del león y grito de la víctima
-        } else {
-          const step = Math.min(sp * dt, d);
-          L_.x += dx / d * step; L_.y += dy / d * step; moving = true;
-          if (Math.abs(dx) > 1 / scale && L_.el) { const f = dx < 0; if (f !== L_.flip) { L_.flip = f; L_.el.classList.toggle('flip', f); } }
-        }
-      }
-    } else if (L_.state === 'eat') {
-      L_.t -= dt;
-      if (L_.t <= 0) { if (L_.el) L_.el.classList.remove('say', 'still'); L_.state = 'chase'; }
-    }
-    if (L_.state === 'leave') {
-      if (!L_.leaveTo) { const a = rnd(0, Math.PI * 2); L_.leaveTo = { dx: Math.cos(a), dy: Math.sin(a) }; L_.fade = 1.6; }
-      L_.x += L_.leaveTo.dx * sp * 0.8 * dt; L_.y += L_.leaveTo.dy * sp * 0.8 * dt; moving = true;
-      if (L_.el) { const f = L_.leaveTo.dx < 0; if (f !== L_.flip) { L_.flip = f; L_.el.classList.toggle('flip', f); } }
-      L_.fade -= dt;
-      if (L_.fade <= 0) return removeLion();
-    }
-    L_.mk.setLatLng(toLL(L_.x, L_.y));
-    if (L_.el) {
-      L_.el.style.opacity = L_.state === 'leave' ? Math.max(0, L_.fade / 1.6) : Math.min(1, L_.age / 0.8);
-      if (L_.state !== 'eat') L_.el.classList.toggle('still', !moving);
-    }
-  }
-
   // ---------- Bucle ----------
   let last = performance.now(), nextPet = rnd(1, 3), running = false;
-  function clearAll() { while (pets.length) removePet(0); removeLion(); }
+  function clearAll() { while (pets.length) removePet(0); }
   map.on('zoomstart', () => { zooming = true; });
   map.on('zoomend', () => { zooming = false; if (map.getZoom() < MIN_ZOOM) clearAll(); });
 
@@ -242,9 +144,6 @@
         if (f !== w.flip) { w.flip = f; w.el.classList.toggle('flip', f); }
       }
     }
-    // León
-    if (lion) updateLion(dt, scale);
-    else if (z >= MIN_ZOOM) { nextLion -= dt; if (nextLion <= 0) { if (!spawnLion()) nextLion = 8; } }
   }
   requestAnimationFrame(frame);
 })();

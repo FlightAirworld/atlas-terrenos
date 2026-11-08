@@ -56,7 +56,7 @@
 
   let FP = 1;                                     // tamaño de la persona según el ancho de la calle (ver sizes() en mapshim.js)
   const walkers = [];
-  window.peopleWalkers = walkers;   // los usa animals.js (el león busca presas entre los peatones)
+  window.peopleWalkers = walkers;
   window.peopleKill = w => { const i = walkers.indexOf(w); if (i >= 0) remove(i); };
   let zooming = false;
 

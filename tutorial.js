@@ -4,6 +4,7 @@
 // y lleva una animación. A mitad del tutorial el mapa «viaja» a una CIUDAD DE EJEMPLO simulada (#tut-sim, dibujada en SVG): se busca
 // la ciudad, se hace zoom hasta una manzana, se ve un terreno libre a pie de calle SIN ninguna casa, se toca, se rellena el panel, aparece
 // la casa y llegan los vecinos. Después las casas reales vuelven al mapa con un fundido. Botón «Saltar tutorial» siempre visible (o tecla Escape).
+// SIN OTROS SONIDOS: suena solo el narrador; el resto de sonidos del juego se callan mientras dura (ver «Silencio total») y vuelven al terminar.
 // No sale si el jugador ya tiene sesión o cuenta guardada, ni si ya lo vio (se recuerda en el navegador). Se quita solo al iniciar sesión.
 // Para volver a verlo: localStorage.removeItem('tutorialDone') y recargar.
 (function () {
@@ -349,6 +350,37 @@ body.tut-nohouses .owner-label{opacity:0}
     try { gl.flyTo({ center: lotFrom.center, zoom: lotFrom.zoom, pitch: lotFrom.pitch, bearing: lotFrom.bearing, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: ms == null ? 2200 : ms, essential: true }); } catch (e) {}
   }
 
+  // ---------- Silencio total mientras dura el tutorial ----------
+  // El narrador SÍ suena (voz grabada y voz del navegador); se callan todos los demás sonidos (efectos, ambiente, coches, trenes, lluvia, voces de los vecinos, música).
+  // Cada módulo crea su propio AudioContext, así que se suspenden todos (se detectan al conectar nodos) y se bloquea su resume() y el
+  // speechSynthesis mientras dure el tutorial. Al terminar se reanuda lo que estaba sonando.
+  let silent = false, ssSpeak = null, narrating = false;   // narrating: solo el narrador puede usar speechSynthesis
+  const audioCtxs = new Set(), wasRunning = new Set();
+  const ACls = window.AudioContext || window.webkitAudioContext;
+  const nodeP = window.AudioNode && window.AudioNode.prototype;
+  const origConnect = nodeP && nodeP.connect, origResume = ACls && ACls.prototype.resume;
+  function suspendCtx(c) { try { if (c.state === 'running') { wasRunning.add(c); c.suspend(); } } catch (e) {} }
+  function hushSpeech() { if (talking) return; try { if (window.speechSynthesis && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel(); } catch (e) {} }
+  function hush() { audioCtxs.forEach(suspendCtx); hushSpeech(); try { if (!talking && window.atlasVoice) window.atlasVoice.stop(); } catch (e) {} }
+  function silence(on) {
+    if (on === silent) return;
+    silent = on;
+    if (on) {
+      if (nodeP && origConnect) nodeP.connect = function () { try { if (this.context) { audioCtxs.add(this.context); if (silent) suspendCtx(this.context); } } catch (e) {} return origConnect.apply(this, arguments); };
+      if (ACls && origResume) ACls.prototype.resume = function () { if (silent) { audioCtxs.add(this); return Promise.resolve(); } return origResume.apply(this, arguments); };
+      try { if (window.speechSynthesis) { ssSpeak = speechSynthesis.speak; speechSynthesis.speak = function (u) { if (!silent || narrating) return ssSpeak.call(speechSynthesis, u); }; } } catch (e) {}
+      document.querySelectorAll('audio,video').forEach(m => { try { m.pause(); } catch (e) {} });
+      hush();
+    } else {
+      if (nodeP && origConnect) nodeP.connect = origConnect;
+      if (ACls && origResume) ACls.prototype.resume = origResume;
+      try { if (ssSpeak) { speechSynthesis.speak = ssSpeak; ssSpeak = null; } } catch (e) {}
+      wasRunning.forEach(c => { try { c.resume(); } catch (e) {} });
+      wasRunning.clear();
+    }
+  }
+
+
   // ---------- Narrador: voz masculina en el idioma / país del jugador ----------
   // El idioma sale de i18n (elegido en el menú, o el del navegador, o el país por zona horaria). La región (es-MX, en-GB, pt-PT…) sale de los idiomas del navegador.
   // Los navegadores no dicen si una voz es de hombre o mujer: se elige por nombre conocido y, si no hay pistas, se baja el tono.
@@ -409,7 +441,7 @@ body.tut-nohouses .owner-label{opacity:0}
         u.onstart = () => { if (my === talkGen) talking = true; };
         u.onend = u.onerror = () => { if (my === talkGen) talking = false; };
         talking = true;
-        speechSynthesis.speak(u);
+        narrating = true; try { speechSynthesis.speak(u); } finally { narrating = false; }
       } catch (e) { talking = false; }
     };
     try { if (window.atlasVoice) window.atlasVoice.stop(); } catch (e) {}   // calla a los vecinos para que se oiga al narrador
@@ -422,7 +454,7 @@ body.tut-nohouses .owner-label{opacity:0}
   function finish() {
     if (ended) return;
     ended = true;
-    narrStop(); flyBack(1800);
+    narrStop(); silence(false); flyBack(1800);
     if (lotEl) { try { gl.off('move', drawLot); gl.off('resize', drawLot); } catch (e) {} lotEl.remove(); lotEl = null; }
     clearInterval(timer); timer = null;
 
@@ -503,6 +535,7 @@ body.tut-nohouses .owner-label{opacity:0}
   function tick() {
     if (ended) return;
     if (logged()) { finish(); return; }                                          // al iniciar sesión, el tutorial se quita
+    if (el % 500 < TICK) hush();                                                 // red de seguridad: cualquier sonido que se cuele se corta
     const hide = modalOpen() || document.hidden;                                  // si hay una ventana abierta (p. ej. el inicio de sesión), se aparta y el guion espera
     card.style.display = hide ? 'none' : ''; spot.style.visibility = hide ? 'hidden' : '';
     stage.style.visibility = hide ? 'hidden' : ''; if (lotEl) lotEl.style.visibility = hide ? 'hidden' : ''; arrow.style.visibility = hide ? 'hidden' : ''; shield.style.display = hide ? 'none' : '';
@@ -518,6 +551,7 @@ body.tut-nohouses .owner-label{opacity:0}
   function begin() {
     if (started || logged() || document.getElementById('tut-card')) return;
     started = true;
+    silence(true);     // sin sonidos durante todo el tutorial
     lsSet(KEY, '1');   // a partir de aquí cuenta como visto: no vuelve a salir en este navegador
     document.body.classList.add('tut-on');
     shield = document.createElement('div'); shield.id = 'tut-shield'; shield.setAttribute('aria-hidden', 'true'); document.body.appendChild(shield);

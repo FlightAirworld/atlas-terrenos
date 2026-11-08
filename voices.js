@@ -3,7 +3,6 @@
 //  - Marcianos y humanos: síntesis de voz del navegador (speechSynthesis), cada uno con su tono y velocidad. Los marcianos sueltan un «pío» raro antes de hablar.
 //  - Vichos (babosas, escarabajos, medusas): sonidos sintetizados (blup, bzzz, ñic ñic, miau, piii…).
 //  - Platillos: zumbido al bajar, al subir y al pasar de largo (con paneo de izquierda a derecha), y un golpe al aterrizar.
-//  - León de la Tierra: rugido.
 // Todo se genera con Web Audio (sin archivos). Lo usan aliens.js, ciudad.js y animals.js a través de window.atlasVoice.
 // Para silenciarlo: atlasVoice.mute(true) (se recuerda en el navegador). Para probar: atlasVoice.speak('Hola terrícola', atlasVoice.profile('alien'), { force: true }).
 (function () {
@@ -120,11 +119,9 @@
     ufoIn: (d, t, v) => { tone(d, 'sine', 950, 300, t, 3.6, 0.14 * v, { vib: [7, 60], a: 0.4, hold: 1 }); tone(d, 'triangle', 1500, 500, t, 3.6, 0.04 * v, { a: 0.4, hold: 1 }); },
     ufoOut: (d, t, v) => { tone(d, 'sine', 300, 1100, t, 3.2, 0.14 * v, { vib: [7, 60], a: 0.3, hold: 1 }); tone(d, 'triangle', 500, 1700, t, 3.2, 0.04 * v, { a: 0.3, hold: 1 }); },
     ufoFly: (d, t, v, o) => { const du = o.dur || 9; tone(d, 'sine', 520, 720, t, du, 0.12 * v, { vib: [5, 45], a: du * 0.25, hold: du * 0.4 }); tone(d, 'triangle', 1040, 1440, t, du, 0.035 * v, { a: du * 0.25, hold: du * 0.4 }); },
-    thud: (d, t, v) => { tone(d, 'sine', 130, 40, t, 0.3, 0.7 * v); noise(d, t, 0.25, 0.25 * v, 300); },
-    // león
-    roar: (d, t, v) => { noise(d, t, 0.9, 0.45 * v, 450); tone(d, 'sawtooth', 120, 55, t, 0.9, 0.35 * v, { vib: [28, 25], lp: 700 }); }
+    thud: (d, t, v) => { tone(d, 'sine', 130, 40, t, 0.3, 0.7 * v); noise(d, t, 0.25, 0.25 * v, 300); }
   };
-  const SFX_CAT = { chirp: 'marcianos', ufoIn: 'marcianos', ufoOut: 'marcianos', ufoFly: 'marcianos', thud: 'marcianos' };   // lo demás (bichos y león) = «animales»
+  const SFX_CAT = { chirp: 'marcianos', ufoIn: 'marcianos', ufoOut: 'marcianos', ufoFly: 'marcianos', thud: 'marcianos' };   // lo demás (bichos) = «animales»
   const catOn = c => !window.soundOn || window.soundOn(c);
   function sfx(name, o) {
     o = o || {};
@@ -142,7 +139,6 @@
 
   window.atlasVoice = {
     profile, speak, stop, sfx, critter,
-    roar: vol => sfx('roar', { vol }),
     mute(v) { off = !!v; try { localStorage.setItem(KEY, off ? '1' : '0'); } catch (e) {} if (off) stop(); },
     get muted() { return off; }
   };
