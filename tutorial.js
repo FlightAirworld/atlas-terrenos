@@ -1,8 +1,9 @@
 'use strict';
 // Tutorial guiado y AUTOMÁTICO para jugadores nuevos. Arranca solo al pulsar «▶ Jugar» en la portada (si hay vídeo de introducción,
 // espera a que termine). Mientras dura, el mapa se ve SIN casas; cada paso se explica con letras que se escriben solas, avanza solo
-// y lleva una animación (mover el mapa, tocar un terreno libre, rellenar el panel, aparecer la casa y los vecinos). Después las casas
-// reales vuelven al mapa con un fundido. Botón «Saltar tutorial» siempre visible (o tecla Escape).
+// y lleva una animación. A mitad del tutorial el mapa «viaja» a una CIUDAD DE EJEMPLO simulada (#tut-sim, dibujada en SVG): se busca
+// la ciudad, se hace zoom hasta una manzana, se ve un terreno libre a pie de calle SIN ninguna casa, se toca, se rellena el panel, aparece
+// la casa y llegan los vecinos. Después las casas reales vuelven al mapa con un fundido. Botón «Saltar tutorial» siempre visible (o tecla Escape).
 // No sale si el jugador ya tiene sesión o cuenta guardada, ni si ya lo vio (se recuerda en el navegador). Se quita solo al iniciar sesión.
 // Para volver a verlo: localStorage.removeItem('tutorialDone') y recargar.
 (function () {
@@ -23,13 +24,9 @@
   const reduce = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   // ---------- Escenas de animación (se dibujan en #tut-stage) ----------
-  const grid = (inner) => `<div class="tg">${inner}</div>`;
-  const cells = (fn) => Array.from({ length: 9 }, (_, k) => `<i class="${k === 4 ? 'c' : ''}">${fn ? fn(k) : ''}</i>`).join('');
   const STAGE = {
     move: () => `<div class="mv"><div class="mv-map"></div><span class="mv-hand">👆</span><span class="mv-arrows">⇄</span>
       <span class="mv-pinch a"></span><span class="mv-pinch b"></span><span class="mv-zoom">🔍</span></div>`,
-    libres: () => grid(cells(() => '') ),
-    tap: () => `<div class="tgw tapw">${grid(cells())}<span class="tf">👆</span></div>`,
     claim: () => `<div class="mp">
       <div class="mp-l">${T('Nombre que aparecerá en el terreno')}</div>
       <div class="mp-in"><span class="mp-type">Ana</span></div>
@@ -37,8 +34,6 @@
       <div class="mp-houses">${HOUSES.slice(0, 4).map((h, k) => `<img src="${IMG(h)}" alt="" class="${k === 1 ? 'pick' : ''}">`).join('')}</div>
       <div class="mp-btn"><span>${T('Reclamar este terreno')}</span></div>
       <span class="mp-f">👆</span></div>`,
-    casa: () => `<div class="tgw">${grid(cells(k => k === 4 ? `<img class="th mine" src="${IMG('casa-1')}" alt=""><b class="sp s1">✨</b><b class="sp s2">✨</b><b class="sp s3">⭐</b>` : ''))}</div>`,
-    vecinos: () => `<div class="tgw">${grid(cells(k => `<img class="th ${k === 4 ? 'mine' : 'nb'}" style="--k:${k}" src="${IMG(k === 4 ? 'casa-1' : HOUSES[(k > 4 ? k - 1 : k) % HOUSES.length])}" alt="">${k === 4 ? '<em class="you">⭐</em>' : ''}`))}</div>`
   };
 
   // ---------- Guion ----------
@@ -47,11 +42,13 @@
     { icon: '👋', title: '¡Bienvenido a Redecora El Mundo!', text: 'Este mapa es el mundo real. Cada cuadradito es un terreno virtual que puedes hacer tuyo, ponerle tu nombre y una casa. ¡Te lo enseño en 1 minuto!' },
     { icon: '🗺️', title: 'Muévete por el mapa', stage: 'move', text: 'Arrastra con el dedo para moverte y pellizca (o usa la rueda del ratón) para acercarte. Acércate hasta ver las parcelas y la vida de la ciudad.' },
     { icon: '☰', title: 'El Menú', target: '#menu-btn', text: 'Aquí está el Menú: 📍 tu ubicación, 🔍 buscar cualquier lugar, 🏆 ranking, 💬 chat de la zona, 🌎 Mundos (¡puedes viajar a la Luna!) y 🔊 Sonidos.' },
-    { icon: '🟩', title: 'Terrenos libres', stage: 'libres', text: 'Mira: aquí todavía no vive nadie. Cada cuadrado es una parcela libre, ¡y puede ser tuya!' },
-    { icon: '👆', title: 'Elige un terreno libre', stage: 'tap', text: 'Toca cualquier parcela libre del mapa. Se abrirá un panel con sus datos. Una vez comprada, nadie más puede quitártela.' },
-    { icon: '🏠', title: 'Hazlo tuyo', stage: 'claim', ms: 10500, text: 'En el panel escribe el nombre que verá la gente, elige tu casa y pulsa «Reclamar este terreno». Cuesta créditos 🎟️.' },
-    { icon: '🏡', title: '¡Tu casa aparece!', stage: 'casa', ms: 8000, text: 'Al reclamarlo, tu casa aparece al instante en el mapa con tu nombre. Solo es tuya: nadie puede quitártela.' },
-    { icon: '🏘️', title: 'Llegan los vecinos', stage: 'vecinos', ms: 9500, houses: true, text: 'Poco a poco llegan vecinos y el mapa se llena de casas. ¡Así se ve donde ya se juega!' },
+    { icon: '🔍', title: 'Viaja a una ciudad', sim: 'search', text: 'Para ir a cualquier sitio usa 🔍 buscar (en el Menú): escribes una ciudad y el mapa vuela hasta allí. Vamos a una ciudad de ejemplo.' },
+    { icon: '🧭', title: 'Acércate a una manzana', sim: 'zoom', text: 'Haz zoom hasta ver las manzanas entre las calles. Dentro de cada manzana están las parcelas, los terrenos que puedes comprar.' },
+    { icon: '🟩', title: 'Terreno libre, sin casa', sim: 'lot', text: 'Así se ve un terreno libre a pie de calle: solo hierba y el borde de la parcela, sin ninguna casa. Mide unos 45 × 56 m y no tiene dueño todavía.' },
+    { icon: '👆', title: 'Elige un terreno libre', sim: 'tap', text: 'Toca cualquier parcela libre del mapa. Se abrirá un panel con sus datos. Una vez comprada, nadie más puede quitártela.' },
+    { icon: '🏠', title: 'Hazlo tuyo', sim: 'claim', ms: 10500, text: 'En el panel escribe el nombre que verá la gente, elige tu casa y pulsa «Reclamar este terreno». Cuesta créditos 🎟️.' },
+    { icon: '🏡', title: '¡Tu casa aparece!', sim: 'built', ms: 8000, text: 'Al reclamarlo, tu casa aparece al instante en el mapa con tu nombre. Solo es tuya: nadie puede quitártela.' },
+    { icon: '🏘️', title: 'Llegan los vecinos', sim: 'nb', ms: 9500, houses: true, text: 'Poco a poco llegan vecinos y el mapa se llena de casas. ¡Así se ve donde ya se juega!' },
     { icon: '🎟️', title: 'Tus créditos', target: '#credit-pill', houses: true, text: 'Aquí ves cuántos créditos tienes. Tócalo para ver tus terrenos y recoger lo que producen cada hora.' },
     { icon: '⭐', title: 'Más créditos gratis', target: '#extras-btn', houses: true, text: 'En Extras tienes 🎁 el regalo diario, 🎡 la ruleta, 👫 Invita y gana y 📖 Cómo jugar. ¡Entra cada día!' },
     { icon: '👤', title: 'Entra para guardar todo', houses: true, ms: 15000, last: true, text: 'Inicia sesión (Google o email) para guardar tus terrenos y tu racha, y recibir tu regalo de bienvenida.', extra: { label: 'Entrar ahora', run() { if (typeof openLogin === 'function') openLogin(); } } }
@@ -91,27 +88,7 @@ body.tut-nohouses .owner-label{opacity:0}
 #tut-stage{position:fixed;z-index:4995;left:0;right:0;top:calc(64px + env(safe-area-inset-top,0px));bottom:270px;display:none;align-items:center;justify-content:center;pointer-events:none;font-family:system-ui,sans-serif}
 #tut-stage.show{display:flex}
 #tut-stage *{box-sizing:border-box}
-.tgw{position:relative}
-.tg{--q:min(24vw,86px);display:grid;grid-template-columns:repeat(3,var(--q));gap:6px;padding:10px;border-radius:16px;background:rgba(4,26,20,.55);animation:tg-in .4s ease-out both}
 @keyframes tg-in{from{opacity:0;transform:scale(.9)}}
-.tg i{position:relative;display:block;width:var(--q);height:var(--q);border:2px dashed #ffffffcc;border-radius:10px;background:rgba(255,255,255,.14);animation:tg-free 1.8s ease-in-out infinite}
-@keyframes tg-free{50%{background:rgba(61,220,151,.35)}}
-.th{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 4px 4px #0006)}
-.tf{position:absolute;left:50%;top:50%;font-size:40px;line-height:1;margin:-6px 0 0 -14px;transform-origin:30% 20%;animation:tf-go var(--d,8s) ease-in-out both;filter:drop-shadow(0 2px 3px #0008)}
-@keyframes tf-go{0%{opacity:0;transform:translate(120px,150px)}18%{opacity:1;transform:translate(120px,150px)}34%{transform:translate(4px,8px)}40%{transform:translate(4px,8px) scale(.82)}46%{transform:translate(4px,8px) scale(1)}85%{opacity:1;transform:translate(4px,8px)}100%{opacity:0;transform:translate(4px,8px)}}
-.tapw .tg i.c{animation:tg-free 1.8s ease-in-out infinite,tg-sel var(--d,8s) both}
-.tgw:not(.tapw) .tg i.c{border:3px solid #ffb703;background:rgba(255,183,3,.3);animation:none}
-@keyframes tg-sel{0%,40%{border-color:#ffffffcc;box-shadow:none}46%,100%{border:3px solid #ffb703;background:rgba(255,183,3,.45);box-shadow:0 0 0 6px rgba(255,183,3,.35),0 0 18px #ffb703}}
-.th.mine{animation:th-drop 1.1s .5s cubic-bezier(.3,1.4,.5,1) both}
-@keyframes th-drop{0%{opacity:0;transform:translateY(-170px) scale(.5)}55%{opacity:1;transform:translateY(0) scale(1.12)}78%{transform:translateY(-12px) scale(.98)}100%{opacity:1;transform:none}}
-.sp{position:absolute;font-size:22px;opacity:0;animation:sp-up 1.4s 1.5s ease-out both}
-.sp.s1{left:-6px;top:4px}.sp.s2{right:-6px;top:10px;animation-delay:1.7s}.sp.s3{left:40%;top:-14px;animation-delay:1.9s}
-@keyframes sp-up{0%{opacity:0;transform:translateY(10px) scale(.4)}40%{opacity:1}100%{opacity:0;transform:translateY(-26px) scale(1.3)}}
-.th.nb{animation:th-pop .6s calc(.3s + var(--k) * .55s) cubic-bezier(.3,1.5,.5,1) both}
-.tg:has(.nb) .th.mine{animation:th-pop .6s .1s cubic-bezier(.3,1.5,.5,1) both}
-@keyframes th-pop{0%{opacity:0;transform:scale(0)}70%{opacity:1;transform:scale(1.15)}100%{opacity:1;transform:scale(1)}}
-.you{position:absolute;right:-5px;top:-9px;font-style:normal;font-size:20px;animation:bob2 1s ease-in-out infinite}
-@keyframes bob2{50%{transform:translateY(-4px)}}
 .mp{position:relative;width:min(84vw,320px);padding:12px 14px 14px;border-radius:16px;background:#fff;color:#222;box-shadow:0 10px 30px #0006;animation:mp-in .5s ease-out both}
 @keyframes mp-in{from{opacity:0;transform:translateY(40px)}}
 .mp-l{font-size:12px;font-weight:700;margin:6px 0 4px;color:#444}
@@ -141,8 +118,61 @@ body.tut-nohouses .owner-label{opacity:0}
 @keyframes mv-p2{0%,52%{opacity:0;transform:translate(8px,-6px)}58%{opacity:1;transform:translate(8px,-6px)}85%{opacity:1;transform:translate(62px,34px)}100%{opacity:0;transform:translate(62px,34px)}}
 .mv-zoom{position:absolute;right:12px;bottom:8px;font-size:30px;opacity:0;animation:mv-z var(--d,8s) both}
 @keyframes mv-z{0%,58%{opacity:0;transform:scale(.6)}70%,92%{opacity:1;transform:scale(1.2)}100%{opacity:0}}
-@media (max-height:640px){#tut-stage{bottom:250px}.tg{--q:min(20vw,70px)}}
-@media (prefers-reduced-motion:reduce){#tut-spot,#tut-spot.pulse,#tut-card,#tut-arrow,#tut-stage *{animation:none !important;transition:none !important}.sp{display:none}}`;
+@media (max-height:640px){#tut-stage{bottom:250px}#tut-sim{bottom:250px}}
+/* Ciudad de ejemplo (mapa simulado): la cámara se mueve con transiciones según data-ph = start | search | zoom | lot | tap | claim | built | nb */
+#tut-sim{position:fixed;z-index:4995;left:8px;right:8px;top:calc(124px + env(safe-area-inset-top,0px));bottom:270px;overflow:hidden;border-radius:18px;pointer-events:none;background:#cfe8a4;box-shadow:0 8px 28px #0007,0 0 0 3px #ffffffcc;font-family:system-ui,sans-serif;animation:sim-in .5s ease-out both}
+@keyframes sim-in{from{opacity:0;transform:translateY(12px)}}
+#tut-sim *{box-sizing:border-box}
+#tut-sim svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+#tut-sim .world{transform-origin:0 0;transition:transform 2.6s cubic-bezier(.45,0,.2,1)}
+#tut-sim[data-ph=start] .world{transform:translate(300px,300px) scale(.4) translate(-300px,-300px)}
+#tut-sim[data-ph=search] .world{transform:translate(300px,300px) scale(1) translate(-300px,-300px);transition-delay:2.4s}
+#tut-sim[data-ph=zoom] .world{transform:translate(300px,300px) scale(2.4) translate(-225px,-225px);transition-duration:3s;transition-delay:.4s}
+#tut-sim[data-ph=lot] .world,#tut-sim[data-ph=tap] .world,#tut-sim[data-ph=built] .world,#tut-sim[data-ph=nb] .world{transform:translate(300px,300px) scale(4.2) translate(-225px,-225px);transition-duration:2.8s}
+#tut-sim[data-ph=claim] .world{transform:translate(300px,150px) scale(2.2) translate(-225px,-225px);transition-duration:1.4s}
+#tut-sim .lot{fill:#bfe08a;stroke:#fff;stroke-width:.9;stroke-dasharray:3 2}
+#tut-sim[data-ph=tap] .lot.c{animation:sim-sel var(--d,8s) both}
+@keyframes sim-sel{0%,40%{stroke:#fff;fill:#bfe08a;stroke-width:.9}46%,100%{stroke:#ffb703;fill:#ffe8a3;stroke-width:1.6}}
+#tut-sim[data-ph=claim] .lot.c,#tut-sim[data-ph=built] .lot.c,#tut-sim[data-ph=nb] .lot.c{stroke:#ffb703;stroke-width:1.6;fill:#ffe8a3}
+#tut-sim .pin{font-size:26px;text-anchor:middle;transition:opacity .8s;animation:sim-bob 1s ease-in-out infinite}
+@keyframes sim-bob{50%{transform:translateY(-5px)}}
+#tut-sim[data-ph=lot] .pin,#tut-sim[data-ph=tap] .pin,#tut-sim[data-ph=claim] .pin,#tut-sim[data-ph=built] .pin,#tut-sim[data-ph=nb] .pin{opacity:0}
+#tut-sim .car{animation:sim-car 11s linear infinite}
+#tut-sim .car.v{animation-name:sim-carv}
+@keyframes sim-car{from{transform:translateX(-300px)}to{transform:translateX(1000px)}}
+@keyframes sim-carv{from{transform:translateY(-300px)}to{transform:translateY(1000px)}}
+#tut-sim .hs{opacity:0;transform-box:fill-box;transform-origin:50% 100%}
+#tut-sim[data-ph=built] .hs.mine{opacity:1;animation:sim-drop 1.1s .5s cubic-bezier(.3,1.4,.5,1) both}
+#tut-sim[data-ph=nb] .hs.mine{opacity:1}
+#tut-sim[data-ph=nb] .hs.nb{animation:sim-pop .6s calc(.3s + var(--k) * .55s) cubic-bezier(.3,1.5,.5,1) both}
+@keyframes sim-drop{0%{opacity:0;transform:translateY(-60px) scale(.5)}55%{opacity:1;transform:translateY(0) scale(1.12)}78%{transform:translateY(-4px) scale(.98)}100%{opacity:1;transform:none}}
+@keyframes sim-pop{0%{opacity:0;transform:scale(0)}70%{opacity:1;transform:scale(1.15)}100%{opacity:1;transform:scale(1)}}
+#tut-sim .own{opacity:0;transition:opacity .6s 1.6s}
+#tut-sim[data-ph=built] .own,#tut-sim[data-ph=nb] .own{opacity:1}
+#tut-sim .sx{position:absolute;left:10px;right:10px;top:10px;height:38px;border-radius:999px;background:#fff;box-shadow:0 3px 10px #0004;display:flex;align-items:center;gap:8px;padding:0 14px;font-size:16px;color:#222;z-index:3}
+#tut-sim .sx-type{display:inline-block;overflow:hidden;white-space:nowrap;vertical-align:bottom;width:0;border-right:2px solid #222;animation:sx-type 1.6s .6s steps(14) forwards}
+@keyframes sx-type{to{width:14.5ch;border-right-color:transparent}}
+#tut-sim .sx small{margin-left:auto;font-size:11px;font-weight:800;color:#2a9d8f;white-space:nowrap}
+#tut-sim .bub{position:absolute;left:50%;top:22%;padding:6px 12px;border-radius:12px;background:#0b3d2e;color:#fff;font-weight:800;font-size:14px;white-space:nowrap;opacity:0;box-shadow:0 4px 12px #0006;transform:translateX(-50%)}
+#tut-sim .bub::after{content:'';position:absolute;left:50%;bottom:-6px;margin-left:-6px;border:6px solid transparent;border-top-color:#0b3d2e;border-bottom:0}
+#tut-sim[data-ph=lot] .bub{animation:sim-bub .8s 3s both}
+@keyframes sim-bub{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+#tut-sim .sf{position:absolute;left:50%;top:50%;font-size:40px;line-height:1;margin:-6px 0 0 -14px;opacity:0;filter:drop-shadow(0 2px 3px #0008)}
+#tut-sim[data-ph=tap] .sf{animation:sim-f var(--d,8s) ease-in-out both}
+@keyframes sim-f{0%{opacity:0;transform:translate(120px,150px)}18%{opacity:1;transform:translate(120px,150px)}34%{transform:translate(4px,8px)}40%{transform:translate(4px,8px) scale(.82)}46%{transform:translate(4px,8px) scale(1)}85%{opacity:1;transform:translate(4px,8px)}100%{opacity:0;transform:translate(4px,8px)}}
+#tut-sim .sheet{position:absolute;left:50%;bottom:8px;width:min(92%,340px);padding:12px 14px;border-radius:16px;background:#fffffe;color:#222;box-shadow:0 -4px 20px #0005;display:none;transform:translateX(-50%)}
+#tut-sim .sheet b{display:block;font-size:16px}
+#tut-sim .sheet small{display:block;color:#666;margin:2px 0 8px;font-size:12px}
+#tut-sim .sheet .chip{display:inline-block;padding:4px 10px;border-radius:999px;background:#d3f9d8;color:#1b6e2e;font-weight:800;font-size:13px}
+#tut-sim[data-ph=tap] .sheet{display:block;animation:sim-sheet .6s calc(var(--d,8s) * .46) both}
+@keyframes sim-sheet{from{opacity:0;transform:translate(-50%,50px)}to{opacity:1;transform:translate(-50%,0)}}
+#tut-sim .claimp{position:absolute;left:50%;bottom:6px;display:none;transform:translateX(-50%) scale(.8);transform-origin:50% 100%}
+#tut-sim[data-ph=claim] .claimp{display:block}
+#tut-sim .ssp{position:absolute;left:50%;top:50%;font-size:24px;opacity:0}
+#tut-sim[data-ph=built] .ssp{animation:sim-sp 1.4s 1.6s ease-out both}
+#tut-sim .ssp.a{margin:-60px 0 0 -60px}#tut-sim .ssp.b{margin:-50px 0 0 40px;animation-delay:1.8s}#tut-sim .ssp.c{margin:-90px 0 0 -8px;animation-delay:2s}
+@keyframes sim-sp{0%{opacity:0;transform:translateY(10px) scale(.4)}40%{opacity:1}100%{opacity:0;transform:translateY(-26px) scale(1.3)}}
+@media (prefers-reduced-motion:reduce){#tut-spot,#tut-spot.pulse,#tut-card,#tut-arrow,#tut-stage *,#tut-sim,#tut-sim *{animation:none !important;transition:none !important}.ssp{display:none}#tut-sim .sx-type{width:auto;border:0}#tut-sim .mp-type{width:auto;border:0}#tut-sim[data-ph=lot] .bub{opacity:1}#tut-sim[data-ph=built] .hs.mine,#tut-sim[data-ph=nb] .hs{opacity:1}}`;
   document.head.appendChild(css);
 
   let idx = -1, el = 0, dur = 0, full = '', timer = null, started = false, ended = false;
@@ -183,12 +213,72 @@ body.tut-nohouses .owner-label{opacity:0}
     document.body.classList.remove('tut-nohouses');
   }
 
+  // ---------- Ciudad de ejemplo: mapa simulado en SVG (la «cámara» es la transformación de .world, ver CSS) ----------
+  let sim = null;
+  function seeded(seed) { let x = seed >>> 0; return () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; }; }
+  function cityHTML() {
+    const R = seeded(7), P = [-300, -150, 0, 150, 300, 450, 600, 750, 900];
+    const roofs = ['#d8d2c4', '#cbbfae', '#b9b3a6', '#e0c9b5', '#c9a89a', '#aab3bd'];
+    let roads = '', blocks = '', main = '';
+    for (const p of P) {
+      roads += `<rect x="-600" y="${p - 11}" width="2400" height="22" fill="#f6f4ee"/><rect x="${p - 11}" y="-600" width="22" height="2400" fill="#f6f4ee"/>` +
+        `<line x1="-600" y1="${p}" x2="1800" y2="${p}" stroke="#e0c76a" stroke-width="1" stroke-dasharray="8 8"/><line x1="${p}" y1="-600" x2="${p}" y2="1800" stroke="#e0c76a" stroke-width="1" stroke-dasharray="8 8"/>`;
+    }
+    for (let i = 0; i < P.length - 1; i++) for (let j = 0; j < P.length - 1; j++) {
+      if (P[i] === 150 && P[j] === 150) continue;                                   // la manzana protagonista se dibuja aparte
+      const x0 = P[i] + 11, y0 = P[j] + 11;
+      blocks += `<rect x="${x0}" y="${y0}" width="128" height="128" fill="#e9e5dc"/>`;
+      if (R() < 0.2) {                                                              // parque
+        blocks += `<rect x="${x0 + 4}" y="${y0 + 4}" width="120" height="120" rx="3" fill="#b9dc86"/>`;
+        for (let k = 0; k < 6; k++) blocks += `<circle cx="${x0 + 14 + R() * 100}" cy="${y0 + 14 + R() * 100}" r="${5 + R() * 3}" fill="#4f9a4a"/>`;
+      } else {                                                                      // edificios
+        for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) {
+          const w = 38 + R() * 16, h = 38 + R() * 16, x = x0 + 6 + a * 60 + R() * (56 - w), y = y0 + 6 + b * 60 + R() * (56 - h);
+          blocks += `<rect x="${x + 2}" y="${y + 2}" width="${w}" height="${h}" fill="#0002"/><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" fill="${roofs[Math.floor(R() * roofs.length)]}"/>`;
+        }
+      }
+    }
+    // manzana protagonista: acera, hierba y 3×3 parcelas libres (ninguna con casa)
+    main += `<rect x="161" y="161" width="128" height="128" fill="#e3dfd5"/><rect x="165" y="165" width="120" height="120" rx="2" fill="#c9e59a"/>`;
+    const HS = ['casa-2', 'jardin', 'pisos', 'bosque', 'casa-6', 'hospital', 'iglesia', 'pisos-2'];
+    let lots = '', houses = '', n = 0;
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+      const x = 168 + c * 39, y = 168 + r * 39, mid = r === 1 && c === 1;
+      lots += `<rect class="lot${mid ? ' c' : ''}" x="${x}" y="${y}" width="36" height="36" rx="2"/>`;
+      for (let k = 0; k < 5; k++) lots += `<circle cx="${x + 4 + R() * 28}" cy="${y + 4 + R() * 28}" r=".7" fill="${R() < 0.5 ? '#fff' : '#f4d35e'}"/>`;
+      for (const [dx, dy] of [[0, 0], [36, 0], [0, 36], [36, 36]]) lots += `<circle cx="${x + dx}" cy="${y + dy}" r="1.1" fill="#ffb703"/>`;   // mojones en las esquinas
+      houses += mid ? `<image class="hs mine" href="${IMG('casa-1').replace('-s.', '-m.')}" x="${x}" y="${y}" width="36" height="36"/>`
+        : `<image class="hs nb" style="--k:${n++}" href="${IMG(HS[n % HS.length]).replace('-s.', '-m.')}" x="${x}" y="${y}" width="36" height="36"/>`;
+    }
+    main += lots + houses;
+    main += `<g class="own"><rect x="213" y="239" width="24" height="9" rx="4.5" fill="#0b3d2e"/><text x="225" y="245.6" font-size="6" font-weight="700" fill="#fff" text-anchor="middle" font-family="system-ui,sans-serif">Ana ⭐</text></g>`;
+    for (const [x, y] of [[158, 158], [292, 158], [158, 292], [292, 292], [225, 158], [225, 292], [158, 225], [292, 225]]) main += `<circle cx="${x}" cy="${y}" r="5" fill="#3f8a3f"/><circle cx="${x - 1}" cy="${y - 1}" r="3" fill="#5aae53"/>`;
+    const cars = `<rect class="car" x="0" y="291" width="14" height="7" rx="2" fill="#e63946"/><rect class="car" style="animation-delay:-5s;animation-duration:14s" x="0" y="302" width="14" height="7" rx="2" fill="#1c7ed6"/>` +
+      `<rect class="car v" style="animation-delay:-3s" x="291" y="0" width="7" height="14" rx="2" fill="#f2c230"/><rect class="car" style="animation-delay:-8s" x="0" y="441" width="14" height="7" rx="2" fill="#fff"/>`;
+    return `<svg viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><rect x="-3000" y="-3000" width="6600" height="6600" fill="#cfe8a4"/>` +
+      `<g class="world">${roads}${blocks}${main}${cars}<text class="pin" x="225" y="196">📍</text></g></svg>` +
+      `<div class="sx"><span>🔍</span><span class="sx-box"><span class="sx-type">Ciudad Ejemplo</span></span><small>${T('Mapa de ejemplo')}</small></div>` +
+      `<div class="bub">${T('Sin casa, sin dueño')}</div><span class="sf">👆</span><b class="ssp a">✨</b><b class="ssp b">✨</b><b class="ssp c">⭐</b>` +
+      `<div class="sheet"><b>Terreno 349511:253638</b><small>Lat 36.819° · Lng -5.244° · ~45 × 56 m</small><span class="chip">🟩 ${T('Terreno libre')}</span></div>` +
+      `<div class="claimp">${STAGE.claim()}</div>`;
+  }
+  function showSim(ph, d) {
+    if (!sim) {
+      sim = document.createElement('div'); sim.id = 'tut-sim'; sim.setAttribute('aria-hidden', 'true'); sim.setAttribute('data-notranslate', '');
+      sim.dataset.ph = 'start'; sim.innerHTML = cityHTML(); document.body.appendChild(sim);
+      void sim.offsetWidth;                                  // fija el punto de partida de la cámara para que la transición se vea
+    }
+    sim.style.setProperty('--d', d + 's');
+    sim.dataset.ph = ph;
+  }
+  function hideSim() { if (sim) { sim.remove(); sim = null; } }
+
   function finish() {
     if (ended) return;
     ended = true;
     clearInterval(timer); timer = null;
     removeEventListener('resize', place); document.removeEventListener('keydown', onKey);
-    showHouses();
+    showHouses(); hideSim();
     document.body.classList.remove('tut-on');
     [card, spot, arrow, stage, shield].forEach(n => { if (n) n.remove(); });
     card = spot = arrow = stage = shield = null;
@@ -234,6 +324,7 @@ body.tut-nohouses .owner-label{opacity:0}
     // Escenario con animación (se vuelve a crear en cada escena para que la animación empiece de cero)
     stage.className = ''; stage.innerHTML = '';
     if (s.stage) { stage.style.setProperty('--d', (dur / 1000) + 's'); stage.innerHTML = STAGE[s.stage](); stage.className = 'show'; }
+    if (s.sim) showSim(s.sim, dur / 1000); else hideSim();
     spot.classList.toggle('pulse', !!s.target);
     place();
     paint();
@@ -255,6 +346,7 @@ body.tut-nohouses .owner-label{opacity:0}
     const hide = modalOpen() || document.hidden;                                  // si hay una ventana abierta (p. ej. el inicio de sesión), se aparta y el guion espera
     card.style.display = hide ? 'none' : ''; spot.style.visibility = hide ? 'hidden' : '';
     stage.style.visibility = hide ? 'hidden' : ''; arrow.style.visibility = hide ? 'hidden' : ''; shield.style.display = hide ? 'none' : '';
+    if (sim) sim.style.visibility = hide ? 'hidden' : '';
     if (hide) return;
     el += TICK;
     paint();
