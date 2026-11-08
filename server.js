@@ -2861,7 +2861,7 @@ async function clansGet(req) {
       const members = await all(`SELECT m.user_id, pr.nickname, m.joined_at,
           (SELECT COUNT(*) FROM parcels p WHERE p.user_id = m.user_id::uuid) AS parcels,
           (SELECT COALESCE(SUM(p.level), 0) FROM parcels p WHERE p.user_id = m.user_id::uuid) AS pts
-        FROM clan_members m LEFT JOIN profiles pr ON pr.user_id = m.user_id WHERE m.clan_id = $1 ORDER BY pts DESC, m.joined_at`, [c.id]);
+        FROM clan_members m LEFT JOIN profiles pr ON pr.user_id::text = m.user_id WHERE m.clan_id = $1 ORDER BY pts DESC, m.joined_at`, [c.id]);
       out.me = { id: c.id, name: c.name, emoji: c.emoji, total: c.total, weekly: c.weekly, rankTotal: rankOf(list, c.id, 'total'), rankWeek: rankOf(list, c.id, 'weekly'), clans: list.length,
         isLeader: c.leader === String(user.id),
         members: members.map(m => ({ nick: m.nickname || 'Jugador', parcels: Number(m.parcels), pts: Number(m.pts), leader: String(m.user_id) === c.leader, you: String(m.user_id) === String(user.id) })) };
@@ -2930,7 +2930,7 @@ async function clanKick(req, body) {
   const user = await needUser(req), nick = String(body && body.nick || '').trim().toLowerCase();
   const mine = await one('SELECT c.id, c.leader_id FROM clan_members m JOIN clans c ON c.id = m.clan_id WHERE m.user_id = $1', [String(user.id)]);
   if (!mine || String(mine.leader_id) !== String(user.id)) throw new HttpError(403, 'Solo el líder puede expulsar');
-  const t = await one('SELECT m.user_id FROM clan_members m JOIN profiles pr ON pr.user_id = m.user_id WHERE m.clan_id = $1 AND lower(pr.nickname) = $2', [mine.id, nick]);
+  const t = await one('SELECT m.user_id FROM clan_members m JOIN profiles pr ON pr.user_id::text = m.user_id WHERE m.clan_id = $1 AND lower(pr.nickname) = $2', [mine.id, nick]);
   if (!t) throw new HttpError(404, 'Ese jugador no está en tu clan');
   if (String(t.user_id) === String(user.id)) throw new HttpError(400, 'No puedes expulsarte a ti mismo: usa «Salir del clan»');
   await run('DELETE FROM clan_members WHERE user_id = $1', [t.user_id]); clanDirty();
@@ -2978,11 +2978,11 @@ const achNameOf = key => { const a = ACHIEVEMENTS.find(x => x.key === key); if (
 async function activityItems(uid) {
   const seen = await one('SELECT seen_at FROM activity_seen WHERE user_id = $1', [uid]), seenAt = seen ? Number(seen.seen_at) : 0;
   const [likes, gifts, ach, alb, joins] = await Promise.all([
-    all(`SELECT l.created_at AS at, pr.nickname AS nick FROM parcel_likes l JOIN parcels p ON p.id = l.parcel_id LEFT JOIN profiles pr ON pr.user_id = l.user_id WHERE p.user_id = $1::uuid ORDER BY l.created_at DESC LIMIT 30`, [uid]),
+    all(`SELECT l.created_at AS at, pr.nickname AS nick FROM parcel_likes l JOIN parcels p ON p.id = l.parcel_id LEFT JOIN profiles pr ON pr.user_id::text = l.user_id WHERE p.user_id = $1::uuid ORDER BY l.created_at DESC LIMIT 30`, [uid]),
     all('SELECT from_nick, credits, created_at AS at FROM gifts WHERE to_user = $1 ORDER BY id DESC LIMIT 20', [uid]),
     all('SELECT key, created_at AS at FROM achievements WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20', [uid]),
     all('SELECT key, created_at AS at FROM album_claims WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20', [uid]),
-    all(`SELECT pr.nickname AS nick, m.joined_at AS at, c.name FROM clan_members me JOIN clan_members m ON m.clan_id = me.clan_id AND m.user_id <> me.user_id JOIN clans c ON c.id = me.clan_id LEFT JOIN profiles pr ON pr.user_id = m.user_id WHERE me.user_id = $1 ORDER BY m.joined_at DESC LIMIT 10`, [uid])
+    all(`SELECT pr.nickname AS nick, m.joined_at AS at, c.name FROM clan_members me JOIN clan_members m ON m.clan_id = me.clan_id AND m.user_id <> me.user_id JOIN clans c ON c.id = me.clan_id LEFT JOIN profiles pr ON pr.user_id::text = m.user_id WHERE me.user_id = $1 ORDER BY m.joined_at DESC LIMIT 10`, [uid])
   ]);
   const items = [];
   likes.forEach(r => items.push({ kind: 'like', at: Number(r.at), text: `❤️ ${r.nick || 'Alguien'} ha dado «me gusta» a uno de tus terrenos` }));
