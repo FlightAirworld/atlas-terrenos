@@ -4,10 +4,11 @@
 // marca con 🤖 y no deja reaccionar ni añadirlos como amigos (no son cuentas reales).
 //
 // Variables de entorno (todas opcionales):
-//   AMBIENT=off              apaga todo (el contador vuelve a mostrar solo jugadores reales)
+// APAGADO POR DEFECTO: el contador y el chat muestran solo jugadores reales.
+//   AMBIENT=on               enciende el ambiente simulado (contador inflado + vecinos virtuales en el chat)
 //   AMBIENT_ONLINE_BASE=500  nivel medio de "jugadores" simulados en la hora punta media (varía según la hora del día)
-//   AMBIENT_CHAT=off         apaga solo los mensajes del chat
-const ON = String(process.env.AMBIENT || '').toLowerCase() !== 'off';
+//   AMBIENT_CHAT=off         con AMBIENT=on, apaga solo los mensajes del chat
+const ON = String(process.env.AMBIENT || '').toLowerCase() === 'on';
 const CHAT_ON = ON && String(process.env.AMBIENT_CHAT || '').toLowerCase() !== 'off';
 const BASE = Math.max(0, Number(process.env.AMBIENT_ONLINE_BASE || 500)) || 500;
 
