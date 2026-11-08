@@ -818,7 +818,20 @@ function showPanel(p) {
     buildPackPicker();
   }
   if (window.retosPanel) window.retosPanel(p);   // botón ❤️ «Me gusta» (retos.js)
+  updateBuyParcelBtn(p);
 }
+// Botón «Comprar terreno» (debajo de Compartir): solo con sesión iniciada y solo en terrenos libres
+function updateBuyParcelBtn(p) {
+  const b = $('buy-parcel-btn'); if (!b) return;
+  const cur = p || selected;
+  const open = !$('panel').classList.contains('hidden');
+  b.classList.toggle('hidden', !(authToken && open && cur && !cur.owner));
+}
+$('buy-parcel-btn').onclick = () => {
+  const has = !!packCode && credits > 0;
+  if (has) { const n = $('name'); n.scrollIntoView({ behavior: 'smooth', block: 'center' }); try { n.focus({ preventScroll: true }); } catch (e) {} setMsg('Pon tu nombre, elige casa y pulsa «Reclamar este terreno».'); }
+  else { $('buy-box').scrollIntoView({ behavior: 'smooth', block: 'center' }); setMsg('Elige un pack de créditos para comprar este terreno.'); }
+};
 $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; if (window.worldClearSel) window.worldClearSel(); };
 // Ganchos para mundos.js: abrir el mismo panel de compra con una parcela de otro planeta, y cerrarlo al viajar
 window.selectWorldParcel = p => { selected = p; showPanel(p); sfx('select'); };
@@ -1424,6 +1437,7 @@ function updateAuthUi() {
   $('stripe-box').classList.toggle('hidden', gate || !cfg.stripe);
   if (cfg.demo) $('demo-pay').classList.toggle('hidden', gate);
   if (dailyState) renderDaily();
+  updateBuyParcelBtn();
 }
 function showWelcomeGift(n) {
   let t = document.getElementById('toast');
