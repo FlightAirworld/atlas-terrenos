@@ -126,9 +126,97 @@ const HOUSES = [
   'images/claro-bosque.webp',
   'images/parque-futbol.webp',
   'images/mar.webp',
-  'images/mar-peces.webp'
+  'images/mar-peces.webp',
+  'images/torre-metalica.webp',
+  'images/casa-modernista.webp',
+  'images/casa-modernista-2.webp',
+  'images/estadio-1.webp',
+  'images/estadio-2.webp',
+  'images/rugby.webp',
+  'images/estadio-3.webp',
+  'images/estadio-4.webp',
+  'images/plaza-de-toros.webp',
+  'images/teatro.webp',
+  'images/cine.webp',
+  'images/supermercado-3.webp',
+  'images/supermercado-4.webp',
+  'images/supermercado-2.webp',
+  'images/pisos-3.webp',
+  'images/pisos-4.webp',
+  'images/pisos-5.webp',
+  'images/casa-7.webp',
+  'images/casa-8.webp'
 ];
-const cleanHouse = h => { h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h; return HOUSES.includes(h) ? h : null; };   // null = al azar (como hasta ahora)
+// Reparto al azar de las parcelas sin casa elegida: es la lista HOUSES de app.js en el MISMO orden (el servidor la usa para el álbum). No la cambies de orden ni de tamaño.
+const CLIENT_RANDOM_POOL = [
+  'images/casa-1.webp',
+  'images/casa-6.webp',
+  'images/colegio.webp',
+  'images/pisos.webp',
+  'images/pisos-2.webp',
+  'images/Farmacia.webp',
+  'images/bosque.webp',
+  'images/parque-infantil.webp',
+  'images/supermercado.webp',
+  'images/helipuerto.webp',
+  'images/jardin.webp',
+  'images/condis.webp',
+  'images/cepsa.webp',
+  'images/aurgi.webp',
+  'images/burrito-blanco.webp',
+  'images/arcobaleno.webp',
+  'images/la-cruilla.webp',
+  'images/torre-metalica.webp',
+  'images/casa-modernista.webp',
+  'images/casa-modernista-2.webp',
+  'images/estadio-1.webp',
+  'images/estadio-2.webp',
+  'images/rugby.webp',
+  'images/estadio-3.webp',
+  'images/estadio-4.webp',
+  'images/plaza-de-toros.webp',
+  'images/teatro.webp',
+  'images/cine.webp',
+  'images/supermercado-3.webp',
+  'images/supermercado-4.webp',
+  'images/supermercado-2.webp',
+  'images/pisos-3.webp',
+  'images/pisos-4.webp',
+  'images/pisos-5.webp',
+  'images/casa-7.webp',
+  'images/casa-8.webp'
+];
+// ---------- Eventos de temporada: casas de edición limitada ----------
+// Cada evento se repite todos los años entre sus fechas (MM-DD). Sus casas SOLO se pueden elegir mientras el evento está activo
+// (quien ya la tiene se la queda para siempre). Para añadir una casa a un evento: sube la imagen (y sus -s -m -t) a images/ y ponla en su lista `houses`.
+// Un evento sin casas no aparece. Para probar uno fuera de fecha, pon en Render EVENT_FORCE=halloween (o varios separados por comas).
+const EVENTS = [
+  { key: 'halloween', name: 'Halloween', icon: '🎃', from: '10-24', to: '11-02', houses: ['images/halloween.webp'], mission: 'Pon la casa de Halloween en uno de tus terrenos', reward: 0.1 },
+  { key: 'navidad', name: 'Navidad', icon: '🎄', from: '12-15', to: '01-06', houses: ['images/navidad.webp'], mission: 'Pon la casa de Navidad en uno de tus terrenos', reward: 0.1 },
+  { key: 'sanvalentin', name: 'San Valentín', icon: '💘', from: '02-07', to: '02-14', houses: [], mission: 'Pon la casa de San Valentín en uno de tus terrenos', reward: 0.1 },
+  { key: 'verano', name: 'Verano', icon: '☀️', from: '07-01', to: '08-31', houses: [], mission: 'Pon la casa de verano en uno de tus terrenos', reward: 0.1 }
+];
+const EVENT_FORCE = new Set(String(process.env.EVENT_FORCE || '').split(',').map(x => x.trim()).filter(Boolean));
+const dayNum = (y, md) => Date.UTC(y, Number(md.slice(0, 2)) - 1, Number(md.slice(3)));
+function eventInfo(e) {   // estado de un evento hoy: activo, días que quedan o días que faltan
+  const t = dayKey(), y = Number(t.slice(0, 4)), md = t.slice(5), today = dayNum(y, md), wrap = e.from > e.to;
+  const active = wrap ? (md >= e.from || md <= e.to) : (md >= e.from && md <= e.to);
+  const forced = EVENT_FORCE.has(e.key);
+  const info = { key: e.key, name: e.name, icon: e.icon, from: e.from, to: e.to, active: active || forced, daysLeft: null, daysTo: null, startYear: wrap && md <= e.to ? y - 1 : y };
+  if (active) info.daysLeft = Math.round((dayNum(wrap && md >= e.from ? y + 1 : y, e.to) - today) / 86400000);
+  else if (forced) info.daysLeft = 7;
+  else info.daysTo = Math.round((dayNum(e.from > md ? y : y + 1, e.from) - today) / 86400000);
+  return info;
+}
+const eventsWithHouses = () => EVENTS.filter(e => e.houses.length);
+const eventOfHouse = h => EVENTS.find(e => e.houses.includes(h));
+const eventPeriod = (e, info) => `E:${e.key}:${info.startYear}`;
+const cleanHouse = h => {
+  h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h;
+  if (HOUSES.includes(h)) return h;
+  const e = eventOfHouse(h);
+  return e && eventInfo(e).active ? h : null;   // las casas de evento solo se pueden elegir mientras dura el evento
+};
 const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
 
 // ---------- Seguridad de administrador ----------
@@ -741,7 +829,7 @@ const HOUSE_COST = Math.max(0, Math.floor(Number(process.env.HOUSE_COST ?? 1)));
 async function setHouse(req, { id, house }) {
   const user = await needUser(req);
   const h = cleanHouse(house);
-  if (!h) throw new HttpError(400, 'Casa no válida');
+  if (!h) throw new HttpError(eventOfHouse(house) ? 409 : 400, eventOfHouse(house) ? 'Esta casa es de un evento que ya terminó. ¡Vuelve el año que viene!' : 'Casa no válida');
   const pack = await ensureUserPack(user);
   const client = await pool.connect();
   try {
@@ -2174,6 +2262,13 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/retos/seen') return retosSeen(req);
   if (req.method === 'POST' && pn === '/api/like') return likePost(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/likes/top') return likesTop();
+  if (req.method === 'GET' && pn === '/api/events') return eventsPublic();
+  if (req.method === 'GET' && pn === '/api/clans') return clansGet(req);
+  if (req.method === 'POST' && pn === '/api/clans/create') return clanCreate(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/clans/join') return clanJoin(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/clans/leave') return clanLeave(req);
+  if (req.method === 'POST' && pn === '/api/clans/kick') return clanKick(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/clans/admin-delete') return clanAdminDelete(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/rank/cities') return rankCities(url);
   if (req.method === 'GET' && pn === '/api/towns') return townsGet(url, req);
   if (req.method === 'GET' && pn === '/api/player') return playerGet(req, url);
@@ -2295,7 +2390,13 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE INDEX IF NOT EXISTS parcel_likes_at ON parcel_likes (created_at)');
     await run('CREATE INDEX IF NOT EXISTS parcel_likes_user ON parcel_likes (user_id)');
     await run('CREATE TABLE IF NOT EXISTS retos_seen (user_id TEXT PRIMARY KEY, likes_seen BIGINT NOT NULL DEFAULT 0)');
-    for (const t of ['mission_progress', 'achievements', 'parcel_likes', 'retos_seen']) await run(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});   // solo el servidor accede (la clave pública no)
+    await run('CREATE TABLE IF NOT EXISTS album_claims (user_id TEXT NOT NULL, key TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, key))');
+    await run('CREATE TABLE IF NOT EXISTS clans (id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, emoji TEXT NOT NULL, leader_id TEXT NOT NULL, created_at BIGINT NOT NULL)');
+    await run('CREATE UNIQUE INDEX IF NOT EXISTS clans_name_lower ON clans (lower(name))');
+    await run('CREATE TABLE IF NOT EXISTS clan_members (user_id TEXT PRIMARY KEY, clan_id BIGINT NOT NULL, joined_at BIGINT NOT NULL)');
+    await run('CREATE INDEX IF NOT EXISTS clan_members_clan ON clan_members (clan_id)');
+    await run('CREATE INDEX IF NOT EXISTS parcels_user_idx ON parcels (user_id)');
+    for (const t of ['mission_progress', 'achievements', 'parcel_likes', 'retos_seen', 'album_claims', 'clans', 'clan_members']) await run(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});   // solo el servidor accede (la clave pública no)
     const purgeMissions = () => run("DELETE FROM mission_progress WHERE period < $1 AND period NOT LIKE 'W%'", [new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10)]).catch(() => {});
     purgeMissions(); setInterval(purgeMissions, 6 * 3600_000).unref();
   }).catch(e => console.error('No se pudieron crear las tablas de retos:', e.message));
@@ -2348,6 +2449,9 @@ const ACHIEVEMENTS = (() => {
     A('gift', '💝', 'Generoso', 'Regala créditos a otro jugador', 0.02, s => n(s.gifts, 1)),
     A('chat', '💬', 'Sociable', 'Escribe en el chat', 0.01, s => n(s.chats, 1)),
     A('pres', '🏛️', 'Presidente', 'Sé presidente de un pueblo', 0.1, s => n(s.pres, 1)),
+    A('alb3', '📚', 'Coleccionista', 'Ten casas de 3 categorías distintas', 0.03, s => n(s.cats, 3)),
+    A('alb6', '📖', 'Gran coleccionista', 'Ten casas de 6 categorías distintas', 0.08, s => n(s.cats, 6)),
+    A('clan', '👥', 'En equipo', 'Únete a un clan', 0.02, s => n(s.inclan, 1)),
     A('m10', '🎯', 'Trabajador', 'Completa 10 misiones', 0.03, s => n(s.missions, 10)),
     A('m50', '🏅', 'Campeón de retos', 'Completa 50 misiones', 0.1, s => n(s.missions, 50))
   ];
@@ -2388,16 +2492,20 @@ async function achStats(uid) {
     (SELECT COUNT(*) FROM gifts WHERE from_user = $2) AS gifts,
     (SELECT COUNT(*) FROM chat_msgs WHERE user_id = $2) AS chats,
     (SELECT COUNT(*) FROM president_grants WHERE user_id = $2) AS pres,
-    (SELECT COUNT(*) FROM mission_progress WHERE user_id = $2 AND claimed AND key <> 'd_bonus') AS missions`, [uid, uid]);
+    (SELECT COUNT(*) FROM mission_progress WHERE user_id = $2 AND claimed AND key <> 'd_bonus') AS missions,
+    (SELECT COUNT(*) FROM clan_members WHERE user_id = $2) AS inclan`, [uid, uid]);
 }
 
 async function retosGet(req) {
   const user = await needUser(req);
   const uid = user.id, day = dayKey(), week = weekKey();
+  const owned = await ownedHouses(uid), album = albumBuild(owned), alb = await albumPay(uid, album);
   const stats = await achStats(uid);
+  stats.cats = album.filter(c => c.stamp).length;
+  const achList = ACHIEVEMENTS.concat(eventsWithHouses().map(e => ({ key: 'ev_' + e.key, icon: e.icon, name: 'Edición ' + e.name, text: `Consigue la casa de ${e.name} (edición limitada)`, reward: 0.1, prog: () => [e.houses.some(h => owned.has(h)) ? 1 : 0, 1] })));
   const have = new Set((await all('SELECT key FROM achievements WHERE user_id = $1', [uid])).map(r => r.key));
   const newAch = [];
-  for (const a of ACHIEVEMENTS) {   // desbloquea (y paga) los logros que ya cumple; el INSERT … ON CONFLICT evita pagar dos veces
+  for (const a of achList) {   // desbloquea (y paga) los logros que ya cumple; el INSERT … ON CONFLICT evita pagar dos veces
     const [cur, tgt] = a.prog(stats);
     if (cur >= tgt && !have.has(a.key)) {
       const ins = await run('INSERT INTO achievements (user_id, key, created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [uid, a.key, Date.now()]);
@@ -2414,7 +2522,9 @@ async function retosGet(req) {
   return {
     daily, bonus: { reward: rew(DAILY_BONUS), claimed: !!(bonusRow && bonusRow.claimed), ready: daily.every(d => d.claimed) },
     weekly: WEEKLY_MISSIONS.map(m => line(m, week)),
-    achievements: ACHIEVEMENTS.map(a => { const [cur, target] = a.prog(stats); return { key: a.key, icon: a.icon, name: a.name, text: a.text, reward: rew(a.reward), unlocked: have.has(a.key), cur, target }; }),
+    achievements: achList.map(a => { const [cur, target] = a.prog(stats); return { key: a.key, icon: a.icon, name: a.name, text: a.text, reward: rew(a.reward), unlocked: have.has(a.key), cur, target }; }),
+    album: { cats: album, all: alb.all, stamp: ALBUM_STAMP, full: ALBUM_FULL, allReward: rew(ALBUM_ALL), have: owned.size, total: HOUSES.length }, newAlbum: alb.fresh,
+    events: await eventsFor(uid, owned),
     newAch, likesIn: Number(stats.likes_in), likesOut: Number(stats.likes_out), likesUnseen: unseen
   };
 }
@@ -2429,6 +2539,12 @@ async function retosClaim(req, body) {
     const ins = await run('INSERT INTO mission_progress (user_id, period, key, n, claimed) VALUES ($1,$2,$3,1,true) ON CONFLICT DO NOTHING', [uid, day, key]);
     if (!ins.rowCount) throw new HttpError(409, 'Ya has reclamado el bonus de hoy');
     reward = DAILY_BONUS;
+  } else if (key.startsWith('e_')) {
+    const e = eventsWithHouses().find(x => 'e_' + x.key === key), info = e && eventInfo(e);
+    if (!e || !info.active) throw new HttpError(404, 'Ese evento no está activo');
+    const up = await one("UPDATE mission_progress SET claimed = true WHERE user_id = $1 AND period = $2 AND key = 'ev' AND NOT claimed AND n >= 1 RETURNING n", [uid, eventPeriod(e, info)]);
+    if (!up) throw new HttpError(409, 'Pon primero la casa del evento en uno de tus terrenos (o ya reclamaste el premio)');
+    reward = e.reward;
   } else {
     const wk = WEEKLY_MISSIONS.find(m => m.key === key), dm = dailyFor(uid, day).find(m => m.key === key);
     const m = wk || dm;
@@ -2470,6 +2586,203 @@ async function likesTop() {
     FROM parcel_likes l JOIN parcels p ON p.id = l.parcel_id WHERE l.created_at > $1 GROUP BY p.id ORDER BY n DESC, MAX(l.created_at) DESC LIMIT 10`, [Date.now() - 7 * 24 * HOUR_MS]);
   topLikesCache = { at: Date.now(), list: rows.map(r => ({ id: r.id, x: r.x, y: r.y, world: r.world || 'tierra', owner: r.owner, avatar: r.avatar, country: r.country, house: r.house, level: r.level, likes: Number(r.n) })) };
   return { top: topLikesCache.list };
+}
+
+// ---------- Álbum de colecciones ----------
+// Categorías de casas (deben ser las mismas que HOUSE_CATS / HOUSE_PREFIX de app.js). Una casa que no esté en ninguna va a «Otros».
+const HOUSE_CATS = [
+  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2', 'burrito-blanco'] },
+  { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica'] },
+  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'condis', 'Farmacia'] },
+  { icon: '🍽️', name: 'Restaurantes', files: ['arcobaleno', 'la-cruilla'] },
+  { icon: '🎬', name: 'Cines', files: ['cine', 'teatro'] },
+  { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros', 'parque-futbol'] },
+  { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
+  { icon: '⛽', name: 'Motor', files: ['cepsa', 'aurgi'] },
+  { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto'] }
+];
+const houseBase = h => String(h).replace(/^images\//, '').replace(/\.(png|webp)$/i, '');
+const catOfHouse = h => { const b = houseBase(h), c = HOUSE_CATS.find(c => c.files.includes(b)); return c ? c.name : 'Otros'; };
+function houseSeen(id, house) {   // la casa que ve el jugador en un terreno: la elegida, o la del reparto al azar (misma fórmula que houseFor de app.js)
+  const h = typeof house === 'string' ? house.replace(/\.png$/i, '.webp') : house;
+  if (h && (HOUSES.includes(h) || eventOfHouse(h))) return h;
+  let x = 2166136261; for (const c of String(id)) x = Math.imul(x ^ c.charCodeAt(0), 16777619) >>> 0;
+  return CLIENT_RANDOM_POOL[(x >>> 16) % CLIENT_RANDOM_POOL.length];
+}
+async function ownedHouses(uid) {
+  const rows = await all('SELECT id, house FROM parcels WHERE user_id = $1::uuid LIMIT 5000', [uid]);
+  return new Set(rows.map(r => houseSeen(r.id, r.house)));
+}
+const ALBUM_STAMP = 0.01, ALBUM_FULL = 0.05, ALBUM_ALL = 0.2;   // sello por categoría (≥1 casa), categoría completa, álbum completo (todas las categorías con sello)
+function albumBuild(owned) {
+  const cats = HOUSE_CATS.map(c => ({ name: c.name, icon: c.icon })).concat(HOUSES.some(h => catOfHouse(h) === 'Otros') ? [{ name: 'Otros', icon: '📦' }] : []);
+  return cats.map(c => {
+    const houses = HOUSES.filter(h => catOfHouse(h) === c.name).map(h => ({ img: h, owned: owned.has(h) }));
+    return { name: c.name, icon: c.icon, houses, stamp: houses.some(h => h.owned), full: houses.length > 0 && houses.every(h => h.owned) };
+  }).filter(c => c.houses.length);
+}
+async function albumPay(uid, album) {   // paga una sola vez cada sello (INSERT … ON CONFLICT DO NOTHING) y devuelve los nuevos para avisar
+  const have = new Set((await all('SELECT key FROM album_claims WHERE user_id = $1', [uid])).map(r => r.key));
+  const fresh = [], pay = async (key, amount, text) => {
+    if (have.has(key)) return;
+    const ins = await run('INSERT INTO album_claims (user_id, key, created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [uid, key, Date.now()]);
+    have.add(key);
+    if (ins.rowCount) { await grantCarry(uid, amount); fresh.push({ text, reward: rew(amount) }); }
+  };
+  for (const c of album) {
+    if (c.stamp) await pay('cat:' + c.name, ALBUM_STAMP, `📚 Sello de ${c.icon} ${c.name}`);
+    if (c.full) await pay('full:' + c.name, ALBUM_FULL, `⭐ ¡Categoría ${c.icon} ${c.name} completa!`);
+  }
+  const main = album.filter(c => HOUSE_CATS.some(h => h.name === c.name));
+  if (main.length && main.every(c => c.stamp)) await pay('all', ALBUM_ALL, '🏅 ¡Álbum completo!');
+  return { fresh, all: have.has('all') };
+}
+
+// ---------- Eventos: estado y misión ----------
+async function eventsFor(uid, owned) {
+  const out = [];
+  for (const e of eventsWithHouses()) {
+    const info = eventInfo(e), houses = e.houses.map(h => ({ img: h, owned: owned ? owned.has(h) : false }));
+    const o = { key: e.key, name: e.name, icon: e.icon, from: e.from, to: e.to, active: info.active, daysLeft: info.daysLeft, daysTo: info.daysTo, houses };
+    if (info.active && uid) {
+      const period = eventPeriod(e, info);
+      if (houses.some(h => h.owned)) await run('INSERT INTO mission_progress (user_id, period, key, n) VALUES ($1,$2,$3,1) ON CONFLICT DO NOTHING', [uid, period, 'ev']);
+      const r = await one('SELECT n, claimed FROM mission_progress WHERE user_id = $1 AND period = $2 AND key = $3', [uid, period, 'ev']);
+      o.mission = { text: e.mission, reward: rew(e.reward), target: 1, n: r ? Math.min(Number(r.n), 1) : 0, claimed: !!(r && r.claimed) };
+    }
+    out.push(o);
+  }
+  return out;
+}
+function eventsPublic() {
+  return { events: eventsWithHouses().map(e => { const i = eventInfo(e); return { key: e.key, name: e.name, icon: e.icon, active: i.active, daysLeft: i.daysLeft, daysTo: i.daysTo, houses: i.active ? e.houses : [] }; }) };
+}
+
+// ---------- Clanes ----------
+// Hasta CLAN_MAX miembros; cada jugador está en un solo clan. Puntos totales = suma de los niveles de los terrenos de sus miembros.
+// Puntos de la semana = 3 por terreno nuevo + 1 por «me gusta» recibido + 1 por misión reclamada (desde el lunes).
+// El nombre pasa un filtro básico (sin enlaces, y la lista CHAT_BANNED de Render). El admin puede borrar un clan: POST /api/clans/admin-delete.
+const CLAN_MAX = 30;
+const CLAN_EMOJIS = ['🛡️', '⚔️', '🏰', '🦁', '🐺', '🦅', '🐉', '🔥', '⭐', '🌍', '🚀', '👑'];
+let clanCache = { at: 0, list: [] };
+const clanDirty = () => { clanCache.at = 0; };
+function cleanClanName(n) {
+  n = String(n || '').replace(/\s+/g, ' ').trim();
+  if (n.length < 3 || n.length > 20 || !/^[\p{L}\p{N} _-]+$/u.test(n)) return null;
+  const low = n.toLowerCase();
+  if (/(https?|www|\.com|\.es|\.net)/i.test(low) || CHAT_BANNED.some(w => low.includes(w))) return null;
+  return n;
+}
+async function clanList() {
+  if (Date.now() - clanCache.at < 60_000) return clanCache.list;
+  const ws = Date.parse(weekKey().slice(1) + 'T00:00:00Z'), wDay = weekKey().slice(1);
+  const rows = await all(`SELECT c.id, c.name, c.emoji, c.leader_id, c.created_at,
+      (SELECT COUNT(*) FROM clan_members m WHERE m.clan_id = c.id) AS members,
+      COALESCE((SELECT SUM(p.level) FROM clan_members m JOIN parcels p ON p.user_id = m.user_id::uuid WHERE m.clan_id = c.id), 0) AS total,
+      3 * (SELECT COUNT(*) FROM clan_members m JOIN parcels p ON p.user_id = m.user_id::uuid WHERE m.clan_id = c.id AND p.created_at >= $1)
+      + (SELECT COUNT(*) FROM clan_members m JOIN parcels p ON p.user_id = m.user_id::uuid JOIN parcel_likes l ON l.parcel_id = p.id WHERE m.clan_id = c.id AND l.created_at >= $1)
+      + (SELECT COUNT(*) FROM clan_members m JOIN mission_progress mp ON mp.user_id = m.user_id WHERE m.clan_id = c.id AND mp.claimed AND mp.key <> 'd_bonus' AND (mp.period = $3 OR (mp.period ~ '^[0-9]' AND mp.period >= $2))) AS weekly,
+      (SELECT p.country FROM clan_members m JOIN parcels p ON p.user_id = m.user_id::uuid WHERE m.clan_id = c.id AND p.country IS NOT NULL GROUP BY p.country ORDER BY COUNT(*) DESC LIMIT 1) AS country
+    FROM clans c ORDER BY total DESC, c.id LIMIT 100`, [ws, wDay, weekKey()]);
+  clanCache = { at: Date.now(), list: rows.map(r => ({ id: Number(r.id), name: r.name, emoji: r.emoji, members: Number(r.members), total: Number(r.total), weekly: Number(r.weekly), country: r.country || null, leader: String(r.leader_id) })) };
+  return clanCache.list;
+}
+const rankOf = (list, id, key) => 1 + list.filter(c => c[key] > list.find(x => x.id === id)[key]).length;
+async function clansGet(req) {
+  const user = await userFrom(req).catch(() => null);
+  const list = await clanList();
+  const out = { max: CLAN_MAX, emojis: CLAN_EMOJIS, ranking: list.slice(0, 50).map(c => ({ id: c.id, name: c.name, emoji: c.emoji, members: c.members, total: c.total, weekly: c.weekly, country: c.country })), me: null, myCountry: null };
+  if (!user) return out;
+  const mine = await one('SELECT clan_id FROM clan_members WHERE user_id = $1', [user.id]);
+  const mc = await one('SELECT country FROM parcels WHERE user_id = $1::uuid AND country IS NOT NULL GROUP BY country ORDER BY COUNT(*) DESC LIMIT 1', [user.id]);
+  out.myCountry = mc ? mc.country : null;
+  if (mine) {
+    const c = list.find(x => x.id === Number(mine.clan_id));
+    if (c) {
+      const members = await all(`SELECT m.user_id, pr.nickname, m.joined_at,
+          (SELECT COUNT(*) FROM parcels p WHERE p.user_id = m.user_id::uuid) AS parcels,
+          (SELECT COALESCE(SUM(p.level), 0) FROM parcels p WHERE p.user_id = m.user_id::uuid) AS pts
+        FROM clan_members m LEFT JOIN profiles pr ON pr.user_id = m.user_id WHERE m.clan_id = $1 ORDER BY pts DESC, m.joined_at`, [c.id]);
+      out.me = { id: c.id, name: c.name, emoji: c.emoji, total: c.total, weekly: c.weekly, rankTotal: rankOf(list, c.id, 'total'), rankWeek: rankOf(list, c.id, 'weekly'), clans: list.length,
+        isLeader: c.leader === String(user.id),
+        members: members.map(m => ({ nick: m.nickname || 'Jugador', parcels: Number(m.parcels), pts: Number(m.pts), leader: String(m.user_id) === c.leader, you: String(m.user_id) === String(user.id) })) };
+    }
+  }
+  return out;
+}
+async function clanCreate(req, body) {
+  const user = await needUser(req);
+  if (!(await getProfile(user.id))) throw new HttpError(409, 'Primero elige tu apodo para poder crear un clan');
+  if (rateHit('clan:' + user.id, 3600_000) > 5) throw new HttpError(429, 'Demasiados intentos. Prueba más tarde');
+  if (await one('SELECT 1 AS x FROM clan_members WHERE user_id = $1', [user.id])) throw new HttpError(409, 'Ya estás en un clan. Sal de él primero');
+  const name = cleanClanName(body && body.name);
+  if (!name) throw new HttpError(400, 'El nombre debe tener de 3 a 20 letras, números o espacios (sin enlaces ni palabras prohibidas)');
+  const emoji = CLAN_EMOJIS.includes(body && body.emoji) ? body.emoji : CLAN_EMOJIS[0];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const c = (await client.query('INSERT INTO clans (name, emoji, leader_id, created_at) VALUES ($1,$2,$3,$4) RETURNING id', [name, emoji, String(user.id), Date.now()])).rows[0];
+    await client.query('INSERT INTO clan_members (user_id, clan_id, joined_at) VALUES ($1,$2,$3)', [String(user.id), c.id, Date.now()]);
+    await client.query('COMMIT'); clanDirty();
+    return { ok: true, id: Number(c.id) };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (isUniqueViolation(e)) throw new HttpError(409, 'Ya existe un clan con ese nombre');
+    throw e;
+  } finally { client.release(); }
+}
+async function clanJoin(req, body) {
+  const user = await needUser(req), id = Math.floor(Number(body && body.id));
+  if (!Number.isFinite(id) || id < 1) throw new HttpError(400, 'Clan no válido');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (!(await client.query('SELECT id FROM clans WHERE id = $1 FOR UPDATE', [id])).rows[0]) throw new HttpError(404, 'Ese clan ya no existe');
+    if ((await client.query('SELECT 1 FROM clan_members WHERE user_id = $1', [String(user.id)])).rows[0]) throw new HttpError(409, 'Ya estás en un clan. Sal de él primero');
+    const n = Number((await client.query('SELECT COUNT(*) AS n FROM clan_members WHERE clan_id = $1', [id])).rows[0].n);
+    if (n >= CLAN_MAX) throw new HttpError(409, 'Este clan está lleno');
+    await client.query('INSERT INTO clan_members (user_id, clan_id, joined_at) VALUES ($1,$2,$3)', [String(user.id), id, Date.now()]);
+    await client.query('COMMIT'); clanDirty();
+    return { ok: true };
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+}
+async function clanRemove(clientDb, userId) {   // saca a un miembro; si era el líder pasa el mando al más antiguo, y si era el último se borra el clan
+  const m = (await clientDb.query('SELECT clan_id FROM clan_members WHERE user_id = $1', [userId])).rows[0];
+  if (!m) return false;
+  const id = m.clan_id;
+  await clientDb.query('SELECT id FROM clans WHERE id = $1 FOR UPDATE', [id]);
+  await clientDb.query('DELETE FROM clan_members WHERE user_id = $1', [userId]);
+  const next = (await clientDb.query('SELECT user_id FROM clan_members WHERE clan_id = $1 ORDER BY joined_at LIMIT 1', [id])).rows[0];
+  if (!next) await clientDb.query('DELETE FROM clans WHERE id = $1', [id]);
+  else await clientDb.query('UPDATE clans SET leader_id = $2 WHERE id = $1 AND leader_id = $3', [id, next.user_id, userId]);
+  return true;
+}
+async function clanLeave(req) {
+  const user = await needUser(req), client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const had = await clanRemove(client, String(user.id));
+    await client.query('COMMIT'); clanDirty();
+    if (!had) throw new HttpError(409, 'No estás en ningún clan');
+    return { ok: true };
+  } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+}
+async function clanKick(req, body) {
+  const user = await needUser(req), nick = String(body && body.nick || '').trim().toLowerCase();
+  const mine = await one('SELECT c.id, c.leader_id FROM clan_members m JOIN clans c ON c.id = m.clan_id WHERE m.user_id = $1', [String(user.id)]);
+  if (!mine || String(mine.leader_id) !== String(user.id)) throw new HttpError(403, 'Solo el líder puede expulsar');
+  const t = await one('SELECT m.user_id FROM clan_members m JOIN profiles pr ON pr.user_id = m.user_id WHERE m.clan_id = $1 AND lower(pr.nickname) = $2', [mine.id, nick]);
+  if (!t) throw new HttpError(404, 'Ese jugador no está en tu clan');
+  if (String(t.user_id) === String(user.id)) throw new HttpError(400, 'No puedes expulsarte a ti mismo: usa «Salir del clan»');
+  await run('DELETE FROM clan_members WHERE user_id = $1', [t.user_id]); clanDirty();
+  return { ok: true };
+}
+async function clanAdminDelete(req, body) {
+  if (!isAdmin(req)) throw new HttpError(403, 'No autorizado');
+  const id = Math.floor(Number(body && body.id));
+  if (!Number.isFinite(id) || id < 1) throw new HttpError(400, 'Clan no válido');
+  await run('DELETE FROM clan_members WHERE clan_id = $1', [id]); await run('DELETE FROM clans WHERE id = $1', [id]); clanDirty();
+  return { ok: true };
 }
 
 // ---------- Papá Noel ----------

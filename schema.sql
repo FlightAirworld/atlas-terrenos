@@ -119,6 +119,13 @@ CREATE INDEX IF NOT EXISTS parcel_likes_at ON parcel_likes (created_at);
 CREATE INDEX IF NOT EXISTS parcel_likes_user ON parcel_likes (user_id);
 CREATE TABLE IF NOT EXISTS retos_seen (user_id TEXT PRIMARY KEY, likes_seen BIGINT NOT NULL DEFAULT 0);
 
+-- Álbum, clanes
+CREATE TABLE IF NOT EXISTS album_claims (user_id TEXT NOT NULL, key TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, key));
+CREATE TABLE IF NOT EXISTS clans (id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, emoji TEXT NOT NULL, leader_id TEXT NOT NULL, created_at BIGINT NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS clans_name_lower ON clans (lower(name));
+CREATE TABLE IF NOT EXISTS clan_members (user_id TEXT PRIMARY KEY, clan_id BIGINT NOT NULL, joined_at BIGINT NOT NULL);
+CREATE INDEX IF NOT EXISTS clan_members_clan ON clan_members (clan_id);
+
 -- RLS activado en todas (sin políticas: solo el servidor accede, con DATABASE_URL)
 DO $$ DECLARE t TEXT; BEGIN
   FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP

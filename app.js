@@ -192,7 +192,7 @@ const HOUSES = [
 
 function houseFor(id, house) {
   if (house) house = String(house).replace(/\.png$/i, '.webp');   // terrenos guardados antes del cambio a webp
-  if (house && HOUSES.includes(house)) return house;   // la que eligió el dueño
+  if (house && (HOUSES.includes(house) || /^images\/[A-Za-z0-9_-]+\.webp$/.test(house))) return house;   // la que eligió el dueño (el servidor solo guarda casas válidas, incluidas las de eventos)
   let h = 2166136261;
   for (const c of id) {
     h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
@@ -883,6 +883,11 @@ try { const s = localStorage.getItem('avatar'); if (AVATARS.includes(s)) avatar 
 
 // ---------- Elegir casa ----------
 let chosenHouse = null;   // casa elegida para el terreno que vas a reclamar (null = al azar)
+// Casas que el servidor acepta pero que no estaban en el selector, y casas de eventos activos (se rellenan solas desde /api/events).
+// OJO: HOUSES NO se toca (el reparto al azar de las parcelas sin casa elegida depende de su orden y tamaño).
+const EXTRA_HOUSES = ['images/cesped-2.webp', 'images/parque-picnic.webp', 'images/desierto-1.webp', 'images/desierto-2.webp', 'images/prado.webp', 'images/claro-bosque.webp', 'images/parque-futbol.webp', 'images/mar.webp', 'images/mar-peces.webp'];
+let eventHouses = [];
+const pickableHouses = () => HOUSES.concat(EXTRA_HOUSES, eventHouses);
 const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '').replace(/[-_]/g, ' ');
 // Categorías del selector de casas: al tocar una (🎬 Cines, 🏠 Casas…) solo salen las de ese tipo. Lo que no esté aquí va a «Otros» (así las casas nuevas siempre se ven).
 const HOUSE_CATS = [
@@ -891,10 +896,11 @@ const HOUSE_CATS = [
   { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'condis', 'Farmacia'] },
   { icon: '🍽️', name: 'Restaurantes', files: ['arcobaleno', 'la-cruilla'] },
   { icon: '🎬', name: 'Cines', files: ['cine', 'teatro'] },
-  { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros'] },
-  { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin'] },
+  { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros', 'parque-futbol'] },
+  { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
   { icon: '⛽', name: 'Motor', files: ['cepsa', 'aurgi'] },
-  { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto'] }
+  { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto'] },
+  { icon: '🎉', name: 'Eventos', files: [] }   // casas de edición limitada del evento activo (se rellena sola)
 ];
 // Si una casa no está en la lista de arriba, su categoría sale del nombre del archivo: cine-2.webp → Cines, casa-9.webp → Casas, etc.
 const HOUSE_PREFIX = [
@@ -909,6 +915,7 @@ const HOUSE_PREFIX = [
   ['Servicios', ['colegio', 'hospital', 'bomberos', 'policia', 'iglesia', 'aeropuerto', 'helipuerto', 'fabrica', 'ayuntamiento', 'estacion']]
 ];
 const houseCatOf = h => {
+  if (eventHouses.includes(h)) return 'Eventos';
   const base = h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '');
   const c = HOUSE_CATS.find(c => c.files.includes(base));
   if (c) return c.name;
@@ -925,7 +932,7 @@ function buildHousePicker(box, onPick, withRandom) {
     b.append(content); b.onclick = () => onPick(value); box.appendChild(b);
   };
   if (withRandom) add(null, '🎲', 'Al azar');
-  HOUSES.forEach(h => {
+  pickableHouses().forEach(h => {
     const i = document.createElement('img');
     i.src = sizedUrl(h, 't'); i.alt = ''; i.loading = 'lazy';
     i.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px;display:block';
@@ -958,9 +965,8 @@ function markHouse(box, current) {
 }
 (function setupHousePickers() {
   const freeBox = $('house-pick-free'), editBox = $('house-pick-edit');
-  buildHousePicker(freeBox, h => { chosenHouse = h; markHouse(freeBox, h); }, true);
-  markHouse(freeBox, null);
-  buildHousePicker(editBox, async h => {
+  const onFree = h => { chosenHouse = h; markHouse(freeBox, h); };
+  const onEdit = async h => {
     if (!selected || !selected.mine || h === selected.house) return;
     const cost = cfg.houseCost ?? 1;
     if (cost > 0) {
@@ -978,7 +984,18 @@ function markHouse(box, current) {
       $('house-pick-wrap').classList.add('hidden');
       setMsg(`🏠 ¡Casa cambiada! Te quedan ${credits} ${plural(credits, 'crédito', 'créditos')}`, 'ok');
     } catch (e) { setMsg(e.message, 'err'); }
-  }, false);
+  };
+  const build = () => {
+    buildHousePicker(freeBox, onFree, true); markHouse(freeBox, chosenHouse);
+    buildHousePicker(editBox, onEdit, false); if (selected && selected.mine) markHouse(editBox, selected.house);
+  };
+  build();
+  window.rebuildHousePickers = build;
+  // Casas de los eventos activos (🎃 Halloween, 🎄 Navidad…): salen en la categoría «Eventos» solo mientras dura el evento
+  api('/api/events').then(j => {
+    eventHouses = ((j && j.events) || []).filter(e => e.active).flatMap(e => e.houses || []);
+    if (eventHouses.length) build();
+  }).catch(() => {});
   $('house-change-btn').onclick = () => $('house-pick-wrap').classList.toggle('hidden');
 })();
 

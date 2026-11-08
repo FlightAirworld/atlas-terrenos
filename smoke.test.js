@@ -42,3 +42,13 @@ test('los peatones dicen nombres de jugadores y el servidor los ofrece en /api/n
   const list = /const NAMED = \[([\s\S]*?)\];/.exec(ciudad);
   assert.ok(list && (list[1].match(/\{n\}/g) || []).length >= 20, 'faltan frases con {n}');
 });
+
+test('toda casa del selector (app.js) la acepta el servidor (server.js)', () => {
+  const list = (src, from) => { const i = src.indexOf(from); return [...src.slice(i, src.indexOf('];', i)).matchAll(/'(images\/[^']+)'/g)].map(m => m[1]); };
+  const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8'), server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+  const srv = new Set(list(server, 'const HOUSES = ['));
+  const missing = [...list(app, 'const HOUSES = ['), ...list(app, 'const EXTRA_HOUSES = [')].filter(h => !srv.has(h));
+  assert.deepEqual(missing, [], 'casas del cliente que el servidor rechazaría: ' + missing.join(', '));
+  // el reparto al azar del servidor (álbum) debe ser idéntico al de HOUSES de app.js
+  assert.deepEqual(list(server, 'const CLIENT_RANDOM_POOL = ['), list(app, 'const HOUSES = ['));
+});
