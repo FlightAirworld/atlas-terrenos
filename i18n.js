@@ -193,6 +193,8 @@
     r('Saltar ⏭', 'Skip ⏭', 'Pular ⏭', 'Passer ⏭', 'Überspringen ⏭', 'Salta ⏭'),
     r('Clasificación', 'Leaderboard', 'Classificação', 'Classement', 'Rangliste', 'Classifica'),
     r('Elige tu carta (tu terreno):', 'Pick your card (your plot):', 'Escolha sua carta (seu terreno):', 'Choisissez votre carte (votre terrain) :', 'Wähle deine Karte (dein Grundstück):', 'Scegli la tua carta (il tuo terreno):'),
+    r('¡Luchar!', 'Fight!', 'Lutar!', 'Combattre !', 'Kämpfen!', 'Combatti!'),
+    r('Vuelve mañana', 'Come back tomorrow', 'Volte amanhã', 'Revenez demain', 'Komm morgen wieder', 'Torna domani'),
     r('⏳ Vuelve mañana', '⏳ Come back tomorrow', '⏳ Volte amanhã', '⏳ Revenez demain', '⏳ Komm morgen wieder', '⏳ Torna domani'),
     r('💥 Has perdido. ¡Otra vez será!', '💥 You lost. Better luck next time!', '💥 Você perdeu. Da próxima vez!', '💥 Perdu. Ce sera pour la prochaine fois !', '💥 Verloren. Beim nächsten Mal klappt es!', '💥 Hai perso. Sarà per la prossima volta!'),
     // Tutorial automático (escenas nuevas)
