@@ -11,7 +11,7 @@ if (!/^https?:\/\/[^/]+/.test(API_BASE)) {
   process.exit(1);
 }
 const OUT = path.join(__dirname, 'dist');
-const EXT = new Set(['.html', '.js', '.css', '.png', '.jpg', '.webp', '.svg', '.ico', '.webmanifest', '.xml']);
+const EXT = new Set(['.html', '.js', '.css', '.png', '.jpg', '.webp', '.svg', '.ico', '.webmanifest', '.xml', '.mp3']);
 const ROOT_EXTRA = new Set(['robots.txt']);   // .txt solo en la raíz (robots.txt); el resto de .txt no se publica
 const SKIP_ROOT = /^(server\.js|build-static\.js|package(-lock)?\.json)$/;   // lo del servidor no se publica
 
