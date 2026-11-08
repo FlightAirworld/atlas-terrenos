@@ -2453,7 +2453,7 @@ function readJson(req) {
 
 // ---------- Servidor HTTP + estáticos ----------
 const PUBLIC = __dirname;
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.xml': 'application/xml; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.xml': 'application/xml; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.mp3': 'audio/mpeg' };
 
 // Migración automática (inofensiva si la columna ya existe)
 const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').catch(e => console.error('No se pudo añadir la columna house:', e.message))
@@ -3131,7 +3131,7 @@ function sendStatic(req, res, file) {
     if (staticCache.size > 300) staticCache.clear();
     staticCache.set(file, ent);
   }
-  const isImg = /^image\//.test(type) && !/svg/.test(type);
+  const isImg = (/^image\//.test(type) && !/svg/.test(type)) || /^audio\//.test(type);   // imágenes y audio: caché de 7 días
   const headers = { 'Content-Type': type, 'ETag': ent.etag, 'Vary': 'Accept-Encoding',
     'Cache-Control': isImg ? 'public, max-age=604800' : 'no-cache',
     'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000' };
@@ -3140,6 +3140,16 @@ function sendStatic(req, res, file) {
   if (COMPRESSIBLE.test(type) && /\bgzip\b/.test(String(req.headers['accept-encoding'] || '')) && body.length > 1024) {
     if (!ent.gz) ent.gz = zlib.gzipSync(ent.buf, { level: 9 });
     body = ent.gz; headers['Content-Encoding'] = 'gzip';
+  }
+  if (/^audio\//.test(type)) {   // los navegadores (sobre todo Safari/iOS) piden el audio por trozos: se responde con 206
+    headers['Accept-Ranges'] = 'bytes';
+    const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''));
+    if (m && (m[1] !== '' || m[2] !== '')) {
+      let a = m[1] === '' ? Math.max(0, body.length - Number(m[2])) : Number(m[1]), b = m[1] === '' || m[2] === '' ? body.length - 1 : Math.min(Number(m[2]), body.length - 1);
+      if (a > b || a >= body.length) { res.writeHead(416, { 'Content-Range': 'bytes */' + body.length }); return res.end(); }
+      headers['Content-Range'] = 'bytes ' + a + '-' + b + '/' + body.length; headers['Content-Length'] = b - a + 1;
+      res.writeHead(206, headers); return res.end(body.subarray(a, b + 1));
+    }
   }
   headers['Content-Length'] = body.length;
   res.writeHead(200, headers); res.end(body);
