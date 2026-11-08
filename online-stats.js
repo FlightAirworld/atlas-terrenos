@@ -1,0 +1,32 @@
+'use strict';
+// Jugadores conectados por país (el panel que se abre al tocar el contador «en línea»).
+// Cuenta SOLO jugadores realmente conectados (una conexión /api/online por jugador, identificado por su cid anónimo):
+// no incluye los jugadores simulados de ambient.js. No se guarda nada: se calcula al vuelo desde la memoria del servidor.
+// El país sale, por este orden, de la cabecera que pone el proxy/CDN (Cloudflare, CloudFront, Vercel...: es el país de la red del
+// jugador) y, si no hay, del país que el propio jugador tiene elegido en el juego. Sin ninguno de los dos, cuenta como «sin identificar».
+const HEADERS = ['cf-ipcountry', 'cloudfront-viewer-country', 'x-vercel-ip-country', 'x-appengine-country'];
+const NOT_A_COUNTRY = new Set(['XX', 'T1', 'ZZ', 'A1', 'A2', 'O1']);   // desconocido, Tor, proxies anónimos, satélite...
+const valid = c => typeof c === 'string' && /^[A-Za-z]{2}$/.test(c) && !NOT_A_COUNTRY.has(c.toUpperCase());
+
+// headers: req.headers (en minúsculas); chosen: país que el jugador tiene elegido en el juego (opcional).
+function countryOf(headers, chosen) {
+  for (const h of HEADERS) { const v = headers && headers[h]; if (valid(v)) return String(v).toUpperCase(); }
+  return valid(chosen) ? String(chosen).toUpperCase() : null;
+}
+
+// cids: los jugadores conectados; countries: Map cid -> código de país (los que no estén cuentan como sin identificar).
+function tally(cids, countries, max = 60) {
+  const by = new Map();
+  let total = 0, unknown = 0;
+  for (const cid of cids) {
+    total++;
+    const cc = countries.get(cid);
+    if (!cc) { unknown++; continue; }
+    by.set(cc, (by.get(cc) || 0) + 1);
+  }
+  const list = [...by].map(([cc, n]) => ({ cc, n })).sort((a, b) => b.n - a.n || (a.cc < b.cc ? -1 : 1));
+  const rest = list.slice(max).reduce((s, x) => s + x.n, 0);
+  return { total, unknown: unknown + rest, countries: list.slice(0, max) };
+}
+
+module.exports = { countryOf, tally, valid };

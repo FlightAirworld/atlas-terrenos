@@ -6,6 +6,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { Pool, types } = require('pg');
 const telegram = require('./telegram');   // avisos al móvil del dueño (TELEGRAM_TOKEN y TELEGRAM_CHAT_ID; sin ellas queda apagado)
+const onlineStats = require('./online-stats');   // jugadores en línea por país (panel al tocar el contador)
 const bots = require('./bots');   // jugadores automáticos 🌍: uno por país, una parcela al día cada uno (BOTS=off los apaga; ver bots.js)
 const ambient = require('./ambient');   // jugadores y mensajes de chat simulados (AMBIENT=off para apagarlo)
 
@@ -1315,6 +1316,15 @@ async function walkerTap(req, body) {
 const ONLINE_MAX_PER_IP = Math.max(1, Number(process.env.ONLINE_MAX_PER_IP || 60));   // conexiones abiertas por conexión de red
 const onlineClients = new Map();   // cid -> Set de respuestas abiertas
 const onlineByIp = new Map();      // ip -> nº de conexiones abiertas
+const onlineCountryByCid = new Map();   // cid -> país (2 letras) del jugador conectado; se borra cuando se va
+let onlineCountriesCache = { at: 0, body: null };
+function onlineCountriesGet() {   // GET /api/online/countries: solo jugadores reales conectados ahora mismo (sin los simulados)
+  const now = Date.now();
+  if (!onlineCountriesCache.body || now - onlineCountriesCache.at > 1000) {   // como mucho una vez por segundo, aunque haya muchos jugadores mirando
+    onlineCountriesCache = { at: now, body: { ...onlineStats.tally(onlineClients.keys(), onlineCountryByCid), at: now } };
+  }
+  return onlineCountriesCache.body;
+}
 let onlineSent = -1, onlineTimer = null;
 const onlineShown = () => ambient.online() + onlineClients.size;   // jugadores simulados (ambient.js, suben y bajan solos) + reales
 
@@ -1354,6 +1364,8 @@ function onlineStream(req, res, url) {
     'X-Accel-Buffering': 'no',          // que nginx y similares no retengan los avisos
     'X-Content-Type-Options': 'nosniff'
   });
+  const cc = onlineStats.countryOf(req.headers, url.searchParams.get('country'));
+  if (cc) onlineCountryByCid.set(cid, cc);
   let set = onlineClients.get(cid);
   if (!set) { set = new Set(); onlineClients.set(cid, set); }
   set.add(res);
@@ -1365,7 +1377,7 @@ function onlineStream(req, res, url) {
   const leave = () => {
     if (gone) return; gone = true;
     set.delete(res);
-    if (!set.size && onlineClients.get(cid) === set) onlineClients.delete(cid);
+    if (!set.size && onlineClients.get(cid) === set) { onlineClients.delete(cid); onlineCountryByCid.delete(cid); }
     const k = (onlineByIp.get(ip) || 1) - 1;
     if (k > 0) onlineByIp.set(ip, k); else onlineByIp.delete(ip);
     scheduleOnlineBroadcast();
@@ -2379,6 +2391,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/ping-db') { try { await run('SELECT 1 FROM parcels LIMIT 1'); return { ok: true, db: true }; } catch (e) { return { ok: false, db: false }; } }
   if (req.method === 'GET' && pn === '/api/health') return { ok: true };   // la pantalla de carga del sitio estático pregunta aquí si ya despertó
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineShown() };
+  if (req.method === 'GET' && pn === '/api/online/countries') return onlineCountriesGet();
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/names') return namesGet();
