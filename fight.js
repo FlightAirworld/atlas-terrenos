@@ -3,7 +3,8 @@
 // Eliges tu carta, el servidor elige rival y decide el combate (/api/fight/start); aquí solo se dibuja y se anima.
 // El combate se ve dentro de un ring (canvas a pantalla completa): presentación automática de los dos luchadores, ~15 s de puñetazos
 // y patadas al azar (el resultado ya viene decidido por el servidor: gana quien tiene que ganar), público alrededor animando,
-// focos de luz, sonidos generados con Web Audio y, al terminar, el ganador y la clasificación.
+// focos de luz, sonidos generados con Web Audio y, al terminar, la ceremonia de victoria: la cámara se acerca a la cara destrozada
+// del ganador, que levanta el puño; entra una chica del ring con la copa y se la entrega; y se pasa solo a la clasificación.
 // Hasta 3 luchas al día; cada victoria da 1 crédito. Clasificación mensual en /api/fight/rank.
 // Usa globals de app.js: authToken, credits, updateCreditUi(), openLogin(), api(), fmtNum().
 (function () {
@@ -160,7 +161,9 @@
       if (!ac) return; const t = ac.currentTime;
       noise(t, sec, 'bandpass', 900, 700, 0.55, 0.5);
       for (let i = 0; i < sec * 22; i++) noise(t + Math.random() * sec, 0.03, 'highpass', 2500 + Math.random() * 2000, 0, 0.1, 0.5);   // aplausos
-    }
+    },
+    click() { if (!ac) return; const t = ac.currentTime; noise(t, 0.03, 'highpass', 3500, 0, 0.3, 0.7); noise(t + 0.05, 0.035, 'bandpass', 1800, 0, 0.22, 1); },   // disparo de cámara de fotos
+    ding() { if (!ac) return; const t = ac.currentTime; tone(t, 'triangle', 1318, 0, 0.9, 0.35); tone(t + 0.09, 'triangle', 1760, 0, 1.1, 0.3); tone(t + 0.18, 'sine', 2637, 0, 0.8, 0.12); }   // brillo al entregar la copa
   };
   function crowdStart() {
     if (!ac) return;
@@ -257,6 +260,7 @@
     line(c, [s.x, s.y, r[0], r[1], r[2], r[3]], 15, fd.skin);
     c.fillStyle = fd.shorts; c.beginPath(); c.arc(r[2], r[3], 12, 0, 7); c.fill();
     c.fillStyle = '#fff5'; c.beginPath(); c.arc(r[2] - 3, r[3] - 4, 4, 0, 7); c.fill();
+    return r;                                                   // [codoX, codoY, manoX, manoY]: la copa se dibuja sobre la mano
   }
   function leg(c, h, tg, fd) {
     const r = ik(h.x, h.y, tg.x, tg.y, 52, 52, -1);
@@ -268,7 +272,7 @@
   function drawFighter(c, fd, P, t, floorY) {
     const bob = (P.fall > 0.05 || P.win) ? 0 : Math.sin(t * 7 + fd.ph) * 2.5;
     c.save(); c.globalAlpha = 0.35; c.fillStyle = '#000'; c.beginPath(); c.ellipse(fd.x, floorY + 3, 44 + P.fall * 40, 9, 0, 0, 7); c.fill(); c.restore();
-    c.save(); c.translate(fd.x, floorY - P.fall * 16); c.scale(fd.dir, 1); if (P.fall > 0) c.rotate(-P.fall * 1.5);
+    c.save(); c.translate(fd.x, floorY - P.fall * 16); c.scale(fd.face || fd.dir, 1); if (P.fall > 0) c.rotate(-P.fall * 1.5);   // fd.face: el ganador se gira hacia la chica de la copa
     const e = P.ext, kick = P.atk === 'kick' || P.atk === 'low';
     const hip = { x: -2 - (kick ? e * 6 : 0), y: -98 + bob * 0.6 + (kick ? e * 6 : 0) };
     let lean = (P.atk === 'cross' ? 10 * e : P.atk === 'hook' ? 12 * e : P.atk === 'jab' ? 5 * e : 0) - (kick ? 12 * e : 0) - P.shock * 16 + (P.block ? 4 : 0);
@@ -286,7 +290,11 @@
     if (P.atk === 'hook') { rear = { x: lerp(rear.x, sh.x + 60, e), y: lerp(rear.y, sh.y - 16, e) }; bendR = -1; }
     if (P.shock > 0) { lead.y += P.shock * 14; rear.y += P.shock * 12; }
     if (P.fall > 0.02) { lead = { x: sh.x + 8, y: sh.y + 58 }; rear = { x: sh.x - 4, y: sh.y + 60 }; }
-    if (P.win) { lead = { x: sh.x + 14 + Math.sin(t * 9) * 6, y: sh.y - 92 }; rear = { x: sh.x - 10 + Math.cos(t * 9) * 6, y: sh.y - 96 }; }
+    if (P.win) { lead = { x: sh.x + 62 + Math.sin(t * 9) * 4, y: sh.y - 60 + Math.sin(t * 9) * 5 }; rear = { x: sh.x - 10 + Math.cos(t * 9) * 6, y: sh.y - 96 }; }   // puño de delante en alto y hacia delante (así no tapa la cara)
+    if (P.win && P.reach > 0) lead = { x: lerp(lead.x, sh.x + 64, P.reach), y: lerp(lead.y, sh.y + 40, P.reach) };   // baja el brazo para coger la copa
+    let lh = null;
+    const leadArm = () => { lh = arm(c, { x: sh.x + 6, y: sh.y + 2 }, lead, 1, fd); if (P.cup) drawTrophy(c, lh[2], lh[3] - 2, 70, t); };   // brazo de delante (+ copa si la tiene)
+    if (P.win) leadArm();                                                               // con el puño en alto se dibuja detrás de la cabeza para no tapar la cara
     arm(c, { x: sh.x - 6, y: sh.y + 4 }, rear, bendR, fd);                              // brazo de atrás
     leg(c, { x: hip.x - 8, y: hip.y + 4 }, rearFoot, fd);                               // pierna de atrás
     line(c, [hip.x, hip.y, sh.x, sh.y], 40, fd.skin);                                   // torso
@@ -297,9 +305,105 @@
     c.fillStyle = fd.hair; c.beginPath(); c.arc(head.x - 2, head.y - 3, 22, Math.PI * 0.92, Math.PI * 2.08); c.fill();
     line(c, [head.x - 20, head.y - 9, head.x + 20, head.y - 9], 5, fd.shorts);          // cinta
     if (P.fall > 0.3) { line(c, [head.x + 6, head.y - 6, head.x + 14, head.y + 2], 2.5, '#111'); line(c, [head.x + 14, head.y - 6, head.x + 6, head.y + 2], 2.5, '#111'); }
-    else { c.fillStyle = '#fff'; c.beginPath(); c.arc(head.x + 10, head.y - 2, 4.5, 0, 7); c.fill(); c.fillStyle = '#111'; c.beginPath(); c.arc(head.x + 11.5, head.y - 2, 2.2, 0, 7); c.fill(); }
-    line(c, [head.x + 6, head.y + 11, head.x + 15, head.y + (P.shock > 0.3 ? 14 : 11)], 2.5, '#5a1a1a');   // boca
-    arm(c, { x: sh.x + 6, y: sh.y + 2 }, lead, 1, fd);                                  // brazo de delante
+    else if (!(P.bat > 0.35)) { c.fillStyle = '#fff'; c.beginPath(); c.arc(head.x + 10, head.y - 2, 4.5, 0, 7); c.fill(); c.fillStyle = '#111'; c.beginPath(); c.arc(head.x + 11.5, head.y - 2, 2.2, 0, 7); c.fill(); }   // con el ojo muy hinchado no se ve
+    if (P.shout) { c.fillStyle = '#4a0d0d'; c.beginPath(); c.ellipse(head.x + 11, head.y + 11, 5.5, 4 + 1.8 * Math.abs(Math.sin(t * 10)), 0, 0, 7); c.fill(); }   // el ganador grita de rabia y de alegría
+    else line(c, [head.x + 6, head.y + 11, head.x + 15, head.y + (P.shock > 0.3 ? 14 : 11)], 2.5, '#5a1a1a');   // boca
+    if (P.bat > 0.08) drawBruises(c, fd, head, P, t);                                   // golpes en la cara
+    if (!P.win) leadArm();
+    c.restore();
+  }
+
+  // Cara destrozada: ojo morado e hinchado, pómulo amoratado, chichón, ceja abierta, nariz y labio sangrando. bat: 0 (intacto) … 1 (destrozado)
+  function drawBruises(c, fd, h, P, t) {
+    const bat = P.bat, ex = h.x + 10, ey = h.y - 2;
+    c.save();
+    if (bat > 0.12) {                                                                   // ojo morado
+      const k = clamp((bat - 0.12) / 0.5, 0, 1);
+      c.fillStyle = `rgba(86,32,120,${0.35 + 0.4 * k})`; c.beginPath(); c.ellipse(ex, ey + 1, 8 + 5 * k, 6.5 + 4 * k, -0.15, 0, 7); c.fill();
+      if (k > 0.5) { c.strokeStyle = 'rgba(40,10,60,.6)'; c.lineWidth = 1.5; c.stroke(); }
+      if (bat > 0.35 && P.fall <= 0.3) { line(c, [ex - 5, ey + 1, ex + 5, ey + 2], 2.8, '#1a0a14'); line(c, [ex - 5, ey - 3, ex + 5, ey - 2], 1.5, '#2a0f1e'); }   // ojo casi cerrado
+    }
+    if (bat > 0.3) {                                                                    // pómulo amoratado
+      const k = clamp((bat - 0.3) / 0.6, 0, 1);
+      c.fillStyle = `rgba(76,60,150,${0.25 + 0.4 * k})`; c.beginPath(); c.ellipse(h.x + 9, h.y + 8, 8 + 3 * k, 6 + 2 * k, 0.3, 0, 7); c.fill();
+      if (k > 0.5) { c.fillStyle = 'rgba(160,170,50,.38)'; c.beginPath(); c.ellipse(h.x + 3, h.y + 13, 6, 3.5, 0.3, 0, 7); c.fill(); }
+    }
+    if (bat > 0.5) {                                                                    // chichón en la frente
+      c.fillStyle = 'rgba(190,70,70,.75)'; c.beginPath(); c.arc(h.x + 2, h.y - 15, 5.5, 0, 7); c.fill();
+      c.fillStyle = 'rgba(255,255,255,.28)'; c.beginPath(); c.arc(h.x + 0.5, h.y - 17, 2, 0, 7); c.fill();
+    }
+    if (bat > 0.45) {                                                                   // ceja abierta con hilo de sangre
+      line(c, [h.x + 4, h.y - 9, h.x + 15, h.y - 8], 2.4, '#8b0000');
+      line(c, [h.x + 14.5, h.y - 8, h.x + 16, h.y + 4 + 6 * bat], 2.4, '#b00020');
+    }
+    if (bat > 0.4) {                                                                    // nariz rota y sangrando
+      c.fillStyle = fd.skin; c.beginPath(); c.arc(h.x + 21, h.y + 3, 3.6, 0, 7); c.fill();
+      line(c, [h.x + 21.5, h.y + 4, h.x + 20, h.y + 12], 2.6, '#c1121f');
+    }
+    if (bat > 0.5) {                                                                    // labio partido y sangre en la barbilla
+      c.fillStyle = '#9d0208'; c.beginPath(); c.ellipse(h.x + 8, h.y + 11.5, 3.2, 2.2, 0, 0, 7); c.fill();
+      line(c, [h.x + 9, h.y + 14, h.x + 9, h.y + 15 + 9 * bat], 2.4, '#b00020');
+    }
+    if (bat > 0.7 && !P.fall) {                                                         // gotas de sangre que caen
+      for (let i = 0; i < 3; i++) { const ph = (t * 1.6 + i * 0.37) % 1; c.fillStyle = `rgba(190,10,30,${1 - ph})`; c.beginPath(); c.arc(h.x + 8 + i * 4, h.y + 24 + ph * 34, 2.1, 0, 7); c.fill(); }
+    }
+    c.restore();
+  }
+
+  // Copa dorada (x,y = base, donde la sostiene la mano; h = altura en píxeles)
+  function drawTrophy(c, x, y, h, t) {
+    const k = h / 70;
+    c.save(); c.translate(x, y); c.scale(k, k); c.lineJoin = 'round';
+    const g = c.createLinearGradient(-20, 0, 20, 0); g.addColorStop(0, '#b8860b'); g.addColorStop(0.35, '#ffe066'); g.addColorStop(0.62, '#ffd43b'); g.addColorStop(1, '#a8740a');
+    c.fillStyle = g; c.strokeStyle = '#7a5200'; c.lineWidth = 1.6;
+    c.strokeStyle = '#e0a800'; c.lineWidth = 4;                                         // asas
+    c.beginPath(); c.arc(-21, -55, 9, Math.PI / 2, Math.PI * 1.5); c.stroke();
+    c.beginPath(); c.arc(21, -55, 9, -Math.PI / 2, Math.PI / 2); c.stroke();
+    c.strokeStyle = '#7a5200'; c.lineWidth = 1.6; c.fillStyle = g;
+    c.beginPath(); c.rect(-13, -12, 26, 10); c.fill(); c.stroke();                      // base
+    c.beginPath(); c.rect(-4, -27, 8, 16); c.fill(); c.stroke();                        // pie
+    c.beginPath(); c.moveTo(-20, -70); c.quadraticCurveTo(-23, -40, -7, -27); c.lineTo(7, -27); c.quadraticCurveTo(23, -40, 20, -70); c.closePath(); c.fill(); c.stroke();   // copa
+    c.fillStyle = '#ffe9a0'; c.beginPath(); c.ellipse(0, -70, 20, 4, 0, 0, 7); c.fill(); c.stroke();   // borde
+    c.fillStyle = '#7a5200'; c.fillRect(-13, -9, 26, 3);                                // placa
+    c.fillStyle = '#fff8'; c.beginPath(); c.moveTo(-14, -64); c.quadraticCurveTo(-16, -46, -8, -35); c.lineTo(-5, -37); c.quadraticCurveTo(-11, -48, -10, -64); c.closePath(); c.fill();   // brillo
+    c.fillStyle = '#b8860b'; c.beginPath();                                             // estrella
+    for (let i = 0; i < 10; i++) { const r = i % 2 ? 3.5 : 8, a = -Math.PI / 2 + i * Math.PI / 5; c.lineTo(Math.cos(a) * r, -50 + Math.sin(a) * r); }
+    c.closePath(); c.fill();
+    const sp = 0.5 + 0.5 * Math.sin(t * 8);                                             // destello que parpadea
+    c.strokeStyle = `rgba(255,255,255,${0.5 + 0.5 * sp})`; c.lineWidth = 2; c.beginPath();
+    c.moveTo(17, -80 - 7 * sp); c.lineTo(17, -80 + 7 * sp); c.moveTo(17 - 7 * sp, -80); c.lineTo(17 + 7 * sp, -80); c.stroke();
+    c.restore();
+  }
+
+  // Chica del ring: entra andando con la copa, se la entrega al ganador y aplaude. g = {x, dir, walk, cup, give, clap, skin, hair}
+  function drawRingGirl(c, g, t, floorY) {
+    const sw = Math.sin(t * 9) * 16 * g.walk, bob = Math.abs(Math.sin(t * 9)) * 3 * g.walk;
+    c.save(); c.globalAlpha = 0.35; c.fillStyle = '#000'; c.beginPath(); c.ellipse(g.x, floorY + 3, 34, 7, 0, 0, 7); c.restore();
+    c.save(); c.translate(g.x, floorY); c.scale(g.dir * 0.92, 0.92);
+    const sh = { x: 2, y: -148 - bob }, head = { x: 5, y: -174 - bob };
+    const hand = { x: lerp(24, 62, g.give), y: -140 };
+    const armTo = (s, tg) => { const r = ik(s.x, s.y, tg.x, tg.y, 36, 34, 1); line(c, [s.x, s.y, r[0], r[1], r[2], r[3]], 9, g.skin); c.fillStyle = g.skin; c.beginPath(); c.arc(r[2], r[3], 5.5, 0, 7); c.fill(); };
+    const k = Math.abs(Math.sin(t * 10));
+    const tF = g.clap ? { x: 34 - k * 10, y: -138 } : g.cup ? hand : { x: 6 + sw * 0.5, y: -98 };
+    const tB = g.clap ? { x: 28 - k * 8, y: -132 } : g.cup ? { x: hand.x - 8, y: hand.y + 5 } : { x: 0 - sw * 0.5, y: -98 };
+    line(c, [head.x - 6, head.y - 4, head.x - 13, head.y + 38 - bob * 0.3], 22, g.hair);   // melena larga
+    armTo({ x: sh.x - 6, y: sh.y + 4 }, tB);                                            // brazo de atrás
+    line(c, [-6, -90, -8 - sw, -10], 11, g.skin); line(c, [6, -90, 8 + sw, -10], 11, g.skin);   // piernas
+    c.fillStyle = '#c1121f'; for (const sx of [-8 - sw, 8 + sw]) { c.beginPath(); c.ellipse(sx + 5, -5, 11, 5, 0, 0, 7); c.fill(); }   // zapatos de tacón
+    c.fillStyle = '#e63946'; c.beginPath(); c.moveTo(-13, -146 - bob); c.lineTo(15, -146 - bob); c.lineTo(12, -118); c.lineTo(23, -82); c.lineTo(-21, -82); c.lineTo(-11, -118); c.closePath(); c.fill();   // vestido
+    c.fillStyle = '#ffd43b'; c.beginPath(); c.moveTo(-13, -146 - bob); c.lineTo(-4, -146 - bob); c.lineTo(14, -110); c.lineTo(6, -110); c.closePath(); c.fill();                                  // fajín
+    line(c, [-21, -82, 23, -82], 3, '#ffd43b');
+    c.fillStyle = g.skin; c.fillRect(sh.x - 4, head.y + 12, 8, 14);                     // cuello
+    c.fillStyle = g.skin; c.beginPath(); c.arc(head.x, head.y, 18, 0, 7); c.fill();     // cabeza
+    c.fillStyle = g.hair; c.beginPath(); c.arc(head.x - 2, head.y - 2, 19.5, Math.PI * 0.82, Math.PI * 2.1); c.fill();
+    line(c, [head.x - 10, head.y - 8, head.x - 12, head.y + 20], 7, g.hair);
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(head.x + 8, head.y - 2, 3.8, 0, 7); c.fill(); c.fillStyle = '#2b1b12'; c.beginPath(); c.arc(head.x + 9, head.y - 2, 2, 0, 7); c.fill();
+    line(c, [head.x + 4, head.y - 6, head.x + 12, head.y - 6], 1.6, '#111');            // pestañas
+    c.fillStyle = 'rgba(255,120,140,.35)'; c.beginPath(); c.arc(head.x + 6, head.y + 5, 4, 0, 7); c.fill();
+    c.strokeStyle = '#a4161a'; c.lineWidth = 2.2; c.lineCap = 'round'; c.beginPath(); c.arc(head.x + 9, head.y + 5, 5, 0.2, Math.PI - 0.5); c.stroke();   // sonrisa
+    c.fillStyle = '#ffd43b'; c.beginPath(); c.arc(head.x - 3, head.y + 8, 2.4, 0, 7); c.fill();   // pendiente
+    armTo({ x: sh.x + 6, y: sh.y + 4 }, tF);                                            // brazo de delante
+    if (g.cup) drawTrophy(c, hand.x, hand.y - 4, 76, t);
     c.restore();
   }
 
@@ -413,9 +517,31 @@
       const crowd = buildCrowd();
       stage.classList.remove('hidden');
       crowdStart(); say(`¡Atención! Combate entre tú y ${names.B}`);
-      const INTRO = 2800, END = 3800;
+      const INTRO = 2800, END = 7600;                             // END: ceremonia de victoria (zoom, copa, fundido) y paso automático a la clasificación
       let start = performance.now(), last = start, phase = 'intro', fightStart = 0, skipOff = 0, lastT = 0, curT = 0, done = false;
       const hpD = { A: 100, B: 100 };
+
+      // ---- CEREMONIA DE VICTORIA (u = segundos desde el final del combate) ----
+      // -0,3…1,1 la cámara se acerca a la cara del ganador · 1,1…2,8 primer plano con flashes · 2,2…4,2 entra la chica con la copa
+      // 4,0 el ganador se gira y baja la mano · 4,6 le entrega la copa y la levanta · 7,0…7,6 fundido a negro → clasificación
+      const winnerFd = j.won ? fa : fb, wf = -winnerFd.dir;      // wf: el lado por el que entra la chica (a la espalda del ganador, lejos del caído)
+      const girl = { x: 0, dir: -wf, walk: 0, cup: true, give: 0, clap: false, skin: SKINS[hash(String(j.foe.id) + 'g') % 5], hair: HAIRS[hash(String(j.mine.id) + 'g') % 5] };
+      const flashes = Array.from({ length: 16 }, () => ({ u: rnd(0.7, 6.6), x: rnd(0.06, 0.94), y: rnd(0.14, 0.5) })).sort((a, b) => a.u - b.u);   // fotógrafos
+      const confetti = Array.from({ length: 80 }, () => ({ x: Math.random(), vy: rnd(0.22, 0.5), delay: rnd(0, 1.6), ph: rnd(0, 6.3), sz: rnd(8, 15), col: ['#ffd43b', '#e63946', '#4dabf7', '#69db7c', '#f783ac', '#fff'][Math.floor(Math.random() * 6)] }));
+      const easeIO = x => { x = clamp(x, 0, 1); return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; };
+      const mixCam = (a, b, k) => ({ z: Math.exp(lerp(Math.log(a.z), Math.log(b.z), k)), cx: lerp(a.cx, b.cx, k), cy: lerp(a.cy, b.cy, k) });
+      function camAt(u, W, H, s) {                               // cámara en coordenadas de escena: zoom y punto central
+        const fit = (bw, bh) => Math.max(1, Math.min(W / (s * bw), H / (s * bh)));   // zoom para que quepa un recuadro de bw×bh de escena (vale en móvil vertical y en pantalla ancha)
+        const full = { z: 1, cx: 500, cy: 350 };
+        const close = { z: fit(210, 200) * (1 + 0.08 * clamp((u - 1.1) / 1.9, 0, 1)), cx: winnerFd.x + winnerFd.dir * 26, cy: 262 };
+        const wide = { z: fit(340, 400), cx: winnerFd.x + wf * 58, cy: 300 };
+        return mixCam(mixCam(full, close, easeIO((u + 0.3) / 1.4)), wide, easeIO((u - 2.8) / 1.2));
+      }
+      function endTick(a, b) {                                   // sonidos de la ceremonia (a, b: u anterior y actual)
+        if (!reduced) for (const fl of flashes) if (fl.u > a && fl.u <= b) SND.click();
+        if (4.0 > a && 4.0 <= b) say(j.won ? '¡Enhorabuena, campeón!' : `¡Enhorabuena, ${names.B}!`);
+        if (4.6 > a && 4.6 <= b) { SND.ding(); SND.roar(2.5); }
+      }
 
       function finish() {
         if (done) return; done = true;
@@ -452,6 +578,7 @@
           t = (now - fightStart) / 1000 + skipOff;
           if (phase === 'fight' && t >= plan.D) { phase = 'end'; SND.bell(1); SND.roar(3); say(j.won ? '¡Has ganado el combate!' : `¡El ganador es ${names.B}!`); }
           if (phase === 'fight') audioTick(lastT, t);
+          if (phase === 'end') endTick(lastT - plan.D, t - plan.D);
           if (phase === 'end' && t >= plan.D + END / 1000) { finish(); return; }
           lastT = t; curT = t;
         }
@@ -465,13 +592,31 @@
         let shake = 0, flash = 0;
         for (const e of plan.ev) { if (e.contact > t) break; if (e.hit) { const k = Math.exp(-(t - e.contact) / 0.14); shake = Math.max(shake, k * (e.ko ? 10 : 5)); flash = Math.max(flash, k * (e.ko ? 1 : 0.5)); } }
         if (reduced) { shake = 0; flash *= 0.4; }
-        c.save(); c.translate(ox + (Math.random() - 0.5) * shake, oy + (Math.random() - 0.5) * shake); c.scale(s, s);
+        const u = phase === 'intro' ? -99 : t - plan.D, cer = u > -0.3;                  // u: segundos desde el final del combate
+        const cam = camAt(u, W, H, s);                                                   // sin ceremonia la cámara es la de siempre (zoom 1 centrada)
+        c.save(); c.translate(W / 2 + (Math.random() - 0.5) * shake, H / 2 + (Math.random() - 0.5) * shake); c.scale(s * cam.z, s * cam.z); c.translate(-cam.cx, -cam.cy);
         for (const p of crowd) if (!p.front && p.y < 300) drawPerson(c, p, t, exc);       // público del fondo
         drawRingFloor(c);
         for (const p of crowd) if (!p.front && p.y >= 300) drawPerson(c, p, t, exc);      // público de los lados
         drawRopes(c, true);
+        if (cam.z > 1.01) {                                                              // al acercarse, el fondo se oscurece y un foco cálido ilumina al ganador
+          const zk = clamp((cam.z - 1) / 1.1, 0, 1);
+          c.save(); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+          c.fillStyle = `rgba(0,0,0,${0.55 * zk})`; c.fillRect(0, 0, W, H);
+          const gl = c.createRadialGradient(W / 2, H * 0.5, 10, W / 2, H * 0.5, Math.max(W, H) * 0.45); gl.addColorStop(0, `rgba(255,226,150,${0.28 * zk})`); gl.addColorStop(1, 'rgba(255,226,150,0)');
+          c.fillStyle = gl; c.fillRect(0, 0, W, H); c.restore();
+        }
         // luchadores: posiciones según el combate
         const PA = poseOf(plan, 'A', t), PB = poseOf(plan, 'B', t);
+        PA.bat = clamp((100 - hpD.A) / 55, 0, 1); PB.bat = clamp((100 - hpD.B) / 55, 0, 1);   // cuántos golpes lleva en la cara
+        if (u > -1) {                                                                    // ceremonia: el ganador acaba con la cara destrozada, grita, recibe la copa y la levanta
+          const PW = winnerSide === 'A' ? PA : PB;
+          PW.bat = lerp(PW.bat, 1, easeOut(clamp((u + 0.2) / 1.0, 0, 1)));
+          PW.shout = u > 0.2 && u < 2.9;
+          PW.reach = easeOut(clamp((u - 4.0) / 0.5, 0, 1)) * (1 - easeOut(clamp((u - 4.65) / 0.7, 0, 1)));
+          PW.cup = u >= 4.6;
+          winnerFd.face = u >= 4.0 ? wf : undefined;                                     // se gira hacia la chica
+        }
         let env = 0;
         for (const e of plan.ev) { if (e.t > t) break; const p = (t - e.t) / e.dur; if (p < 1) env = Math.sin(Math.PI * p); }
         const after = clamp((t - plan.ko.contact) / 1.0, 0, 1);
@@ -481,6 +626,13 @@
         const FLOOR = 470;
         if (fa.x > fb.x) { /* nunca se cruzan */ }
         drawFighter(c, fa, PA, t, FLOOR); drawFighter(c, fb, PB, t, FLOOR);
+        if (u > 2.2) {                                                                   // la chica del ring llega andando con la copa y se la da al ganador
+          const gp = clamp((u - 2.2) / 2.0, 0, 1);
+          girl.x = winnerFd.x + wf * (119 + 300 * (1 - gp)); girl.walk = gp < 1 ? 1 : 0;
+          girl.cup = u < 4.6; girl.clap = u > 4.95;
+          girl.give = easeOut(clamp((u - 4.0) / 0.5, 0, 1)) * (1 - easeOut(clamp((u - 4.65) / 0.5, 0, 1)));
+          drawRingGirl(c, girl, t, FLOOR);
+        }
         // golpes: estrella + onomatopeya
         for (const e of plan.ev) {
           if (e.contact > t) break; const age = t - e.contact;
@@ -503,7 +655,8 @@
         c.save(); c.translate(ox, oy); c.scale(s, s); drawLights(c, t, exc, flash, W, H, ox, oy); c.restore();
         // --- HUD ---
         for (const k of ['A', 'B']) { const target = hpAt(plan, k, t); hpD[k] += (target - hpD[k]) * Math.min(1, dt * 10); }
-        drawHud(c, W, names, hpD, elems, t, phase);
+        const hudA = cer ? 1 - clamp((u + 0.3) / 0.5, 0, 1) : 1;                          // las barras de vida se funden al empezar la ceremonia
+        if (hudA > 0.01) { c.save(); c.globalAlpha = hudA; drawHud(c, W, names, hpD, elems, t, phase); c.restore(); }
         c.textBaseline = 'alphabetic';
         if (phase === 'intro') {                                                          // presentación automática: quién se enfrenta a quién
           const p = clamp((now - start) / INTRO, 0, 1), pop = easeOut(clamp(p * 3, 0, 1));
@@ -519,14 +672,37 @@
           c.save(); c.translate(W / 2, H * 0.47); c.scale(0.6 + pop * 0.4, 0.6 + pop * 0.4); c.fillStyle = '#e63946'; c.strokeStyle = '#fff'; c.lineWidth = 6;
           c.font = `900 ${Math.min(W * 0.14, 84)}px system-ui, sans-serif`; c.strokeText('VS', 0, 0); c.fillText('VS', 0, 0); c.restore();
           c.fillStyle = '#fff'; c.font = `700 ${Math.min(W * 0.045, 20)}px system-ui, sans-serif`; c.fillText(`Probabilidad de ganar: ${j.chance} %`, W / 2, H * 0.7);
-        } else if (phase === 'end') {                                                     // ganador
-          const p = clamp((t - plan.D) / 0.6, 0, 1);
-          c.fillStyle = `rgba(0,0,0,${0.5 * p})`; c.fillRect(0, 0, W, H); c.globalAlpha = p; c.textAlign = 'center';
-          c.fillStyle = '#ffd43b'; c.strokeStyle = '#000'; c.lineWidth = 6; fitText(c, j.won ? '¡HAS GANADO!' : '¡HAS PERDIDO!', W * 0.9, Math.min(W * 0.11, 64), 900);
-          c.strokeText(j.won ? '¡HAS GANADO!' : '¡HAS PERDIDO!', W / 2, H * 0.4); c.fillText(j.won ? '¡HAS GANADO!' : '¡HAS PERDIDO!', W / 2, H * 0.4);
-          c.fillStyle = '#fff'; fitText(c, `🏆 GANADOR: ${winnerName}`, W * 0.9, Math.min(W * 0.06, 32)); c.fillText(`🏆 GANADOR: ${winnerName}`, W / 2, H * 0.4 + 46);
-          if (j.won && j.prize) { c.fillStyle = '#69db7c'; c.font = `800 ${Math.min(W * 0.05, 26)}px system-ui, sans-serif`; c.fillText(`+${j.prize} ${j.prize === 1 ? 'crédito' : 'créditos'}`, W / 2, H * 0.4 + 86); }
-          c.fillStyle = '#ddd'; c.font = `600 ${Math.min(W * 0.04, 18)}px system-ui, sans-serif`; c.fillText('Ahora, la clasificación…', W / 2, H * 0.4 + 124); c.globalAlpha = 1;
+        }
+        if (cer) {                                                                       // ceremonia: flashes de fotógrafos, confeti, barras de cine con el ganador y fundido final
+          if (!reduced) for (const fl of flashes) {                                      // destellos pequeños (nunca pantalla completa)
+            const age = u - fl.u; if (age < 0 || age > 0.2) continue;
+            const x = fl.x * W, y = fl.y * H, gr = c.createRadialGradient(x, y, 0, x, y, 26 + 300 * age);
+            gr.addColorStop(0, `rgba(255,255,255,${1 - age / 0.2})`); gr.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = gr; c.fillRect(x - 100, y - 100, 200, 200);
+          }
+          if (u > 4.6) for (const p of confetti) {
+            const q = u - 4.6 - p.delay; if (q < 0) continue;
+            const y = q * p.vy * H - 20; if (y > H + 20) continue;
+            c.save(); c.translate(p.x * W + Math.sin(u * 3 + p.ph) * 22, y); c.rotate(u * 5 + p.ph); c.fillStyle = p.col; c.fillRect(-p.sz / 2, -p.sz / 4, p.sz, p.sz / 2); c.restore();
+          }
+          const bh = Math.min(H * 0.11, 90) * easeOut((u + 0.2) / 0.8);
+          c.fillStyle = '#000'; c.fillRect(0, 0, W, bh); c.fillRect(0, H - bh, W, bh);
+          c.textAlign = 'center'; c.textBaseline = 'middle';
+          const pop = easeOut((u - 0.25) / 0.45), pn = easeOut((u - 1.0) / 0.5);
+          if (pop > 0) {
+            const tt = j.won ? '¡HAS GANADO!' : '¡HAS PERDIDO!';
+            c.save(); c.globalAlpha = pop; c.translate(W / 2, bh / 2); c.scale(0.7 + 0.3 * pop, 0.7 + 0.3 * pop);
+            c.fillStyle = '#ffd43b'; fitText(c, tt, W * 0.9, Math.min(W * 0.07, bh * 0.62), 900); c.fillText(tt, 0, 0); c.restore();
+          }
+          if (pn > 0) {
+            c.globalAlpha = pn; c.fillStyle = '#fff'; const l1 = `🏆 GANADOR: ${winnerName}`;
+            fitText(c, l1, W * 0.7, Math.min(W * 0.05, bh * 0.36), 800); c.fillText(l1, W / 2, H - bh * 0.66);
+            let l2 = '', col = '#69db7c';
+            if (u > 6.2) { l2 = 'Ahora, la clasificación…'; col = '#ddd'; } else if (u > 4.7 && j.won && j.prize) l2 = `+${j.prize} ${j.prize === 1 ? 'crédito' : 'créditos'}`;
+            if (l2) { c.fillStyle = col; fitText(c, l2, W * 0.7, Math.min(W * 0.04, bh * 0.26), 700); c.fillText(l2, W / 2, H - bh * 0.27); }
+            c.globalAlpha = 1;
+          }
+          const fo = clamp((u - 7.0) / 0.6, 0, 1); if (fo > 0) { c.fillStyle = `rgba(0,0,0,${fo})`; c.fillRect(0, 0, W, H); }
+          c.textBaseline = 'alphabetic';
         }
         requestAnimationFrame(frame);
       }
