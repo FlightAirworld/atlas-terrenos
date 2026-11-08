@@ -348,8 +348,13 @@ body.tut-nohouses .owner-label{opacity:0}
   const MALE = /\b(jorge|diego|juan|carlos|pablo|enrique|raul|raúl|miguel|andres|andrés|alvaro|álvaro|david|daniel|alex|mark|james|george|thomas|fred|aaron|arthur|guy|rishi|ryan|oliver|luca|cosimo|giorgio|antonio|felipe|luciano|ricardo|cristiano|markus|stefan|hans|jan|conrad|claude|henri|paul|thierry|nicolas|mathieu|male|masculin|hombre)\b/i;
   const FEMALE = /\b(monica|mónica|paulina|helena|lucia|lucía|sabina|laura|marisol|female|femenin|mujer|samantha|karen|moira|tessa|zira|susan|hazel|catherine|amelie|amélie|audrey|julie|marie|virginia|elsa|federica|alice|paola|anna|petra|vicki|maria|maría|luciana|francisca|joana)\b/i;
   let narrOn = true, talking = false, talkGen = 0;
+  // Voz grabada: idiomas con archivos en audio/tutorial/<idioma>/<paso>.mp3 (paso 1..13). El resto usa la voz del navegador.
+  const CLIP_LANGS = { es: true };
+  let clip = null;
+  function clipStop() { if (clip) { try { clip.onended = clip.onerror = clip.onplaying = null; clip.pause(); } catch (e) {} clip = null; } }
   try { narrOn = localStorage.getItem('tutVoice') !== '0' && !(window.atlasVoice && window.atlasVoice.muted); } catch (e) {}
   const hasTTS = !!window.speechSynthesis && !!window.SpeechSynthesisUtterance;
+  const hasVoice = () => hasTTS || !!CLIP_LANGS[curLang()];
   const curLang = () => { const l = window.i18n && window.i18n.lang; return LOCALE[l] ? l : 'es'; };
   function regionLocale(l) {   // p. ej. es-MX si el navegador dice es-MX; si no, el de por defecto
     try { for (const x of (navigator.languages || [navigator.language || ''])) if (String(x).toLowerCase().startsWith(l + '-')) return String(x).replace('_', '-'); } catch (e) {}
@@ -371,9 +376,23 @@ body.tut-nohouses .owner-label{opacity:0}
   }
   function narrate(text) {
     narrStop();
-    if (!hasTTS || !narrOn || document.hidden) return;
+    if (!hasVoice() || !narrOn || document.hidden) return;
     const my = ++talkGen, t = cleanSpeech(text); if (!t) return;
-    const go = () => {
+    const step = idx + 1;
+    if (CLIP_LANGS[curLang()] && step >= 1) {   // voz grabada
+      try {
+        if (window.atlasVoice) window.atlasVoice.stop();   // calla a los vecinos para que se oiga al narrador
+        const a = new Audio('audio/tutorial/' + curLang() + '/' + step + '.mp3');
+        clip = a; talking = true;
+        a.onended = () => { if (my === talkGen) { talking = false; clip = null; } };
+        a.onerror = () => { if (my === talkGen) { talking = false; clip = null; if (hasTTS) go(); } };
+        const pr = a.play();
+        if (pr && pr.catch) pr.catch(() => { if (my === talkGen) { talking = false; clip = null; if (hasTTS) go(); } });
+        return;
+      } catch (e) { talking = false; clip = null; }
+    }
+    if (!hasTTS) return;
+    function go() {
       if (my !== talkGen || ended) return;
       try {
         const n = pickNarrator(), u = new SpeechSynthesisUtterance(t);
@@ -389,7 +408,7 @@ body.tut-nohouses .owner-label{opacity:0}
     setTimeout(go, 250);   // deja tiempo a que cancel() termine
     try { if (!speechSynthesis.getVoices().length) speechSynthesis.addEventListener('voiceschanged', () => { if (my === talkGen && !talking) go(); }, { once: true }); } catch (e) {}
   }
-  function narrStop() { talkGen++; talking = false; try { if (hasTTS) speechSynthesis.cancel(); } catch (e) {} }
+  function narrStop() { talkGen++; talking = false; clipStop(); try { if (hasTTS) speechSynthesis.cancel(); } catch (e) {} }
   function paintVoiceBtn() { const b = card && card.querySelector('.tut-voice'); if (b) { b.textContent = narrOn ? '🔊' : '🔇'; b.setAttribute('aria-label', narrOn ? T('Voz activada') : T('Voz desactivada')); } }
 
   function finish() {
@@ -430,7 +449,7 @@ body.tut-nohouses .owner-label{opacity:0}
     dur = Math.max(s.ms || 0, 3000 + full.length * 55);
     if (!s.houses) hideHouses(); else showHouses();
     card.innerHTML = `
-      <div class="tut-top"><span class="tut-step">${n + 1} / ${STEPS.length}</span><span class="tut-topr">${hasTTS ? '<button type="button" class="tut-voice"></button>' : ''}<button type="button" class="tut-skip">${T('Saltar tutorial')}</button></span></div>
+      <div class="tut-top"><span class="tut-step">${n + 1} / ${STEPS.length}</span><span class="tut-topr">${hasVoice() ? '<button type="button" class="tut-voice"></button>' : ''}<button type="button" class="tut-skip">${T('Saltar tutorial')}</button></span></div>
       <h3 data-notranslate></h3>
       <p data-notranslate><span class="sr"></span><span aria-hidden="true"><span class="on"></span><span class="off"></span></span></p>
       ${s.extra || s.last ? `<div class="tut-btns">${s.extra ? `<button type="button" class="tut-extra">${T(s.extra.label)}</button>` : ''}<button type="button" class="tut-next">${T('¡A jugar!')}</button></div>` : ''}
