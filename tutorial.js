@@ -16,6 +16,14 @@
     try { for (let i = 0; i < localStorage.length; i++) if (/^sb-.*-auth-token$/.test(localStorage.key(i) || '')) return true; } catch (e) {}
     return false;
   }
+  // Para repetir el tutorial: abre la web con ?tutorial al final (p. ej. https://tu-web/?tutorial=es). Con =es, en, pt, fr, de o it también cambia el idioma.
+  try {
+    const q = new URLSearchParams(location.search).get('tutorial');
+    if (q !== null) {
+      localStorage.removeItem(KEY);
+      if (['es', 'en', 'pt', 'fr', 'de', 'it'].includes(q) && window.i18n && typeof window.i18n.set === 'function') window.i18n.set(q);
+    }
+  } catch (e) {}
   if (returning() || logged()) return;
 
   const T = s => (window.i18n && typeof window.i18n.t === 'function' ? window.i18n.t(s) : s);   // traduce con las filas de i18n.js
