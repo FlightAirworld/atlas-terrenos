@@ -389,7 +389,7 @@ body.tut-nohouses .owner-label{opacity:0}
   const FEMALE = /\b(monica|mónica|paulina|helena|lucia|lucía|sabina|laura|marisol|female|femenin|mujer|samantha|karen|moira|tessa|zira|susan|hazel|catherine|amelie|amélie|audrey|julie|marie|virginia|elsa|federica|alice|paola|anna|petra|vicki|maria|maría|luciana|francisca|joana)\b/i;
   let narrOn = true, talking = false, talkGen = 0;
   // Voz grabada: idiomas con archivos en audio/tutorial/<idioma>/<paso>.mp3 (paso 1..13). El resto usa la voz del navegador.
-  const CLIP_LANGS = { es: true };
+  const CLIP_LANGS = { es: true, en: true };
   let clip = null;
   function clipStop() { if (clip) { try { clip.onended = clip.onerror = clip.onplaying = null; clip.pause(); } catch (e) {} clip = null; } }
   try { narrOn = localStorage.getItem('tutVoice') !== '0' && !(window.atlasVoice && window.atlasVoice.muted); } catch (e) {}
