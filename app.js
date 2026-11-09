@@ -190,6 +190,20 @@ const HOUSES = [
   'images/casa-8.webp'
 ];
 
+// Casas de cada planeta (6 por mundo; imágenes images/<mundo>-<casa>.webp, las genera tools/make-planet-houses.py). Deben coincidir con WORLD_HOUSES de server.js.
+const WORLD_HOUSES = {
+  luna: ['images/luna-cupula.webp', 'images/luna-base-apolo.webp', 'images/luna-granja-solar.webp', 'images/luna-radiotelescopio.webp', 'images/luna-mina-regolito.webp', 'images/luna-puerto-lunar.webp'],
+  marte: ['images/marte-cupula-marciana.webp', 'images/marte-invernadero.webp', 'images/marte-base-rover.webp', 'images/marte-mina-roja.webp', 'images/marte-torre-radio.webp', 'images/marte-puerto-marte.webp'],
+  mercurio: ['images/mercurio-base-crater.webp', 'images/mercurio-escudo-solar.webp', 'images/mercurio-observatorio.webp', 'images/mercurio-mina-metal.webp', 'images/mercurio-antena-solar.webp', 'images/mercurio-estacion-polar.webp'],
+  venus: ['images/venus-ciudad-aerostato.webp', 'images/venus-plataforma-nube.webp', 'images/venus-laboratorio-acido.webp', 'images/venus-globo-dorado.webp', 'images/venus-torre-nubes.webp', 'images/venus-puerto-aereo.webp'],
+  jupiter: ['images/jupiter-plataforma-flotante.webp', 'images/jupiter-globo-gas.webp', 'images/jupiter-refineria-hidrogeno.webp', 'images/jupiter-observatorio-tormenta.webp', 'images/jupiter-ciudad-nube.webp', 'images/jupiter-puerto-nubes.webp'],
+  saturno: ['images/saturno-plataforma-anillos.webp', 'images/saturno-ciudad-flotante.webp', 'images/saturno-globo-anillo.webp', 'images/saturno-laboratorio-gas.webp', 'images/saturno-refineria-saturno.webp', 'images/saturno-puerto-saturno.webp'],
+  urano: ['images/urano-cristal-hielo.webp', 'images/urano-plataforma-azul.webp', 'images/urano-globo-hielo.webp', 'images/urano-estacion-eje.webp', 'images/urano-refineria-metano.webp', 'images/urano-puerto-urano.webp'],
+  neptuno: ['images/neptuno-plataforma-tormenta.webp', 'images/neptuno-globo-azul.webp', 'images/neptuno-refineria-diamante.webp', 'images/neptuno-ciudad-neptuno.webp', 'images/neptuno-laboratorio-frio.webp', 'images/neptuno-puerto-neptuno.webp'],
+  pluton: ['images/pluton-cupula-hielo.webp', 'images/pluton-base-corazon.webp', 'images/pluton-criolaboratorio.webp', 'images/pluton-mina-nitrogeno.webp', 'images/pluton-sonda-horizontes.webp', 'images/pluton-refugio-polar.webp']
+};
+const worldOfId = id => { const m = /^([a-z]+):/.exec(String(id || '')); return m && WORLD_HOUSES[m[1]] ? m[1] : 'tierra'; };   // los ids de otros mundos son «<mundo>:x:y»
+
 function houseFor(id, house) {
   if (house) house = String(house).replace(/\.png$/i, '.webp');   // terrenos guardados antes del cambio a webp
   if (house && (HOUSES.includes(house) || /^images\/[A-Za-z0-9_-]+\.webp$/.test(house))) return house;   // la que eligió el dueño (el servidor solo guarda casas válidas, incluidas las de eventos)
@@ -197,6 +211,8 @@ function houseFor(id, house) {
   for (const c of id) {
     h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
   }
+  const wl = WORLD_HOUSES[worldOfId(id)];   // en un planeta, la casa al azar es de ese planeta
+  if (wl) return wl[(h >>> 16) % wl.length];
   return HOUSES[(h >>> 16) % HOUSES.length];
 }
 // Altura aproximada (en metros) de cada tipo de edificio: da volumen 3D a las parcelas
@@ -817,6 +833,7 @@ function showPanel(p) {
   } else {
     buildPackPicker();
   }
+  { const w = (p && p.world) || worldOfId(p && p.id); if (w !== pickerWorld) { pickerWorld = w; chosenHouse = null; if (window.rebuildHousePickers) window.rebuildHousePickers(); } }   // cada mundo, sus casas
   if (window.retosPanel) window.retosPanel(p);   // botón ❤️ «Me gusta» (retos.js)
   updateBuyParcelBtn(p);
 }
@@ -897,7 +914,8 @@ const EXTRA_HOUSES = ['images/cesped-2.webp', 'images/parque-picnic.webp', 'imag
 // Casas del Pase Oro 👑 (mismas que GOLD_HOUSES de server.js). Sin pase salen con candado; window.atlasGold lo pone retos.js.
 const GOLD_HOUSES = ['images/casa-2.webp', 'images/casa-3.webp', 'images/rascacielos.webp', 'images/parque-atracciones.webp', 'images/puerto.webp', 'images/aeropuerto.webp', 'images/ayuntamiento.webp', 'images/banco.webp', 'images/hospital.webp', 'images/iglesia.webp', 'images/piscina.webp', 'images/estacion.webp'];
 let eventHouses = [];
-const pickableHouses = () => HOUSES.concat(EXTRA_HOUSES, GOLD_HOUSES, eventHouses);
+let pickerWorld = 'tierra';   // mundo de la parcela abierta: en un planeta el selector solo enseña las casas de ese planeta
+const pickableHouses = () => pickerWorld !== 'tierra' ? WORLD_HOUSES[pickerWorld] : HOUSES.concat(EXTRA_HOUSES, GOLD_HOUSES, eventHouses);
 const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '').replace(/[-_]/g, ' ');
 // Categorías del selector de casas: al tocar una (🎬 Cines, 🏠 Casas…) solo salen las de ese tipo. Lo que no esté aquí va a «Otros» (así las casas nuevas siempre se ven).
 const HOUSE_CATS = [
@@ -910,6 +928,7 @@ const HOUSE_CATS = [
   { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
   { icon: '⛽', name: 'Motor', files: ['cepsa', 'aurgi'] },
   { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto'] },
+  { icon: '🚀', name: 'Espacio', files: Object.values(WORLD_HOUSES).flat().map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) },
   { icon: '👑', name: 'Oro', files: GOLD_HOUSES.map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) },
   { icon: '🎉', name: 'Eventos', files: [] }   // casas de edición limitada del evento activo (se rellena sola)
 ];

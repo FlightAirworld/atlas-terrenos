@@ -216,8 +216,25 @@ const eventOfHouse = h => EVENTS.find(e => e.houses.includes(h));
 const eventPeriod = (e, info) => `E:${e.key}:${info.startYear}`;
 // Casas del Pase Oro 👑: solo se pueden elegir con el pase activo (quien ya la tiene se la queda). Las imágenes ya están en images/.
 const GOLD_HOUSES = ['images/casa-2.webp', 'images/casa-3.webp', 'images/rascacielos.webp', 'images/parque-atracciones.webp', 'images/puerto.webp', 'images/aeropuerto.webp', 'images/ayuntamiento.webp', 'images/banco.webp', 'images/hospital.webp', 'images/iglesia.webp', 'images/piscina.webp', 'images/estacion.webp'];
-const cleanHouse = h => {
+// Casas de cada planeta (6 por mundo, imágenes images/<mundo>-<casa>.webp; las genera tools/make-planet-houses.py). Deben coincidir con WORLD_HOUSES de app.js.
+// En un planeta solo se pueden elegir sus casas; las de la Tierra (y las de los planetas) no valen en otros mundos.
+const WORLD_HOUSES = {
+  luna: ['images/luna-cupula.webp', 'images/luna-base-apolo.webp', 'images/luna-granja-solar.webp', 'images/luna-radiotelescopio.webp', 'images/luna-mina-regolito.webp', 'images/luna-puerto-lunar.webp'],
+  marte: ['images/marte-cupula-marciana.webp', 'images/marte-invernadero.webp', 'images/marte-base-rover.webp', 'images/marte-mina-roja.webp', 'images/marte-torre-radio.webp', 'images/marte-puerto-marte.webp'],
+  mercurio: ['images/mercurio-base-crater.webp', 'images/mercurio-escudo-solar.webp', 'images/mercurio-observatorio.webp', 'images/mercurio-mina-metal.webp', 'images/mercurio-antena-solar.webp', 'images/mercurio-estacion-polar.webp'],
+  venus: ['images/venus-ciudad-aerostato.webp', 'images/venus-plataforma-nube.webp', 'images/venus-laboratorio-acido.webp', 'images/venus-globo-dorado.webp', 'images/venus-torre-nubes.webp', 'images/venus-puerto-aereo.webp'],
+  jupiter: ['images/jupiter-plataforma-flotante.webp', 'images/jupiter-globo-gas.webp', 'images/jupiter-refineria-hidrogeno.webp', 'images/jupiter-observatorio-tormenta.webp', 'images/jupiter-ciudad-nube.webp', 'images/jupiter-puerto-nubes.webp'],
+  saturno: ['images/saturno-plataforma-anillos.webp', 'images/saturno-ciudad-flotante.webp', 'images/saturno-globo-anillo.webp', 'images/saturno-laboratorio-gas.webp', 'images/saturno-refineria-saturno.webp', 'images/saturno-puerto-saturno.webp'],
+  urano: ['images/urano-cristal-hielo.webp', 'images/urano-plataforma-azul.webp', 'images/urano-globo-hielo.webp', 'images/urano-estacion-eje.webp', 'images/urano-refineria-metano.webp', 'images/urano-puerto-urano.webp'],
+  neptuno: ['images/neptuno-plataforma-tormenta.webp', 'images/neptuno-globo-azul.webp', 'images/neptuno-refineria-diamante.webp', 'images/neptuno-ciudad-neptuno.webp', 'images/neptuno-laboratorio-frio.webp', 'images/neptuno-puerto-neptuno.webp'],
+  pluton: ['images/pluton-cupula-hielo.webp', 'images/pluton-base-corazon.webp', 'images/pluton-criolaboratorio.webp', 'images/pluton-mina-nitrogeno.webp', 'images/pluton-sonda-horizontes.webp', 'images/pluton-refugio-polar.webp']
+};
+const PLANET_HOUSES = Object.values(WORLD_HOUSES).flat();
+const worldOfId = id => { const m = /^([a-z]+):/.exec(String(id)); return m && WORLDS.includes(m[1]) ? m[1] : 'tierra'; };
+const cleanHouse = (h, world = 'tierra') => {
   h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h;
+  if (world !== 'tierra') return (WORLD_HOUSES[world] || []).includes(h) ? h : null;
+  if (PLANET_HOUSES.includes(h)) return null;
   if (HOUSES.includes(h)) return h;
   if (GOLD_HOUSES.includes(h)) return null;   // las del Pase Oro pasan por cleanHouseFor (comprueba el pase)
   const e = eventOfHouse(h);
@@ -225,13 +242,13 @@ const cleanHouse = h => {
 };
 const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
 
-async function cleanHouseFor(house, user) {   // como cleanHouse, pero también deja elegir las casas del Pase Oro si el jugador lo tiene activo
+async function cleanHouseFor(house, user, world = 'tierra') {   // como cleanHouse, pero también deja elegir las casas del Pase Oro si el jugador lo tiene activo
   const h = typeof house === 'string' ? house.replace(/\.png$/i, '.webp') : house;
-  if (GOLD_HOUSES.includes(h)) {
+  if (world === 'tierra' && GOLD_HOUSES.includes(h)) {
     if (!user || !(await hasPass(user.id))) throw new HttpError(409, 'Esta casa es del Pase Oro 👑. Consíguelo en 🎯 Retos → 👑 Pase');
     return h;
   }
-  return cleanHouse(house);
+  return cleanHouse(house, world);
 }
 
 // ---------- Seguridad de administrador ----------
@@ -800,7 +817,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
   const p = parcelFromLatLng(Number(lat), Number(lng), world);
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
   const user = await userFrom(req);
-  const chosenHouse = await cleanHouseFor(house, user);   // lanza un aviso claro si es una casa del Pase Oro y no lo tiene
+  const chosenHouse = await cleanHouseFor(house, user, world);   // lanza un aviso claro si es una casa del Pase Oro y no lo tiene
   const prof = user && await getProfile(user.id);
   const vip = code && await one('SELECT fixed_nick, fixed_country FROM packs WHERE code = $1 AND fixed_nick IS NOT NULL', [code]);
   const name = vip ? vip.fixed_nick : prof ? prof.nickname : cleanName(owner);   // pack VIP o cuenta: siempre sale el apodo fijo
@@ -848,7 +865,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
 const HOUSE_COST = Math.max(0, Math.floor(Number(process.env.HOUSE_COST ?? 1)));
 async function setHouse(req, { id, house }) {
   const user = await needUser(req);
-  const h = await cleanHouseFor(house, user);
+  const h = await cleanHouseFor(house, user, worldOfId(id));
   if (!h) throw new HttpError(eventOfHouse(house) ? 409 : 400, eventOfHouse(house) ? 'Esta casa es de un evento que ya terminó. ¡Vuelve el año que viene!' : 'Casa no válida');
   const pack = await ensureUserPack(user);
   const client = await pool.connect();
@@ -2800,7 +2817,7 @@ function houseSeen(id, house) {   // la casa que ve el jugador en un terreno: la
 }
 async function ownedHouses(uid) {
   const rows = await all('SELECT id, house FROM parcels WHERE user_id = $1::uuid LIMIT 5000', [uid]);
-  return new Set(rows.map(r => houseSeen(r.id, r.house)));
+  return new Set(rows.filter(r => worldOfId(r.id) === 'tierra').map(r => houseSeen(r.id, r.house)));   // el álbum es solo de casas de la Tierra
 }
 const ALBUM_STAMP = 0.01, ALBUM_FULL = 0.05, ALBUM_ALL = 0.2;   // sello por categoría (≥1 casa), categoría completa, álbum completo (todas las categorías con sello)
 function albumBuild(owned) {
