@@ -208,6 +208,14 @@ Las posiciones de bancos, colas, puertas y chimeneas dentro de cada parcela son 
 - **Cartas en las luchas 🥊:** antes de luchar se puede elegir una carta de refuerzo. Suma al poder del terreno un % igual a su Poder × `FIGHT_CARD_BONUS` (0,35 → una carta de Poder 90 da +31 %) y su elemento sustituye al del terreno para la ventaja 🔥>🌿>💧. El servidor comprueba que la carta es tuya; las probabilidades siguen limitadas entre 25 % y 75 %. `FIGHT_CARD_BONUS=0` lo apaga. La carta no se gasta.
 - Tablas nuevas (se crean solas; `migration-cards.sql` es lo mismo): `card_owned`, `card_packs`, `card_daily`, `card_claims`, `card_trades`.
 
+### Compartir cartas 📤 (`cards-share.js`)
+
+- Cada carta tiene un botón **📤 Compartir** (en la colección, en las cartas de otros jugadores del ranking y en las Cartas Negras). Crea en el navegador una imagen vertical de 1080×1350 con la carta y quién la tiene, y ofrece **Compartir** (menú del móvil, con imagen), **Copiar enlace** y **Descargar**.
+- **Enlace:** `https://tu-dominio/carta/4321` (Carta Negra: `/carta/N2026-11`). Da una vista previa con el nombre, la rareza y el dueño en WhatsApp o Telegram y lleva al juego. En el sitio estático (`API_BASE`) el enlace es `/?carta=4321`.
+- Quien lo abre ve la carta **sin iniciar sesión**, con quién la tiene ahora (apodo, avatar y país, lo mismo que ya enseña el mapa) o «nadie la tiene todavía». Desde ahí puede ir a sus cartas.
+- API pública: `GET /api/cards/share?id=4321` (límite de 60 por minuto y por IP). No devuelve créditos, correo ni más cartas del dueño. No hay tablas nuevas.
+- Pruebas: `test/cards-share.test.js`.
+
 ## Paga mensual del dueño
 
 - El dueño recibe `OWNER_MONTHLY_CREDITS` créditos (**10.000** por defecto) una vez al mes (el mes cambia según `DAILY_TZ`).

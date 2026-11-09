@@ -133,12 +133,14 @@
     return d;
   }
 
+  const shareBtn = id => { const b = document.createElement('button'); b.type = 'button'; b.textContent = '📤 Compartir'; b.onclick = () => { if (window.CardsShare) window.CardsShare.open(id); }; return b; };   // cards-share.js
   function zoomEl(el, from, glow) { if (window.CardsCine) window.CardsCine.zoom(el, from && from.getBoundingClientRect ? from.getBoundingClientRect() : null, { glow }); }
   function zoomCard(id, from) { const info = C.cardInfo(id, S ? S.season : 'T1'); zoomEl(cardEl(info, false), from, info.c2); }
 
   function showCard(id, into, flip) {
     const el = into || $('cards-view'); const ce = cardEl(C.cardInfo(id, S ? S.season : 'T1'), flip); ce.onclick = () => zoomCard(id, ce); el.replaceChildren(ce);
     if (S && !into) { const b = document.createElement('button'); b.type = 'button'; b.textContent = '🔁 Ofrecer esta carta'; b.onclick = () => { pendingOffer = id; tradesUi(); $('cards-trades').scrollIntoView({ behavior: 'smooth' }); }; el.appendChild(b); }
+    if (!into) el.appendChild(shareBtn(id));
   }
 
   const ENV = { bronce: ['#b87333', '#e6a86a'], plata: ['#9aa5b1', '#e5e9ee'], oro: ['#d4a017', '#ffe27a'] };
@@ -370,9 +372,9 @@
     else { const bm = document.createElement('div'); bm.className = 'mini'; P.black.forEach(b => { const info = C.blackInfo(b.month), t = tile(info, b.month.slice(2), () => pick(t, blackWrap(info, b))); bm.appendChild(t); }); panel.appendChild(bm); }
     panel.appendChild(detail);
   }
-  function blackWrap(info, b) { const w = document.createElement('div'); const ce = cardEl(info, true); ce.onclick = () => zoomEl(cardEl(info, false), ce, '#d4a017'); w.appendChild(ce); w.appendChild(mkp('cmeta', '🖤 Única · ganada con una puja de ' + money(b.bid) + '. No se puede comprar ni cambiar.')); return w; }
+  function blackWrap(info, b) { const w = document.createElement('div'); const ce = cardEl(info, true); ce.onclick = () => zoomEl(cardEl(info, false), ce, '#d4a017'); w.appendChild(ce); w.appendChild(mkp('cmeta', '🖤 Única · ganada con una puja de ' + money(b.bid) + '. No se puede comprar ni cambiar.')); w.appendChild(shareBtn(info.id)); return w; }
   function cardWithBuy(P, id, info) {   // la carta abierta + formulario para ofrecer créditos por ella
-    const w = document.createElement('div'); w.appendChild(cardEl(info, true));
+    const w = document.createElement('div'); w.appendChild(cardEl(info, true)); w.appendChild(shareBtn(id));
     if (P.me) { w.appendChild(mkp('cmeta', 'Esta carta es tuya.')); return w; }
     const f = document.createElement('div'); f.className = 'tform';
     const price = document.createElement('input'); price.type = 'number'; price.min = 1; price.step = 1; price.inputMode = 'numeric'; price.placeholder = '🎟️ Créditos'; price.setAttribute('aria-label', 'Créditos que ofreces');
@@ -491,6 +493,7 @@
     if (typeof authToken !== 'undefined' && !authToken) { openLogin(); return; }
     modal.classList.remove('hidden'); go2('home'); load();
   });
+  window.CardsUI = { cardEl, zoomEl };   // lo usa cards-share.js para enseñar una carta recibida por enlace
   $('cards-close').onclick = close;
   $('cards-back').onclick = back;
   $('cards-go-rank').onclick = () => go2('rank');

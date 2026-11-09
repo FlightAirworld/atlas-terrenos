@@ -492,8 +492,52 @@ module.exports = function (d) {
     return auctionState(uid);
   }
 
+  // ---------- Compartir una carta (público, sin login) ----------
+  // Cualquiera con el enlace ve la carta y quién la tiene ahora (apodo, avatar y país: lo mismo que ya enseña el mapa). Ni créditos ni correo.
+  const SHARE_ID = /^(?:\d{1,5}|N\d{4}-(?:0[1-9]|1[0-2]))$/;
+  const escH = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  async function shareLookup(raw) {
+    if (!ON) return null;
+    let sid = String(raw || '').trim().toUpperCase();
+    if (!SHARE_ID.test(sid)) return null;
+    let info, uid = null;
+    if (sid[0] === 'N') {   // Carta Negra 🖤 del mes
+      info = core.blackInfo(sid.slice(1)); if (!info) return null;
+      const r = (await all('SELECT user_id FROM card_black WHERE month = $1', [sid.slice(1)]))[0]; uid = r ? String(r.user_id) : null;
+    } else {
+      sid = String(Number(sid));
+      info = core.cardInfo(Number(sid), SEASON); if (!info) return null;
+      const r = (await all('SELECT user_id FROM card_owned WHERE season = $1 AND card_id = $2', [SEASON, Number(sid)]))[0]; uid = r ? String(r.user_id) : null;
+    }
+    let owner = null;
+    if (uid) {
+      const pr = (await all('SELECT nickname, avatar FROM profiles WHERE user_id::text = $1', [uid]))[0];
+      if (pr) owner = { nick: pr.nickname, avatar: pr.avatar || null, country: await countryOf(uid) };
+    }
+    return { sid, info, owned: !!uid, owner };
+  }
+  async function shareInfo(sp) {
+    const r = await shareLookup(sp && sp.get('id'));
+    if (!r) throw new HttpError(404, 'Esa carta no existe');
+    return { ok: true, id: r.sid, black: r.sid[0] === 'N', month: r.sid[0] === 'N' ? r.sid.slice(1) : null, season: SEASON, owned: r.owned, owner: r.owner };
+  }
+  // Página mínima para los enlaces /carta/ID: da el título y la descripción a la vista previa de WhatsApp, Telegram, etc. y manda al juego.
+  async function sharePage(raw, base) {
+    const r = await shareLookup(raw); if (!r) return null;
+    const i = r.info, to = '/?carta=' + encodeURIComponent(r.sid);
+    const title = `${i.emoji} ${i.name} · ${i.rarityName}` + (r.owner ? ` · de ${r.owner.nick}` : '');
+    const desc = `${i.special ? 'Carta única' : 'Carta Nº ' + Number(r.sid)} · Poder ${i.poder} · ${i.element} ${i.elementName}. Colecciona cartas en Redecora El Mundo 🌎`;
+    return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escH(title)}</title>
+<meta name="description" content="${escH(desc)}"><meta name="robots" content="noindex">
+<meta property="og:site_name" content="Redecora El Mundo"><meta property="og:locale" content="es_ES"><meta property="og:type" content="website">
+<meta property="og:title" content="${escH(title)}"><meta property="og:description" content="${escH(desc)}">
+<meta property="og:url" content="${escH(base + '/carta/' + r.sid)}"><meta property="og:image" content="${escH(base + '/images/og-image.png')}">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image">
+<meta http-equiv="refresh" content="0;url=${escH(to)}"></head><body><p><a href="${escH(to)}">${escH(title)}: ver la carta</a></p></body></html>`;
+  }
+
   async function init2() { await auctionTick(); setInterval(auctionTick, 60_000).unref(); }   // cada minuto: cierra la puja a su hora y abre la del mes nuevo
 
-  return { ON, SEASON, init, init2, grantPack, get, daily, buy, open, offer, pick, trades, trade, answer, ranking, player, notifs, notifsSeen, auction, bid, auctionTick };
+  return { ON, SEASON, init, init2, grantPack, get, daily, buy, open, offer, pick, trades, trade, answer, ranking, player, notifs, notifsSeen, auction, bid, auctionTick, shareInfo, sharePage };
 };
 module.exports.pickWinner = core.pickWinner;

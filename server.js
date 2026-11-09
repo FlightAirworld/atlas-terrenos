@@ -2513,6 +2513,10 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/cards/trade/answer') return cardsMod().answer(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/cards/ranking') return cardsMod().ranking(req);
   if (req.method === 'GET' && pn === '/api/cards/player') return cardsMod().player(req, sp);
+  if (req.method === 'GET' && pn === '/api/cards/share') {   // público (sin login): la carta de un enlace compartido y quién la tiene
+    if (rateHit('cardshare:' + clientIp(req), 60_000) > 60) throw new HttpError(429, 'Vas muy rápido. Espera un minuto');
+    return cardsMod().shareInfo(sp);
+  }
   if (req.method === 'GET' && pn === '/api/cards/notifs') return cardsMod().notifs(req, sp);
   if (req.method === 'POST' && pn === '/api/cards/notifs/seen') return cardsMod().notifsSeen(req);
   if (req.method === 'GET' && pn === '/api/cards/auction') return cardsMod().auction(req);
@@ -3423,6 +3427,12 @@ const httpServer = http.createServer(async (req, res) => {
       const out = await route(req, res, url);
       if (req.method !== 'GET') tileCache.clear();   // una compra, mejora o cambio de casa ya está guardado: las teselas en memoria se vuelven a leer
       return send(200, JSON.stringify(out));
+    }
+    const cs = req.method === 'GET' && /^\/carta\/([0-9A-Za-z-]{1,12})\/?$/.exec(url.pathname);   // enlace para compartir una carta: /carta/4321 o /carta/N2026-11
+    if (cs) {
+      if (rateHit('cardshare:' + clientIp(req), 60_000) > 120) throw new HttpError(429, 'Vas muy rápido. Espera un minuto');
+      const page = await cardsMod().sharePage(cs[1], NEW_ORIGIN);
+      return page ? send(200, page, 'text/html; charset=utf-8', { 'Cache-Control': 'public, max-age=300' }) : send(404, 'No encontrado', 'text/plain');
     }
     let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname + (url.pathname.endsWith('/') ? 'index.html' : '')));   // /mundos/ -> mundos/index.html
     const rel = path.relative(PUBLIC, file);
