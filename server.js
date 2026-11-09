@@ -316,6 +316,31 @@ function cleanName(raw) {
   return s.length >= 2 && s.length <= 30 ? s : null;
 }
 
+// ---------- Filtro de datos de contacto (teléfonos, correos y direcciones) ----------
+// Se usa en el chat y en el apodo. Normaliza trucos habituales (números en letra, 6️⃣, separadores, "arroba", "punto com").
+const NUM_WORDS = { cero: 0, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9 };
+const STREET_WORDS = 'calle|c\\/|cl\\.|avenida|avda\\.?|av\\.|paseo|pº|plaza|pza\\.?|carretera|ctra\\.?|camino|ronda|travesia|urbanizacion|urb\\.|street|st\\.|road|avenue|rue|via|strasse|straße';
+function hasContactInfo(raw) {
+  if (typeof raw !== 'string') return false;
+  let t = raw.normalize('NFKC').toLowerCase()
+    .replace(/(\d)[\ufe0f]?\u20e3/g, '$1')                    // 6️⃣ -> 6
+    .replace(/[\u200b-\u200f\u2060\ufeff]/g, '');
+  const plain = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');   // sin tildes
+  // correo
+  if (/@|\barroba\b|\(\s*at\s*\)|\[\s*at\s*\]|\bpunto\s*(com|es|net|org)\b|\(\s*dot\s*\)/.test(plain)) return true;
+  if (/\b[a-z0-9_-]+\s*\.\s*(com|net|org|es|info|io|eu|mx|ar|cl)\b/.test(plain)) return true;
+  if (/\b(gmail|hotmail|outlook|yahoo|icloud|protonmail|telefonica|movistar\.es)\b/.test(plain)) return true;
+  // teléfono: cifras (también escritas con letras) seguidas, con separadores en medio
+  const digits = plain.replace(/\b(cero|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|zero|one|two|three|four|five|six|seven|eight|nine)\b/g, w => String(NUM_WORDS[w]));
+  if (/(?:\d[\s.\-_()\/+*·,]*){7,}/.test(digits)) return true;
+  if ((digits.match(/\d/g) || []).length >= 9) return true;         // cifras repartidas por el mensaje
+  // dirección
+  if (new RegExp('(?:^|[^a-z])(?:' + STREET_WORDS + ')\\s+[^\\d]{0,40}?\\s*(?:n[º°o.]*\\s*)?\\d', 'i').test(plain)) return true;
+  if (new RegExp('\\b(?:vivo|vivimos|vive|mi casa|mi domicilio|mi direccion)\\b.{0,25}\\b(?:' + STREET_WORDS + ')(?:\\s|$)', 'i').test(plain)) return true;
+  if (/\b(?:codigo postal|c\.?p\.?)\s*:?\s*\d{4,5}\b/.test(plain)) return true;
+  return false;
+}
+
 // ---------- PayPal ----------
 let tokenCache = { token: null, exp: 0 };
 async function paypalToken() {
@@ -448,6 +473,7 @@ async function profileSet(req, { nickname }) {
   const user = await needUser(req);
   const name = cleanName(nickname);
   if (!name) throw new HttpError(400, 'El apodo debe tener de 2 a 30 caracteres');
+  if (hasContactInfo(name)) throw new HttpError(400, 'El apodo no puede contener teléfonos, correos ni direcciones');
   if (await getProfile(user.id)) throw new HttpError(409, 'Tu apodo ya está fijado y no se puede cambiar');
   if (await nickReserved(name)) throw new HttpError(409, 'Ese apodo ya está en uso. Elige otro');
   try {
@@ -1542,6 +1568,7 @@ async function chatSend(req, body) {
   if (!text) throw new HttpError(400, `Escribe un mensaje (máximo ${CHAT_MAX_LEN} caracteres)`);
   const low = text.toLowerCase();
   if (/https?:\/\/|www\./.test(low)) throw new HttpError(400, 'No se pueden enviar enlaces');
+  if (hasContactInfo(text)) throw new HttpError(400, 'No se pueden compartir teléfonos, correos ni direcciones');
   if (CHAT_BANNED.some(w => low.includes(w))) throw new HttpError(400, 'Mensaje no permitido');
   const now = Date.now();
   const st = chatLast.get(user.id) || { t: [], text: '' };
