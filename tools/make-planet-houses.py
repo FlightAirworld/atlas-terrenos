@@ -445,7 +445,8 @@ def render(world, name, kind, var, idx):
 
 
 def main():
-    only = sys.argv[1:] or list(HOUSES)
+    # la Luna usa imágenes propias (images/luna-*.webp): no se regeneran salvo que se pida a propósito (python3 tools/make-planet-houses.py luna)
+    only = sys.argv[1:] or [w for w in HOUSES if w != 'luna']
     os.makedirs(OUT, exist_ok=True)
     for w in only:
         for i, (name, kind, var) in enumerate(HOUSES[w]):
