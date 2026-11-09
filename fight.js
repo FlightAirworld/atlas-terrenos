@@ -458,14 +458,15 @@
   // Chica del ring: entra andando con la copa, se la entrega al ganador y aplaude. g = {x, dir, walk, cup, give, clap, skin, hair}
   function drawRingGirl(c, g, t, floorY) {
     const sw = Math.sin(t * 9) * 16 * g.walk, bob = Math.abs(Math.sin(t * 9)) * 3 * g.walk;
+    const gk = 0.92 * (g.sc || 1);   // g.sc: tamaño según la profundidad (más pequeña al fondo del ring)
     c.save(); c.globalAlpha = 0.35; c.fillStyle = '#000'; c.beginPath(); c.ellipse(g.x, floorY + 3, 34, 7, 0, 0, 7); c.restore();
-    c.save(); c.translate(g.x, floorY); c.scale(g.dir * 0.92, 0.92);
+    c.save(); c.translate(g.x, floorY); c.scale(g.dir * gk, gk);
     const sh = { x: 2, y: -148 - bob }, head = { x: 5, y: -174 - bob };
     const hand = { x: lerp(24, 62, g.give), y: -140 };
     const armTo = (s, tg) => { const r = ik(s.x, s.y, tg.x, tg.y, 36, 34, 1); line(c, [s.x, s.y, r[0], r[1], r[2], r[3]], 9, g.skin); c.fillStyle = g.skin; c.beginPath(); c.arc(r[2], r[3], 5.5, 0, 7); c.fill(); };
     const k = Math.abs(Math.sin(t * 10));
-    const tF = g.clap ? { x: 34 - k * 10, y: -138 } : g.cup ? hand : { x: 6 + sw * 0.5, y: -98 };
-    const tB = g.clap ? { x: 28 - k * 8, y: -132 } : g.cup ? { x: hand.x - 8, y: hand.y + 5 } : { x: 0 - sw * 0.5, y: -98 };
+    const tF = g.sign ? { x: 28, y: -206 } : g.clap ? { x: 34 - k * 10, y: -138 } : g.cup ? hand : { x: 6 + sw * 0.5, y: -98 };   // g.sign: sujeta el cartel en alto
+    const tB = g.sign ? { x: -10, y: -206 } : g.clap ? { x: 28 - k * 8, y: -132 } : g.cup ? { x: hand.x - 8, y: hand.y + 5 } : { x: 0 - sw * 0.5, y: -98 };
     line(c, [head.x - 6, head.y - 4, head.x - 13, head.y + 38 - bob * 0.3], 22, g.hair);   // melena larga
     armTo({ x: sh.x - 6, y: sh.y + 4 }, tB);                                            // brazo de atrás
     line(c, [-6, -90, -8 - sw, -10], 11, g.skin); line(c, [6, -90, 8 + sw, -10], 11, g.skin);   // piernas
@@ -485,6 +486,21 @@
     armTo({ x: sh.x + 6, y: sh.y + 4 }, tF);                                            // brazo de delante
     if (g.cup) drawTrophy(c, hand.x, hand.y - 4, 76, t);
     c.restore();
+  }
+
+  // Cartel que levanta la chica antes del combate: los dos nombres con la bandera de su país. Siempre se lee del derecho (no se voltea con ella).
+  function drawRingSign(c, g, floorY, A, B, t) {
+    const k = 0.92 * (g.sc || 1), w = 236 * k, h = 128 * k, cx = g.x + g.dir * 9 * k, by = floorY - 212 * k;   // by: borde de abajo, justo donde la chica agarra el cartel
+    c.save(); c.translate(cx, by); c.rotate(Math.sin(t * 5) * 0.035);
+    c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(-w / 2 + 4 * k, -h + 5 * k, w, h);
+    c.fillStyle = '#fff8e1'; c.fillRect(-w / 2, -h, w, h);
+    c.strokeStyle = '#e63946'; c.lineWidth = Math.max(2, 5 * k); c.strokeRect(-w / 2, -h, w, h);
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    const line = (txt, y, col, size) => { fitText(c, txt, w - 20 * k, size * k, 900); c.fillStyle = col; c.fillText(txt, 0, y); };
+    line(`${A.flag} ${A.name}`.trim(), -h * 0.8, '#1d3557', 27);
+    line('VS', -h * 0.5, '#e63946', 30);
+    line(`${B.flag} ${B.name}`.trim(), -h * 0.2, '#b5651d', 27);
+    c.restore(); c.textBaseline = 'alphabetic';
   }
 
   function buildCrowd() {
@@ -657,7 +673,7 @@
       const crowd = buildCrowd();
       stage.classList.remove('hidden');
       crowdStart(); say(`¡Atención! Combate entre tú y ${names.B}`);
-      const INTRO = 2800, END = 7600;                             // END: ceremonia de victoria (zoom, copa, fundido) y paso automático a la clasificación
+      const INTRO = 7000, END = 7600;                             // END: ceremonia de victoria (zoom, copa, fundido) y paso automático a la clasificación
       let start = performance.now(), last = start, phase = 'intro', fightStart = 0, skipOff = 0, lastT = 0, curT = 0, done = false;
       const hpD = { A: 100, B: 100 };
 
@@ -728,6 +744,25 @@
       // 4,0 el ganador se gira y baja la mano · 4,6 le entrega la copa y la levanta · 7,0…7,6 fundido a negro → clasificación
       const winnerFd = j.won ? fa : fb, wf = -winnerFd.dir;      // wf: el lado por el que entra la chica (a la espalda del ganador, lejos del caído)
       const girl = { x: 0, dir: -wf, walk: 0, cup: true, give: 0, clap: false, skin: SKINS[hash(String(j.foe.id) + 'g') % 5], hair: HAIRS[hash(String(j.mine.id) + 'g') % 5] };
+      // ---- PRESENTACIÓN: una chica de pelo largo da la vuelta al ring con un cartel en alto con los dos nombres y sus banderas ----
+      const LAP = [[500, 522], [865, 520], [735, 338], [265, 338], [135, 520], [500, 522]];
+      const lapLen = LAP.slice(1).map((pt, i) => Math.hypot(pt[0] - LAP[i][0], pt[1] - LAP[i][1])), lapTot = lapLen.reduce((a, b) => a + b, 0);
+      const lapAt = q => {
+        let d = clamp(q, 0, 1) * lapTot, i = 0;
+        while (i < lapLen.length - 1 && d > lapLen[i]) { d -= lapLen[i]; i++; }
+        const a = LAP[i], b = LAP[i + 1], f = lapLen[i] ? d / lapLen[i] : 0;
+        return { x: lerp(a[0], b[0], f), y: lerp(a[1], b[1], f), dir: b[0] >= a[0] ? 1 : -1 };
+      };
+      const lapGirl = { x: 0, dir: 1, walk: 1, cup: false, give: 0, clap: false, sign: true, sc: 1, skin: girl.skin, hair: girl.hair };
+      const signA = { name: j.mine.owner || 'Tú', flag: wallFlags.A || '🌍' }, signB = { name: names.B, flag: wallFlags.B || '🌍' };
+      let lapY = 0;
+      const lapPlace = (now0) => {   // coloca a la chica en su vuelta según el avance de la presentación; devuelve false si no se ve
+        if (phase !== 'intro') return false;
+        const pr = clamp((now0 - start) / INTRO, 0, 1), q = lapAt(clamp((pr - 0.03) / 0.9, 0, 1));
+        lapGirl.x = q.x; lapGirl.dir = q.dir; lapY = q.y; lapGirl.sc = 0.62 + 0.38 * clamp((q.y - 300) / 240, 0, 1);
+        return true;
+      };
+      const lapDraw = (c0, now0) => { drawRingSign(c0, lapGirl, lapY, signA, signB, (now0 - start) / 1000); drawRingGirl(c0, lapGirl, (now0 - start) / 1000, lapY); };
       const flashes = Array.from({ length: 16 }, () => ({ u: rnd(0.7, 6.6), x: rnd(0.06, 0.94), y: rnd(0.14, 0.5) })).sort((a, b) => a.u - b.u);   // fotógrafos
       const confetti = Array.from({ length: 80 }, () => ({ x: Math.random(), vy: rnd(0.22, 0.5), delay: rnd(0, 1.6), ph: rnd(0, 6.3), sz: rnd(8, 15), col: ['#ffd43b', '#e63946', '#4dabf7', '#69db7c', '#f783ac', '#fff'][Math.floor(Math.random() * 6)] }));
       const easeIO = x => { x = clamp(x, 0, 1); return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; };
@@ -840,7 +875,10 @@
           fxT = t;
           stepFx(dt * slowK);
         }
+        const lapOn = lapPlace(now);
+        if (lapOn && lapY < FLOOR) lapDraw(c, now);                                      // vuelta al ring: al fondo, por detrás de los luchadores
         drawFighter(c, fa, PA, t, FLOOR); drawFighter(c, fb, PB, t, FLOOR);
+        if (lapOn && lapY >= FLOOR) lapDraw(c, now);                                     // ...y por delante cuando pasa por el frente
         if (u > 2.2) {                                                                   // la chica del ring llega andando con la copa y se la da al ganador
           const gp = clamp((u - 2.2) / 2.0, 0, 1);
           girl.x = winnerFd.x + wf * (119 + 300 * (1 - gp)); girl.walk = gp < 1 ? 1 : 0;
@@ -898,18 +936,19 @@
         }
         if (phase === 'intro') {                                                          // presentación automática: quién se enfrenta a quién
           const p = clamp((now - start) / INTRO, 0, 1), pop = easeOut(clamp(p * 3, 0, 1));
-          c.fillStyle = `rgba(0,0,0,${0.62 * Math.min(1, p * 4)})`; c.fillRect(0, 0, W, H);
+          c.fillStyle = `rgba(0,0,0,${0.3 * Math.min(1, p * 4)})`; c.fillRect(0, 0, W, H);   // velo ligero: el ring y la chica se ven
+          const cf = 1 - clamp((p - 0.3) / 0.15, 0, 1);                                  // las tarjetas se funden para dejar ver el ring
           c.textAlign = 'center'; c.fillStyle = '#ffd43b'; c.font = `900 ${Math.min(W * 0.09, 54)}px system-ui, sans-serif`; c.fillText('🥊 COMBATE', W / 2, H * 0.22);
           const card = (x, who, el, nm, lv, pw) => {
-            c.save(); c.translate(x + (x < W / 2 ? -1 : 1) * (1 - pop) * W * 0.4, H * 0.45); c.globalAlpha = pop;
+            c.save(); c.translate(x + (x < W / 2 ? -1 : 1) * (1 - pop) * W * 0.4, H * 0.45); c.globalAlpha = pop * cf;
             c.fillStyle = '#fff'; fitText(c, nm, W * 0.4, Math.min(W * 0.065, 36)); c.fillText(nm, 0, 0);
             c.font = `700 ${Math.min(W * 0.04, 20)}px system-ui, sans-serif`; c.fillStyle = '#ffd43b'; c.fillText(`${el} Nivel ${lv} · ⚔️ ${pw}`, 0, 34);
             c.restore();
           };
           card(W * 0.27, 'A', elems.A, names.A, j.mine.level, j.mine.power); card(W * 0.73, 'B', elems.B, names.B, j.foe.level, j.foe.power);
-          c.save(); c.translate(W / 2, H * 0.47); c.scale(0.6 + pop * 0.4, 0.6 + pop * 0.4); c.fillStyle = '#e63946'; c.strokeStyle = '#fff'; c.lineWidth = 6;
+          c.save(); c.globalAlpha = cf; c.translate(W / 2, H * 0.47); c.scale(0.6 + pop * 0.4, 0.6 + pop * 0.4); c.fillStyle = '#e63946'; c.strokeStyle = '#fff'; c.lineWidth = 6;
           c.font = `900 ${Math.min(W * 0.14, 84)}px system-ui, sans-serif`; c.strokeText('VS', 0, 0); c.fillText('VS', 0, 0); c.restore();
-          c.fillStyle = '#fff'; c.font = `700 ${Math.min(W * 0.045, 20)}px system-ui, sans-serif`; c.fillText(`Probabilidad de ganar: ${j.chance} %`, W / 2, H * 0.7);
+          c.fillStyle = '#fff'; c.font = `700 ${Math.min(W * 0.045, 20)}px system-ui, sans-serif`; c.strokeStyle = '#000'; c.lineWidth = 4; c.strokeText(`Probabilidad de ganar: ${j.chance} %`, W / 2, H * 0.92); c.fillText(`Probabilidad de ganar: ${j.chance} %`, W / 2, H * 0.92);
         }
         if (cer) {                                                                       // ceremonia: flashes de fotógrafos, confeti, barras de cine con el ganador y fundido final
           if (!reduced) for (const fl of flashes) {                                      // destellos pequeños (nunca pantalla completa)
