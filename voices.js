@@ -27,6 +27,7 @@
   // Cada personaje tiene su voz para siempre: tono, velocidad y qué voz del sistema usa
   function profile(kind) {
     if (kind === 'human') return { k: 'human', pitch: rnd(0.7, 1.45), rate: rnd(0.95, 1.12), vi: Math.random(), chirp: 0 };
+    if (kind === 'astro') return { k: 'astro', pitch: rnd(0.55, 1.1), rate: rnd(0.86, 1.02), vi: Math.random(), chirp: 0 };   // astronautas de la Luna: voz de radio, algo grave y pausada
     const deep = Math.random() < 0.25;   // algún marciano de voz grave, de ultratumba
     return { k: 'alien', pitch: deep ? rnd(0.3, 0.6) : rnd(1.5, 2), rate: rnd(0.8, 1.18), vi: Math.random(), chirp: rnd(520, 1500) };
   }
@@ -51,6 +52,7 @@
     if (busy) { try { ss.cancel(); } catch (e) {} }
     let wait = busy ? 90 : 0;
     if (p.k === 'alien' && p.chirp) { sfx('chirp', { vol: (o.vol || 1) * 0.8, f: p.chirp }); wait = Math.max(wait, 230); }
+    if (p.k === 'astro') { sfx('radio', { vol: (o.vol || 1) * 0.8 }); wait = Math.max(wait, 200); }   // «¡kshh!» de la radio del casco
     pend++;
     setTimeout(() => {
       pend--;
@@ -115,13 +117,19 @@
     glub: (d, t, v) => { tone(d, 'sine', 220, 120, t, 0.13, 0.65 * v); tone(d, 'sine', 260, 140, t + 0.17, 0.13, 0.55 * v); },
     hip: (d, t, v) => tone(d, 'sine', 380, 760, t, 0.09, 0.55 * v),
     splosh: (d, t, v) => { noise(d, t, 0.35, 0.5 * v, 900); tone(d, 'sine', 400, 150, t, 0.25, 0.4 * v); },
+    // frases con gracia: bienvenida (arpegio alegre), «¡qué caro!» (caja registradora), enfado (zumbido que cae), radio del casco y moto lunar
+    bienvenida: (d, t, v) => [523, 659, 784, 1047].forEach((f, i) => tone(d, 'triangle', f, f, t + i * 0.085, 0.2, 0.3 * v, { hold: 0.1 })),
+    cash: (d, t, v) => { noise(d, t, 0.07, 0.22 * v, 7000); tone(d, 'sine', 1568, 1568, t, 0.1, 0.35 * v); tone(d, 'sine', 2093, 2093, t + 0.09, 0.55, 0.3 * v, { hold: 0.3 }); },
+    enfado: (d, t, v) => { tone(d, 'sawtooth', 330, 110, t, 0.38, 0.22 * v, { vib: [18, 20], lp: 900, hold: 0.1 }); tone(d, 'square', 220, 90, t + 0.3, 0.3, 0.12 * v, { lp: 700 }); },
+    radio: (d, t, v) => { noise(d, t, 0.09, 0.28 * v, 3200); tone(d, 'sine', 1250, 1250, t + 0.05, 0.07, 0.18 * v); },
+    rover: (d, t, v, o) => { const du = o.dur || 12; tone(d, 'sawtooth', 62, 78, t, du, 0.09 * v, { vib: [16, 7], lp: 320, a: du * 0.2, hold: du * 0.35 }); },
     // platillos
     ufoIn: (d, t, v) => { tone(d, 'sine', 950, 300, t, 3.6, 0.14 * v, { vib: [7, 60], a: 0.4, hold: 1 }); tone(d, 'triangle', 1500, 500, t, 3.6, 0.04 * v, { a: 0.4, hold: 1 }); },
     ufoOut: (d, t, v) => { tone(d, 'sine', 300, 1100, t, 3.2, 0.14 * v, { vib: [7, 60], a: 0.3, hold: 1 }); tone(d, 'triangle', 500, 1700, t, 3.2, 0.04 * v, { a: 0.3, hold: 1 }); },
     ufoFly: (d, t, v, o) => { const du = o.dur || 9; tone(d, 'sine', 520, 720, t, du, 0.12 * v, { vib: [5, 45], a: du * 0.25, hold: du * 0.4 }); tone(d, 'triangle', 1040, 1440, t, du, 0.035 * v, { a: du * 0.25, hold: du * 0.4 }); },
     thud: (d, t, v) => { tone(d, 'sine', 130, 40, t, 0.3, 0.7 * v); noise(d, t, 0.25, 0.25 * v, 300); }
   };
-  const SFX_CAT = { chirp: 'marcianos', ufoIn: 'marcianos', ufoOut: 'marcianos', ufoFly: 'marcianos', thud: 'marcianos' };   // lo demás (bichos) = «animales»
+  const SFX_CAT = { chirp: 'marcianos', ufoIn: 'marcianos', ufoOut: 'marcianos', ufoFly: 'marcianos', thud: 'marcianos', bienvenida: 'marcianos', cash: 'marcianos', enfado: 'marcianos', radio: 'gente', rover: 'gente' };   // lo demás (bichos) = «animales»
   const catOn = c => !window.soundOn || window.soundOn(c);
   function sfx(name, o) {
     o = o || {};

@@ -1,5 +1,6 @@
 'use strict';
-// Vida extraterrestre en todos los planetas (menos la Luna, que está desierta):
+// Vida en todos los mundos. En la Luna viven ASTRONAUTAS (caminan a saltitos, con casas lunares: cúpulas, módulos con paneles solares, invernaderos…;
+// de vez en cuando pasa un jeep lunar). En el resto de planetas:
 //  - Marcianos que pasean, se paran a charlar entre ellos y piensan en voz alta («¿qué hace este terrícola en mi planeta?»).
 //  - Vichos: babosas saltarinas, escarabajos de seis patas y medusas flotantes.
 //  - Platillos volantes que aterrizan en plataformas (como helipuertos), sueltan visitantes y vuelven a despegar. Y alguno que pasa de largo.
@@ -7,10 +8,13 @@
 // Todo es un dibujo ligero (SVG) que se coloca sobre el mapa de cada planeta (mundos.js avisa con el evento «mundo:map»).
 // Solo se ve de cerca (zoom 15 o más). Se apaga con el mismo botón de la gente (🚶), como los animales de la Tierra.
 // Para probar en la consola: alienSay('marte') hace hablar a un marciano; alienSaucer('marte') llama a un platillo.
+// Saludos con tu nombre: al llegar a CUALQUIER mundo (evento «mundo:llegada», lo lanza mundos.js) un habitante te da la bienvenida por tu apodo y otro
+// te suelta una frase graciosa («Vete de aquí, terrícola», «Aquí está todo muy caro», «Voy a pedir una hipoteca»…). Después, de vez en cuando, siguen nombrándote.
+// Cada tipo de frase tiene su sonido (arpegio de bienvenida, caja registradora, zumbido de enfado, radio del casco). Prueba: alienGreet('marte') / alienGreet('luna').
 // Voces y sonidos: cada burbuja se dice en voz alta (voices.js): los marcianos hablan, los vichos hacen su ruido y los platillos zumban.
 (function () {
   if (!window.maplibregl) return;
-  const IDS = ['mercurio', 'venus', 'marte', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton'];   // la Luna no está
+  const IDS = ['luna', 'mercurio', 'venus', 'marte', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton'];   // en la Luna: astronautas en vez de marcianos
   const FLOAT = { jupiter: 1, saturno: 1, urano: 1, neptuno: 1 };                                      // gigantes gaseosos: todo flota
   const MC = maplibregl.MercatorCoordinate;
   const SMALL = Math.min(innerWidth, innerHeight) < 600;
@@ -41,6 +45,7 @@
 
   // Colores por planeta: pieles de los marcianos y paredes de los edificios (que destaquen sobre el fondo de cada mundo)
   const PAL = {
+    luna:     { skin: ['#f4f6fa', '#ffe9cf', '#dcecff', '#ffe1e1'], wall: ['#e9ecf1', '#cfd6e2', '#efe0c4'] },   // trajes (blanco con detalles) y casas lunares claras
     mercurio: { skin: ['#7ee787', '#ff9f43', '#d980fa', '#48dbfb'], wall: ['#7d5ba6', '#2a9d8f', '#d1603d'] },
     venus:    { skin: ['#4dd2c8', '#b983ff', '#6ea8ff', '#9be564'], wall: ['#7a3e9d', '#2f6db5', '#1f9e89'] },
     marte:    { skin: ['#7ee787', '#a8e063', '#4dd2c8', '#6ea8ff'], wall: ['#4b8f6a', '#5a6fb3', '#8a5fb0'] },
@@ -175,6 +180,84 @@
       ${[7, 17.5, 28, 38.5, 49].map((x, i) => bl(x, 21, 1.8, cols[i], i * 0.17, 0.85)).join('')}</svg>`;
   }
 
+  // Astronauta (20×30, el suelo está en el borde de abajo). Cuatro modelos: detalles naranja, rojo, azul y verde; el 3.º lleva antena y el 4.º una bandera.
+  function astroSVG(kind, suit) {
+    const dk = shade(suit, -0.26), ln = '#434a5c', gold = '#f0c14b', acc = ['#ff7a1a', '#e5484d', '#2f7de1', '#2fb36b'][kind % 4];
+    const leg = b => { const x = b ? 11 : 6.2; return `<g class="al-leg${b ? ' b' : ''}"><rect x="${x}" y="17.5" width="2.8" height="6" rx="1.2" fill="${suit}" stroke="${ln}" stroke-width=".45"/><rect x="${x - 0.5}" y="22.2" width="3.8" height="2.6" rx="1.1" fill="${dk}" stroke="${ln}" stroke-width=".45"/></g>`; };
+    const arm = b => { const d = b ? 'M14.4 12.8 Q17.6 15.2 16.8 18.6' : 'M5.6 12.8 Q2.4 15.2 3.2 18.6', gx = b ? 16.8 : 3.2; return `<g class="al-leg${b ? ' b' : ''}"><path d="${d}" stroke="${ln}" stroke-width="3.3" fill="none" stroke-linecap="round"/><path d="${d}" stroke="${suit}" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="${gx}" cy="19" r="1.5" fill="${dk}" stroke="${ln}" stroke-width=".4"/></g>`; };
+    let extra = '';
+    if (kind === 2) extra = `<path d="M13.6 2.4 L15.6 -2.2" stroke="${ln}" stroke-width=".8" stroke-linecap="round"/>${bl(15.7, -2.6, 1.1, '#ff4d4d', 0, 1)}`;
+    else if (kind === 3) extra = `<path d="M18 19.4 V-3.6" stroke="#d6d9e0" stroke-width=".9" stroke-linecap="round"/><path d="M18 -3.6 H25 L23.2 -1.2 L25 1.2 H18Z" fill="#ff7a1a" stroke="${ln}" stroke-width=".3"/><circle cx="20.2" cy="-1.2" r="1" fill="#fff"/>`;
+    return `<svg width="20" height="30" viewBox="0 -4 20 30" aria-hidden="true"><ellipse cx="10" cy="25" rx="6.5" ry="1.3" fill="rgba(0,0,0,.32)"/>
+      <rect x="3.6" y="10.4" width="12.8" height="9" rx="2.6" fill="${dk}" stroke="${ln}" stroke-width=".5"/>
+      ${leg(0)}${leg(1)}${arm(1)}
+      <rect x="5.2" y="11" width="9.6" height="8.6" rx="3" fill="${suit}" stroke="${ln}" stroke-width=".5"/>
+      <rect x="5.4" y="16.5" width="9.2" height="1.5" fill="${acc}"/><rect x="8" y="12.7" width="4" height="2.8" rx=".7" fill="#56627a"/><circle cx="9" cy="14.1" r=".5" fill="#ff5252"/><circle cx="11" cy="14.1" r=".5" fill="#5cff8a"/>
+      ${arm(0)}
+      <rect x="6.4" y="11" width="7.2" height="1.5" rx=".7" fill="${acc}"/>
+      <circle cx="10" cy="6.4" r="6.3" fill="${suit}" stroke="${ln}" stroke-width=".5"/>
+      <ellipse cx="10" cy="6.8" rx="4.7" ry="4.1" fill="#a9760f"/><ellipse cx="10" cy="6.6" rx="4.2" ry="3.6" fill="${gold}"/><ellipse cx="8.3" cy="5.1" rx="1.6" ry=".9" fill="#fff" opacity=".7"/>${extra}</svg>`;
+  }
+  // Casas lunares (44×60, la base está en y=58): cúpula, módulo con paneles solares, casa doble, antena parabólica, invernadero y torre con bandera.
+  function moonBaseSVG(kind, wall) {
+    const c1 = wall, c2 = shade(wall, -0.3), c3 = shade(wall, 0.45), win = '#ffe66d', ln = '#454c5c', sw = ` stroke="${ln}" stroke-width=".8"`;
+    const sh = `<ellipse cx="22" cy="58.4" rx="19" ry="2.2" fill="rgba(0,0,0,.3)"/>`;
+    let g = '';
+    if (kind === 0) {          // cúpula-iglú con esclusa
+      g = `<path d="M4 58 A18 18 0 0 1 40 58Z" fill="${c1}"${sw}/><path d="M22 40 V58 M12 45 Q22 40 32 45 M8 52 Q22 47 36 52" stroke="${c2}" stroke-width=".8" fill="none" opacity=".7"/>
+        <rect x="18.5" y="47" width="7" height="11" rx="3.5" fill="${c2}"${sw}/><rect x="20.2" y="49" width="3.6" height="4" rx="1.8" fill="${win}"/>
+        <circle cx="12" cy="50" r="2" fill="#7be0ff"${sw}/><circle cx="32" cy="50" r="2" fill="#7be0ff"${sw}/>
+        <path d="M22 40 V32" stroke="${ln}" stroke-width="1.1"/>${bl(22, 31.5, 1.6, '#ff4d4d', 0, 1)}`;
+    } else if (kind === 1) {   // módulo cilíndrico con panel solar
+      g = `<path d="M12 58 V55 M32 58 V55" stroke="${ln}" stroke-width="1.6"/><rect x="5" y="42" width="34" height="15" rx="7.5" fill="${c1}"${sw}/><path d="M5 50 H39" stroke="${c2}" stroke-width=".8" opacity=".6"/>
+        <circle cx="13" cy="48.5" r="2.4" fill="#7be0ff"${sw}/><circle cx="22" cy="48.5" r="2.4" fill="#7be0ff"${sw}/><circle cx="31" cy="48.5" r="2.4" fill="${win}"${sw}/>
+        <path d="M22 42 V31" stroke="${ln}" stroke-width="1.4"/><path d="M8 21 H36 L38 30 H6Z" fill="#2b4c9b"${sw}/><path d="M15 21 L14 30 M22 21 V30 M29 21 L30 30 M7 25.5 H37" stroke="#8fb0f5" stroke-width=".6"/>
+        ${bl(5, 49, 1.4)}${bl(39, 49, 1.4)}`;
+    } else if (kind === 2) {   // casa cuadrada + cúpula unidas por un tubo
+      g = `<rect x="19" y="49" width="8" height="5.5" fill="${c2}"${sw}/><rect x="2.5" y="38" width="17.5" height="20" rx="2" fill="${c1}"${sw}/><rect x="2.5" y="36" width="17.5" height="4.2" rx="1.6" fill="${c3}"${sw}/>
+        <rect x="5.5" y="43" width="5.5" height="5.5" rx="1" fill="${win}"${sw}/><rect x="13" y="48" width="5" height="10" rx="1" fill="${c2}"${sw}/>
+        <path d="M24 58 A10 10 0 0 1 44 58Z" fill="${c3}"${sw}/><circle cx="34" cy="52.5" r="2.3" fill="#7be0ff"${sw}/>
+        <path d="M16 36 V27" stroke="${ln}" stroke-width="1.1"/>${bl(16, 26.5, 1.5, '#ff4d4d', 0, 1)}`;
+    } else if (kind === 3) {   // antena parabólica
+      g = `<rect x="9" y="46" width="26" height="12" rx="2" fill="${c1}"${sw}/><rect x="12.5" y="49" width="6.5" height="4" rx="1" fill="${win}"${sw}/><rect x="26" y="50" width="5" height="8" fill="${c2}"${sw}/>
+        <path d="M22 46 V32" stroke="${ln}" stroke-width="1.8"/>
+        <g transform="rotate(-20 22 30)"><path d="M8 20 Q22 40 36 20Z" fill="${c3}"${sw}/><path d="M22 30 V10" stroke="${ln}" stroke-width="1"/></g>${bl(18.5, 11, 1.6, '#ff5cf0', 0, 1)}${bl(9, 52, 1.3)}`;
+    } else if (kind === 4) {   // invernadero con plantas
+      g = `<path d="M3 57 A19 19 0 0 1 41 57Z" fill="#bfe8ff" opacity=".55"${sw}/><path d="M22 38 V57 M12 43 Q22 37 32 43" stroke="${c2}" stroke-width=".8" fill="none" opacity=".8"/>
+        <rect x="8" y="51" width="28" height="6" fill="#6b4a2f"/>
+        <path d="M13 51 V47 M20 51 V44 M28 51 V46 M34 51 V48" stroke="#2f9b4d" stroke-width="1.1"/>
+        <circle cx="13" cy="46" r="3.1" fill="#3fbf5f"/><circle cx="20" cy="43.5" r="3.7" fill="#57d46f"/><circle cx="28" cy="45.5" r="3.4" fill="#3fbf5f"/><circle cx="34" cy="47.5" r="2.6" fill="#57d46f"/>
+        <circle cx="21.5" cy="44.5" r="1" fill="#ff5252"/><circle cx="27" cy="47" r=".9" fill="#ff5252"/><circle cx="12" cy="47.4" r=".9" fill="#ffb02e"/>
+        <rect x="1.5" y="56" width="41" height="3" rx="1.5" fill="${c1}"${sw}/>${bl(22, 37, 1.4, '#7dff6b', 0, 1.4)}`;
+    } else {                    // torre de módulos con bandera
+      g = `<rect x="8" y="46" width="28" height="12" rx="2" fill="${c1}"${sw}/><rect x="13" y="32" width="18" height="14.5" rx="2" fill="${c3}"${sw}/><path d="M15 32 A7 7 0 0 1 29 32Z" fill="${c1}"${sw}/>
+        <circle cx="13.5" cy="52" r="2" fill="#7be0ff"${sw}/><circle cx="22" cy="52" r="2" fill="${win}"${sw}/><circle cx="30.5" cy="52" r="2" fill="#7be0ff"${sw}/><rect x="19.5" y="37" width="5" height="6" rx="1" fill="${win}"${sw}/>
+        <path d="M22 25.5 V8" stroke="#d6d9e0" stroke-width="1.1"/><path d="M22 8 H35 L32.5 11.5 L35 15 H22Z" fill="#ff7a1a"${sw.replace('.8', '.5')}/><circle cx="27" cy="11.6" r="1.6" fill="#fff"/>${bl(22, 7.5, 1.3, '#ff4d4d', 0, 1)}`;
+    }
+    return `<svg width="44" height="62" viewBox="0 -2 44 62" aria-hidden="true">${sh}${g}</svg>`;
+  }
+  // Plataforma de aterrizaje lunar con módulo (64×54, anclado abajo)
+  function landerSVG() {
+    const ln = '#434a5c';
+    return `<svg width="64" height="54" viewBox="0 0 64 54" aria-hidden="true">
+      <rect x="2" y="38" width="60" height="14" rx="7" fill="#303650"/><rect x="2" y="34" width="60" height="14" rx="7" fill="#5b6280"/><rect x="6" y="37" width="52" height="8" rx="4" fill="#474e6b"/>
+      <path d="M23 24 L13 41 M41 24 L51 41 M27 25 L22 42 M37 25 L42 42" stroke="#b8bfcc" stroke-width="1.6" stroke-linecap="round"/><ellipse cx="13" cy="41.5" rx="3.4" ry="1.2" fill="#d6dae3"/><ellipse cx="51" cy="41.5" rx="3.4" ry="1.2" fill="#d6dae3"/><ellipse cx="22" cy="42.5" rx="2.8" ry="1" fill="#d6dae3"/><ellipse cx="42" cy="42.5" rx="2.8" ry="1" fill="#d6dae3"/>
+      <path d="M20 26 L24 14 H40 L44 26Z" fill="#d9a441" stroke="${ln}" stroke-width=".7"/><path d="M26 15 L27 25 M32 14 V26 M38 15 L37 25" stroke="#a97a22" stroke-width=".7"/>
+      <path d="M25 14 Q32 2 39 14Z" fill="#e4e8ef" stroke="${ln}" stroke-width=".7"/><ellipse cx="32" cy="10" rx="3.2" ry="2.4" fill="#7be0ff" stroke="${ln}" stroke-width=".5"/>
+      <path d="M32 3 V-3" stroke="${ln}" stroke-width=".9"/>${bl(32, -3.4, 1.5, '#ff4d4d', 0, 1)}${bl(8, 41, 1.6, '#4dfcff', 0, 1.2)}${bl(56, 41, 1.6, '#ff5cf0', 0.3, 1.2)}</svg>`;
+  }
+  // Jeep lunar (56×30, anclado abajo, mira a la derecha)
+  function roverSVG() {
+    const ln = '#434a5c', wheel = x => `<g transform="translate(${x},24)"><g class="rv-w"><circle r="5" fill="#2e3340" stroke="#aab2c2" stroke-width="1.2"/><path d="M-4 0 H4 M0 -4 V4 M-2.8 -2.8 L2.8 2.8 M2.8 -2.8 L-2.8 2.8" stroke="#aab2c2" stroke-width=".7"/></g></g>`;
+    return `<svg width="56" height="30" viewBox="0 0 56 30" aria-hidden="true"><ellipse cx="28" cy="29" rx="25" ry="1.6" fill="rgba(0,0,0,.3)"/>
+      <path d="M12 21 L16 24 H40 L44 21" stroke="${ln}" stroke-width="1.4" fill="none"/>
+      <rect x="8" y="14" width="40" height="7" rx="2.5" fill="#e9ecf1" stroke="${ln}" stroke-width=".8"/><rect x="12" y="16.5" width="12" height="2.4" fill="#ff7a1a"/>
+      <path d="M36 14 V6" stroke="${ln}" stroke-width="1"/><path d="M29 2 H46 L47 7 H28Z" fill="#2b4c9b" stroke="${ln}" stroke-width=".6"/><path d="M33.5 2 L33 7 M38 2 V7 M42.5 2 L43 7" stroke="#8fb0f5" stroke-width=".5"/>
+      <path d="M50 14 L53 5" stroke="${ln}" stroke-width=".9"/>${bl(53, 4.4, 1.2, '#ff4d4d', 0, 1)}
+      <circle cx="20" cy="7.6" r="4.2" fill="#f4f6fa" stroke="${ln}" stroke-width=".6"/><ellipse cx="21.4" cy="7.9" rx="2.6" ry="2.2" fill="#f0c14b"/><rect x="16.4" y="11" width="7.2" height="5" rx="2" fill="#f4f6fa" stroke="${ln}" stroke-width=".5"/>
+      ${wheel(14)}${wheel(42)}</svg>`;
+  }
+
   // ---------- Frases ----------
   const THINK = [
     '¿Qué hace este terrícola en mi planeta?', 'Otro terrícola… y yo sin haber ordenado la nave.', 'Pienso, luego orbito.',
@@ -212,7 +295,75 @@
     ['Ayer vi un platillo mal aparcado.', 'Seguro que era del cuñado de Orión.'],
     ['¿Por qué lleva ese aparato en la mano?', 'Dicen que es su antena. Pobrecillo, solo tiene una… y plana.']
   ];
+  // Frases con el nombre del jugador ({n}) y del mundo ({w}). Grupos: hi = bienvenida · bad = «vete de aquí» · cash = «qué caro / hipoteca» · wise = frases elocuentes
+  const FX = { hi: 'bienvenida', bad: 'enfado', cash: 'cash', wise: null };
+  const NAMED_A = {
+    hi: ['¡Bienvenido a {w}, {n}!', '¡{n}! ¡Qué honor! Pasa, pasa, que no pisamos las parcelas… mucho.', 'Bienvenido, {n}. Aquí el aire es opcional, pero la hospitalidad no.',
+      '¡Oh, {n}! Te esperábamos desde el Big Bang.', 'Salve, {n}, noble viajero de la Vía Láctea.', 'Bienvenido a {w}, {n}. Mi casa es tu casa… y mi hipoteca también.',
+      '¡Hola, {n}! Nos han dicho que vienes a comprar. ¡Qué alegría!', 'Aplaudid con las antenas: ¡{n} nos visita!', '¡Es {n}! ¡Que alguien avise al alcalde, al otro alcalde y al tercero!'],
+    bad: ['Vete de aquí, terrícola {n}.', '{n}, lárgate a tu planeta. Aquí ya no cabe nadie.', '¡Fuera, {n}! Este planeta está completo.', 'No me mires así, {n}, que me pongo verde. Más.',
+      '{n}, esto es propiedad privada… de otro terrícola. Qué fastidio.', 'Ay, {n}… otra vez tú. Vete de aquí, terrícola.', '¡Largo, {n}! Y llévate a tu cohete.'],
+    cash: ['Aquí está todo muy caro, {n}.', '¿Un cráter por tres créditos? ¡Ni en Andrómeda, {n}!', '{n}, los precios por aquí están por las nubes. Y eso que estamos en {w}.',
+      'Voy a pedir una hipoteca, {n}. ¿Me avalas?', 'Dicen que {n} compra parcelas. Yo, para comprarme un cráter, voy a pedir una hipoteca.', '{n}, ¿me prestas unos créditos? Te los devuelvo en el próximo eclipse.',
+      'El metro cuadrado se ha disparado, {n}. Y el de agujero negro, ni te cuento.', 'Si compras aquí, {n}, acabarás pidiendo una hipoteca, como yo.', 'Me han subido el alquiler del platillo, {n}. Voy a pedir una hipoteca.',
+      '¿Cuánto cuesta una parcela? Mucho, {n}. Demasiado. Voy a pedir una hipoteca.'],
+    wise: ['Dijo el sabio de Andrómeda: quien visita a {n}, nunca vuelve con las manos vacías.', 'El universo es infinito, {n}, pero la paciencia de los marcianos no.', '{n}, quien busca una estrella encuentra una parcela.',
+      'Las órbitas son como las deudas, {n}: siempre vuelven.', 'Contempla, {n}: millones de estrellas… y ninguna con cobertura.', 'Somos polvo de estrellas, {n}. Tú, polvo con tarjeta.',
+      'No hay mal que por bien no venga, {n}, ni platillo que no aterrice.', 'Recuerda, {n}: quien no arriesga, no se hipoteca.', 'Cada cráter es una historia, {n}. Y cada historia, un alquiler.',
+      'En {w}, {n}, la sabiduría es gratis y el aparcamiento no.']
+  };
+  const NAMED_M = {
+    hi: ['¡Bienvenido a la Luna, {n}! Aquí no hay aire, pero hay buena conexión con la Tierra.', 'Houston, tenemos visita: se llama {n}.', 'Un pequeño paso para {n}, un gran paso para el vecindario lunar.',
+      'Hola {n}, aquí base Tranquilidad. ¿Me recibes?', '¡{n} ha aterrizado! Repito: {n} ha aterrizado.', 'Bienvenido, {n}. Cuidado con el polvo: se pega a todo, como los vendedores.', '¡Atención, base! {n} ha llegado. Que alguien ponga café.'],
+    bad: ['Vete de aquí, terrícola {n}. Es broma… o no.', '{n}, vuelve a la Tierra. Aquí ya no queda ni un cráter libre.', '¡Fuera de mi cráter, {n}!', 'Esta zona es privada, {n}. Lo dice la bandera.'],
+    cash: ['Aquí está todo carísimo, {n}: hasta el oxígeno va por suscripción.', 'Voy a pedir una hipoteca para comprarme un cráter, {n}.', 'Los precios en la Luna están por las nubes, {n}. Y eso que aquí no hay nubes.',
+      '{n}, ¿me das un poco de oxígeno? Te lo pago a plazos.', 'Houston, aquí hace un frío que pela y el alquiler está por las nubes. Voy a pedir una hipoteca, {n}.', 'Un cráter con vistas a la Tierra… ¡a ese precio, {n}, ni loco!'],
+    wise: ['Contempla la Tierra, {n}: tan azul, tan pequeña, tan llena de gente que no nos escribe.', 'La Luna no tiene viento, {n}, pero sí mucha gente que se da aires.', 'Aquí abajo todo pesa seis veces menos, {n}, menos las facturas.',
+      'Mira, {n}: desde aquí no se ven fronteras… ni el banco.', 'He visto salir la Tierra, {n}. Es como la de las fotos, pero sin filtro.', 'Silencio absoluto, {n}. Así se oye uno pensar… y a la hipoteca llamar.']
+  };
+  const MOON_THINK = [
+    'Houston, tenemos visita… ¿será el del banco?', 'Si me caigo, tardo seis veces más en llegar al suelo.', 'Qué silencio. Aquí nadie te oye… ni tu suegra.', 'Mi traje tiene más años que mi coche.',
+    'Un paso, dos pasos… ¿por qué se me va la bota?', 'La Tierra se ve más bonita desde lejos.', 'Ya me gustaría tener ascensor en este cráter.', 'Casa lunar con vistas a la Tierra: ¡oportunidad única!',
+    'Dejé la bandera aquí… ¿o era en el otro cráter?', 'Aquí el polvo no se barre, se negocia.', 'Cuando vuelva a la Tierra, lo primero: una ducha. Y una lluvia.', 'Pesar poco está genial. Hasta que llega la nómina.',
+    'Aquí no hay atascos, pero tampoco hay bares.', 'Una luna llena desde la Luna… ¿eso es la Tierra llena?', 'Mi radio solo capta anuncios de la Tierra. Y hipotecas.', 'Si grito, ¿alguien me oye? ¿Hola? Qué silencio.',
+    'Estas botas pesan menos, pero me aprietan igual.', 'Ni un bar en 400.000 kilómetros. Esto es el fin del mundo.', 'Dicen que aquí cerca vive un conejo. Nunca lo he visto.', 'He plantado una lechuga. Tiene más suerte que yo.'
+  ];
+  const MOON_CONVOS = [
+    ['Houston, ¿me recibes?', 'Alto y claro. ¿Dónde has aparcado el jeep?', 'En el cráter de la derecha. O el de la izquierda.'],
+    ['¿Has visto al visitante?', 'Sí. Parece que viene a comprar un cráter.', 'Pues dile que aquí todo está muy caro.'],
+    ['Hoy toca limpiar el polvo.', '¿Otra vez? Si no hay quien lo ensucie.', 'El polvo. Siempre el polvo.'],
+    ['¿Qué tal el invernadero?', 'Ha salido una lechuga. Una.', '¡Pues esta noche hay cena de gala!'],
+    ['Me duele la espalda de tanto saltar.', 'Es la gravedad: te falta un poco.', 'Pues yo me siento más ligero que nunca.'],
+    ['¿Pedimos una hipoteca para ampliar la base?', 'Con estos tipos de interés, ni en órbita.'],
+    ['Mira, la Tierra está en cuarto creciente.', 'Preciosa. Qué pena que no tenga cobertura aquí.'],
+    ['¿Has oído eso?', 'Es el silencio.', 'Ah, claro. Qué ruidoso.']
+  ];
+  const CONVOS_N = [
+    ['¿No es ese {n}?', 'Sí, el terrícola que compra parcelas. ¡Escóndete!'], ['Dicen que {n} viene a pedir una hipoteca.', 'Pues que haga cola: yo soy el primero.'],
+    ['¿Has visto a {n}?', 'Sí. Aquí está todo muy caro y viene a comprar. Qué valor.'], ['{n} nos está mirando.', 'Disimula. Haz como que pagas la hipoteca.']
+  ];
+  const MOON_CONVOS_N = [
+    ['Ese es {n}, ¿verdad?', 'El mismo. El que compra parcelas en la Luna.', 'Pues que no pregunte el precio.'], ['{n} ha vuelto a la Luna.', 'Qué bien: otro que paga el alquiler del cráter.'],
+    ['Dicen que {n} quiere casa lunar.', 'Con vistas a la Tierra y sin vecinos. Pide una hipoteca.']
+  ];
   const FLYSAY = ['¡Ahí os quedáis, terrícolas!', '¡Que llego tarde a la abducción!', '¡Apartaos, que paso!', '¡Hola, abajo! ¡Adiós, abajo!', '¡Uiiii, qué velocidad!', '¡Salud, terrícolas!'];
+  const ROVERSAY = ['¡Cuidado, que paso!', '¡Soy el rey del jeep lunar!', '¡Ni un semáforo en toda la Luna!', '¡Vaya baches!', '¡Yuhuuu!', 'Voy a la base a por oxígeno.'];
+  // Nombre del jugador: su apodo (el que fija app.js). Sin sesión, se le llama «terrícola»
+  function playerName() {
+    let n = '';
+    try { n = (typeof nickOf === 'function' ? nickOf() : '') || (document.getElementById('name') || {}).value || ''; } catch (e) {}
+    return String(n).replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+  }
+  function worldName(W) { let n = W.id; try { if (window.worldInfo) n = window.worldInfo(W.id).name; } catch (e) {} return /^La /.test(n) ? 'la ' + n.slice(3) : n; }
+  const fill = (t, W) => t.replace(/\{n\}/g, playerName() || 'terrícola').replace(/\{w\}/g, worldName(W)).replace(/terrícola,? terrícola/ig, 'terrícola');
+  // Una frase con el nombre del jugador de uno de los grupos; nunca repite la anterior
+  function namedLine(W, groups) {
+    const g = pick(groups), pool = (W.moon ? NAMED_M : NAMED_A)[g];
+    let t = pick(pool), k = 0;
+    while (t === W.lastNamed && pool.length > 1 && ++k < 6) t = pick(pool);
+    W.lastNamed = t;
+    return { text: fill(t, W), fx: FX[g] };
+  }
   const SOUNDS = ['¡blup!', 'bzzz', 'ñic ñic', '¿miau?', '¡piii!', 'glub', '¡hip!', 'splosh'];
   const ARRIVE = ['¡Hemos llegado! ¿Y este terrícola?', '¡Aterrizaje perfecto! Casi.', 'Buen viaje. ¿Quién deja a un terrícola suelto?', '¡Qué mal aparca el piloto!'];
 
@@ -245,12 +396,17 @@
     .al-b.think::after { width: 5px; height: 5px; left: 50%; bottom: -19px; margin-left: -2px; }
     .al-b.say::after { content: ''; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: #fff; }
     .al-b.tiny { font-size: 11px; padding: 3px 8px; border-radius: 99px; }
+    .al-sp.mwalk svg { animation: almoon .84s ease-in-out infinite; }
+    .al-sp.mwalk .al-leg { animation-duration: .42s; }
+    .rv-w { transform-box: fill-box; transform-origin: 50% 50%; animation: alspin .45s linear infinite; }
+    @keyframes almoon { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3.5px); } }
+    @keyframes alspin { to { transform: rotate(360deg); } }
     @keyframes alstep { from { transform: rotate(-26deg); } to { transform: rotate(26deg); } }
     @keyframes albob { from { transform: translateY(0); } to { transform: translateY(-1.3px); } }
     @keyframes alhop { 0%, 100% { transform: translateY(0) scale(1.12, .84); } 50% { transform: translateY(-7px) scale(.9, 1.12); } }
     @keyframes alhover { from { transform: translate(-50%, -100%) translateY(-3px); } to { transform: translate(-50%, -100%) translateY(-7px); } }
     @keyframes alblink { 0%, 100% { opacity: .12; } 50% { opacity: 1; } }
-    @media (prefers-reduced-motion: reduce) { .bl, .al-leg, .al-sp svg, .al-e.hov > .al-sp { animation: none !important; } .bl { opacity: .85; } }`;
+    @media (prefers-reduced-motion: reduce) { .bl, .al-leg, .al-sp svg, .al-e.hov > .al-sp, .rv-w { animation: none !important; } .bl { opacity: .85; } }`;
   document.head.appendChild(st);
 
   // ---------- Un mundo ----------
@@ -261,7 +417,7 @@
     const layer = div('al-layer');
     const cv = map.getCanvas(); cv.parentNode.insertBefore(layer, cv.nextSibling);   // justo encima del mapa y por debajo de los rótulos de los dueños
     const c = map.getContainer();
-    const W = { id, map, box, layer, w: c.clientWidth, h: c.clientHeight, off: true, pal: PAL[id], hov: !!FLOAT[id], seed: IDS.indexOf(id) * 1000 + 17,
+    const W = { id, moon: id === 'luna', map, box, layer, w: c.clientWidth, h: c.clientHeight, off: true, pal: PAL[id], hov: !!FLOAT[id], seed: IDS.indexOf(id) * 1000 + 17,
       walkers: [], critters: [], structs: new Map(), bubbles: [], view: null, sync: 0, viewT: 0, ready: false, flyT: rnd(6, 12), fly: null, sig: '', first: true, s: 1 };
     map.on('resize', () => { W.w = c.clientWidth; W.h = c.clientHeight; });
     worlds[id] = W;
@@ -280,14 +436,15 @@
   // ---------- Marcianos y vichos ----------
   function makeEnt(W, type, x, y) {
     let svg, h, v, cls = '';
-    if (type === 'alien') { svg = alienSVG(Math.floor(Math.random() * 4), pick(W.pal.skin)); h = 30; v = rnd(9, 14); }
+    if (type === 'alien' && W.moon) { svg = astroSVG(Math.floor(Math.random() * 4), pick(W.pal.skin)); h = 30; v = rnd(6, 10); }   // en la Luna: astronautas
+    else if (type === 'alien') { svg = alienSVG(Math.floor(Math.random() * 4), pick(W.pal.skin)); h = 30; v = rnd(9, 14); }
     else if (type === 'blob') { svg = blobSVG(pick(W.pal.skin)); h = 13; v = rnd(6, 9); cls = ' hop'; }
     else if (type === 'bug') { svg = bugSVG(pick(['#ff9f43', '#ff6b81', '#feca57', '#a29bfe', '#55efc4'])); h = 13; v = rnd(11, 16); }
     else { svg = jellySVG(pick(['#ff7ab6', '#b983ff', '#7ef0ff', '#ffd166'])); h = 26; v = rnd(4, 6); }
     const el = div('al-e'); el.style.opacity = '0';
     if (W.hov && type !== 'jelly') { el.appendChild(div('al-hd')); el.classList.add('hov'); }
     const sp = div('al-sp'), fl = div('al-fl', svg); sp.appendChild(fl); el.appendChild(sp); W.layer.appendChild(el);
-    const e = { type, el, sp, fl, mx: x, my: y, tx: x, ty: y, v, h, dir: 1, state: 'idle', t: rnd(0.2, 2), tb: rnd(2.5, 9), cool: rnd(4, 14), cls, sx: 0, sy: 0, sc: 1, bub: null, partner: null, visitor: false, born: performance.now(), vp: type === 'alien' && window.atlasVoice ? window.atlasVoice.profile('alien') : null };
+    const e = { type, el, sp, fl, mx: x, my: y, tx: x, ty: y, v, h, dir: 1, state: 'idle', t: rnd(0.2, 2), tb: rnd(2.5, 9), cool: rnd(4, 14), cls, sx: 0, sy: 0, sc: 1, bub: null, partner: null, visitor: false, born: performance.now(), vp: type === 'alien' && window.atlasVoice ? window.atlasVoice.profile(W.moon ? 'astro' : 'alien') : null, moon: !!W.moon };
     sp.className = 'al-sp still' + cls; requestAnimationFrame(() => { el.style.opacity = '1'; });
     return e;
   }
@@ -304,7 +461,7 @@
   }
   function setLook(e) {   // animación según lo que hace: andar, saltar (babosa) o quieto
     const walking = e.state === 'walk';
-    const c = 'al-sp' + (!walking ? ' still' : e.type === 'blob' ? ' hop' : e.type === 'bug' ? '' : ' walk');
+    const c = 'al-sp' + (!walking ? ' still' : e.type === 'blob' ? ' hop' : e.type === 'bug' ? '' : e.moon ? ' mwalk' : ' walk');
     if (e.look !== c) { e.look = c; e.sp.className = c; }
   }
   function pickTarget(W, e) {
@@ -317,7 +474,7 @@
     e.tx = tx; e.ty = ty; e.state = 'walk';
   }
   function startTalk(W, a, b) {
-    const convo = pick(CONVOS), first = Math.random() < .5 ? a : b;
+    const convo = pick(W.moon ? (playerName() ? MOON_CONVOS.concat(MOON_CONVOS_N) : MOON_CONVOS) : (playerName() ? CONVOS.concat(CONVOS_N) : CONVOS)).map(l => fill(l, W)), first = Math.random() < .5 ? a : b;
     a.state = b.state = 'talk'; a.partner = b; b.partner = a;
     a.dir = b.mx < a.mx ? -1 : 1; b.dir = -a.dir;
     a.cool = b.cool = rnd(25, 45);
@@ -345,7 +502,7 @@
         e.mx = e.tx; e.my = e.ty; e.state = 'idle'; e.t = e.type === 'alien' ? rnd(1, 3.5) : rnd(0.3, 2);
         if (e.type === 'alien' && e.cool <= 0) {   // ¿hay otro marciano libre aquí al lado? pues a charlar
           const o = W.walkers.find(q => q !== e && q.state !== 'talk' && q.cool <= 0 && Math.hypot(q.mx - e.mx, q.my - e.my) < 46 * U && inView(v, q.mx, q.my, 0));
-          if (o && W.bubbles.length < 2) startTalk(W, e, o);
+          if (o && W.bubbles.length < 2 && !(W.hushUntil > performance.now())) startTalk(W, e, o);
         }
       } else { e.mx += dx / d * step; e.my += dy / d * step; if (Math.abs(dx) > 0.2 * U) e.dir = dx < 0 ? -1 : 1; }
     } else if (e.state === 'talk' && e.lead) stepTalk(W, e, dt);
@@ -353,8 +510,11 @@
       e.tb -= dt;
       if (e.tb <= 0) {
         e.tb = rnd(7, 15);
-        if (inView(v, e.mx, e.my, -0.02) && !e.bub) {
-          if (e.type === 'alien') say(W, e, W.first ? (W.first = false, THINK[0]) : pick(Math.random() < .35 ? THINK_W[W.id] : THINK), 'think');
+        if (inView(v, e.mx, e.my, -0.02) && !e.bub && !(W.hushUntil > performance.now())) {   // mientras dura el saludo al jugador nadie más habla
+          if (e.type === 'alien') {
+            if (Math.random() < 0.4) { const nl = namedLine(W, ['cash', 'bad', 'wise', 'hi', 'cash']); say(W, e, nl.text, 'say', null, false, nl.fx); }   // se dirige al jugador por su nombre
+            else say(W, e, W.moon ? pick(MOON_THINK) : W.first ? (W.first = false, THINK[0]) : pick(Math.random() < .35 ? THINK_W[W.id] : THINK), 'think');
+          }
           else if (Math.random() < .5) say(W, e, pick(SOUNDS), 'say tiny', 1.8);
         }
       }
@@ -363,20 +523,21 @@
   }
 
   // ---------- Bocadillos ----------
-  function say(W, e, text, kind, dur, force) {
+  function say(W, e, text, kind, dur, force, fx) {
     if (e.bub || (!force && W.bubbles.length >= 3)) return false;
     const el = div('al-b ' + kind); el.textContent = text; W.layer.appendChild(el);
     const b = { el, e, t: dur || Math.max(3, text.length * 0.07 + 1.8), w: el.offsetWidth, tail: kind.indexOf('think') >= 0 ? 24 : 10 };
     W.bubbles.push(b); e.bub = b; requestAnimationFrame(() => el.classList.add('on'));
-    voiceSay(W, e, text, force);
+    voiceSay(W, e, text, force, fx);
     return true;
   }
   // Voz y sonidos: más fuerte cuanto más cerca del centro de la pantalla; el paneo de los efectos sigue al platillo
   const near = (W, x, y) => clamp(1 - Math.hypot(x - W.w / 2, y - W.h / 2) / Math.max(W.w, W.h), 0.35, 1);
-  function voiceSay(W, e, text, force) {
+  function voiceSay(W, e, text, force, fx) {
     const v = window.atlasVoice; if (!v) return;
     const vol = near(W, e.sx, e.sy);
-    if (e.type === 'alien') v.speak(text, e.vp || (e.vp = v.profile('alien')), { force: !!force, vol });
+    if (fx && !v.muted) v.sfx(fx, { vol: vol * 0.9, pan: clamp((e.sx - W.w / 2) / (W.w / 2), -1, 1) * 0.6 });   // bienvenida, «qué caro», enfado…
+    if (e.type === 'alien') v.speak(text, e.vp || (e.vp = v.profile(W.moon ? 'astro' : 'alien')), { force: !!force, vol });
     else v.critter(text, vol * 0.9);
   }
   function sfxAt(W, name, sx, sy, o) {
@@ -422,7 +583,7 @@
     keep.forEach((c, k) => {
       if (W.structs.has(k)) return;
       const m = MC.fromLngLat({ lng: c.lng, lat: c.lat }), el = div('al-e');
-      const sp = div('al-sp' + (c.type === 'pad' ? ' mid' : ''), c.type === 'pad' ? padSVG() : buildingSVG(c.kind, W.pal.wall[c.kind % W.pal.wall.length]));
+      const sp = div('al-sp' + (c.type === 'pad' && !W.moon ? ' mid' : ''), c.type === 'pad' ? (W.moon ? landerSVG() : padSVG()) : (W.moon ? moonBaseSVG : buildingSVG)(c.kind, W.pal.wall[c.kind % W.pal.wall.length]));
       el.appendChild(sp); W.layer.appendChild(el);
       const o = { key: k, type: c.type, mx: m.x, my: m.y, el, sx: 0, sy: 0, sc: 1, sau: null };
       if (c.type === 'bld' && W.hov) el.classList.add('hov');
@@ -476,17 +637,23 @@
     let F = W.fly;
     if (!F) {
       W.flyT -= dt; if (W.flyT > 0) return;
-      const el = div('al-e', ''); const sp = div('al-sp mid', saucerSVG()); el.appendChild(sp); el.style.zIndex = 9500; W.layer.appendChild(el);
-      F = W.fly = { el, u: 0, dur: rnd(8, 12), dir: Math.random() < .5 ? -1 : 1, y: rnd(0.14, 0.5) * W.h, ph: rnd(0, 6), said: false,
-        pilot: { type: 'alien', sx: 0, sy: 0, sc: 1, h: 22, bub: null, vp: window.atlasVoice ? window.atlasVoice.profile('alien') : null } };   // el piloto habla desde el platillo
-      if (window.atlasVoice) window.atlasVoice.sfx('ufoFly', { dur: F.dur, vol: 0.9, panFrom: F.dir > 0 ? -0.85 : 0.85, panTo: F.dir > 0 ? 0.85 : -0.85 });
+      const el = div('al-e', ''), sp = div(W.moon ? 'al-sp' : 'al-sp mid', W.moon ? roverSVG() : saucerSVG()); el.appendChild(sp); W.layer.appendChild(el);
+      F = W.fly = { el, sp, u: 0, dur: W.moon ? rnd(12, 17) : rnd(8, 12), dir: Math.random() < .5 ? -1 : 1, y: W.moon ? rnd(0.5, 0.88) * W.h : rnd(0.14, 0.5) * W.h, ph: rnd(0, 6), said: false,
+        pilot: { type: 'alien', sx: 0, sy: 0, sc: 1, h: 22, bub: null, vp: window.atlasVoice ? window.atlasVoice.profile(W.moon ? 'astro' : 'alien') : null } };   // el piloto habla desde el platillo (o el jeep)
+      el.style.zIndex = W.moon ? Math.round(F.y) + 10 : 9500;
+      if (W.moon) sp.style.transform = F.dir < 0 ? 'translate(-50%,-100%) scaleX(-1)' : 'translate(-50%,-100%)';
+      if (window.atlasVoice) window.atlasVoice.sfx(W.moon ? 'rover' : 'ufoFly', { dur: F.dur, vol: 0.9, panFrom: F.dir > 0 ? -0.85 : 0.85, panTo: F.dir > 0 ? 0.85 : -0.85 });
     }
     F.u += dt / F.dur;
     if (F.u >= 1) { F.el.remove(); dropBubbleOf(W, F.pilot); W.fly = null; W.flyT = rnd(22, 40); return; }
-    const x = F.dir > 0 ? -50 + (W.w + 100) * F.u : W.w + 50 - (W.w + 100) * F.u, y = F.y + Math.sin(F.u * 7 + F.ph) * 12;
+    const x = F.dir > 0 ? -50 + (W.w + 100) * F.u : W.w + 50 - (W.w + 100) * F.u, y = F.y + (W.moon ? Math.sin(F.u * 60 + F.ph) * 0.8 : Math.sin(F.u * 7 + F.ph) * 12);
     F.pilot.sx = x; F.pilot.sy = y;
-    if (!F.said && F.u > 0.22 && F.u < 0.7) { F.said = true; if (Math.random() < 0.7) say(W, F.pilot, pick(FLYSAY), 'say', 3.6); }
-    F.el.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,0) scale(.85) rotate(' + (Math.sin(F.u * 7 + F.ph) * 5).toFixed(1) + 'deg)';
+    if (!F.said && F.u > 0.22 && F.u < 0.7) {
+      F.said = true;
+      if (W.moon) { if (Math.random() < 0.8) { const nl = Math.random() < 0.45 ? namedLine(W, ['hi', 'wise', 'cash']) : null; say(W, F.pilot, nl ? nl.text : pick(ROVERSAY), 'say', 4, false, nl && nl.fx); } }
+      else if (Math.random() < 0.7) say(W, F.pilot, pick(FLYSAY), 'say', 3.6);
+    }
+    F.el.style.transform = 'translate3d(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px,0) scale(' + (W.moon ? 1 : .85) + ') rotate(' + (W.moon ? 0 : (Math.sin(F.u * 7 + F.ph) * 5).toFixed(1)) + 'deg)';
   }
 
   // ---------- Bucle ----------
@@ -502,7 +669,7 @@
     if (!W.ready) {
       W.ready = true;
       for (let i = 0; i < N_WALK; i++) { const p = randIn(v, 0.08); W.walkers.push(makeEnt(W, 'alien', p.x, p.y)); }
-      for (let i = 0; i < N_CRIT; i++) { const p = randIn(v, 0.05); W.critters.push(makeEnt(W, ['blob', 'bug', 'jelly'][i % 3], p.x, p.y)); }
+      for (let i = 0; i < (W.moon ? 0 : N_CRIT); i++) { const p = randIn(v, 0.05); W.critters.push(makeEnt(W, ['blob', 'bug', 'jelly'][i % 3], p.x, p.y)); }
     }
     for (let i = W.walkers.length - 1; i >= 0; i--) {   // los visitantes de los platillos se marchan al rato
       const e = W.walkers[i];
@@ -513,7 +680,7 @@
       if (!inView(v, e.mx, e.my, 0.4)) { if (e.visitor) { e.dead = true; removeEnt(W, e); W.walkers.splice(W.walkers.indexOf(e), 1); return; } relocate(W, e, randIn(v, 0.06)); }
       stepEnt(W, e, dt, v);
     });
-    W.structs.forEach(o => { if (o.type === 'pad') { if (!o.sau) newSaucer(W, o); stepSaucer(W, o, dt); } });
+    if (!W.moon) W.structs.forEach(o => { if (o.type === 'pad') { if (!o.sau) newSaucer(W, o); stepSaucer(W, o, dt); } });   // en la Luna no hay platillos: los módulos de alunizaje se quedan en su plataforma
     stepFly(W, dt, ts);
     // dibujo
     const place = (o, extraZ) => {
@@ -521,7 +688,7 @@
       o.el.style.transform = 'translate3d(' + p.x.toFixed(1) + 'px,' + p.y.toFixed(1) + 'px,0) scale(' + s.toFixed(3) + ')';
       o.el.style.zIndex = Math.round(p.y) + (extraZ || 0) + 10;
     };
-    W.structs.forEach(o => { place(o, o.type === 'pad' ? -9 : 0); if (o.sau) drawSaucer(W, o, ts); });
+    W.structs.forEach(o => { place(o, o.type === 'pad' && !W.moon ? -9 : 0); if (o.sau) drawSaucer(W, o, ts); });
     all.forEach(e => {
       if (e.dead) return;
       place(e);
@@ -543,8 +710,41 @@
   }
   requestAnimationFrame(frame);
 
+  // ---------- Saludo al llegar a un mundo ----------
+  // Un habitante da la bienvenida al jugador por su nombre y, al terminar, otro le suelta algo gracioso (enfado, precios, hipoteca o una frase elocuente)
+  function greet(id) {
+    const W = worlds[id]; if (!W) return;
+    let tries = 0;
+    const go = () => {
+      if (W.box.classList.contains('hidden') || !isOn()) return;
+      if (!W.ready || !W.view || W.off) { if (++tries < 10) setTimeout(go, 700); return; }
+      if (W.greetT && performance.now() - W.greetT < 15000) return;
+      W.greetT = performance.now();
+      const dist = e => Math.hypot(e.sx - W.w / 2, e.sy - W.h / 2);
+      const vis = W.walkers.filter(e => !e.dead && e.sx > 40 && e.sx < W.w - 40 && e.sy > 110 && e.sy < W.h - 40).sort((a, b) => dist(a) - dist(b));
+      let first = vis[0];
+      if (!first) { first = W.walkers.find(e => !e.dead); if (!first) return; relocate(W, first, randIn(W.view, 0.28)); }
+      const l1 = namedLine(W, ['hi']), d1 = Math.max(3.4, l1.text.length * 0.07 + 1.6);
+      if (first.partner) { first.partner.partner = null; if (first.partner.state === 'talk') first.partner.state = 'idle'; first.partner = null; }
+      W.hushUntil = performance.now() + d1 * 1000 + 9000;   // el saludo ocupa unos segundos: el resto se calla
+      dropBubbleOf(W, first); first.state = 'idle'; first.t = d1 + 2;
+      say(W, first, l1.text, 'say', d1, true, l1.fx);
+      setTimeout(() => {   // la segunda frase: otro habitante (o el mismo) con su gracia
+        if (W.box.classList.contains('hidden') || !isOn()) return;
+        let second = vis.find(e => e !== first && !e.dead && W.walkers.indexOf(e) >= 0) || first;
+        if (W.walkers.indexOf(second) < 0) return;
+        const r = Math.random(), l2 = namedLine(W, r < 0.36 ? ['bad'] : r < 0.74 ? ['cash'] : ['wise']), d2 = Math.max(3.4, l2.text.length * 0.07 + 1.6);
+        dropBubbleOf(W, second); if (second.state !== 'talk') { second.state = 'idle'; second.t = d2 + 1.5; }
+        say(W, second, l2.text, 'say', d2, true, l2.fx);
+      }, d1 * 1000 + 500);
+    };
+    setTimeout(go, 1200);
+  }
+  window.addEventListener('mundo:llegada', e => { try { greet(e.detail.id); } catch (err) { console.error('[aliens] saludo', err); } });
+  window.alienGreet = id => { const k = id || Object.keys(worlds).find(k => !W_hidden(k)); if (k && worlds[k]) { worlds[k].greetT = 0; greet(k); } };
+
   // Para probar desde la consola
-  window.alienSay = id => { const W = worlds[id || Object.keys(worlds).find(k => !W_hidden(k))]; if (!W) return; const e = W.walkers[0]; if (e) { dropBubbleOf(W, e); say(W, e, pick(THINK), 'think', 4, true); } };
+  window.alienSay = id => { const W = worlds[id || Object.keys(worlds).find(k => !W_hidden(k))]; if (!W) return; const e = W.walkers[0]; if (e) { dropBubbleOf(W, e); say(W, e, pick(W.moon ? MOON_THINK : THINK), 'think', 4, true); } };
   window.alienSaucer = id => { const W = worlds[id]; if (!W) return; W.structs.forEach(o => { if (o.sau && o.sau.state === 'wait') o.sau.t = 0; }); };
   function W_hidden(k) { const W = worlds[k]; return !W || W.box.classList.contains('hidden'); }
 })();

@@ -264,6 +264,12 @@ El apodo queda **reservado**: nadie más puede usarlo como nombre al reclamar ni
 
 `voices.js` (`window.atlasVoice`) hace que hablen las burbujas de texto: los **marcianos** con la síntesis de voz del navegador (cada uno con su tono y velocidad, y un «pío» raro antes de hablar; en las charlas se alternan sus voces), los **vichos** con sonidos sintetizados (blup, bzzz, ñic ñic, miau, piii…), los **platillos** con zumbido al bajar, al subir y al pasar de largo (con paneo, y el piloto grita desde arriba), los **peatones de la Tierra** con su frase en voz alta. Una sola voz a la vez: los pensamientos sueltos se saltan si alguien ya está hablando. Se apaga con el botón 🚶 (como la gente y los marcianos) o con `atlasVoice.mute(true)` en la consola (se recuerda en el navegador).
 
+### Astronautas en la Luna y saludos con tu nombre
+
+`aliens.js` también da vida a la **Luna**: astronautas que caminan a saltitos (con jeep lunar que cruza de vez en cuando) entre **casas lunares** (cúpulas, módulos con paneles solares, casas dobles, antenas, invernaderos, torres con bandera) y módulos de alunizaje. Hablan por radio (`voices.js`: perfil `astro`, «¡kshh!» antes de cada frase).
+
+Al **llegar a cualquier mundo** (`mundos.js` lanza el evento `mundo:llegada`) un habitante te da la bienvenida con tu apodo (`nickOf()` de `app.js`; sin sesión te llama «terrícola») y otro suelta una frase graciosa: «Vete de aquí, terrícola», «Aquí está todo muy caro», «Voy a pedir una hipoteca», frases elocuentes… Después te siguen nombrando de vez en cuando. Cada tipo de frase tiene su sonido (arpegio de bienvenida, caja registradora, zumbido de enfado). Las frases están en `NAMED_A` (planetas) y `NAMED_M` (Luna) dentro de `aliens.js`: añade las tuyas con `{n}` (nombre) y `{w}` (mundo). Para probar en la consola: `alienGreet('marte')`, `alienGreet('luna')`. Se apagan con el botón 🚶 y con los ajustes de sonido «Marcianos» y «Gente».
+
 ### Sonido del cohete
 
 El motor (`window.rocketEngine` en `sounds.js`) suena sin cortarse desde el despegue hasta que el astronauta toca suelo.

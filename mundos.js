@@ -649,7 +649,10 @@
     }).catch(e => console.error('[mundos] viaje', e)).then(() => {
       traveling = false;
       try { if (window.rocketEngine) window.rocketEngine.stop(); } catch (e) {}   // por si algo falló antes de aterrizar: el motor nunca se queda sonando
-      if (to !== 'tierra') { showNote(to, WORLDS[to].note, 12000); flashPresident(to); }
+      if (to !== 'tierra') {
+        showNote(to, WORLDS[to].note, 12000); flashPresident(to);
+        try { window.dispatchEvent(new CustomEvent('mundo:llegada', { detail: { id: to } })); } catch (e) {}   // aliens.js: los habitantes saludan al jugador por su nombre
+      }
       if (goto && goto.after) goto.after();
     });
   }
