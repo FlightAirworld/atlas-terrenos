@@ -133,6 +133,12 @@ function colorFor(name) {
   let h = 0; for (const c of name) h = (h * 31 + c.codePointAt(0)) >>> 0;
   return `hsl(${h % 360}, 70%, 42%)`;
 }
+// Color estable por país (mapa de dominio): mismo código -> mismo color para todos los jugadores
+function countryColor(code) {
+  if (!/^[A-Z]{2}$/.test(code || '')) return '#9aa6b6';
+  let h = 0; for (const c of code) h = (h * 37 + c.charCodeAt(0) * 17) >>> 0;
+  return `hsl(${(h * 47) % 360}, 78%, 50%)`;
+}
 function boundsOf(x, y) {
   const s = cfg.size, west = x * s - 180, south = y * s - 90;
   return [[south, west], [south + s, west + s]];
@@ -523,7 +529,7 @@ function drawOwned(p) {
   // Volumen 3D de la parcela (neutro, para no teñir la foto; el color del dueño va en el borde)
   ownedFeatures.set(p.id, {
     type: 'Feature', id: p.x * 1000003 + p.y,
-    properties: { pid: p.id, color: col, h: heightOf(url, lvl), clat: (s + n) / 2, clng: (w + e) / 2 },
+    properties: { pid: p.id, color: col, cc: countryColor(p.country), h: heightOf(url, lvl), clat: (s + n) / 2, clng: (w + e) / 2 },
     geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] }
   });
   drawn.set(p.id, { p, srcId: 'img-' + p.id, url, level: lvl, starsEl: null, label: null, hasDetail: false });
@@ -548,6 +554,17 @@ function toggleBaseMode() {
   applyBaseMode();
 }
 document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#base-btn')) toggleBaseMode(); });
+
+// ---------- Mapa de dominio por país ----------
+let domainOn = false;
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('#dom-btn');
+  if (!b || !gl || !gl.getLayer('owned-country')) return;
+  domainOn = !domainOn;
+  gl.setLayoutProperty('owned-country', 'visibility', domainOn ? 'visible' : 'none');
+  b.setAttribute('aria-pressed', domainOn ? 'true' : 'false');
+  b.classList.toggle('on', domainOn);
+});
 
 // ---------- Vista plana / 3D ----------
 function applyViewMode(animate) {
@@ -598,6 +615,11 @@ gl.on('load', () => {
     id: 'owned-line', type: 'line', source: 'owned',
     layout: { visibility: 'none' },   // sin marco de color alrededor de las casas (se ve más limpio); para volver a verlo: 'visible'
     paint: { 'line-color': ['get', 'color'], 'line-width': 2 }
+  });
+  gl.addLayer({
+    id: 'owned-country', type: 'fill', source: 'owned',
+    layout: { visibility: 'none' },   // se enciende con el botón «Dominio»
+    paint: { 'fill-color': ['get', 'cc'], 'fill-opacity': 0.5 }
   });
   gl.addSource('sel', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   gl.addLayer({
