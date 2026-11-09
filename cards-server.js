@@ -33,6 +33,7 @@ module.exports = function (d) {
     await run('CREATE INDEX IF NOT EXISTS card_owned_user ON card_owned (user_id, season)');
     await run('CREATE TABLE IF NOT EXISTS card_packs (id BIGSERIAL PRIMARY KEY, user_id TEXT NOT NULL, season TEXT NOT NULL, kind TEXT NOT NULL, source TEXT, created_at BIGINT NOT NULL, opened_at BIGINT, card_id INT)');
     await run('CREATE INDEX IF NOT EXISTS card_packs_user ON card_packs (user_id, opened_at)');
+    await run('ALTER TABLE card_packs ADD COLUMN IF NOT EXISTS offered TEXT');   // las 3 cartas que el cartero ofrece al abrir el sobre (ids separados por comas)
     await run('CREATE TABLE IF NOT EXISTS card_daily (user_id TEXT NOT NULL, day TEXT NOT NULL, PRIMARY KEY (user_id, day))');
     await run('CREATE TABLE IF NOT EXISTS card_claims (user_id TEXT NOT NULL, season TEXT NOT NULL, key TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, season, key))');
     await run('CREATE TABLE IF NOT EXISTS card_trades (id BIGSERIAL PRIMARY KEY, season TEXT NOT NULL, from_user TEXT NOT NULL, to_user TEXT NOT NULL, from_nick TEXT NOT NULL, to_nick TEXT NOT NULL, offer_card INT NOT NULL, want_card INT, status TEXT NOT NULL DEFAULT \'open\', created_at BIGINT NOT NULL, resolved_at BIGINT)');
@@ -150,6 +151,76 @@ module.exports = function (d) {
       return { ok: true, cardId, season: SEASON, packsLeft: left, minted: taken.size + 1, rewards };
     } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
   }
+
+  // Elegir carta (animación del cartero): offer reparte 3 cartas libres de UNA misma rareza (la que toca según las probabilidades del sobre,
+  // así el precio y las probabilidades no cambian) y las apunta en el sobre; pick guarda la que elige el jugador. Hasta que se elige, las 3 siguen libres.
+  function sample(list, n) {   // n elementos distintos al azar (Fisher-Yates parcial sobre una copia)
+    const a = list.slice(), out = [];
+    for (let i = 0; i < n && a.length; i++) { const j = crypto.randomInt(0, a.length); out.push(a[j]); a[j] = a[a.length - 1]; a.pop(); }
+    return out;
+  }
+
+  async function offer(req, body) {
+    if (!ON) throw new HttpError(404, 'Las cartas están desactivadas');
+    const user = await needUser(req); const uid = String(user.id);
+    if (rateHit('cards:' + uid, 60_000) > 30) throw new HttpError(429, 'Vas muy rápido. Espera un minuto');
+    const wanted = Math.floor(Number(body && body.packId)) || 0;
+    if (!wanted) throw new HttpError(400, 'Falta el sobre');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['cards:' + SEASON]);
+      const pk = (await client.query('SELECT id, kind, offered FROM card_packs WHERE id = $1 AND user_id = $2 AND season = $3 AND opened_at IS NULL FOR UPDATE', [wanted, uid, SEASON])).rows[0];
+      if (!pk) throw new HttpError(404, 'No tienes ese sobre para abrir');
+      const taken = new Set((await client.query('SELECT card_id FROM card_owned WHERE season = $1', [SEASON])).rows.map(r => r.card_id));
+      const prev = pk.offered ? pk.offered.split(',').map(Number).filter(core.valid) : [];
+      let ids = prev;
+      if (!prev.length || prev.some(id => taken.has(id))) {   // oferta nueva (o la anterior ya no sirve porque alguien se llevó una de las 3)
+        const free = [[], [], [], [], []];
+        for (let id = 1; id <= core.TOTAL; id++) if (!taken.has(id)) free[core.rarityIndexOf(id)].push(id);
+        let ridx = weightedIndex(PACKS[pk.kind].odds, free.map(l => l.length > 0));
+        if (ridx < 0) ridx = free.findIndex(l => l.length > 0);
+        if (ridx < 0) throw new HttpError(409, '¡La colección de esta temporada está completa! Ya no quedan cartas');
+        ids = sample(free[ridx], 3);
+        await client.query('UPDATE card_packs SET offered = $1 WHERE id = $2', [ids.join(','), pk.id]);
+      }
+      await client.query('COMMIT');
+      return { ok: true, packId: Number(pk.id), kind: pk.kind, season: SEASON, offer: ids };
+    } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+  }
+
+  async function pick(req, body) {
+    if (!ON) throw new HttpError(404, 'Las cartas están desactivadas');
+    const user = await needUser(req); const uid = String(user.id);
+    if (rateHit('cards:' + uid, 60_000) > 30) throw new HttpError(429, 'Vas muy rápido. Espera un minuto');
+    const wanted = Math.floor(Number(body && body.packId)) || 0, cardId = Math.floor(Number(body && body.cardId)) || 0;
+    if (!wanted || !core.valid(cardId)) throw new HttpError(400, 'Petición no válida');
+    const client = await pool.connect(); let taken409 = false, res;
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['cards:' + SEASON]);
+      const pk = (await client.query('SELECT id, kind, offered FROM card_packs WHERE id = $1 AND user_id = $2 AND season = $3 AND opened_at IS NULL FOR UPDATE', [wanted, uid, SEASON])).rows[0];
+      if (!pk) throw new HttpError(404, 'Ese sobre ya se abrió');
+      const offered = pk.offered ? pk.offered.split(',').map(Number) : [];
+      if (!offered.includes(cardId)) throw new HttpError(403, 'Esa carta no estaba entre las que te ofreció el cartero');
+      if ((await client.query('SELECT 1 FROM card_owned WHERE season = $1 AND card_id = $2', [SEASON, cardId])).rows.length) {
+        await client.query('UPDATE card_packs SET offered = NULL WHERE id = $1', [pk.id]);   // alguien se la llevó mientras elegías: se vuelve a ofrecer
+        taken409 = true;
+      } else {
+        const now = Date.now();
+        await client.query('INSERT INTO card_owned (season, card_id, user_id, obtained_at, source) VALUES ($1,$2,$3,$4,$5)', [SEASON, cardId, uid, now, pk.kind]);
+        await client.query('UPDATE card_packs SET opened_at = $1, card_id = $2 WHERE id = $3', [now, cardId, pk.id]);
+        res = { others: offered.filter(x => x !== cardId) };
+      }
+      await client.query('COMMIT');
+    } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
+    if (taken409) throw new HttpError(409, 'Justo esa carta se la acaba de llevar otro jugador. El cartero te ofrecerá otras tres');
+    const left = Number((await all('SELECT COUNT(*) AS n FROM card_packs WHERE user_id = $1 AND season = $2 AND opened_at IS NULL', [uid, SEASON]))[0].n);
+    const minted = Number((await all('SELECT COUNT(*) AS n FROM card_owned WHERE season = $1', [SEASON]))[0].n);
+    const rewards = await payMilestones(uid).catch(() => []);
+    return { ok: true, cardId, season: SEASON, packsLeft: left, minted, rewards, others: res.others };
+  }
+
 
   // Paga los premios de grupo que el jugador ya merece y aún no ha cobrado (la clave primaria evita cobrar dos veces)
   async function payMilestones(uid) {
@@ -422,6 +493,6 @@ module.exports = function (d) {
 
   async function init2() { await auctionTick(); setInterval(auctionTick, 60_000).unref(); }   // cada minuto: cierra la puja a su hora y abre la del mes nuevo
 
-  return { ON, SEASON, init, init2, grantPack, get, daily, buy, open, trades, trade, answer, ranking, player, notifs, notifsSeen, auction, bid, auctionTick };
+  return { ON, SEASON, init, init2, grantPack, get, daily, buy, open, offer, pick, trades, trade, answer, ranking, player, notifs, notifsSeen, auction, bid, auctionTick };
 };
 module.exports.pickWinner = core.pickWinner;

@@ -2462,6 +2462,8 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/cards/daily') return cardsMod().daily(req);
   if (req.method === 'POST' && pn === '/api/cards/buy') return cardsMod().buy(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/cards/open') return cardsMod().open(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/cards/offer') return cardsMod().offer(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/cards/pick') return cardsMod().pick(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/cards/trades') return cardsMod().trades(req);
   if (req.method === 'POST' && pn === '/api/cards/trade') return cardsMod().trade(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/cards/trade/answer') return cardsMod().answer(req, await readJson(req));

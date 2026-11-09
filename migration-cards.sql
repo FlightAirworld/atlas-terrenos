@@ -22,3 +22,4 @@ ALTER TABLE card_notifs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE card_auctions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE card_bids ENABLE ROW LEVEL SECURITY;
 ALTER TABLE card_black ENABLE ROW LEVEL SECURITY;
+ALTER TABLE card_packs ADD COLUMN IF NOT EXISTS offered TEXT;   -- cartero: las 3 cartas ofrecidas al abrir un sobre

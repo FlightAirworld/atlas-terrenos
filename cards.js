@@ -14,89 +14,93 @@
 
   const st = document.createElement('style');
   st.textContent = `
-    #cards .modal-card { max-height: min(92vh, 780px); overflow-y: auto; text-align: center; }
+    :is(#cards, .cardsroot) .modal-card { max-height: min(92vh, 780px); overflow-y: auto; text-align: center; }
     #cards h3 { margin: 14px 0 6px; font-size: 15px; }
-    #cards .cmeta { font-size: 13px; margin: 0 0 6px; }
-    #cards .crow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 6px 0; }
-    #cards .crow button { padding: 6px 10px; font-weight: 700; }
-    #cards .env { width: 150px; height: 104px; margin: 12px auto; border-radius: 10px; position: relative; cursor: pointer; border: 2px solid rgba(0,0,0,.25);
+    :is(#cards, .cardsroot) .cmeta { font-size: 13px; margin: 0 0 6px; }
+    :is(#cards, .cardsroot) .crow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 6px 0; }
+    :is(#cards, .cardsroot) .crow button { padding: 6px 10px; font-weight: 700; }
+    :is(#cards, .cardsroot) .env { width: 150px; height: 104px; margin: 12px auto; border-radius: 10px; position: relative; cursor: pointer; border: 2px solid rgba(0,0,0,.25);
       background: linear-gradient(135deg, var(--e1), var(--e2)); box-shadow: 0 6px 16px rgba(0,0,0,.3); display: flex; align-items: center; justify-content: center; font-size: 40px; }
-    #cards .env::before { content: ''; position: absolute; inset: 0; border-radius: 8px; clip-path: polygon(0 0, 100% 0, 50% 58%); background: rgba(255,255,255,.28); }
-    #cards .env.shake { animation: cshake .6s ease-in-out; }
+    :is(#cards, .cardsroot) .env::before { content: ''; position: absolute; inset: 0; border-radius: 8px; clip-path: polygon(0 0, 100% 0, 50% 58%); background: rgba(255,255,255,.28); }
+    :is(#cards, .cardsroot) .env.shake { animation: cshake .6s ease-in-out; }
     @keyframes cshake { 0%,100% { transform: rotate(0) } 20% { transform: rotate(-7deg) } 40% { transform: rotate(7deg) } 60% { transform: rotate(-5deg) } 80% { transform: rotate(5deg) } }
-    #cards .seebtn { font-size: 18px; padding: 10px 22px; font-weight: 800; }
-    #cards .card { width: 210px; margin: 8px auto; border-radius: 14px; padding: 8px; position: relative; overflow: hidden; color: #1b1b1b; text-align: left;
+    :is(#cards, .cardsroot) .seebtn { font-size: 18px; padding: 10px 22px; font-weight: 800; }
+    :is(#cards, .cardsroot) .card { width: 210px; margin: 8px auto; border-radius: 14px; padding: 8px; position: relative; overflow: hidden; color: #1b1b1b; text-align: left;
       background: linear-gradient(145deg, var(--c1), var(--c2) 55%, var(--c1)); box-shadow: 0 8px 22px rgba(0,0,0,.35); border: 3px solid var(--c1); }
-    #cards .card.oro { border-color: #fff3b0; box-shadow: 0 0 22px 4px rgba(255,214,70,.75), 0 8px 22px rgba(0,0,0,.4); }
-    #cards .card.oro::after, #cards .card.legendaria::after { content: ''; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.7) 50%, transparent 65%);
+    :is(#cards, .cardsroot) .card.oro { border-color: #fff3b0; box-shadow: 0 0 22px 4px rgba(255,214,70,.75), 0 8px 22px rgba(0,0,0,.4); }
+    :is(#cards, .cardsroot) .card.oro::after, #cards .card.legendaria::after { content: ''; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.7) 50%, transparent 65%);
       background-size: 250% 100%; animation: cshine 2.6s linear infinite; pointer-events: none; }
     @keyframes cshine { from { background-position: 150% 0 } to { background-position: -100% 0 } }
-    #cards .card.flip { animation: cflip .8s ease-out; }
+    :is(#cards, .cardsroot) .card.flip { animation: cflip .8s ease-out; }
     @keyframes cflip { from { transform: rotateY(90deg) scale(.8); opacity: 0 } to { transform: none; opacity: 1 } }
-    #cards .ctop { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 13px; }
-    #cards .cart { background: rgba(255,255,255,.55); border-radius: 10px; height: 104px; display: flex; align-items: center; justify-content: center; font-size: 62px; margin: 6px 0; }
-    #cards .cname { font-weight: 800; font-size: 15px; text-align: center; }
-    #cards .crar { font-size: 11px; text-align: center; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 4px; }
-    #cards .cstats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; font-size: 12px; font-weight: 700; background: rgba(255,255,255,.55); border-radius: 8px; padding: 5px 8px; }
-    #cards .cfoot { display: flex; justify-content: space-between; font-size: 11px; margin-top: 5px; font-weight: 700; }
-    #cards .grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; margin: 8px 0; }
-    #cards .slot { aspect-ratio: 1; border-radius: 5px; font-size: 14px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); color: var(--muted); font-size: 9px; }
-    #cards .slot.have { cursor: pointer; font-size: 17px; border: 2px solid var(--c1); background: var(--c2); color: #1b1b1b; }
-    #cards .slot.taken { background: rgba(0,0,0,.15); }
+    :is(#cards, .cardsroot) .ctop { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 13px; }
+    :is(#cards, .cardsroot) .cart { background: rgba(255,255,255,.55); border-radius: 10px; height: 104px; display: flex; align-items: center; justify-content: center; font-size: 62px; margin: 6px 0; }
+    :is(#cards, .cardsroot) .cname { font-weight: 800; font-size: 15px; text-align: center; }
+    :is(#cards, .cardsroot) .crar { font-size: 11px; text-align: center; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 4px; }
+    :is(#cards, .cardsroot) .cstats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; font-size: 12px; font-weight: 700; background: rgba(255,255,255,.55); border-radius: 8px; padding: 5px 8px; }
+    :is(#cards, .cardsroot) .cfoot { display: flex; justify-content: space-between; font-size: 11px; margin-top: 5px; font-weight: 700; }
+    :is(#cards, .cardsroot) .grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; margin: 8px 0; }
+    :is(#cards, .cardsroot) .slot { aspect-ratio: 1; border-radius: 5px; font-size: 14px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); color: var(--muted); font-size: 9px; }
+    :is(#cards, .cardsroot) .slot.have { cursor: pointer; font-size: 17px; border: 2px solid var(--c1); background: var(--c2); color: #1b1b1b; }
+    :is(#cards, .cardsroot) .slot.taken { background: rgba(0,0,0,.15); }
     #cards select { padding: 6px; max-width: 100%; }
-    #cards .msg { min-height: 1.2em; }
-    #cards .ms { font-size: 12px; margin: 4px 0; }
-    #cards .tform { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; align-items: center; margin: 6px 0; }
-    #cards .tform input { width: 128px; padding: 6px; }
-    #cards .trow { border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; margin: 6px 0; font-size: 13px; }
-    #cards .trow .crow { margin: 4px 0 0; }
+    :is(#cards, .cardsroot) .msg { min-height: 1.2em; }
+    :is(#cards, .cardsroot) .ms { font-size: 12px; margin: 4px 0; }
+    :is(#cards, .cardsroot) .tform { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; align-items: center; margin: 6px 0; }
+    :is(#cards, .cardsroot) .tform input { width: 128px; padding: 6px; }
+    :is(#cards, .cardsroot) .trow { border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; margin: 6px 0; font-size: 13px; }
+    :is(#cards, .cardsroot) .trow .crow { margin: 4px 0 0; }
     @media (max-width: 480px) { #cards .grid { grid-template-columns: repeat(5, 1fr); } #cards .slot { font-size: 19px; } }
     /* Cabecera fija: el botón Volver atrás y los avisos (errores / «Oferta enviada») se ven siempre, aunque estés abajo del todo */
     #cards-head { position: sticky; top: -20px; z-index: 6; background: var(--bg); margin: -20px -24px 8px; padding: 12px 24px 4px; border-radius: 14px 14px 0 0; }
-    #cards .chbar { display: flex; align-items: center; padding-right: 34px; }
-    #cards .cback { font-weight: 800; padding: 6px 12px; }
+    :is(#cards, .cardsroot) .chbar { display: flex; align-items: center; padding-right: 34px; }
+    :is(#cards, .cardsroot) .cback { font-weight: 800; padding: 6px 12px; }
     #cards #cards-msg { margin: 6px 0 0; font-weight: 600; }
     #cards #cards-msg:not(:empty) { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 88%, var(--accent)); }
-    #cards .cnav { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
-    #cards .cnav button { flex: 1 1 150px; font-weight: 800; padding: 10px 8px; }
-    #cards .cnav button.blk, #cards button.blk { background: #0a0a0a; color: #ffd54a; border-color: #d4a017; }
-    #cards .news { text-align: left; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin: 8px 0; font-size: 13px; }
-    #cards .news div { padding: 3px 0; } #cards .news div.new { font-weight: 700; } #cards .news div.new::before { content: '🔴 '; }
-    #cards .tmsg { font-size: 13px; margin: 4px 0; }
+    :is(#cards, .cardsroot) .cnav { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+    :is(#cards, .cardsroot) .cnav button { flex: 1 1 150px; font-weight: 800; padding: 10px 8px; }
+    :is(#cards, .cardsroot) .cnav button.blk, #cards button.blk { background: #0a0a0a; color: #ffd54a; border-color: #d4a017; }
+    :is(#cards, .cardsroot) .news { text-align: left; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin: 8px 0; font-size: 13px; }
+    :is(#cards, .cardsroot) .news div { padding: 3px 0; } #cards .news div.new { font-weight: 700; } #cards .news div.new::before { content: '🔴 '; }
+    :is(#cards, .cardsroot) .tmsg { font-size: 13px; margin: 4px 0; }
     /* Carta Negra: fondo negro y letras doradas */
-    #cards .card.negra { background: radial-gradient(circle at 30% 18%, #2b2410, #000 62%); color: #ffd54a; border-color: #d4a017;
+    :is(#cards, .cardsroot) .card.negra { background: radial-gradient(circle at 30% 18%, #2b2410, #000 62%); color: #ffd54a; border-color: #d4a017;
       box-shadow: 0 0 22px 4px rgba(212,160,23,.6), 0 8px 22px rgba(0,0,0,.6); }
-    #cards .card.negra .ctop, #cards .card.negra .cname, #cards .card.negra .crar, #cards .card.negra .cfoot { color: #ffd54a; text-shadow: 0 0 6px rgba(255,200,40,.45); }
-    #cards .card.negra .cart { background: rgba(255,213,74,.08); border: 1px solid rgba(255,213,74,.4); }
-    #cards .card.negra .cstats { background: rgba(255,213,74,.08); border: 1px solid rgba(255,213,74,.35); color: #ffd54a; }
-    #cards .card.negra::after { content: ''; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 38%, rgba(255,213,74,.35) 50%, transparent 62%);
+    :is(#cards, .cardsroot) .card.negra .ctop, #cards .card.negra .cname, #cards .card.negra .crar, #cards .card.negra .cfoot { color: #ffd54a; text-shadow: 0 0 6px rgba(255,200,40,.45); }
+    :is(#cards, .cardsroot) .card.negra .cart { background: rgba(255,213,74,.08); border: 1px solid rgba(255,213,74,.4); }
+    :is(#cards, .cardsroot) .card.negra .cstats { background: rgba(255,213,74,.08); border: 1px solid rgba(255,213,74,.35); color: #ffd54a; }
+    :is(#cards, .cardsroot) .card.negra::after { content: ''; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 38%, rgba(255,213,74,.35) 50%, transparent 62%);
       background-size: 250% 100%; animation: cshine 3.2s linear infinite; pointer-events: none; }
     /* Ranking */
-    #cards .rc { display: flex; justify-content: space-between; align-items: baseline; font-weight: 800; margin: 16px 0 4px; text-align: left; font-size: 15px; }
-    #cards .rc small { font-weight: 600; color: var(--muted); }
-    #cards .rp { display: flex; width: 100%; justify-content: space-between; gap: 8px; text-align: left; padding: 8px 10px; margin: 3px 0; font-weight: 700; }
-    #cards .rp.me { border-color: var(--accent); }
-    #cards .rp .n { font-variant-numeric: tabular-nums; white-space: nowrap; }
-    #cards .rpanel { border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin: 2px 0 8px; }
-    #cards .mini { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin: 6px 0; }
-    #cards .mini button { width: 42px; height: 50px; padding: 0; border-radius: 6px; border: 2px solid var(--c1); background: var(--c2); color: #1b1b1b; font-size: 21px; line-height: 1.05; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    #cards .mini button small { font-size: 9px; font-weight: 700; }
-    #cards .mini button.sel { outline: 3px solid var(--accent); }
-    #cards .mini button.blk { background: #0a0a0a; color: #ffd54a; border-color: #d4a017; }
-    #cards .rpanel h4 { margin: 10px 0 2px; font-size: 13px; }
+    :is(#cards, .cardsroot) .rc { display: flex; justify-content: space-between; align-items: baseline; font-weight: 800; margin: 16px 0 4px; text-align: left; font-size: 15px; }
+    :is(#cards, .cardsroot) .rc small { font-weight: 600; color: var(--muted); }
+    :is(#cards, .cardsroot) .rp { display: flex; width: 100%; justify-content: space-between; gap: 8px; text-align: left; padding: 8px 10px; margin: 3px 0; font-weight: 700; }
+    :is(#cards, .cardsroot) .rp.me { border-color: var(--accent); }
+    :is(#cards, .cardsroot) .rp .n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    :is(#cards, .cardsroot) .rpanel { border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin: 2px 0 8px; }
+    :is(#cards, .cardsroot) .mini { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin: 6px 0; }
+    :is(#cards, .cardsroot) .mini button { width: 42px; height: 50px; padding: 0; border-radius: 6px; border: 2px solid var(--c1); background: var(--c2); color: #1b1b1b; font-size: 21px; line-height: 1.05; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    :is(#cards, .cardsroot) .mini button small { font-size: 9px; font-weight: 700; }
+    :is(#cards, .cardsroot) .mini button.sel { outline: 3px solid var(--accent); }
+    :is(#cards, .cardsroot) .mini button.blk { background: #0a0a0a; color: #ffd54a; border-color: #d4a017; }
+    :is(#cards, .cardsroot) .rpanel h4 { margin: 10px 0 2px; font-size: 13px; }
     /* Subasta */
-    #cards .count { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 4px 0; }
-    #cards .hist { text-align: left; font-size: 13px; border: 1px solid var(--line); border-radius: 10px; padding: 4px 10px; }
-    #cards .hist div { padding: 4px 0; border-bottom: 1px solid var(--line); } #cards .hist div:last-child { border-bottom: 0; }
+    :is(#cards, .cardsroot) .count { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 4px 0; }
+    :is(#cards, .cardsroot) .hist { text-align: left; font-size: 13px; border: 1px solid var(--line); border-radius: 10px; padding: 4px 10px; }
+    :is(#cards, .cardsroot) .hist div { padding: 4px 0; border-bottom: 1px solid var(--line); } #cards .hist div:last-child { border-bottom: 0; }
     #cards-dot { position: absolute; top: 1px; right: 1px; width: 13px; height: 13px; border-radius: 50%; background: #e63946; border: 2px solid #fff; animation: dailypulse 1.4s infinite; }
     #cards-dot.hidden { display: none; }
     .mp-ic #cards-dot { top: -3px !important; right: -3px !important; }
     @media (prefers-reduced-motion: reduce) { #cards-dot, #cards .card.negra::after { animation: none; } }
-  `;
+  
+    #cards .slot.newc { animation: cnew 1.1s ease-in-out 6; position: relative; z-index: 2; }
+    @keyframes cnew { 0%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,214,70,0); } 50% { transform: scale(1.45); box-shadow: 0 0 16px 6px rgba(255,214,70,.95); } }
+    #cards #cards-view .card, #cards #cards-black .card { cursor: zoom-in; }
+`;
   document.head.appendChild(st);
 
   const modal = document.createElement('div');
-  modal.id = 'cards'; modal.className = 'modal hidden';
+  modal.id = 'cards'; modal.className = 'modal hidden cardsroot';
   modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'cards-title');
   modal.innerHTML = '<div class="modal-card"><div id="cards-head"><div class="chbar"><button id="cards-back" class="cback" type="button">← Volver atrás</button></div>' +
     '<button id="cards-close" class="close" type="button" aria-label="Cerrar">×</button><p id="cards-msg" class="msg" role="status" aria-live="polite"></p></div>' +
@@ -121,8 +125,11 @@
     return d;
   }
 
+  function zoomEl(el, from, glow) { if (window.CardsCine) window.CardsCine.zoom(el, from && from.getBoundingClientRect ? from.getBoundingClientRect() : null, { glow }); }
+  function zoomCard(id, from) { const info = C.cardInfo(id, S ? S.season : 'T1'); zoomEl(cardEl(info, false), from, info.c2); }
+
   function showCard(id, into, flip) {
-    const el = into || $('cards-view'); el.replaceChildren(cardEl(C.cardInfo(id, S ? S.season : 'T1'), flip));
+    const el = into || $('cards-view'); const ce = cardEl(C.cardInfo(id, S ? S.season : 'T1'), flip); ce.onclick = () => zoomCard(id, ce); el.replaceChildren(ce);
     if (S && !into) { const b = document.createElement('button'); b.type = 'button'; b.textContent = '🔁 Ofrecer esta carta'; b.onclick = () => { pendingOffer = id; tradesUi(); $('cards-trades').scrollIntoView({ behavior: 'smooth' }); }; el.appendChild(b); }
   }
 
@@ -138,7 +145,7 @@
     const lab = document.createElement('div'); lab.className = 'cmeta'; lab.textContent = (S.shop[p.kind] || {}).name || 'Sobre';
     const go = document.createElement('button'); go.className = 'primary'; go.type = 'button'; go.textContent = '✉️ Abrir sobre';
     el.append(lab, env, go);
-    const doOpen = () => openPack(p, env, go);
+    const doOpen = () => (window.CardsCine ? openCine(p) : openPack(p, env, go));
     env.onclick = doOpen; env.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doOpen(); } }; go.onclick = doOpen;
   }
 
@@ -167,6 +174,28 @@
     } catch (e) { say(e.message, 'err'); env.classList.remove('shake'); } finally { busy = false; }
   }
 
+  // Abre un sobre con la escena del cartero: el servidor ofrece 3 cartas, el jugador elige una y esa es la que se queda
+  async function openCine(p) {
+    if (busy) return; busy = true; say('');
+    let res = null;
+    try {
+      res = await window.CardsCine.courier({
+        kind: p.kind, packId: p.id,
+        getOffer: () => api('/api/cards/offer', { method: 'POST', body: { packId: p.id } }),
+        pick: id => api('/api/cards/pick', { method: 'POST', body: { packId: p.id, cardId: id } }),
+        info: (id, season) => C.cardInfo(id, season), cardEl: info => cardEl(info, false)
+      });
+    } catch (e) { res = { error: e.message }; } finally { busy = false; }
+    if (res && res.cardId) group = C.groupOf(res.cardId);
+    await load();   // vuelves a la pantalla de cartas…
+    if (res && res.error) { say(res.error, 'err'); return; }
+    if (!res || !res.cardId) return;
+    const slot = document.querySelector('#cards-grid .slot[data-id="' + res.cardId + '"]');   // …y la carta aparece donde le toca, brillando
+    if (slot) { slot.classList.add('newc'); try { slot.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {} setTimeout(() => slot.classList.remove('newc'), 7000); }
+    const extra = (res.rewards || []).map(w => '🎉 ¡Premio de grupo! ' + w.n + ' cartas del grupo ' + w.group + ': sobre de ' + w.kind + (w.credits ? ' + ' + nf(w.credits) + ' 🎟️' : '')).join(' · ');
+    const info = C.cardInfo(res.cardId, res.season); say('¡' + info.name + ' (Nº ' + res.cardId + ') ya está en tu colección!' + (extra ? ' ' + extra : ''), 'ok');
+  }
+
   function shop() {
     const el = $('cards-shop'); el.replaceChildren();
     const h = document.createElement('h3'); h.textContent = '🛒 Conseguir sobres'; el.appendChild(h);
@@ -177,9 +206,14 @@
     const tip = document.createElement('p'); tip.className = 'cmeta muted'; tip.textContent = 'Ganas sobres con el regalo diario y con el campeonato 🥊 (uno cada 3 victorias del mes). Cuanto mejor el sobre, más probable es una carta legendaria.'; el.appendChild(tip);
   }
   async function act(url, body) {
-    if (busy) return; busy = true; say('');
-    try { const r = await api(url, { method: 'POST', body }); S = r; if (r.credits !== undefined) { try { refreshCredits(); } catch (e) {} } render(); }
+    if (busy) return; busy = true; say(''); let bought = null;
+    try {
+      const before = new Set((S.packs || []).map(x => x.id));
+      const r = await api(url, { method: 'POST', body }); S = r; if (r.credits !== undefined) { try { refreshCredits(); } catch (e) {} } render();
+      if (url === '/api/cards/buy' && window.CardsCine) bought = (r.packs || []).filter(x => !before.has(x.id)).pop() || null;   // el sobre recién comprado
+    }
     catch (e) { say(e.message, 'err'); } finally { busy = false; }
+    if (bought) openCine(bought);   // ¡llega el cartero!
   }
 
   function collection() {
@@ -197,8 +231,8 @@
     const base = (group - 1) * C.GROUP;
     for (let i = 1; i <= C.GROUP; i++) {
       const id = base + i, e = document.createElement('div'); e.className = 'slot';
-      if (own.has(id)) { const info = C.cardInfo(id, S.season); e.classList.add('have'); e.style.setProperty('--c1', info.c1); e.style.setProperty('--c2', info.c2); e.textContent = info.emoji; e.title = info.name; e.onclick = () => showCard(id, null, true); }
-      else e.textContent = id;
+      if (own.has(id)) { const info = C.cardInfo(id, S.season); e.classList.add('have'); e.style.setProperty('--c1', info.c1); e.style.setProperty('--c2', info.c2); e.textContent = info.emoji; e.title = info.name; e.dataset.id = id; e.onclick = () => { showCard(id, null, false); zoomCard(id, e); }; }
+      else { e.textContent = id; e.dataset.id = id; }
       grid.appendChild(e);
     }
   }
@@ -326,7 +360,7 @@
     else { const bm = document.createElement('div'); bm.className = 'mini'; P.black.forEach(b => { const info = C.blackInfo(b.month), t = tile(info, b.month.slice(2), () => pick(t, blackWrap(info, b))); bm.appendChild(t); }); panel.appendChild(bm); }
     panel.appendChild(detail);
   }
-  function blackWrap(info, b) { const w = document.createElement('div'); w.appendChild(cardEl(info, true)); w.appendChild(mkp('cmeta', '🖤 Única · ganada con una puja de ' + money(b.bid) + '. No se puede comprar ni cambiar.')); return w; }
+  function blackWrap(info, b) { const w = document.createElement('div'); const ce = cardEl(info, true); ce.onclick = () => zoomEl(cardEl(info, false), ce, '#d4a017'); w.appendChild(ce); w.appendChild(mkp('cmeta', '🖤 Única · ganada con una puja de ' + money(b.bid) + '. No se puede comprar ni cambiar.')); return w; }
   function cardWithBuy(P, id, info) {   // la carta abierta + formulario para ofrecer créditos por ella
     const w = document.createElement('div'); w.appendChild(cardEl(info, true));
     if (P.me) { w.appendChild(mkp('cmeta', 'Esta carta es tuya.')); return w; }
@@ -401,10 +435,10 @@
   // Mis Cartas Negras (apartado propio dentro de la colección)
   function blackSection() {
     const el = $('cards-black'); el.replaceChildren();
-    const h = document.createElement('h3'); h.textContent = '🖤 Mis Cartas Negras'; el.appendChild(h);
-    if (!S.black || !S.black.length) { el.appendChild(mkp('cmeta muted', 'Aún no tienes ninguna. Se ganan en la puja mensual de la Carta Negra.')); return; }
+    const h = document.createElement('h3'); h.textContent = '⭐ Especiales'; el.appendChild(h); el.appendChild(mkp('cmeta muted', 'Aquí se guardan tus cartas especiales de las pujas: las 🖤 Cartas Negras.'));
+    if (!S.black || !S.black.length) { el.appendChild(mkp('cmeta muted', 'Aún no tienes ninguna. Se ganan en la puja mensual de la Carta Negra 🖤.')); return; }
     const mini = document.createElement('div'); mini.className = 'mini';
-    S.black.forEach(b => { const info = C.blackInfo(b.month), t = tile(info, b.month.slice(2), () => { const v = $('cards-view'); v.replaceChildren(blackWrap(info, b)); v.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }); mini.appendChild(t); });
+    S.black.forEach(b => { const info = C.blackInfo(b.month), t = tile(info, b.month.slice(2), () => { const v = $('cards-view'); v.replaceChildren(blackWrap(info, b)); v.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); zoomEl(cardEl(info, false), t, '#d4a017'); }); mini.appendChild(t); });
     el.appendChild(mini);
   }
 
