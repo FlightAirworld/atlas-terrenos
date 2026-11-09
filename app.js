@@ -464,7 +464,9 @@ function mountDetail(ex, imgUrl, blob) {
   stars.textContent = starsOf(ex.level);
   ex.starsEl = stars;
   const wrap = document.createElement('span');
-  wrap.append(stars);   // solo las estrellas del nivel: el nombre del dueño ya no se muestra sobre la parcela
+  const flag = flagOf(ex.p && ex.p.country);   // bandera del país del dueño, encima de la casa
+  if (flag) { const fl = document.createElement('span'); fl.className = 'owner-flag'; fl.textContent = flag; wrap.append(fl); }
+  wrap.append(stars);   // las estrellas del nivel: el nombre del dueño ya no se muestra sobre la parcela
   ex.label = L.marker([(s + n) / 2, (w + e) / 2], {   // en el centro de la parcela, dentro de la casa
     icon: L.divIcon({ className: 'owner-label', html: wrap, iconSize: [0, 0] }),
     interactive: false, keyboard: false
