@@ -820,18 +820,13 @@ function showPanel(p) {
   if (window.retosPanel) window.retosPanel(p);   // botón ❤️ «Me gusta» (retos.js)
   updateBuyParcelBtn(p);
 }
-// Botón «Comprar terreno» (debajo de Compartir): solo con sesión iniciada y solo en terrenos libres
+// Botón «Reclamar terreno» (debajo de Compartir): solo en terrenos libres. Con créditos reclama el terreno; sin créditos lleva a los packs
 function updateBuyParcelBtn(p) {
   const b = $('buy-parcel-btn'); if (!b) return;
   const cur = p || selected;
   const open = !$('panel').classList.contains('hidden');
-  b.classList.toggle('hidden', !(authToken && open && cur && !cur.owner));
+  b.classList.toggle('hidden', !(open && cur && !cur.owner));
 }
-$('buy-parcel-btn').onclick = () => {
-  const has = !!packCode && credits > 0;
-  if (has) { const n = $('name'); n.scrollIntoView({ behavior: 'smooth', block: 'center' }); try { n.focus({ preventScroll: true }); } catch (e) {} setMsg('Pon tu nombre, elige casa y pulsa «Reclamar este terreno».'); }
-  else { $('buy-box').scrollIntoView({ behavior: 'smooth', block: 'center' }); setMsg('Elige un pack de créditos para comprar este terreno.'); }
-};
 $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; if (window.worldClearSel) window.worldClearSel(); };
 // Ganchos para mundos.js: abrir el mismo panel de compra con una parcela de otro planeta, y cerrarlo al viajar
 window.selectWorldParcel = p => { selected = p; showPanel(p); sfx('select'); };
@@ -1100,11 +1095,12 @@ $('recover-btn').onclick = async () => {
     setMsg(`Código recuperado: te quedan ${credits} terrenos`, 'ok');
   } catch (e) { setMsg(e.message, 'err'); }
 };
-$('use-credit').onclick = async () => {
+$('buy-parcel-btn').onclick = async () => {
+  if (!(!!packCode && credits > 0)) { $('buy-box').scrollIntoView({ behavior: 'smooth', block: 'center' }); setMsg('Elige un pack de créditos para reclamar este terreno.'); return; }
   if (!selected || selected.owner) return;
   let owner;
   try { owner = nameOrThrow(); } catch (e) { return; }   // nameOrThrow ya muestra el aviso
-  const btn = $('use-credit');
+  const btn = $('buy-parcel-btn');
   btn.disabled = true;
   try {
     const r = await fetch('/api/claim', {
@@ -1331,6 +1327,7 @@ function openBuy() {
 }
 $('mine-buy').onclick = () => { $('mine').classList.add('hidden'); openBuy(); };
 $('panel-buy').onclick = openBuy;   // el mismo botón, desde el panel de tu terreno
+$('credit-buy').onclick = openBuy;   // «Comprar créditos» del panel de terreno libre: lleva al pago
 $('buy-close').onclick = () => $('buy').classList.add('hidden');
 $('demo-pay-2').onclick = async () => { try { await captureOrder(await createOrder()); } catch (e) { fail(e); } };
 $('demo-pay').onclick = async () => {
@@ -1868,7 +1865,7 @@ if ('serviceWorker' in navigator) {
   }
   goBtn.onclick = () => {
     if (mode === 'pick') { const b = document.getElementById('locate'); if (b) b.click(); }
-    else { const b = document.getElementById('use-credit'); if (b) b.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    else { const b = document.getElementById('buy-parcel-btn'); if (b) b.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
   };
   box.querySelector('.coach-x').onclick = () => { ssSet('coachHide', '1'); box.classList.add('hidden'); };
 
@@ -1884,7 +1881,7 @@ if ('serviceWorker' in navigator) {
     if (credits < 1 || ssGet('coachHide') === '1' || (welcome && !welcome.classList.contains('hidden'))) { box.classList.add('hidden'); return; }
     const panelOpen = !document.getElementById('panel').classList.contains('hidden');
     if (panelOpen && typeof selected !== 'undefined' && selected && !selected.owner) {
-      set('claim', 'Paso 2 de 2', 'Escribe el nombre que verá la gente, elige tu casa y pulsa «Reclamar este terreno».', '⬇ Ir al botón');
+      set('claim', 'Paso 2 de 2', 'Escribe el nombre que verá la gente, elige tu casa y pulsa «Reclamar terreno».', '⬇ Ir al botón');
     } else {
       set('pick', 'Paso 1 de 2', `Tienes ${credits} ${plural(credits, 'crédito', 'créditos')}. Toca una parcela libre del mapa para hacerla tuya.`, '📍 Ir a mi ubicación');
     }

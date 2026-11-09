@@ -41,7 +41,7 @@
       <div class="mp-in"><span class="mp-type">Ana</span></div>
       <div class="mp-l">${T('Tu casa')}</div>
       <div class="mp-houses">${HOUSES.slice(0, 4).map((h, k) => `<img src="${IMG(h)}" alt="" class="${k === 1 ? 'pick' : ''}">`).join('')}</div>
-      <div class="mp-btn"><span>${T('Reclamar este terreno')}</span></div>
+      <div class="mp-btn"><span>${T('Reclamar terreno')}</span></div>
       <span class="mp-f">👆</span></div>`,
   };
 
@@ -55,7 +55,7 @@
     { icon: '🧭', title: 'Acércate a un terreno vacío', real: 'block', sim: 'zoom', ms: 7500, text: 'Vamos a volar a un terreno de verdad, sin casas. Haz zoom hasta verlo a pie de suelo para que te lo explique encima.' },
     { icon: '🟩', title: 'Terreno libre, sin casa', real: 'ground', sim: 'lot', ms: 9000, text: 'Así se ve un terreno libre a pie de calle: solo hierba y el borde de la parcela, sin ninguna casa. Mide unos 45 × 56 m y no tiene dueño todavía.' },
     { icon: '👆', title: 'Elige un terreno libre', sim: 'tap', text: 'Toca cualquier parcela libre del mapa. Se abrirá un panel con sus datos. Una vez comprada, nadie más puede quitártela.' },
-    { icon: '🏠', title: 'Hazlo tuyo', sim: 'claim', ms: 10500, text: 'En el panel escribe el nombre que verá la gente, elige tu casa y pulsa «Reclamar este terreno». Cuesta créditos 🎟️.' },
+    { icon: '🏠', title: 'Hazlo tuyo', sim: 'claim', ms: 10500, text: 'En el panel escribe el nombre que verá la gente, elige tu casa y pulsa «Reclamar terreno». Cuesta créditos 🎟️.' },
     { icon: '🏡', title: '¡Tu casa aparece!', sim: 'built', ms: 8000, text: 'Al reclamarlo, tu casa aparece al instante en el mapa con tu nombre. Solo es tuya: nadie puede quitártela.' },
     { icon: '🏘️', title: 'Llegan los vecinos', sim: 'nb', ms: 9500, houses: true, text: 'Poco a poco llegan vecinos y el mapa se llena de casas. ¡Así se ve donde ya se juega!' },
     { icon: '🎟️', title: 'Tus créditos', target: '#credit-pill', houses: true, text: 'Aquí ves cuántos créditos tienes. Tócalo para ver tus terrenos y recoger lo que producen cada hora.' },
