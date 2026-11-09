@@ -351,7 +351,7 @@
   // Nombre del jugador: su apodo (el que fija app.js). Sin sesión, se le llama «terrícola»
   function playerName() {
     let n = '';
-    try { n = (typeof nickOf === 'function' ? nickOf() : '') || (document.getElementById('name') || {}).value || ''; } catch (e) {}
+    try { n = (typeof nickOf === 'function' ? nickOf() : '') || (document.getElementById('name') || {}).value || (document.getElementById('login-nick') || {}).value || ''; } catch (e) {}
     return String(n).replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 24);
   }
   window.atlasPlayerName = playerName;   // viaje.js: los planetas y marcianos del viaje en cohete también te llaman por tu nombre
