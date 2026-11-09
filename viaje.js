@@ -5,6 +5,8 @@
 // Se resuelve cuando el cohete ya ha llegado y la pantalla empieza a desvanecerse.
 // window.rocketDrop({ target, suit, world }) → Promise: el cohete llega arriba, el muñeco salta en paracaídas (con traje de astronauta si suit)
 // y la promesa se resuelve cuando aterriza y grita. window.planetSVG(mundo) devuelve el dibujo de un planeta (lo usa mundos.js).
+// Durante el viaje hablan al jugador por su nombre (su apodo; «terrícola» si no ha iniciado sesión), con frases elocuentes y voz: el planeta de salida se despide,
+// los de en medio saludan al pasar, el de destino da la bienvenida y los marcianos de los platillos le preguntan adónde va (planetSay, PASS_LINES…).
 (function () {
   const SURF = { mercurio: ['#b3a79b', '#6f665d'], venus: ['#e9b44c', '#a56a1e'], jupiter: ['#d9a066', '#8f5a30'], saturno: ['#e6cf94', '#a98748'], urano: ['#a8e6ea', '#5fb2bb'], neptuno: ['#5f86ff', '#2a3fb5'], pluton: ['#e6d3c0', '#a58f7e'] };
   const SKY = { venus: ['#c98a2b', '#e9b44c', '#f6d98a'], jupiter: ['#a8683a', '#d9a066', '#f0d2a8'], saturno: ['#b4915a', '#e6cf94', '#f3e8c4'], urano: ['#5fb2bb', '#a8e6ea', '#d9f8f8'], neptuno: ['#1c2c8f', '#4a6fe8', '#9cb8ff'] };
@@ -58,7 +60,10 @@
     #viaje .ufo svg { width: 100%; height: auto; display: block; overflow: visible; filter: drop-shadow(0 4px 6px rgba(0,0,0,.4)); }
     #viaje .ufo .ufo-l { animation: ufoBlink .5s infinite alternate; }
     @keyframes ufoBlink { from { opacity: .3; } to { opacity: 1; } }
-    #viaje .ufo .say { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 12px; opacity: 0; white-space: nowrap; background: #fff; color: #111; border-radius: 14px; padding: 8px 12px; font: 800 15px/1.1 system-ui, sans-serif; box-shadow: 0 3px 10px rgba(0,0,0,.45); }
+    #viaje .ufo .say { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); margin-bottom: 12px; opacity: 0; width: max-content; max-width: 210px; text-align: center; white-space: normal; background: #fff; color: #111; border-radius: 14px; padding: 8px 12px; font: 800 14px/1.2 system-ui, sans-serif; box-shadow: 0 3px 10px rgba(0,0,0,.45); }
+    #viaje .pbub { position: absolute; left: 0; top: 0; z-index: 4; width: max-content; max-width: 230px; text-align: center; background: #fff; color: #14183a; border-radius: 16px; padding: 9px 13px; font: 800 14px/1.25 system-ui, sans-serif; box-shadow: 0 3px 12px rgba(0,0,0,.5); pointer-events: none; opacity: 0; transition: opacity .35s; }
+    #viaje .pbub.on { opacity: 1; }
+    #viaje .pbub::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -7px; border: 7px solid transparent; border-top-color: #fff; border-bottom: 0; }
     #viaje .ufo .say::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -7px; border: 7px solid transparent; border-top-color: #fff; }
     #viaje .puff.on { animation: viajePuff 2.4s ease-out forwards; }
     @keyframes viajePuff { 0% { opacity: .9; transform: translate(0,0) scale(.5); } 100% { opacity: 0; transform: translate(var(--dx), -20px) scale(4); } }`;
@@ -181,6 +186,7 @@
         dur = 4400; delay = Math.max(0, st.t - dur / 2); easing = 'cubic-bezier(.5,0,.9,.6)';
       }
       out.push(el.animate(kf, { duration: dur, delay, easing, fill: 'both' }));
+      setTimeout(() => planetSay(ov, el, st.w, i === 0 ? BYE_LINES : i === n - 1 ? DEST_LINES : PASS_LINES), i === 0 ? 1100 : delay + dur * (i === n - 1 ? 0.7 : 0.5));   // despedida, saludo al pasar o bienvenida
       if (i > 0) {   // el nombre del planeta acompaña a su dibujo (sin crecer con él) mientras se pasa por delante
         const lab = document.createElement('div'); lab.className = 'plabel'; lab.textContent = NAME[st.w].replace(/^la /, 'La ');
         space.appendChild(lab);
@@ -191,6 +197,55 @@
     });
     return out;
   }
+
+  // Nombre del jugador (lo da aliens.js: su apodo fijo) y frases con gracia durante el viaje. {n} = nombre, {w} = el planeta que habla.
+  // Cada frase lleva su sonido: bienvenida (arpegio), cash («qué caro»), enfado, o ninguno (voces.js).
+  const myName = () => { let n = ''; try { n = window.atlasPlayerName ? window.atlasPlayerName() : ''; } catch (e) {} return n; };
+  const fillN = (t, w) => t.replace(/\{n\}/g, myName() || 'terrícola').replace(/\{w\}/g, w ? NAME[w] : '').replace(/terrícola,? terrícola/ig, 'terrícola').replace(/(^|[.!?]\s)la ([A-ZÁÉÍÓÚ])/g, (m, a, b) => a + 'La ' + b);
+  const BYE_LINES = [
+    ['bienvenida', '¡Adiós, {n}! {w} te echará de menos… y tu cartera también.'], [null, 'Vuela alto, {n}. Quien parte con ilusión, llega con anécdotas.'],
+    ['bienvenida', '¡Buen viaje, {n}! Escribe, aunque sea por radio.'], [null, 'Todo gran viajero, {n}, empieza dejando atrás su planeta. Yo ya me siento atrás.'],
+    ['cash', 'Que no te cobren peaje en el camino, {n}. Aquí abajo todo está muy caro.'], [null, 'Mírame, {n}: pequeño por fuera, inmenso por dentro. Como tú con la hipoteca.'],
+    ['enfado', 'Vete de aquí, {n}. Es broma. Vuelve pronto.']
+  ];
+  const PASS_LINES = [
+    [null, '¡Eh, {n}! Soy {w}, y no suelo recibir visitas con tanto glamour.'], [null, '{n}, el que viaja por el cosmos nunca llega tarde: llega cuando las estrellas quieren.'],
+    ['bienvenida', '¡Bienvenido a mi órbita, {n}! La entrada es gratis; la salida, con hipoteca.'], [null, 'Un día, {n}, contarás que pasaste junto a {w} sin pagar peaje.'],
+    [null, 'Los caminos del universo son inescrutables, {n}, pero este lleva derecho a mi vecino.'], ['enfado', 'Vete de aquí, terrícola {n}… a seguir viajando, que me tapas el sol.'],
+    ['cash', 'Aquí está todo muy caro, {n}: hasta el peaje espacial.'], [null, 'No hay prisa, {n}: en el espacio nadie te oye correr.'],
+    [null, 'Navega, {n}, navega: quien a buen planeta se arrima, buena parcela le cobija.'], ['cash', 'Voy a pedir una hipoteca para tener un cohete como el tuyo, {n}.'],
+    [null, 'Somos polvo de estrellas, {n}. Tú, polvo con cohete.'], ['bienvenida', '¡Saluda a {w}, {n}, que no todos los días se pasa por aquí!'],
+    [null, 'Contempla, {n}: millones de estrellas, ninguna con cobertura.']
+  ];
+  const DEST_LINES = [
+    ['bienvenida', '¡Ya casi llegas, {n}! {w} te espera con los brazos abiertos… y con las tarifas.'], [null, 'Prepárate, {n}: aterrizar en {w} es como el amor, se nota en el estómago.'],
+    ['bienvenida', 'Bienvenido a {w}, {n}. Que el aterrizaje sea suave y la hipoteca, corta.'], [null, 'Se acerca {n}, el valiente. Que alguien avise a {w}: llega el terrícola.'],
+    ['cash', '{n}, en {w} el metro cuadrado está por las nubes. Respira hondo antes de preguntar.'], [null, 'Todo viaje, {n}, es largo hasta que se llega. Y tú ya llegas.']
+  ];
+  // El planeta (su dibujo en el vuelo) dice una frase en un bocadillo encima de él, con voz grave de planeta y su sonido
+  function planetSay(ov, body, w, lines) {
+    if (!ov.isConnected || ov._pb) return;
+    const L = lines[Math.floor(Math.random() * lines.length)], txt = fillN(L[1], w);
+    const r = body.getBoundingClientRect(), W = innerWidth, H = innerHeight;
+    const el = document.createElement('div'); el.className = 'pbub'; el.textContent = txt; ov.appendChild(el);
+    const x = Math.max(120, Math.min(W - 120, r.left + r.width / 2)), y = Math.max(150, Math.min(H * 0.72, r.top + r.height * 0.12));
+    el.style.transform = 'translate(' + (x - el.offsetWidth / 2).toFixed(0) + 'px,' + (y - el.offsetHeight - 10).toFixed(0) + 'px)';
+    requestAnimationFrame(() => el.classList.add('on'));
+    ov._pb = el;
+    try {
+      const v = window.atlasVoice, mute = v && v.muted;
+      if (L[0] && v && !mute) v.sfx(L[0], { vol: 0.8 });
+      if (!mute && (!window.soundOn || window.soundOn('marcianos'))) setTimeout(() => speak(txt, 0.55 + Math.random() * 0.4), L[0] ? 350 : 100);   // voz grave de planeta
+    } catch (e) {}
+    const life = Math.max(3200, txt.length * 75 + 1800);
+    setTimeout(() => { el.classList.remove('on'); setTimeout(() => { el.remove(); if (ov._pb === el) ov._pb = null; }, 400); }, life);
+  }
+  // Marcianos de los platillos: [sonido, frase] con el nombre del jugador; los 6 de siempre siguen saliendo también
+  const SAY_N = [
+    [null, '¿A dónde vas, {n}?'], [null, '¡EH, {n}! ¿DÓNDE VAS?'], ['enfado', 'Vete de aquí, terrícola {n}.'], ['cash', '{n}, aquí está todo muy caro. Da la vuelta.'],
+    [null, '¡{n}! ¡Estás muy lejos de casa!'], ['cash', 'Voy a pedir una hipoteca para un platillo como el tuyo, {n}.'], ['bienvenida', '¡Bienvenido al espacio, {n}! Cobramos peaje.'],
+    [null, 'Dijo un sabio: quien vuela lejos, {n}, vuelve con la cartera ligera.'], [null, 'El universo es infinito, {n}, pero mi paciencia no.']
+  ];
 
   // Platillos volantes con marcianos: salen en los viajes muy largos (no si el destino es la Tierra o la Luna) y preguntan adónde vas
   const SAY = ['¿A dónde vas, terrícola?', '¡EH! ¿DÓNDE VAS?', '¿DÓNDE VAS TÚ?', '¡Aquí no se puede pasar!', '¿Y tú de dónde sales?', '¡Estás muy lejos de casa!'];
@@ -221,14 +276,16 @@
       const y = 150 + Math.random() * Math.max(50, H * 0.52 - 150), x0 = dir > 0 ? -w - 40 : W + 40, x1 = dir > 0 ? W + 40 : -w - 40;
       el.className = 'ufo'; el.style.width = w + 'px';
       el.innerHTML = ufoSVG(ALIEN[i % ALIEN.length]) + '<div class="say"></div>';
-      const say = i === 0 ? '¿DÓNDE VAS...?' : SAY[Math.floor(Math.random() * SAY.length)];
+      const nl = i === 0 || Math.random() < 0.65 ? (i === 0 ? [null, '¿DÓNDE VAS, {n}...?'] : SAY_N[Math.floor(Math.random() * SAY_N.length)]) : null;   // casi todos te llaman por tu nombre
+      const say = nl ? fillN(nl[1]).replace(/\{n\}/g, '') : SAY[Math.floor(Math.random() * SAY.length)];
       el.querySelector('.say').textContent = say;
       ov.insertBefore(el, rocket);
       el.animate([{ transform: `translate(${x0}px, ${y}px)` }, { transform: `translate(${(x0 + x1) / 2}px, ${y - 22}px)`, offset: 0.5 }, { transform: `translate(${x1}px, ${y + 6}px)` }], { duration: dur, fill: 'both' });
       el.firstElementChild.animate([{ transform: 'rotate(-6deg)' }, { transform: 'rotate(6deg)' }], { duration: 700, direction: 'alternate', iterations: Infinity, easing: 'ease-in-out' });
       el.querySelector('.say').animate([{ opacity: 0 }, { opacity: 1, offset: 0.18 }, { opacity: 1, offset: 0.82 }, { opacity: 0 }], { duration: dur, fill: 'both' });
       sfx('ufo');
-      setTimeout(() => speak(say, PITCH[i % PITCH.length]), 250);   // el marciano habla en cuanto aparece
+      if (nl && nl[0] && window.atlasVoice && !window.atlasVoice.muted) setTimeout(() => window.atlasVoice.sfx(nl[0], { vol: 0.7 }), 150);
+      setTimeout(() => speak(say, PITCH[i % PITCH.length]), nl && nl[0] ? 450 : 250);   // el marciano habla en cuanto aparece
       setTimeout(() => el.remove(), dur + 300);
     });
   }

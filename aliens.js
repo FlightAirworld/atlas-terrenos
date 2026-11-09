@@ -354,6 +354,7 @@
     try { n = (typeof nickOf === 'function' ? nickOf() : '') || (document.getElementById('name') || {}).value || ''; } catch (e) {}
     return String(n).replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 24);
   }
+  window.atlasPlayerName = playerName;   // viaje.js: los planetas y marcianos del viaje en cohete también te llaman por tu nombre
   function worldName(W) { let n = W.id; try { if (window.worldInfo) n = window.worldInfo(W.id).name; } catch (e) {} return /^La /.test(n) ? 'la ' + n.slice(3) : n; }
   const fill = (t, W) => t.replace(/\{n\}/g, playerName() || 'terrícola').replace(/\{w\}/g, worldName(W)).replace(/terrícola,? terrícola/ig, 'terrícola');
   // Una frase con el nombre del jugador de uno de los grupos; nunca repite la anterior
