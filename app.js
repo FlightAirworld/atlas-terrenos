@@ -1400,6 +1400,9 @@ function applyNick() {
   const nm = $('name'), n = nickOf();
   if (!nm) return;
   if (n) { nm.value = n; nm.readOnly = true; } else nm.readOnly = false;
+  // Con la cuenta iniciada y el apodo ya fijado, el campo sobra: se oculta (el apodo se sigue usando al reclamar)
+  const hide = !!(authToken && n), lb = document.querySelector('label[for="name"]');
+  nm.style.display = hide ? 'none' : ''; if (lb) lb.style.display = hide ? 'none' : '';
 }
 function setLoginMsg(text, kind = '') { const m = $('login-msg'); m.textContent = text; m.className = 'msg ' + kind; }
 function openLogin(reason) {
