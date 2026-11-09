@@ -210,7 +210,7 @@ Las posiciones de bancos, colas, puertas y chimeneas dentro de cada parcela son 
 
 ### Compartir cartas 📤 (`cards-share.js`)
 
-- Cada carta tiene un botón **📤 Compartir** (en la colección, en las cartas de otros jugadores del ranking y en las Cartas Negras). Crea en el navegador una imagen vertical de 1080×1350 con la carta y quién la tiene, y ofrece **Compartir** (menú del móvil, con imagen), **Copiar enlace** y **Descargar**.
+- Cada carta tiene los mismos dos botones que los terrenos (en la colección, en las cartas de otros jugadores del ranking, en las Cartas Negras y dentro de la carta ampliada): **🔗 Compartir esta carta** (menú de compartir del móvil con el enlace; si no hay, copia el enlace) y **🖼️ Crear imagen para compartir**, que dibuja en el navegador una imagen vertical de 1080×1350 con la carta y quién la tiene, y ofrece **Compartir** (con imagen) y **Descargar**.
 - **Enlace:** `https://tu-dominio/carta/4321` (Carta Negra: `/carta/N2026-11`). Da una vista previa con el nombre, la rareza y el dueño en WhatsApp o Telegram y lleva al juego. En el sitio estático (`API_BASE`) el enlace es `/?carta=4321`.
 - Quien lo abre ve la carta **sin iniciar sesión**, con quién la tiene ahora (apodo, avatar y país, lo mismo que ya enseña el mapa) o «nadie la tiene todavía». Desde ahí puede ir a sus cartas.
 - API pública: `GET /api/cards/share?id=4321` (límite de 60 por minuto y por IP). No devuelve créditos, correo ni más cartas del dueño. No hay tablas nuevas.

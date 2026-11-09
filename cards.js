@@ -133,7 +133,14 @@
     return d;
   }
 
-  const shareBtn = id => { const b = document.createElement('button'); b.type = 'button'; b.textContent = '📤 Compartir'; b.onclick = () => { if (window.CardsShare) window.CardsShare.open(id); }; return b; };   // cards-share.js
+  const shareBtn = id => {   // los dos botones de compartir, iguales que en los terrenos (cards-share.js)
+    const w = document.createElement('div'); w.className = 'crow';
+    const a = document.createElement('button'); a.type = 'button'; a.textContent = '🔗 Compartir esta carta';
+    a.onclick = async () => { if (!window.CardsShare) return; const m = await window.CardsShare.link(id); if (m) say(m, 'ok'); };
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = '🖼️ Crear imagen para compartir';
+    b.onclick = () => { if (window.CardsShare) window.CardsShare.open(id); };
+    w.append(a, b); return w;
+  };
   function zoomEl(el, from, glow, shareId) { if (window.CardsCine) window.CardsCine.zoom(el, from && from.getBoundingClientRect ? from.getBoundingClientRect() : null, { glow, shareId }); }
   function zoomCard(id, from) { const info = C.cardInfo(id, S ? S.season : 'T1'); zoomEl(cardEl(info, false), from, info.c2, id); }
 

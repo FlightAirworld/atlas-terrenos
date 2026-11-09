@@ -1,5 +1,6 @@
 'use strict';
 // COMPARTIR CARTAS 📤: botón «Compartir» en cada carta (colección, ranking y Carta Negra).
+//  · Dos botones, como en los terrenos: «🔗 Compartir esta carta» (enlace) y «🖼️ Crear imagen para compartir» (imagen).
 //  · Dibuja en un lienzo una imagen vertical (1080×1350, buena para WhatsApp e Instagram) con la carta y quién la tiene, y la comparte o la descarga.
 //  · El enlace es /carta/ID (con vista previa en WhatsApp, Telegram…) o ?carta=ID en el sitio estático. Al abrirlo se ve la carta SIN iniciar sesión.
 // Todo el dibujo ocurre en el navegador. El servidor solo dice de qué temporada es la carta y quién la tiene (GET /api/cards/share?id=…).
@@ -23,7 +24,6 @@
       '<h2 id="card-share-title">📤 Compartir carta</h2>' +
       '<img id="card-share-pic" alt="Imagen de la carta para compartir" style="width:100%;max-width:340px;display:block;margin:8px auto;border-radius:14px;box-shadow:0 4px 16px rgba(0,0,0,.25)">' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button id="card-share-send" class="primary" type="button" style="flex:1 1 140px">📤 Compartir</button>' +
-      '<button id="card-share-link" type="button" style="flex:1 1 140px">🔗 Copiar enlace</button>' +
       '<button id="card-share-dl" type="button" style="flex:1 1 140px">⬇️ Descargar</button></div>' +
       '<p id="card-share-msg" class="msg" aria-live="polite"></p>' +
     '</div>';
@@ -86,8 +86,15 @@
       say('');
     } catch (e) { blob = null; say(e.message || 'No se pudo crear la imagen', 'err'); }
   }
-  async function copyLink() {
-    try { await navigator.clipboard.writeText(link); say('🔗 Enlace copiado', 'ok'); } catch (e) { say(link); }
+  // «🔗 Compartir esta carta»: igual que «Compartir este terreno». Menú de compartir del móvil con el enlace; si no hay, copia el enlace.
+  // Devuelve el aviso que hay que enseñar ('' si no hace falta).
+  async function shareLink(id) {
+    const sid = String(id || '').trim().toUpperCase();
+    if (!ID_RE.test(sid)) return '';
+    const url = linkFor(sid);
+    try { if (navigator.share) { await navigator.share({ title: 'Redecora El Mundo', text: 'Mira esta carta en Redecora El Mundo', url }); return ''; } }
+    catch (e) { if (e && e.name === 'AbortError') return ''; }
+    try { await navigator.clipboard.writeText(url); return '🔗 Enlace copiado'; } catch (e) { return url; }
   }
   $('card-share-send').onclick = async () => {
     if (!blob) return;
@@ -99,7 +106,6 @@
     try { await navigator.clipboard.writeText(link); say('Este dispositivo no puede compartir imágenes: se ha copiado el enlace. Usa «Descargar» para guardar la imagen.', 'ok'); }
     catch (e) { say('Usa «Descargar» para guardar la imagen.'); }
   };
-  $('card-share-link').onclick = copyLink;
   $('card-share-dl').onclick = () => {
     if (!blobUrl) return;
     const a = document.createElement('a'); a.href = blobUrl; a.download = fileName; document.body.appendChild(a); a.click(); a.remove();
@@ -147,5 +153,5 @@
     }
   } catch (e) { /* sin enlace de carta */ }
 
-  window.CardsShare = { open };
+  window.CardsShare = { open, link: shareLink };
 })();
