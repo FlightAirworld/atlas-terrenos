@@ -93,6 +93,14 @@
     .mp-ic #cards-dot { top: -3px !important; right: -3px !important; }
     @media (prefers-reduced-motion: reduce) { #cards-dot, #cards .card.negra::after { animation: none; } }
   
+    #cards button.cgo { background: #16a34a; color: #fff; border: 2px solid #0b7a35; font-weight: 800; animation: cblinkg 1s ease-in-out infinite; }
+    #cards button.cgo:disabled { animation: none; background: var(--bg); color: var(--muted); border: 1px solid var(--line); font-weight: 400; }
+    #cards button.cblue { background: #1d6fe8; color: #fff; border: 2px solid #0d4fb0; font-weight: 800; animation: cblinkb 1s ease-in-out infinite; }
+    #cards h3.cbuy { color: #1d6fe8; animation: cblinktxt 1s ease-in-out infinite; }
+    @keyframes cblinkg { 0%,100% { box-shadow: 0 0 0 0 rgba(22,163,74,0); filter: brightness(1); } 50% { box-shadow: 0 0 16px 5px rgba(22,163,74,.85); filter: brightness(1.3); } }
+    @keyframes cblinkb { 0%,100% { box-shadow: 0 0 0 0 rgba(29,111,232,0); filter: brightness(1); } 50% { box-shadow: 0 0 16px 5px rgba(29,111,232,.85); filter: brightness(1.3); } }
+    @keyframes cblinktxt { 50% { opacity: .35; } }
+    @media (prefers-reduced-motion: reduce) { #cards button.cgo, #cards button.cblue, #cards h3.cbuy { animation: none; } }
     #cards .slot.newc { animation: cnew 1.1s ease-in-out 6; position: relative; z-index: 2; }
     @keyframes cnew { 0%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255,214,70,0); } 50% { transform: scale(1.45); box-shadow: 0 0 16px 6px rgba(255,214,70,.95); } }
     #cards #cards-view .card, #cards #cards-black .card { cursor: zoom-in; }
@@ -201,8 +209,10 @@
     const h = document.createElement('h3'); h.textContent = '🛒 Conseguir sobres'; el.appendChild(h);
     const row = document.createElement('div'); row.className = 'crow'; el.appendChild(row);
     const d = document.createElement('button'); d.type = 'button'; d.textContent = S.dailyReady ? '🎁 Sobre gratis de hoy' : '🎁 Ya recogido hoy'; d.disabled = !S.dailyReady;
-    d.onclick = () => act('/api/cards/daily'); row.appendChild(d);
-    Object.entries(S.shop).forEach(([k, v]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = v.name + ' · ' + nf(v.cost) + ' 🎟️'; b.onclick = () => act('/api/cards/buy', { kind: k }); row.appendChild(b); });
+    d.onclick = () => act('/api/cards/daily'); if (S.dailyReady) d.className = 'cgo'; row.appendChild(d);   // verde y parpadeando mientras haya sobre gratis
+    const bh = document.createElement('h3'); bh.className = 'cbuy'; bh.textContent = '💳 Comprar con créditos'; el.appendChild(bh);   // azul y parpadeando, debajo del sobre gratis
+    const row2 = document.createElement('div'); row2.className = 'crow'; el.appendChild(row2);
+    Object.entries(S.shop).forEach(([k, v]) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'cblue'; b.textContent = v.name + ' · ' + nf(v.cost) + ' 🎟️'; b.onclick = () => act('/api/cards/buy', { kind: k }); row2.appendChild(b); });
     const tip = document.createElement('p'); tip.className = 'cmeta muted'; tip.textContent = 'Ganas sobres con el regalo diario y con el campeonato 🥊 (uno cada 3 victorias del mes). Cuanto mejor el sobre, más probable es una carta legendaria.'; el.appendChild(tip);
   }
   async function act(url, body) {

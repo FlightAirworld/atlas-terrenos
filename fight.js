@@ -578,10 +578,21 @@
     c.font = `${Math.round(size * 0.95)}px system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('🌎', W - 56, H / 2 + 4);
     return (wallCache = cv);
   }
+  let wallFlags = null;   // { A: '🇪🇸', B: '🇫🇷' }: bandera de cada luchador (se rellena en runFight)
   function drawWall(c) {   // pared negra de detrás del público: el cartel va justo encima de las primeras filas
     const b = wallBanner(); if (!b) return;
     const w = 780, h = w * b.height / b.width;
     c.save(); c.globalAlpha = 0.95; c.drawImage(b, 500 - w / 2, 160 - h, w, h); c.restore();
+    if (wallFlags) {   // las dos banderas, grandes, encima del cartel de Redecora El Mundo: tú a la izquierda (azul), el rival a la derecha (naranja)
+      [['A', 290, '#4c8dff'], ['B', 710, '#ff9f1c']].forEach(([k, cx, col]) => {
+        const pw = 270, ph = 205, y0 = 160 - h - 26 - ph;
+        c.save(); c.fillStyle = '#0d0f1ccc'; c.beginPath(); c.roundRect(cx - pw / 2, y0, pw, ph, 28); c.fill();
+        c.lineWidth = 6; c.strokeStyle = col; c.shadowColor = col; c.shadowBlur = 18; c.stroke(); c.shadowBlur = 0;
+        c.font = '150px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#fff';
+        c.fillText(wallFlags[k] || '🌍', cx, y0 + ph / 2 + 8);
+        c.restore();
+      });
+    }
   }
   function drawFloorLogo(c) {   // pintado en la lona, en perspectiva y dentro de las cuerdas
     c.save(); c.translate(500, 425); c.scale(1, 0.32); c.textAlign = 'left'; c.textBaseline = 'middle';
@@ -636,6 +647,8 @@
       const winnerSide = j.won ? 'A' : 'B';
       const plan = makePlan(winnerSide, reduced);
       const names = { A: 'Tú', B: j.foe.owner || 'Rival' };
+      const fl = c2 => { try { return (typeof flagOf === 'function' && flagOf(c2)) || ''; } catch (e) { return ''; } };
+      wallFlags = { A: fl(j.mine.country), B: fl(j.foe.country) };
       const elems = { A: (EL[j.mine.element] || EL.fuego)[0], B: (EL[j.foe.element] || EL.fuego)[0] };
       const fa = { dir: 1, x: 400, ph: 0.3, shorts: (EL[j.mine.element] || EL.fuego)[1], skin: SKINS[hash(j.mine.id) % 5], hair: HAIRS[hash(j.mine.id + 'h') % 5] };
       const fb = { dir: -1, x: 600, ph: 2.1, shorts: (EL[j.foe.element] || EL.fuego)[1], skin: SKINS[hash(j.foe.id) % 5], hair: HAIRS[hash(j.foe.id + 'h') % 5] };

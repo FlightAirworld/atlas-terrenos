@@ -1851,7 +1851,7 @@ const FIGHT_LEVEL_RANGE = Math.max(0, Math.floor(numEnv('FIGHT_LEVEL_RANGE', 5))
 const FIGHT_ELEMENTS = ['fuego', 'planta', 'agua'];                         // el índice i gana al i+1 (y agua, el último, gana a fuego)
 const fightElement = id => { let h = 0; for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 3; };
 const fightPower = level => FIGHT_BASE + Math.max(1, Number(level) || 1) * FIGHT_PER_LEVEL;
-const fightCard = r => ({ id: r.id, level: Number(r.level) || 1, element: FIGHT_ELEMENTS[fightElement(r.id)], power: fightPower(r.level), house: r.house || null, avatar: r.avatar || null, owner: r.owner || null });
+const fightCard = r => ({ id: r.id, level: Number(r.level) || 1, element: FIGHT_ELEMENTS[fightElement(r.id)], power: fightPower(r.level), house: r.house || null, avatar: r.avatar || null, owner: r.owner || null, country: /^[A-Z]{2}$/.test(r.country || '') ? r.country : null });
 
 async function fightGet(req) {
   if (!FIGHT_ON) return { on: false };
@@ -1879,11 +1879,11 @@ async function fightStart(req, body) {
       throw new HttpError(403, `Tu cuenta debe tener al menos ${FIGHT_MIN_AGE_H} h para entrar en el campeonato`);
     const used = Number((await client.query('SELECT COUNT(*) AS n FROM fights WHERE attacker_user = $1 AND day = $2', [uid, today])).rows[0].n);
     if (used >= FIGHT_DAILY_MAX) throw new HttpError(429, `Hoy ya has hecho tus ${FIGHT_DAILY_MAX} luchas. ¡Vuelve mañana!`);
-    const mine = (await client.query('SELECT id, level, house, avatar, owner FROM parcels WHERE id = $1 AND user_id = $2', [parcelId, user.id])).rows[0];
+    const mine = (await client.query('SELECT id, level, house, avatar, owner, COALESCE(country, (SELECT p2.country FROM parcels p2 WHERE p2.user_id = parcels.user_id AND p2.country IS NOT NULL ORDER BY p2.created_at DESC LIMIT 1)) AS country FROM parcels WHERE id = $1 AND user_id = $2', [parcelId, user.id])).rows[0];
     if (!mine) throw new HttpError(404, 'Ese terreno no es tuyo');
     const L = Number(mine.level) || 1;
     // Rival: terreno de otro jugador, de nivel parecido, y de un jugador al que hoy aún no te has enfrentado; si no hay, el de nivel más cercano
-    const pick = `SELECT id, level, house, avatar, owner, user_id::text AS uid FROM parcels
+    const pick = `SELECT id, level, house, avatar, owner, COALESCE(country, (SELECT p2.country FROM parcels p2 WHERE p2.user_id = parcels.user_id AND p2.country IS NOT NULL ORDER BY p2.created_at DESC LIMIT 1)) AS country, user_id::text AS uid FROM parcels
                   WHERE user_id IS NOT NULL AND user_id::text <> $1
                     AND user_id::text NOT IN (SELECT defender_user FROM fights WHERE attacker_user = $1 AND day = $2)`;
     let foe = (await client.query(`${pick} AND level BETWEEN $3 AND $4 ORDER BY random() LIMIT 1`, [uid, today, L - FIGHT_LEVEL_RANGE, L + FIGHT_LEVEL_RANGE])).rows[0];
