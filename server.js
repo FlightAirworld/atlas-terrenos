@@ -216,10 +216,10 @@ const eventOfHouse = h => EVENTS.find(e => e.houses.includes(h));
 const eventPeriod = (e, info) => `E:${e.key}:${info.startYear}`;
 // Casas del Pase Oro 👑: solo se pueden elegir con el pase activo (quien ya la tiene se la queda). Las imágenes ya están en images/.
 const GOLD_HOUSES = ['images/casa-2.webp', 'images/casa-3.webp', 'images/rascacielos.webp', 'images/parque-atracciones.webp', 'images/puerto.webp', 'images/aeropuerto.webp', 'images/ayuntamiento.webp', 'images/banco.webp', 'images/hospital.webp', 'images/iglesia.webp', 'images/piscina.webp', 'images/estacion.webp'];
-// Casas de cada planeta (6 por mundo, imágenes images/<mundo>-<casa>.webp; las genera tools/make-planet-houses.py). Deben coincidir con WORLD_HOUSES de app.js.
+// Casas de cada planeta (6 por mundo; la Luna tiene 8 con imágenes propias, imágenes images/<mundo>-<casa>.webp; las genera tools/make-planet-houses.py). Deben coincidir con WORLD_HOUSES de app.js.
 // En un planeta solo se pueden elegir sus casas; las de la Tierra (y las de los planetas) no valen en otros mundos.
 const WORLD_HOUSES = {
-  luna: ['images/luna-cupula.webp', 'images/luna-base-apolo.webp', 'images/luna-granja-solar.webp', 'images/luna-radiotelescopio.webp', 'images/luna-mina-regolito.webp', 'images/luna-puerto-lunar.webp'],
+  luna: ['images/luna-cupula.webp', 'images/luna-rover.webp', 'images/luna-granja-solar.webp', 'images/luna-radiotelescopio.webp', 'images/luna-ciudad-lunar.webp', 'images/luna-estacion-lunar.webp', 'images/luna-complejo-lunar.webp', 'images/luna-base-geodesica.webp'],
   marte: ['images/marte-cupula-marciana.webp', 'images/marte-invernadero.webp', 'images/marte-base-rover.webp', 'images/marte-mina-roja.webp', 'images/marte-torre-radio.webp', 'images/marte-puerto-marte.webp'],
   mercurio: ['images/mercurio-base-crater.webp', 'images/mercurio-escudo-solar.webp', 'images/mercurio-observatorio.webp', 'images/mercurio-mina-metal.webp', 'images/mercurio-antena-solar.webp', 'images/mercurio-estacion-polar.webp'],
   venus: ['images/venus-ciudad-aerostato.webp', 'images/venus-plataforma-nube.webp', 'images/venus-laboratorio-acido.webp', 'images/venus-globo-dorado.webp', 'images/venus-torre-nubes.webp', 'images/venus-puerto-aereo.webp'],
