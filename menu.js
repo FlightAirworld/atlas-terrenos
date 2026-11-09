@@ -105,6 +105,12 @@ html body #map-controls #extras-items button::after{flex:1;font-size:15px !impor
 .mp-ic img{width:24px;height:24px;border-radius:6px}
 .mp-ic svg{width:20px;height:20px}
 .mp-ic #daily-dot{top:-3px !important;right:-3px !important}
+/* Punto rojo parpadeante: el mismo en todas las opciones (regalo, retos, cartas, ruleta, campeonato, premios, población…) y en Extras */
+@keyframes mpblink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.2;transform:scale(1.3)}}
+.mp-ic [id$="-dot"]{top:-4px !important;right:-4px !important;width:14px !important;height:14px !important;border-radius:50% !important;background:#e63946 !important;border:2px solid #fff !important;box-sizing:border-box;z-index:2;pointer-events:none}
+.mp-ic [id$="-dot"].hidden{display:none !important}
+.mp-ic [id$="-dot"],html body #extras-dot{animation:mpblink 1s ease-in-out infinite !important}
+@media (prefers-reduced-motion:reduce){.mp-ic [id$="-dot"],html body #extras-dot{animation:none !important}}
 
 /* Velo suave detrás de los paneles */
 #mp-scrim{position:fixed;inset:0;z-index:900;background:rgba(8,20,14,.30);opacity:0;pointer-events:none;transition:opacity .18s ease;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
@@ -214,6 +220,19 @@ const MP_ICON = {
     const sync = () => { if (window.syncExtrasDot) window.syncExtrasDot(); else eDot.classList.toggle('hidden', dot.classList.contains('hidden')); };
     new MutationObserver(sync).observe(dot, { attributes: true, attributeFilter: ['class'] });
     sync();
+  }
+  // El punto de Extras se enciende si CUALQUIER opción del desplegable tiene su punto rojo (y se apaga si ninguna)
+  if (eDot) {
+    const anyDot = () => [...list.querySelectorAll('[id$="-dot"]')].some(d => !d.classList.contains('hidden'));
+    let busyDot = false;
+    const syncAny = () => {
+      if (busyDot) return; busyDot = true;
+      eDot.classList.toggle('hidden', !anyDot());
+      busyDot = false;
+    };
+    new MutationObserver(syncAny).observe(list, { attributes: true, attributeFilter: ['class'], subtree: true, childList: true });
+    setInterval(syncAny, 3000);
+    syncAny();
   }
   // Velo detrás de cualquier panel abierto: oscurece un poco el mapa y un toque fuera lo cierra
   const scrim = document.createElement('div');

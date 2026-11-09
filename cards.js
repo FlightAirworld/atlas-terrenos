@@ -219,7 +219,7 @@
     if (busy) return; busy = true; say(''); let bought = null;
     try {
       const before = new Set((S.packs || []).map(x => x.id));
-      const r = await api(url, { method: 'POST', body }); S = r; if (r.credits !== undefined) { try { refreshCredits(); } catch (e) {} } render();
+      const r = await api(url, { method: 'POST', body }); S = r; setDaily(S.dailyReady); if (r.credits !== undefined) { try { refreshCredits(); } catch (e) {} } render();
       if (url === '/api/cards/buy' && window.CardsCine) bought = (r.packs || []).filter(x => !before.has(x.id)).pop() || null;   // el sobre recién comprado
     }
     catch (e) { say(e.message, 'err'); } finally { busy = false; }
@@ -457,7 +457,7 @@
     stage(); shop(); collection(); blackSection(); tradesUi();
   }
   async function load() {
-    try { S = await api('/api/cards'); if (!S.on) { say('Las cartas están desactivadas', 'err'); return; } say(''); $('cards-view').replaceChildren(); render(); loadTrades(); loadNews(); }
+    try { S = await api('/api/cards'); if (!S.on) { say('Las cartas están desactivadas', 'err'); return; } setDaily(S.dailyReady); say(''); $('cards-view').replaceChildren(); render(); loadTrades(); loadNews(); }
     catch (e) { say(e.message, 'err'); }
   }
 
@@ -465,14 +465,17 @@
   const dot = document.createElement('span'); dot.id = 'cards-dot'; dot.className = 'hidden'; dot.setAttribute('aria-hidden', 'true'); btn.appendChild(dot);
   const prevSync = window.syncExtrasDot;   // el puntito de «Extras» también se enciende con los avisos de cartas
   window.syncExtrasDot = () => { if (prevSync) prevSync(); const e = $('extras-dot'); if (e && !dot.classList.contains('hidden')) e.classList.remove('hidden'); };
-  function setDot(on) { dot.classList.toggle('hidden', !on); if (window.syncExtrasDot) window.syncExtrasDot(); }
+  let newsOn = false, dailyOn = false;   // dos motivos para el punto: novedades sin ver y sobre gratis sin recoger
+  function paintDot() { dot.classList.toggle('hidden', !(newsOn || dailyOn)); if (window.syncExtrasDot) window.syncExtrasDot(); }
+  function setDot(on) { newsOn = !!on; paintDot(); }
+  function setDaily(on) { dailyOn = !!on; paintDot(); }
   let lastToast = 0, tokenSeen = null;
   async function pollNotifs() {
-    if (typeof authToken === 'undefined' || !authToken) { setDot(false); return; }
+    if (typeof authToken === 'undefined' || !authToken) { setDot(false); setDaily(false); return; }
     if (document.hidden || !modal.classList.contains('hidden')) return;   // con la ventana abierta, las novedades salen ahí dentro
     try {
       const j = await api('/api/cards/notifs?brief=1'); if (j.on === false) return;
-      setDot(j.unseen > 0);
+      setDot(j.unseen > 0); if (j.dailyReady !== undefined) setDaily(j.dailyReady);
       const f = (j.fresh || [])[0];
       if (f && f.id !== lastToast) { lastToast = f.id; toastMsg('🃏 ' + f.text); }
     } catch (e) { /* sin conexión: se reintenta */ }

@@ -256,9 +256,10 @@ module.exports = function (d) {
     if (!ON) return { ok: true, on: false, unseen: 0 };
     const user = await needUser(req); const uid = String(user.id);
     const unseen = Number((await all('SELECT COUNT(*) AS n FROM card_notifs WHERE user_id = $1 AND seen_at IS NULL', [uid]))[0].n);
-    if (sp && sp.get('brief') === '1') return { ok: true, unseen, fresh: await all('SELECT id, kind, text FROM card_notifs WHERE user_id = $1 AND seen_at IS NULL ORDER BY id DESC LIMIT 3', [uid]) };   // el móvil lo pregunta cada minuto
+    const dailyReady = !(await all('SELECT 1 FROM card_daily WHERE user_id = $1 AND day = $2', [uid, dayKey()])).length;   // sobre gratis de hoy sin recoger
+    if (sp && sp.get('brief') === '1') return { ok: true, unseen, dailyReady, fresh: await all('SELECT id, kind, text FROM card_notifs WHERE user_id = $1 AND seen_at IS NULL ORDER BY id DESC LIMIT 3', [uid]) };   // el móvil lo pregunta cada minuto
     const items = await all('SELECT id, kind, text, created_at AS at, seen_at IS NOT NULL AS seen FROM card_notifs WHERE user_id = $1 ORDER BY id DESC LIMIT 30', [uid]);
-    return { ok: true, unseen, items: items.map(r => ({ id: Number(r.id), kind: r.kind, text: r.text, at: Number(r.at), seen: !!r.seen })) };
+    return { ok: true, unseen, dailyReady, items: items.map(r => ({ id: Number(r.id), kind: r.kind, text: r.text, at: Number(r.at), seen: !!r.seen })) };
   }
   async function notifsSeen(req) {
     if (!ON) return { ok: true };
