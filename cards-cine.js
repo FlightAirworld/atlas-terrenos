@@ -197,7 +197,7 @@
     x.onclick = close;
     if (opt.shareId && window.CardsShare) {   // 🔗 y 🖼️ dentro de la carta ampliada (cards-share.js)
       const row = document.createElement('div'); row.className = 'czshare';
-      row.style.cssText = 'position:fixed;left:0;right:0;bottom:calc(52px + env(safe-area-inset-bottom,0px));z-index:3;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 12px';
+      row.style.cssText = 'position:fixed;left:0;right:0;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:3;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 12px';
       const mk = t => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.style.cssText = 'padding:10px 18px;border-radius:999px;border:0;font-weight:800;font-size:15px;background:#ffd166;color:#1b1b1b;box-shadow:0 4px 14px rgba(0,0,0,.45);cursor:pointer'; return b; };
       const id = opt.shareId, lk = mk('🔗 Enlace'), im = mk('🖼️ Imagen');
       lk.onclick = async e => { e.stopPropagation(); const m = await window.CardsShare.link(id); if (m) { lk.textContent = m.length > 22 ? '🔗 Copia el enlace' : m; setTimeout(() => { lk.textContent = '🔗 Enlace'; }, 2500); } };
