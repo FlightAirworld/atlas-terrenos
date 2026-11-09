@@ -445,7 +445,7 @@ async function profileSet(req, { nickname }) {
 }
 
 // Regalo de bienvenida: créditos que recibe una cuenta nueva, una sola vez (WELCOME_CREDITS=0 lo desactiva)
-const WELCOME_CREDITS = Math.max(0, Math.floor(Number(process.env.WELCOME_CREDITS ?? 5)));
+const WELCOME_CREDITS = Math.max(0, Math.floor(Number(process.env.WELCOME_CREDITS ?? 100)));
 
 // Al iniciar sesión: ata a la cuenta el código de este dispositivo (o junta sus terrenos con los de la cuenta)
 async function linkAccount(req) {
