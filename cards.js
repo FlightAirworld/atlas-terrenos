@@ -134,8 +134,8 @@
   }
 
   const shareBtn = id => { const b = document.createElement('button'); b.type = 'button'; b.textContent = '📤 Compartir'; b.onclick = () => { if (window.CardsShare) window.CardsShare.open(id); }; return b; };   // cards-share.js
-  function zoomEl(el, from, glow) { if (window.CardsCine) window.CardsCine.zoom(el, from && from.getBoundingClientRect ? from.getBoundingClientRect() : null, { glow }); }
-  function zoomCard(id, from) { const info = C.cardInfo(id, S ? S.season : 'T1'); zoomEl(cardEl(info, false), from, info.c2); }
+  function zoomEl(el, from, glow, shareId) { if (window.CardsCine) window.CardsCine.zoom(el, from && from.getBoundingClientRect ? from.getBoundingClientRect() : null, { glow, shareId }); }
+  function zoomCard(id, from) { const info = C.cardInfo(id, S ? S.season : 'T1'); zoomEl(cardEl(info, false), from, info.c2, id); }
 
   function showCard(id, into, flip) {
     const el = into || $('cards-view'); const ce = cardEl(C.cardInfo(id, S ? S.season : 'T1'), flip); ce.onclick = () => zoomCard(id, ce); el.replaceChildren(ce);
@@ -372,7 +372,7 @@
     else { const bm = document.createElement('div'); bm.className = 'mini'; P.black.forEach(b => { const info = C.blackInfo(b.month), t = tile(info, b.month.slice(2), () => pick(t, blackWrap(info, b))); bm.appendChild(t); }); panel.appendChild(bm); }
     panel.appendChild(detail);
   }
-  function blackWrap(info, b) { const w = document.createElement('div'); const ce = cardEl(info, true); ce.onclick = () => zoomEl(cardEl(info, false), ce, '#d4a017'); w.appendChild(ce); w.appendChild(mkp('cmeta', '🖤 Única · ganada con una puja de ' + money(b.bid) + '. No se puede comprar ni cambiar.')); w.appendChild(shareBtn(info.id)); return w; }
+  function blackWrap(info, b) { const w = document.createElement('div'); const ce = cardEl(info, true); ce.onclick = () => zoomEl(cardEl(info, false), ce, '#d4a017', info.id); w.appendChild(ce); w.appendChild(mkp('cmeta', '🖤 Única · ganada con una puja de ' + money(b.bid) + '. No se puede comprar ni cambiar.')); w.appendChild(shareBtn(info.id)); return w; }
   function cardWithBuy(P, id, info) {   // la carta abierta + formulario para ofrecer créditos por ella
     const w = document.createElement('div'); w.appendChild(cardEl(info, true)); w.appendChild(shareBtn(id));
     if (P.me) { w.appendChild(mkp('cmeta', 'Esta carta es tuya.')); return w; }
@@ -450,7 +450,7 @@
     const h = document.createElement('h3'); h.textContent = '⭐ Especiales'; el.appendChild(h); el.appendChild(mkp('cmeta muted', 'Aquí se guardan tus cartas especiales de las pujas: las 🖤 Cartas Negras.'));
     if (!S.black || !S.black.length) { el.appendChild(mkp('cmeta muted', 'Aún no tienes ninguna. Se ganan en la puja mensual de la Carta Negra 🖤.')); return; }
     const mini = document.createElement('div'); mini.className = 'mini';
-    S.black.forEach(b => { const info = C.blackInfo(b.month), t = tile(info, b.month.slice(2), () => { const v = $('cards-view'); v.replaceChildren(blackWrap(info, b)); v.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); zoomEl(cardEl(info, false), t, '#d4a017'); }); mini.appendChild(t); });
+    S.black.forEach(b => { const info = C.blackInfo(b.month), t = tile(info, b.month.slice(2), () => { const v = $('cards-view'); v.replaceChildren(blackWrap(info, b)); v.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); zoomEl(cardEl(info, false), t, '#d4a017', info.id); }); mini.appendChild(t); });
     el.appendChild(mini);
   }
 
