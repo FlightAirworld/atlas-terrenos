@@ -249,7 +249,9 @@ function flushOwned() {
 
 // Para ir fluido, la foto del suelo y la etiqueta con el nombre solo existen en las parcelas más cercanas al centro.
 // El volumen 3D (una sola capa para todas) se mantiene siempre.
-const MAX_DETAIL = 40;
+// Cuántas parcelas (las más cercanas al centro) mantienen su foto a la vez. Con el zoom lejano la foto pesa poco (128 px) y caben muchas;
+// al acercar, cada foto es mayor (256 / 512 px) y se baja para no agotar la memoria del móvil.
+const DETAIL_CAP = { t: 120, s: 70, m: 40 }, DETAIL_KEEP = 20;   // DETAIL_KEEP: margen para que no parpadeen las del borde al mover un poco el mapa
 let detailQueued = false;
 // ---------- Casas recortadas por las calles ----------
 // Las calles reales (teselas de OpenFreeMap) se restan de cada parcela: la casa queda cortada por la carretera.
@@ -259,6 +261,7 @@ let detailQueued = false;
 const ROAD_WIDTH = { motorway: 16, trunk: 14, primary: 12, secondary: 10, tertiary: 9, minor: 7 };   // ancho total, en metros
 // ---------- Calles horizontales entre edificios pegados ----------
 // Cuando dos edificios están pegados uno encima del otro, se traza una calle horizontal justo en la frontera entre los dos.
+// Si hay más de dos apilados, se traza una frontera sí y la siguiente no, para que la zona no se llene de calles.
 // Las calles de parcelas que se tocan en la misma fila se unen en una sola; al cruzar una calle real se empalman con ella
 // (mapshim.withSynth parte las dos en el cruce), y por ellas circulan coches y peatones como por cualquier otra calle.
 // Cuentan todas las parcelas ocupadas, también parques, bosques, jardines y prados.
@@ -273,11 +276,16 @@ function rebuildSynth() {
     const p = ex.p; if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
     occ.set(p.x + ',' + p.y, ex);
   }
-  const pairs = new Set(), byY = new Map();                         // pareja = parcela (x,y) con edificio justo debajo de otra (x,y-1)
+  const all = [];                                                   // pareja = parcela (x,y) justo encima de otra (x,y-1)
   for (const k of occ.keys()) {
     const [x, y] = k.split(',').map(Number);
-    if (!occ.has(x + ',' + (y - 1))) continue;
-    pairs.add(k);
+    if (occ.has(x + ',' + (y - 1))) all.push([x, y]);
+  }
+  all.sort((m, n) => m[1] - n[1]);
+  const pairs = new Set(), byY = new Map();                         // en una pila de parcelas, una frontera sí y la siguiente no (para que no se llene de calles)
+  for (const [x, y] of all) {
+    if (pairs.has(x + ',' + (y - 1))) continue;
+    pairs.add(x + ',' + y);
     if (!byY.has(y)) byY.set(y, []);
     byY.get(y).push(x);
   }
@@ -547,7 +555,8 @@ function updateDetail() {
     const c = gl.getCenter();
     all.forEach(ex => { const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y); ex.d = Math.hypot((s + n) / 2 - c.lat, (w + e) / 2 - c.lng); });
     all.sort((a, b) => a.d - b.d);
-    all.forEach((ex, i) => i < MAX_DETAIL ? addDetail(ex) : dropDetail(ex));
+    const cap = DETAIL_CAP[resOf()] || 40;
+    all.forEach((ex, i) => (i < cap || (ex.hasDetail && i < cap + DETAIL_KEEP)) ? addDetail(ex) : dropDetail(ex));
   });
 }
 gl.on('moveend', updateDetail);
