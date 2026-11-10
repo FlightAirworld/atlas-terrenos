@@ -175,11 +175,10 @@
     if (/^(casa|choza)/.test(k)) return 'home';
     if (k === 'parque-infantil') return 'play';
     if (/^(parque|jardin|bosque|cesped|cesped-2|parque-picnic|parque-futbol|prado|claro-bosque)$/.test(k)) return 'park';
-    if (/^(farmacia|supermercado|condis)$/.test(k)) return 'shop';
-    if (/^(mcdonald|burgerking)$/.test(k)) return 'drive';
-    if (/^(cepsa|gasolinera)$/.test(k)) return 'gas';
+    if (/^(farmacia|supermercado)$/.test(k)) return 'shop';
+    if (/^gasolinera$/.test(k)) return 'gas';
     if (/^iglesia/.test(k)) return 'church';
-    if (/^(restaurante|burrito-blanco|arcobaleno|la-cruilla)$/.test(k)) return 'bar';
+    if (/^restaurante$/.test(k)) return 'bar';
     return null;
   }
   const P_ = (sc, u, v) => ({ x: sc.cx + u * sc.hw, y: sc.cy + v * sc.hh });

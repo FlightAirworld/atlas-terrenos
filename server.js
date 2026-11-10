@@ -115,12 +115,7 @@ const HOUSES = [
   'images/supermercado.webp',
   'images/helipuerto.webp',
   'images/jardin.webp',
-  'images/condis.webp',
-  'images/cepsa.webp',
-  'images/aurgi.webp',
-  'images/burrito-blanco.webp',
-  'images/arcobaleno.webp',
-  'images/la-cruilla.webp',
+  'images/Restaurante.webp',
   'images/cesped-2.webp',
   'images/parque-picnic.webp',
   'images/desierto-1.webp',
@@ -163,12 +158,7 @@ const CLIENT_RANDOM_POOL = [
   'images/supermercado.webp',
   'images/helipuerto.webp',
   'images/jardin.webp',
-  'images/condis.webp',
-  'images/cepsa.webp',
-  'images/aurgi.webp',
-  'images/burrito-blanco.webp',
-  'images/arcobaleno.webp',
-  'images/la-cruilla.webp',
+  'images/Restaurante.webp',
   'images/torre-metalica.webp',
   'images/casa-modernista.webp',
   'images/casa-modernista-2.webp',
@@ -2620,6 +2610,11 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 
 // Migración automática (inofensiva si la columna ya existe)
 const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').catch(e => console.error('No se pudo añadir la columna house:', e.message))
+  .then(async () => {   // casas con marcas o negocios reales retiradas: los terrenos que las tenían pasan a una casa sin marca
+    for (const [b, to] of [['condis', 'supermercado-2'], ['cepsa', 'supermercado-4'], ['aurgi', 'supermercado-3'], ['arcobaleno', 'Restaurante'], ['la-cruilla', 'Restaurante'], ['burrito-blanco', 'casa-7']]) {
+      await run('UPDATE parcels SET house = $1 WHERE house IN ($2, $3)', ['images/' + to + '.webp', 'images/' + b + '.webp', 'images/' + b + '.png']).catch(e => console.error('Migración de casas:', e.message));
+    }
+  })
   .then(async () => {   // niveles de terreno (no hacen nada si las columnas ya existen)
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level SMALLINT NOT NULL DEFAULT 1');
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level_at BIGINT');
@@ -2897,14 +2892,13 @@ async function likesTop() {
 // ---------- Álbum de colecciones ----------
 // Categorías de casas (deben ser las mismas que HOUSE_CATS / HOUSE_PREFIX de app.js). Una casa que no esté en ninguna va a «Otros».
 const HOUSE_CATS = [
-  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2', 'burrito-blanco'] },
+  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2'] },
   { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica'] },
-  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'condis', 'Farmacia'] },
-  { icon: '🍽️', name: 'Restaurantes', files: ['arcobaleno', 'la-cruilla'] },
+  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'Farmacia'] },
+  { icon: '🍽️', name: 'Restaurantes', files: ['Restaurante'] },
   { icon: '🎬', name: 'Cines', files: ['cine', 'teatro'] },
   { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros', 'parque-futbol'] },
   { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
-  { icon: '⛽', name: 'Motor', files: ['cepsa', 'aurgi'] },
   { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto'] }
 ];
 const houseBase = h => String(h).replace(/^images\//, '').replace(/\.(png|webp)$/i, '');

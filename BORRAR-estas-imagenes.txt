@@ -1,0 +1,4 @@
+Borra de la carpeta images/ estas imagenes (cada una tiene 4 tamanos: nombre.webp, -m, -s, -t):
+Burgerking, McDonald, cepsa, condis, aurgi, gasolinera, arcobaleno, la-cruilla, burrito-blanco, policia
+Ejemplo (en la raiz del repositorio):
+  git rm images/Burgerking*.webp images/McDonald*.webp images/cepsa*.webp images/condis*.webp images/aurgi*.webp images/gasolinera*.webp images/arcobaleno*.webp images/la-cruilla*.webp images/burrito-blanco*.webp images/policia*.webp

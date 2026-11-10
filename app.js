@@ -173,12 +173,7 @@ const HOUSES = [
   'images/supermercado.webp',
   'images/helipuerto.webp',
   'images/jardin.webp',
-  'images/condis.webp',
-  'images/cepsa.webp',
-  'images/aurgi.webp',
-  'images/burrito-blanco.webp',
-  'images/arcobaleno.webp',
-  'images/la-cruilla.webp',
+  'images/Restaurante.webp',
   'images/torre-metalica.webp',
   'images/casa-modernista.webp',
   'images/casa-modernista-2.webp',
@@ -227,7 +222,7 @@ function houseFor(id, house) {
 }
 // Altura aproximada (en metros) de cada tipo de edificio: da volumen 3D a las parcelas
 const HOUSE_HEIGHT = {
-  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'condis': 9, 'cepsa': 7, 'aurgi': 8, 'burrito-blanco': 8, 'arcobaleno': 8, 'la-cruilla': 8,
+  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'restaurante': 8,
   'torre-metalica': 60, 'casa-modernista': 20, 'casa-modernista-2': 20, 'estadio-1': 25, 'estadio-2': 25, 'rugby': 10, 'estadio-3': 40, 'estadio-4': 40, 'plaza-de-toros': 20, 'teatro': 14, 'cine': 10, 'supermercado-3': 8, 'supermercado-4': 8, 'supermercado-2': 8, 'pisos-3': 30, 'pisos-4': 30, 'pisos-5': 30, 'casa-7': 8, 'casa-8': 8
 };
 // Nivel del terreno (1 a 5): más estrellas junto al nombre y un edificio más alto
@@ -1009,14 +1004,13 @@ const pickableHouses = () => pickerWorld !== 'tierra' ? WORLD_HOUSES[pickerWorld
 const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '').replace(/[-_]/g, ' ');
 // Categorías del selector de casas: al tocar una (🎬 Cines, 🏠 Casas…) solo salen las de ese tipo. Lo que no esté aquí va a «Otros» (así las casas nuevas siempre se ven).
 const HOUSE_CATS = [
-  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2', 'burrito-blanco'] },
+  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2'] },
   { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica'] },
-  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'condis', 'Farmacia'] },
-  { icon: '🍽️', name: 'Restaurantes', files: ['arcobaleno', 'la-cruilla'] },
+  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'Farmacia'] },
+  { icon: '🍽️', name: 'Restaurantes', files: ['Restaurante'] },
   { icon: '🎬', name: 'Cines', files: ['cine', 'teatro'] },
   { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros', 'parque-futbol'] },
   { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
-  { icon: '⛽', name: 'Motor', files: ['cepsa', 'aurgi'] },
   { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto'] },
   { icon: '🚀', name: 'Espacio', files: Object.values(WORLD_HOUSES).flat().map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) },
   { icon: '👑', name: 'Oro', files: GOLD_HOUSES.map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) },
@@ -1026,12 +1020,12 @@ const HOUSE_CATS = [
 const HOUSE_PREFIX = [
   ['Casas', ['casa', 'chalet', 'villa', 'mansion', 'adosado']],
   ['Edificios', ['piso', 'edificio', 'torre', 'bloque', 'rascacielos', 'apartamento', 'hotel', 'oficina']],
-  ['Tiendas', ['super', 'supermercado', 'tienda', 'farmacia', 'panaderia', 'banco', 'centro-comercial', 'mercado', 'condis']],
-  ['Restaurantes', ['restaurante', 'cafe', 'cafeteria', 'bar', 'mcdonald', 'pizzeria', 'burger', 'heladeria']],
+  ['Tiendas', ['super', 'supermercado', 'tienda', 'farmacia', 'panaderia', 'banco', 'centro-comercial', 'mercado']],
+  ['Restaurantes', ['restaurante', 'cafe', 'cafeteria', 'bar', 'pizzeria', 'heladeria']],
   ['Cines', ['cine', 'teatro', 'museo', 'discoteca']],
   ['Deportes', ['estadio', 'rugby', 'plaza-de-toros', 'futbol', 'baloncesto', 'tenis', 'piscina', 'pabellon', 'gimnasio', 'golf']],
   ['Parques', ['parque', 'bosque', 'jardin', 'claro', 'cesped', 'desierto', 'lago', 'playa', 'huerto']],
-  ['Motor', ['gasolinera', 'cepsa', 'aurgi', 'taller', 'parking', 'garaje', 'lavadero']],
+  ['Motor', ['gasolinera', 'taller', 'parking', 'garaje', 'lavadero']],
   ['Servicios', ['colegio', 'hospital', 'bomberos', 'policia', 'iglesia', 'aeropuerto', 'helipuerto', 'fabrica', 'ayuntamiento', 'estacion']]
 ];
 const houseCatOf = h => {
