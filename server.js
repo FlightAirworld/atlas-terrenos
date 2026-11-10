@@ -3237,6 +3237,7 @@ ready.then(async () => {   // ruleta diaria: una fila por cuenta y día (la clav
   await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS pack_code TEXT');
   await run('CREATE INDEX IF NOT EXISTS parcels_pack_code ON parcels (pack_code) WHERE pack_code IS NOT NULL');
   await run('CREATE TABLE IF NOT EXISTS guest_ip (day TEXT NOT NULL, ip_hash TEXT NOT NULL, n INT NOT NULL DEFAULT 1, PRIMARY KEY (day, ip_hash))');
+  await run('ALTER TABLE public.guest_ip ENABLE ROW LEVEL SECURITY').catch(() => {});   // solo el servidor accede (la clave pública no)
   await run('CREATE UNIQUE INDEX IF NOT EXISTS packs_fixed_nick ON packs (lower(fixed_nick)) WHERE fixed_nick IS NOT NULL');
   await run('CREATE TABLE IF NOT EXISTS monthly_rewards (user_id TEXT NOT NULL, month TEXT NOT NULL, streak INT NOT NULL DEFAULT 0, last_day TEXT, PRIMARY KEY (user_id, month))');
   await run('CREATE TABLE IF NOT EXISTS president_grants (city TEXT NOT NULL, month TEXT NOT NULL, user_id TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (city, month))');
