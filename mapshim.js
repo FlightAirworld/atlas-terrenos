@@ -76,7 +76,16 @@
       } catch (e) { return out; }
       if (!synth.length) return out;
       const sy = synth.map(l => ({ lat: l[0][1], w: l[0][0], e: l[1][0], xs: [] })), res = [];
+      const TOL = 4 / 111320;      // ~4 m en grados: una calle real que acaba tan cerca de la horizontal (o encima) se empalma con ella
       out.forEach(c => {
+        [0, c.length - 1].forEach(idx => {   // calle real que termina tocando la horizontal (cruce en T): el extremo se pega a la línea
+          const q = c[idx], nb = c[idx === 0 ? 1 : c.length - 2];
+          if (!q || !nb) return;
+          for (const s of sy) {
+            const d = Math.abs(q[1] - s.lat);
+            if (d <= TOL && Math.abs(nb[1] - s.lat) > d && q[0] >= s.w && q[0] <= s.e) { c[idx] = [q[0], s.lat]; s.xs.push(q[0]); break; }
+          }
+        });
         const cuts = [];
         for (let i = 0; i + 1 < c.length; i++) {
           const a = c[i], b = c[i + 1];
