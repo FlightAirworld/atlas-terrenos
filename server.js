@@ -860,7 +860,10 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const r = await client.query('UPDATE packs SET credits = credits - 1 WHERE code = $1 AND credits > 0 RETURNING credits', [code]);
+    // El dueño del juego (OWNER_USER_ID / OWNER_EMAIL) reclama sin gastar créditos: terrenos ilimitados
+    const r = isOwner(user)
+      ? await client.query('UPDATE packs SET credits = credits WHERE code = $1 RETURNING credits', [code])
+      : await client.query('UPDATE packs SET credits = credits - 1 WHERE code = $1 AND credits > 0 RETURNING credits', [code]);
     if (!r.rows[0]) {
       const exists = code && await one('SELECT 1 AS ok FROM packs WHERE code = $1', [code]);
       throw new HttpError(exists ? 402 : 403, exists ? 'No te quedan terrenos en tu pack' : 'Código no válido');

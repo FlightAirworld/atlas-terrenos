@@ -141,6 +141,13 @@ function authHeaders() { return authToken ? { 'X-Auth-Token': authToken } : {}; 
 function setMsg(text, kind = '') {
   for (const id of ['msg', 'buy-msg']) { const m = $(id); if (m) { m.textContent = text; m.className = 'msg ' + kind; } }   // 'buy-msg': ventana de comprar créditos
 }
+// Aviso arriba de la pantalla (el #msg del panel queda al final y en el móvil no se ve sin bajar)
+function flashToast(text) {
+  let t = document.getElementById('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+  t.textContent = text; t.classList.add('show');
+  clearTimeout(flashToast.t); flashToast.t = setTimeout(() => t.classList.remove('show'), 6000);
+}
 async function api(url, opts = {}) {
   // Siempre manda el token de sesión (antes, en los GET sin opciones no se enviaba y el servidor respondía "Inicia sesión")
   const hasBody = opts.body !== undefined;
@@ -1180,7 +1187,7 @@ $('recover-btn').onclick = async () => {
   } catch (e) { setMsg(e.message, 'err'); }
 };
 $('buy-parcel-btn').onclick = async () => {
-  if (!(!!packCode && credits > 0)) { $('buy-box').scrollIntoView({ behavior: 'smooth', block: 'center' }); setMsg('Elige un pack de créditos para reclamar este terreno.'); return; }
+  if (!(!!packCode && credits > 0)) { $('buy-box').scrollIntoView({ behavior: 'smooth', block: 'center' }); setMsg('Elige un pack de créditos para reclamar este terreno.'); flashToast('Elige un pack de créditos para reclamar este terreno.'); return; }
   if (!selected || selected.owner) return;
   let owner;
   try { owner = nameOrThrow(); } catch (e) { return; }   // nameOrThrow ya muestra el aviso
@@ -1198,12 +1205,12 @@ $('buy-parcel-btn').onclick = async () => {
     selected.owner = j.owner; selected.avatar = avatar; selected.country = country; selected.since = Date.now();
     selected.house = chosenHouse; selected.mine = !!authToken;
     showPanel(selected);
-    setMsg(`¡Listo! Es tuyo. Te quedan ${credits} terrenos 🎉` + (j.referralBonus ? ` 👫 (incluye +${j.referralBonus} de regalo por venir invitado)` : ''), 'ok'); sfx('claim');
+    setMsg('¡Listo! Es tuyo. 🎉' + (j.referralBonus ? ` 👫 (incluye +${j.referralBonus} de regalo por venir invitado)` : ''), 'ok'); sfx('claim');
     drawOwned({ world: selected.world, id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house });
     if (!isOtherWorld(selected)) invalidateTile(selected.x, selected.y);
     loadStats(); loadParcels(); loadProduction();
   } catch (e) {
-    setMsg(e.message, 'err'); sfx('error');
+    setMsg(e.message, 'err'); flashToast('⚠️ ' + e.message); sfx('error');
     refreshCredits();
   } finally { btn.disabled = false; }
 };
@@ -1275,7 +1282,7 @@ $('daily-claim').onclick = async () => {
 // ---------- Compra ----------
 function nameOrThrow() {
   const n = $('name').value.replace(/\s+/g, ' ').trim();
-  if (n.length < 2) { setMsg('Escribe tu nombre (mínimo 2 letras) antes de pagar', 'err'); throw new Error('nombre'); }
+  if (n.length < 2) { setMsg('Escribe tu nombre (mínimo 2 letras) antes de pagar', 'err'); flashToast('⚠️ Escribe tu nombre (mínimo 2 letras)'); throw new Error('nombre'); }
   return n;
 }
 // Packs a la venta (vienen del servidor): el elegido se manda al crear el pedido de PayPal
