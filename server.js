@@ -477,6 +477,50 @@ async function ensureUserPack(user, create = true) {
   return find();
 }
 
+// ---------- Borrar la cuenta (derecho de supresión) ----------
+// Borra todos los datos del jugador y su usuario de Supabase Auth en UNA transacción: si algo falla, no se borra nada.
+// Recorre las tablas con columnas de usuario (así también cubre las que se añadan en el futuro). Excepciones:
+//  - pack_orders: se conserva el registro de la transacción, sin el usuario (obligación contable)
+//  - card_auctions: se quita al ganador, pero queda la subasta
+//  - clans: si era líder pasa el mando al miembro más antiguo; si no queda nadie, se borra el clan
+const ACCOUNT_COLS = ['user_id', 'friend_id', 'from_user', 'to_user', 'invitee_id', 'inviter_id', 'attacker_user', 'defender_user', 'leader_id', 'winner_id'];
+async function accountDelete(req, body) {
+  const user = await needUser(req);
+  if (!body || body.confirm !== true) throw new HttpError(400, 'Falta la confirmación');
+  if (rateHit('acctdel:' + user.id, 3_600_000) > 5) throw new HttpError(429, 'Demasiados intentos. Espera un rato');
+  const id = String(user.id);
+  const qi = s => '"' + String(s).replace(/"/g, '""') + '"';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const c of (await client.query('SELECT id FROM clans WHERE leader_id = $1', [id])).rows) {
+      const nxt = (await client.query('SELECT user_id FROM clan_members WHERE clan_id = $1 AND user_id <> $2 ORDER BY joined_at LIMIT 1', [c.id, id])).rows[0];
+      if (nxt) await client.query('UPDATE clans SET leader_id = $1 WHERE id = $2', [nxt.user_id, c.id]);
+      else { await client.query('DELETE FROM clan_members WHERE clan_id = $1', [c.id]); await client.query('DELETE FROM clans WHERE id = $1', [c.id]); }
+    }
+    await client.query('DELETE FROM parcel_likes WHERE parcel_id IN (SELECT id FROM parcels WHERE user_id::text = $1)', [id]);
+    await client.query('DELETE FROM chat_reacts WHERE msg_id IN (SELECT id FROM chat_msgs WHERE user_id = $1)', [id]);
+    const cols = (await client.query("SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND column_name = ANY($1::text[]) AND table_name IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public')", [ACCOUNT_COLS])).rows;
+    for (const { table_name: t, column_name: c } of cols) {
+      if (t === 'clans') continue;
+      if (t === 'pack_orders') await client.query(`UPDATE pack_orders SET ${qi(c)} = NULL WHERE ${qi(c)}::text = $1`, [id]);
+      else if (t === 'card_auctions') await client.query('UPDATE card_auctions SET winner_id = NULL, winner_nick = NULL WHERE winner_id = $1', [id]);
+      else await client.query(`DELETE FROM ${qi(t)} WHERE ${qi(c)}::text = $1`, [id]);
+    }
+    await client.query('DELETE FROM auth.users WHERE id = $1::uuid', [id]);   // el servidor entra con el rol postgres (DATABASE_URL), que puede borrar usuarios de Supabase Auth
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('BORRAR CUENTA falló:', e.message);
+    throw new HttpError(500, 'No se pudo borrar la cuenta. No se ha borrado nada; inténtalo de nuevo o escríbenos.');
+  } finally {
+    client.release();
+  }
+  for (const [tok, v] of authCache) if (v.user && v.user.id === user.id) authCache.delete(tok);   // el token ya no vale
+  walkerState.delete(id); chatLast.delete(id); helloAt.delete(id);
+  return { ok: true };
+}
+
 // ---------- Apodo fijo (se elige una sola vez y no se puede cambiar) ----------
 const getProfile = userId => one('SELECT nickname FROM profiles WHERE user_id = $1', [userId]);
 
@@ -2563,6 +2607,7 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/push/unsubscribe') return pushUnsubscribe(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/friends') return friendsList(req);
   if (req.method === 'POST' && pn === '/api/friends/add') return friendsAdd(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/account/delete') return accountDelete(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/friends/remove') return friendsRemove(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/cards') return cardsMod().get(req);
   if (req.method === 'POST' && pn === '/api/cards/daily') return cardsMod().daily(req);

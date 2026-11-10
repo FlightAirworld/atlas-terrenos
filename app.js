@@ -1543,6 +1543,7 @@ function updateAuthUi() {
   $('account-btn').setAttribute('aria-label', logged ? 'Mi cuenta' : 'Entrar');
   $('login-out').classList.toggle('hidden', logged);
   $('login-in').classList.toggle('hidden', !logged);
+  if (!logged) { $('login-delete-confirm').classList.add('hidden'); $('login-delete').classList.remove('hidden'); $('login-delete-yes').disabled = false; }
   $('login-email-shown').textContent = (authUser && authUser.email) || '';
   if (logged && document.activeElement !== $('login-nick')) $('login-nick').value = nickOf();
   const fixed = !!myNick;
@@ -1614,6 +1615,16 @@ $('login-close').onclick = () => $('login').classList.add('hidden');
 $('buy-login').onclick = () => openLogin('Entra para comprar tu pack 🎁');
 // "Entrar con Google" con el botón de Google (Google Identity Services): Google enseña tu dominio en vez de supabase.co.
 // Si algo falla (sin conexión, script bloqueado, origen no autorizado...) se queda el botón de siempre.
+// Casilla de edad (16+): hace falta para crear cuenta y para entrar con Google (que también puede crear una)
+const ageOk = () => !!($('age-ok') && $('age-ok').checked);
+const syncAge = () => document.body.classList.toggle('age-pending', !ageOk());
+function needAge() {
+  if (ageOk()) return true;
+  setLoginMsg('Marca la casilla para confirmar que tienes 16 años o más', 'err');
+  return false;
+}
+if ($('age-ok')) { $('age-ok').onchange = () => { syncAge(); if (ageOk()) setLoginMsg(''); }; syncAge(); }
+
 async function initGoogleId() {
   try {
     const cid = cfg.auth && cfg.auth.googleClientId, box = $('login-google-gsi');
@@ -1626,6 +1637,7 @@ async function initGoogleId() {
     google.accounts.id.initialize({
       client_id: cid, nonce: hashed, ux_mode: 'popup', use_fedcm_for_prompt: true, itp_support: true,
       callback: async resp => {
+        if (!needAge()) return;
         setLoginMsg('Entrando…');
         const { error } = await sb.auth.signInWithIdToken({ provider: 'google', token: resp.credential, nonce: raw });
         if (error) setLoginMsg(error.message, 'err'); else setLoginMsg('');
@@ -1645,6 +1657,7 @@ async function initGoogleId() {
 }
 $('login-google').onclick = async () => {
   if (!sb) return setLoginMsg('El login no está disponible ahora mismo', 'err');
+  if (!needAge()) return;
   const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
   if (error) setLoginMsg(error.message, 'err');
 };
@@ -1667,6 +1680,7 @@ function readCreds() {
 }
 $('login-signup-btn').onclick = async () => {
   if (!sb) return setLoginMsg('El login no está disponible ahora mismo', 'err');
+  if (!needAge()) return;
   const c = readCreds(); if (!c) return;
   const btn = $('login-signup-btn'); btn.disabled = true;
   try {
@@ -1709,6 +1723,19 @@ $('login-logout').onclick = async () => {
   try { if (sb) await sb.auth.signOut(); } catch {}
   await onSession(null);
   $('login').classList.add('hidden');
+};
+// Borrar la cuenta: pide confirmación y borra todo en el servidor (datos + usuario)
+$('login-delete').onclick = () => { $('login-delete').classList.add('hidden'); $('login-delete-confirm').classList.remove('hidden'); };
+$('login-delete-no').onclick = () => { $('login-delete-confirm').classList.add('hidden'); $('login-delete').classList.remove('hidden'); };
+$('login-delete-yes').onclick = async () => {
+  const btn = $('login-delete-yes'); btn.disabled = true;
+  try {
+    await api('/api/account/delete', { method: 'POST', body: { confirm: true } });
+    try { if (sb) await sb.auth.signOut(); } catch {}
+    try { localStorage.clear(); sessionStorage.clear(); } catch {}   // fuera también lo guardado en este navegador
+    setLoginMsg('Tu cuenta se ha borrado.', 'ok');
+    setTimeout(() => location.reload(), 1800);
+  } catch (e) { setLoginMsg(e.message, 'err'); btn.disabled = false; }
 };
 
 // ---------- Compartir terreno ----------
