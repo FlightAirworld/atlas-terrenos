@@ -14,6 +14,9 @@ try { flatView = localStorage.getItem('flatView') !== '0'; } catch (e) {}
 // Mapa base: 'estilizado' (dibujo limpio tipo Atlas Earth, vectorial) o 'satelite'
 let baseMode = 'estilizado';
 try { baseMode = localStorage.getItem('baseMode') === 'satelite' ? 'satelite' : 'estilizado'; } catch (e) {}
+// Ancho del río según el zoom (el mismo para el mapa base y para la capa que lo dibuja encima de las parcelas)
+const WATER_W = ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.5, 14, 2, 16, 5, 18, 13, 20, 30];
+const WATER_W_EDGE = ['interpolate', ['exponential', 1.6], ['zoom'], 8, 1, 14, 3.2, 16, 6.8, 18, 15, 20, 32];   // borde algo más ancho
 const FLAT_NEAR = 14;          // (zoom MapLibre) a partir de aquí el globo se ve plano
 const MAP_STYLE = {
   version: 8,
@@ -39,7 +42,7 @@ const MAP_STYLE = {
     { id: 'st-landuse', type: 'fill', source: 'roads', 'source-layer': 'landuse', paint: { 'fill-color': ['match', ['get', 'class'], 'residential', '#ece6d6', 'commercial', '#efdcc6', 'industrial', '#e2dde0', 'retail', '#efdcc6', 'cemetery', '#c3dfa6', 'school', '#f0e3c2', 'hospital', '#f4d7d2', '#e9e4d2'], 'fill-opacity': 0.9 } },
     { id: 'st-park', type: 'fill', source: 'roads', 'source-layer': 'park', paint: { 'fill-color': '#9fd58a', 'fill-opacity': 0.9 } },
     { id: 'st-water', type: 'fill', source: 'roads', 'source-layer': 'water', paint: { 'fill-color': '#7cc4e8' } },
-    { id: 'st-waterway', type: 'line', source: 'roads', 'source-layer': 'waterway', paint: { 'line-color': '#7cc4e8', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.5, 16, 4] } },
+    { id: 'st-waterway', type: 'line', source: 'roads', 'source-layer': 'waterway', paint: { 'line-color': '#7cc4e8', 'line-width': WATER_W } },
     { id: 'st-buildings', type: 'fill', source: 'roads', 'source-layer': 'building', minzoom: 14, paint: { 'fill-color': '#d9d2c3', 'fill-outline-color': '#c2baa8' } },
     { id: 'st-road-casing', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
       filter: ['all', ['!=', ['get', 'brunnel'], 'tunnel'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service']]]],
@@ -524,7 +527,7 @@ function mountDetail(ex, imgUrl, blob) {
   // La casa llena su cuadrado de la cuadrícula hasta el borde; sin calle se ensancha un 0,4 % para que dos vecinas no dejen rendija
   const cutNow = roadCut.get(ex.p.id), k = (cutNow && cutNow.road) ? 0 : 0.004, dw = (e - w) * k, dh = (n - s) * k;
   gl.addSource(ex.srcId, { type: 'image', url: imgUrl, coordinates: [[w - dw, n + dh], [e + dw, n + dh], [e + dw, s - dh], [w - dw, s - dh]] });
-  gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, 'owned-3d');
+  gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, gl.getLayer('wt-water') ? 'wt-water' : 'owned-3d');
   const stars = document.createElement('span');
   stars.className = 'owner-stars';
   stars.textContent = starsOf(ex.level);
@@ -607,6 +610,11 @@ function applyBaseMode() {
   gl.setLayoutProperty('sat', 'visibility', sat ? 'visible' : 'none');
   for (const l of gl.getStyle().layers) if (l.id.startsWith('st-')) gl.setLayoutProperty(l.id, 'visibility', sat ? 'none' : 'visible');
   for (const id of ['sy-sat-casing', 'sy-sat-road']) if (gl.getLayer(id)) gl.setLayoutProperty(id, 'visibility', sat ? 'visible' : 'none');
+  if (gl.getLayer('wt-waterway')) {
+    gl.setPaintProperty('wt-water', 'fill-opacity', sat ? 0.3 : 0.55);
+    gl.setPaintProperty('wt-waterway', 'line-opacity', sat ? 0.6 : 0.9);
+    gl.setPaintProperty('wt-waterway-edge', 'line-opacity', sat ? 0.35 : 0.7);
+  }
   const b = document.getElementById('base-btn');
   if (b) { b.setAttribute('aria-pressed', sat ? 'true' : 'false'); b.title = sat ? 'Mapa: satélite' : 'Mapa: estilizado'; b.textContent = sat ? '🛰️' : '🎨'; }
 }
@@ -653,6 +661,14 @@ window.removeParcelClient = removeParcelClient;
 
 // Capas del mapa que dependen de que el estilo esté cargado
 gl.on('load', () => {
+  // Ríos y lagos por encima de las parcelas: la casa no los tapa (las fotos de las casas se insertan justo debajo de 'wt-water')
+  gl.addLayer({ id: 'wt-water', type: 'fill', source: 'roads', 'source-layer': 'water', minzoom: 13, paint: { 'fill-color': '#7cc4e8', 'fill-opacity': 0.55 } });
+  gl.addLayer({ id: 'wt-waterway-edge', type: 'line', source: 'roads', 'source-layer': 'waterway', minzoom: 13,
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': '#4f9fcf', 'line-opacity': 0.7, 'line-width': WATER_W_EDGE } });
+  gl.addLayer({ id: 'wt-waterway', type: 'line', source: 'roads', 'source-layer': 'waterway', minzoom: 13,
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': '#7cc4e8', 'line-opacity': 0.9, 'line-width': WATER_W } });
   gl.addSource('owned', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   gl.addLayer({
     id: 'owned-3d', type: 'fill-extrusion', source: 'owned',
