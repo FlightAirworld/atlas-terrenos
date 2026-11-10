@@ -464,6 +464,7 @@ body.tut-nohouses .owner-label{opacity:0}
     [card, spot, arrow, stage, shield].forEach(n => { if (n) n.remove(); });
     card = spot = arrow = stage = shield = null;
     lsSet(KEY, '1');
+    try { document.dispatchEvent(new Event('tutorial:end')); } catch (e) {}   // la guía de las primeras parcelas (primeras.js) arranca aquí
   }
   const onKey = e => { if (e.key === 'Escape' && !modalOpen()) finish(); };
 

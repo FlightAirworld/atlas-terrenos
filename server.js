@@ -419,6 +419,29 @@ async function adminVip(req, { nickname, country, credits }) {
   return { ok: true, created: true, nickname: nick, credits: cr, country: ctry, code, link: '/?vip=' + code };
 }
 
+// ---------- Parcelas de prueba: un jugador anónimo recibe GUEST_CREDITS parcelas gratis (0 lo desactiva) ----------
+// Cuando las usa se le lleva a crear cuenta; al iniciar sesión su pack y sus parcelas pasan a la cuenta (ver linkAccount).
+// Antiabuso: como mucho GUEST_PER_IP packs de prueba al día por conexión, y un pack de prueba no cobra el regalo diario sin cuenta.
+const GUEST_CREDITS = Math.max(0, Math.min(10, Math.floor(Number(process.env.GUEST_CREDITS ?? 2))));
+const GUEST_PER_IP = Math.max(1, Math.floor(Number(process.env.GUEST_PER_IP ?? 5)));
+async function guestStart(req) {
+  if (GUEST_CREDITS < 1) throw new HttpError(403, 'Las parcelas de prueba están desactivadas');
+  if (await userFrom(req)) throw new HttpError(409, 'Ya tienes cuenta');
+  const code = packCodeFrom(req);
+  if (code) {   // ya tiene pack (el suyo de prueba u otro): se devuelve tal cual, no se crea otro
+    const row = await one('SELECT code, credits, is_guest FROM packs WHERE code = $1', [code]);
+    if (row) return { ok: true, code: row.code, credits: row.credits, guest: !!row.is_guest, created: false };
+  }
+  const today = dayKey();
+  const hash = crypto.createHash('sha256').update('guest:' + clientIp(req) + DAILY_SALT).digest('hex');
+  await run('DELETE FROM guest_ip WHERE day < $1', [today]);
+  const lim = await one('INSERT INTO guest_ip (day, ip_hash, n) VALUES ($1,$2,1) ON CONFLICT (day, ip_hash) DO UPDATE SET n = guest_ip.n + 1 WHERE guest_ip.n < $3 RETURNING n', [today, hash, GUEST_PER_IP]);
+  if (!lim) throw new HttpError(429, 'Ya se han usado las parcelas de prueba desde esta conexión hoy. Entra con tu cuenta para seguir jugando');
+  const newCode = newPackCode();
+  await run('INSERT INTO packs (code, credits, created_at, is_guest) VALUES ($1,$2,$3,TRUE)', [newCode, GUEST_CREDITS, Date.now()]);
+  return { ok: true, code: newCode, credits: GUEST_CREDITS, guest: true, created: true };
+}
+
 async function getPack(req) {
   const code = packCodeFrom(req);
   const row = code && await one('SELECT code, credits FROM packs WHERE code = $1', [code]);
@@ -479,6 +502,7 @@ async function profileSet(req, { nickname }) {
   try {
     await run('INSERT INTO profiles (user_id, nickname, created_at) VALUES ($1,$2,$3)', [user.id, name, Date.now()]);
     telegram.notify(`🆕 Jugador nuevo: ${name}`);
+    await run('UPDATE parcels SET owner = $1 WHERE user_id = $2 AND pack_code IN (SELECT code FROM packs WHERE user_id = $2 AND is_guest)', [name, user.id]).catch(() => {});   // las parcelas de prueba llevan el apodo
   } catch (e) {
     if (!isUniqueViolation(e)) throw e;
     if (await getProfile(user.id)) throw new HttpError(409, 'Tu apodo ya está fijado y no se puede cambiar');
@@ -520,6 +544,13 @@ async function linkAccount(req) {
         mine.credits = up.rows[0].credits;
       }
     }
+    // Parcelas reclamadas sin cuenta con ese pack (las de prueba): pasan a ser de la cuenta, con su apodo si ya lo tiene
+    let adopted = 0;
+    if (old) {
+      const prof0 = (await client.query('SELECT nickname FROM profiles WHERE user_id = $1', [user.id])).rows[0];
+      const ad = await client.query('UPDATE parcels SET user_id = $1, owner = COALESCE($3, owner) WHERE pack_code = $2 AND user_id IS NULL', [user.id, old.code, prof0 ? prof0.nickname : null]);
+      adopted = ad.rowCount;
+    }
     // Regalo de bienvenida: solo cuentas nuevas y una sola vez (la clave primaria de welcome_gifts lo garantiza)
     if (isNewAccount && WELCOME_CREDITS > 0) {
       const g = await client.query('INSERT INTO welcome_gifts (user_id, credits, created_at) VALUES ($1,$2,$3) ON CONFLICT (user_id) DO NOTHING RETURNING user_id', [user.id, WELCOME_CREDITS, Date.now()]);
@@ -537,7 +568,7 @@ async function linkAccount(req) {
       if (ownerBonus) mine.credits = (await one('SELECT credits FROM packs WHERE code = $1', [mine.code])).credits;
     }
     const prof = await getProfile(user.id);
-    return { ok: true, code: mine.code, credits: mine.credits, email: user.email, nickname: prof ? prof.nickname : null, welcomeBonus, ownerBonus };
+    return { ok: true, code: mine.code, credits: mine.credits, email: user.email, nickname: prof ? prof.nickname : null, welcomeBonus, ownerBonus, adopted };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Inténtalo de nuevo');
@@ -873,9 +904,9 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
       if (owned >= MAX_PARCELS_PER_ACCOUNT) throw new HttpError(409, `Has alcanzado el máximo de ${MAX_PARCELS_PER_ACCOUNT} terrenos por cuenta`);
     }
     await client.query(
-      'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id, house, world, city) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',
+      'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id, house, world, city, pack_code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)',
       // En otros mundos no hay países ni ciudades de la Tierra: sin país y con «Sin ciudad», así no entran en los rankings ni en el geocodificador de ciudades
-      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), world === 'tierra' ? cleanCountry(country) : null, user ? user.id : null, chosenHouse, world, world === 'tierra' ? null : CITY_NONE]);
+      [p.id, p.x, p.y, name, null, '0.00', 'PACK', now, cleanAvatar(avatar), world === 'tierra' ? cleanCountry(country) : null, user ? user.id : null, chosenHouse, world, world === 'tierra' ? null : CITY_NONE, code]);
     await client.query('COMMIT');
     let bonus = 0;   // invitación: premio al invitado y a quien le invitó (si no hay invitación, no pasa nada)
     if (user) notifyFriendsOf(user.id, 'claim');   // sin esperar: el aviso no retrasa la respuesta
@@ -989,8 +1020,9 @@ async function dailyClaim(req) {
     return { ok: true, code: newCode, credits: reward, reward, streak: 1, newCode: true };
   }
 
-  const row = await one('SELECT code, credits, last_daily, streak FROM packs WHERE code = $1', [code]);
+  const row = await one('SELECT code, credits, last_daily, streak, is_guest FROM packs WHERE code = $1', [code]);
   if (!row) throw new HttpError(403, 'Código no válido');
+  if (row.is_guest && REQUIRE_LOGIN && !(await userFrom(req))) throw new HttpError(401, 'Crea tu cuenta para reclamar tu regalo diario');
   const info = dailyInfo(row);
   if (!info.canClaim) throw new HttpError(409, 'Ya has reclamado el regalo de hoy');
   const up = await one(
@@ -2422,7 +2454,7 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
     return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, demo: DEMO, stripe: !DEMO && HAS_STRIPE, paypal: !DEMO && HAS_PAYPAL, clientId: (DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, worlds: WORLDS, packSize: PACKS[0].credits, packs: PACKS,
-      maxParcels: Number.isFinite(MAX_PARCELS_PER_ACCOUNT) ? MAX_PARCELS_PER_ACCOUNT : null, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null, googleClientId: AUTH_ENABLED ? GOOGLE_CLIENT_ID : null } };
+      maxParcels: Number.isFinite(MAX_PARCELS_PER_ACCOUNT) ? MAX_PARCELS_PER_ACCOUNT : null, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, guestCredits: GUEST_CREDITS, welcomeCredits: WELCOME_CREDITS, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null, googleClientId: AUTH_ENABLED ? GOOGLE_CLIENT_ID : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')), cleanWorld(sp.get('world')));
@@ -2496,6 +2528,7 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/monthly/claim') return monthlyClaim(req);
   if (req.method === 'POST' && pn === '/api/parcel/house') return setHouse(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/parcel/upgrade') return upgradeParcel(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/guest/start') return guestStart(req);
   if (req.method === 'POST' && pn === '/api/claim') return claimWithCredit(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/auth/link') return linkAccount(req);
   if (req.method === 'GET' && pn === '/api/profile') return profileGet(req);
@@ -3198,6 +3231,12 @@ ready.then(async () => {   // ruleta diaria: una fila por cuenta y día (la clav
   // packs VIP (los crea solo el administrador): apodo y país fijos, sin necesidad de iniciar sesión
   await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS fixed_nick TEXT');
   await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS fixed_country TEXT');
+  // parcelas de prueba (jugador anónimo): su pack es «de invitado» hasta que crea cuenta, y cada parcela recuerda con qué pack se reclamó
+  // para pasar a la cuenta al iniciar sesión. guest_ip limita cuántos packs de prueba salen de una misma conexión al día.
+  await run('ALTER TABLE packs ADD COLUMN IF NOT EXISTS is_guest BOOLEAN NOT NULL DEFAULT FALSE');
+  await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS pack_code TEXT');
+  await run('CREATE INDEX IF NOT EXISTS parcels_pack_code ON parcels (pack_code) WHERE pack_code IS NOT NULL');
+  await run('CREATE TABLE IF NOT EXISTS guest_ip (day TEXT NOT NULL, ip_hash TEXT NOT NULL, n INT NOT NULL DEFAULT 1, PRIMARY KEY (day, ip_hash))');
   await run('CREATE UNIQUE INDEX IF NOT EXISTS packs_fixed_nick ON packs (lower(fixed_nick)) WHERE fixed_nick IS NOT NULL');
   await run('CREATE TABLE IF NOT EXISTS monthly_rewards (user_id TEXT NOT NULL, month TEXT NOT NULL, streak INT NOT NULL DEFAULT 0, last_day TEXT, PRIMARY KEY (user_id, month))');
   await run('CREATE TABLE IF NOT EXISTS president_grants (city TEXT NOT NULL, month TEXT NOT NULL, user_id TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (city, month))');

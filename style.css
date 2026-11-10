@@ -273,6 +273,23 @@ path.buy-range {
 @keyframes coachpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,183,3,.6); } 70% { box-shadow: 0 0 0 9px rgba(255,183,3,0); } }
 @media (prefers-reduced-motion: reduce) { #coach, #coach .coach-go { animation: none; } }
 
+/* Guía de las primeras parcelas gratis (primeras.js) */
+#fg { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); z-index: 1060; width: min(92vw, 400px); padding: 14px 16px; border-radius: 18px;
+  background: rgba(11,61,46,.97); color: #fff; box-shadow: 0 6px 22px rgba(0,0,0,.5); border: 1px solid #ffb70388; animation: coachin .3s ease-out; }
+#fg.hidden { display: none; }
+#fg .fg-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#fg .fg-badge { font-size: 12px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: #ffb703; }
+#fg .fg-dots { display: flex; gap: 5px; }
+#fg .fg-dots i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #ffb703; box-sizing: border-box; }
+#fg .fg-dots i.on { background: #ffb703; }
+#fg .fg-title { font-size: 18px; font-weight: 800; margin: 6px 0 2px; }
+#fg .fg-text { font-size: 15px; font-weight: 500; line-height: 1.35; margin: 2px 0 12px; }
+#fg .fg-btns { display: flex; gap: 8px; }
+#fg .fg-go { flex: 1; padding: 11px 12px; border: 0; border-radius: 999px; background: #ffb703; color: #222; font-weight: 800; font-size: 15px; animation: coachpulse 1.6s ease-in-out infinite; }
+#fg .fg-go:disabled { opacity: .7; animation: none; }
+#fg .fg-x { padding: 9px 14px; border-radius: 999px; background: transparent; color: #fff; border: 1px solid #fff8; }
+@media (prefers-reduced-motion: reduce) { #fg, #fg .fg-go { animation: none; } }
+
 /* Pregunta de avisos al móvil (push.js) */
 #push-ask { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 1050; width: min(92vw, 380px); padding: 12px 14px; border-radius: 16px;
   background: rgba(11,61,46,.96); color: #fff; box-shadow: 0 4px 18px rgba(0,0,0,.45); }

@@ -1205,6 +1205,9 @@ $('recover-btn').onclick = async () => {
   } catch (e) { setMsg(e.message, 'err'); }
 };
 $('buy-parcel-btn').onclick = async () => {
+  if (!(!!packCode && credits > 0) && !authToken && loginRequired() && cfg.guestCredits > 0 && (window.firstGuide ? window.firstGuide.isGuest() : false)) {   // usó sus parcelas de prueba: ahora toca crear cuenta
+    openLogin('Crea tu cuenta para guardar tus parcelas y seguir jugando 🎁'); return;
+  }
   if (!(!!packCode && credits > 0)) { $('buy-box').scrollIntoView({ behavior: 'smooth', block: 'center' }); setMsg('Elige un pack de créditos para reclamar este terreno.'); flashToast('Elige un pack de créditos para reclamar este terreno.'); return; }
   if (!selected || selected.owner) return;
   let owner;
@@ -1220,6 +1223,7 @@ $('buy-parcel-btn').onclick = async () => {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'No se pudo reclamar');
     credits = j.credits; updateCreditUi();
+    try { document.dispatchEvent(new CustomEvent('parcel:claimed', { detail: { credits: j.credits, lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, id: selected.id } })); } catch (e) {}
     selected.owner = j.owner; selected.avatar = avatar; selected.country = country; selected.since = Date.now();
     selected.house = chosenHouse; selected.mine = !!authToken;
     showPanel(selected);
@@ -1512,7 +1516,7 @@ $('locate').onclick = () => {
 // ---------- Cuenta (Google o email con contraseña) ----------
 const loginRequired = () => !!(cfg && cfg.auth && cfg.auth.required);
 const needLoginToBuy = () => loginRequired() && !authToken;
-const needLoginForDaily = () => loginRequired() && !authToken && !packCode;
+const needLoginForDaily = () => loginRequired() && !authToken && (!packCode || !!(window.firstGuide && window.firstGuide.isGuest()));
 
 // El apodo vive en el servidor (tabla profiles) y no se puede cambiar una vez fijado
 const nickOf = () => myNick || '';
@@ -1585,6 +1589,8 @@ async function linkAccountOnServer() {
       $('login').classList.add('hidden');
     }
     loadDaily(); loadProduction();
+    if (j.adopted > 0) { try { loadParcels(); loadMine && loadMine(); } catch (e) {} }
+    try { document.dispatchEvent(new CustomEvent('account:linked', { detail: { adopted: j.adopted || 0, credits: j.credits, welcomeBonus: j.welcomeBonus || 0 } })); } catch (e) {}
     if (j.welcomeBonus > 0) showWelcomeGift(j.welcomeBonus);   // regalo de bienvenida (solo la primera vez)
     if (j.ownerBonus > 0 && window.giftToast) giftToast(`👑 ¡Paga del mes! Te han ingresado ${Number(j.ownerBonus).toLocaleString('es-ES')} créditos.`);
     if (window.inviteAfterLink) inviteAfterLink();      // Invita y gana: apunta de quién viene

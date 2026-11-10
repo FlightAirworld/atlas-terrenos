@@ -176,3 +176,9 @@ ALTER TABLE card_auctions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE card_bids ENABLE ROW LEVEL SECURITY;
 ALTER TABLE card_black ENABLE ROW LEVEL SECURITY;
 ALTER TABLE card_packs ADD COLUMN IF NOT EXISTS offered TEXT;
+
+-- Parcelas de prueba (jugador anónimo con parcelas gratis): el pack es de invitado hasta que crea cuenta
+ALTER TABLE packs ADD COLUMN IF NOT EXISTS is_guest BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE parcels ADD COLUMN IF NOT EXISTS pack_code TEXT;
+CREATE INDEX IF NOT EXISTS parcels_pack_code ON parcels (pack_code) WHERE pack_code IS NOT NULL;
+CREATE TABLE IF NOT EXISTS guest_ip (day TEXT NOT NULL, ip_hash TEXT NOT NULL, n INT NOT NULL DEFAULT 1, PRIMARY KEY (day, ip_hash));
