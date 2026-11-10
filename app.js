@@ -261,19 +261,16 @@ const ROAD_WIDTH = { motorway: 16, trunk: 14, primary: 12, secondary: 10, tertia
 // Cuando dos edificios están pegados uno encima del otro, se traza una calle horizontal justo en la frontera entre los dos.
 // Las calles de parcelas que se tocan en la misma fila se unen en una sola; al cruzar una calle real se empalman con ella
 // (mapshim.withSynth parte las dos en el cruce), y por ellas circulan coches y peatones como por cualquier otra calle.
-// Las zonas verdes (parques, bosques, jardines...) no cuentan como edificio y no llevan calle.
+// Cuentan todas las parcelas ocupadas, también parques, bosques, jardines y prados.
 const SYNTH_HALF_M = 3.5, SYNTH_MIN_Z = 15, SYNTH_MAX_LINES = 150;
-const SYNTH_GREEN = /^(parque|jardin|bosque|cesped|cesped-2|parque-picnic|parque-futbol|parque-infantil|prado|claro-bosque)$/;
-const synthKeyOf = url => String(url || '').split('/').pop().replace(/\.[a-z]+$/i, '').toLowerCase();
 function synthLat(y) { return y * cfg.size - 90; }
 let synthRuns = [], synthPairs = new Set(), synthDirty = true;
 function rebuildSynth() {
   synthDirty = false;
   if (!cfg) return;
-  const occ = new Map();                                            // "x,y" -> parcela dibujada (solo edificios)
+  const occ = new Map();                                            // "x,y" -> parcela dibujada
   for (const ex of drawn.values()) {
     const p = ex.p; if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
-    if (SYNTH_GREEN.test(synthKeyOf(ex.url))) continue;
     occ.set(p.x + ',' + p.y, ex);
   }
   const pairs = new Set(), byY = new Map();                         // pareja = parcela (x,y) con edificio justo debajo de otra (x,y-1)
