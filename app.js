@@ -1162,6 +1162,7 @@ function updateCreditUi() {
   const has = !!packCode && credits > 0;
   $('credit-box').classList.toggle('hidden', !has);
   $('buy-box').classList.toggle('hidden', has);
+  const fn = $('free-note'); if (fn) fn.classList.toggle('hidden', !(cfg && cfg.free) || has);   // juego gratuito: sin créditos se explica cómo conseguir más
   $('credits-left').textContent = credits;
   $('my-code').textContent = packCode || '';
   const cc = $('credit-count'); if (cc) cc.textContent = credits;
@@ -1202,6 +1203,7 @@ $('buy-parcel-btn').onclick = async () => {
   if (!(!!packCode && credits > 0) && !authToken && loginRequired() && cfg.guestCredits > 0 && (window.firstGuide ? window.firstGuide.isGuest() : false)) {   // usó sus parcelas de prueba: ahora toca crear cuenta
     openLogin('Crea tu cuenta para guardar tus parcelas y seguir jugando 🎁'); return;
   }
+  if (cfg.free && !(!!packCode && credits > 0)) { const m = 'Te faltan créditos. Consíguelos con el regalo diario, la ruleta, invitando amigos o con la producción de tus terrenos.'; setMsg(m); flashToast(m); return; }
   if (!(!!packCode && credits > 0)) { $('buy-box').scrollIntoView({ behavior: 'smooth', block: 'center' }); setMsg('Elige un pack de créditos para reclamar este terreno.'); flashToast('Elige un pack de créditos para reclamar este terreno.'); return; }
   if (!selected || selected.owner) return;
   let owner;
@@ -1437,6 +1439,7 @@ async function resumePayment() {
 // ---------- Comprar créditos desde "Mis terrenos" ----------
 let buyReady = false;
 function openBuy() {
+  if (cfg && cfg.free) return;   // juego gratuito: no hay compras
   buildPackPicker('pack-list-2');
   setMsg('');
   $('buy').classList.remove('hidden');
@@ -1921,11 +1924,12 @@ scheduleWalker(randBetween(20000, 60000));
 // ---------- Inicio ----------
 (async () => {
   cfg = await api('/api/config');
+  if (cfg.free) document.body.classList.add('free-mode');   // oculta por CSS todos los botones de compra
 
   if (adminViewEnabled()) setupAdminControls();
 
   if (cfg.demo) $('demo-pay').classList.remove('hidden');
-  else setupPayBoxes();
+  else if (!cfg.free) setupPayBoxes();
 
   if (cfg.demo) {
     const h = document.createElement('p');

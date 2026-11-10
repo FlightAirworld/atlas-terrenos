@@ -26,7 +26,9 @@ const HAS_PAYPAL = !!(PAYPAL_CLIENT_ID && PAYPAL_SECRET);
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';   // sk_test_... (pruebas) o sk_live_... (real). Solo en el servidor
 const HAS_STRIPE = /^(sk|rk)_(test|live)_/.test(STRIPE_SECRET_KEY);
 const IS_PROD = process.env.NODE_ENV === 'production' || !!process.env.RENDER;   // Render define RENDER=true
-const DEMO = process.env.DEMO === '1' || !(HAS_STRIPE || HAS_PAYPAL);
+// FREE_MODE=1: juego gratuito. No se venden créditos (ni Stripe, ni PayPal, ni modo demo); se juega con los créditos que da el propio juego.
+const FREE_MODE = process.env.FREE_MODE === '1';
+const DEMO = !FREE_MODE && (process.env.DEMO === '1' || !(HAS_STRIPE || HAS_PAYPAL));
 if (DEMO && IS_PROD && process.env.DEMO !== '1') {
   // Sin esto, un fallo de configuración regalaría packs sin cobrar.
   console.error('Falta STRIPE_SECRET_KEY (o PAYPAL_CLIENT_ID / PAYPAL_SECRET) en producción. Configúralos, o pon DEMO=1 si de verdad quieres el modo demo.');
@@ -34,8 +36,9 @@ if (DEMO && IS_PROD && process.env.DEMO !== '1') {
 }
 if (DEMO && IS_PROD) console.warn('AVISO: modo DEMO activo en producción. No se cobra dinero real.');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
-if (!DEMO && HAS_STRIPE && !STRIPE_WEBHOOK_SECRET) console.warn('AVISO: falta STRIPE_WEBHOOK_SECRET. Sin webhook, si un jugador paga y cierra la pestaña antes de volver, no recibe el pack.');
-if (!DEMO && HAS_PAYPAL && !PAYPAL_WEBHOOK_ID) console.warn('AVISO: falta PAYPAL_WEBHOOK_ID. Sin webhook, si un jugador aprueba el pago y cierra la pestaña antes de volver, no recibe el pack.');
+if (FREE_MODE) console.log('MODO GRATUITO: las compras de créditos están desactivadas.');
+if (!DEMO && !FREE_MODE && HAS_STRIPE && !STRIPE_WEBHOOK_SECRET) console.warn('AVISO: falta STRIPE_WEBHOOK_SECRET. Sin webhook, si un jugador paga y cierra la pestaña antes de volver, no recibe el pack.');
+if (!DEMO && !FREE_MODE && HAS_PAYPAL && !PAYPAL_WEBHOOK_ID) console.warn('AVISO: falta PAYPAL_WEBHOOK_ID. Sin webhook, si un jugador aprueba el pago y cierra la pestaña antes de volver, no recibe el pack.');
 const RESERVE_MINUTES = 10;                               // tiempo que se reserva una parcela mientras se paga
 const PACK_SIZE = Math.max(1, Number(process.env.PACK_SIZE || 50));   // (ya no se usa para vender: ver PACKS)
 // Packs a la venta: lista "créditos:precio" separada por comas, p. ej. PACKS="50:1,150:2,300:3,500:4" (sustituye a PRICE y PACK_SIZE)
@@ -569,6 +572,7 @@ async function linkAccount(req) {
 }
 
 async function createPackOrder(req, body) {
+  if (FREE_MODE) throw new HttpError(403, 'Las compras están desactivadas: el juego es gratuito por ahora.');   // primera línea: ni demo ni pagos
   const user = REQUIRE_LOGIN ? await needUser(req) : await userFrom(req);   // se guarda en el pedido: el webhook lo necesita para saber a quién entregar el pack
   const now = Date.now();
   const want = body && body.pack != null ? Number(body.pack) : PACKS[0].credits;   // sin indicar pack: el primero (clientes antiguos)
@@ -2472,7 +2476,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/admin/stats') return adminStats(req);
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
-    return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, demo: DEMO, stripe: !DEMO && HAS_STRIPE, paypal: !DEMO && HAS_PAYPAL, clientId: (DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, worlds: WORLDS, packSize: PACKS[0].credits, packs: PACKS,
+    return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, free: FREE_MODE, demo: DEMO, stripe: !FREE_MODE && !DEMO && HAS_STRIPE, paypal: !FREE_MODE && !DEMO && HAS_PAYPAL, clientId: (FREE_MODE || DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, worlds: WORLDS, packSize: PACKS[0].credits, packs: PACKS,
       maxParcels: Number.isFinite(MAX_PARCELS_PER_ACCOUNT) ? MAX_PARCELS_PER_ACCOUNT : null, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, guestCredits: GUEST_CREDITS, welcomeCredits: WELCOME_CREDITS, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null, googleClientId: AUTH_ENABLED ? GOOGLE_CLIENT_ID : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
@@ -3514,7 +3518,7 @@ const httpServer = http.createServer(async (req, res) => {
     send(status, JSON.stringify({ error: status === 500 ? 'Error interno' : e.message }));
   }
 }).listen(PORT, () => {
-  console.log(`Redecora El Mundo en http://localhost:${PORT}  [${DEMO ? 'MODO DEMO (sin cobro real)' : [HAS_STRIPE ? 'Stripe ' + (STRIPE_SECRET_KEY.includes('_live_') ? 'LIVE' : 'test') : null, HAS_PAYPAL ? 'PayPal ' + PAYPAL_ENV : null].filter(Boolean).join(' + ')}]  packs ${PACKS.map(p => p.credits + '=' + p.price).join(', ')} ${CURRENCY}`);
+  console.log(`Redecora El Mundo en http://localhost:${PORT}  [${FREE_MODE ? 'MODO GRATUITO (sin compras)' : DEMO ? 'MODO DEMO (sin cobro real)' :[HAS_STRIPE ? 'Stripe ' + (STRIPE_SECRET_KEY.includes('_live_') ? 'LIVE' : 'test') : null, HAS_PAYPAL ? 'PayPal ' + PAYPAL_ENV : null].filter(Boolean).join(' + ')}]  packs ${PACKS.map(p => p.credits + '=' + p.price).join(', ')} ${CURRENCY}`);
   telegram.start('Redecora El Mundo');
 });
 

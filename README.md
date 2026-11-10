@@ -334,3 +334,7 @@ Al tocar el contador «en línea» se abre un panel con los jugadores conectados
 - Solo cuenta jugadores **realmente conectados**, no los simulados de `ambient.js`. Por defecto el ambiente simulado está apagado y el contador y el chat solo muestran jugadores reales; si pones `AMBIENT=on`, el contador suma los simulados y deja de coincidir con el total del panel.
 - El país sale de la cabecera que pone el proxy o CDN (`cf-ipcountry` de Cloudflare, `cloudfront-viewer-country`, `x-vercel-ip-country`) y, si no hay, del país que el jugador tiene elegido en el juego. Si no hay ninguno, cuenta como «Sin identificar».
 - No se guarda nada en la base de datos: todo vive en memoria y desaparece cuando el jugador se desconecta. No se envían datos personales, solo números por país.
+
+## Juego gratuito (FREE_MODE)
+
+Pon `FREE_MODE=1` en Render (Environment) y guarda: se ocultan todos los botones de compra y el servidor rechaza cualquier pedido de pago (también el modo demo). Para volver a cobrar, borra la variable o ponla en `0`.

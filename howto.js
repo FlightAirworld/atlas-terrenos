@@ -290,7 +290,7 @@
   const section = (h, items) => `<h3>${h}</h3><ul>${items.map(x => `<li>${x}</li>`).join('')}</ul>`;
   function bodyHtml(t) {
     return (t.intro ? `<p>${t.intro}</p>` : '')
-      + section(t.h[0], t.s1) + section(t.h[1], t.s2) + section(t.h[2], t.s3) + section(t.h[3], t.s4)
+      + section(t.h[0], t.s1) + section(t.h[1], document.body.classList.contains('free-mode') ? t.s2.filter(x => !/PayPal/.test(x)) : t.s2) + section(t.h[2], t.s3) + section(t.h[3], t.s4)
       + `<h3>${t.h[4]}</h3><p>${t.life}</p>`;
   }
   const tipHtml = t => `<div class="tip">${t.tip}</div><p class="muted" style="font-size:12px">${t.note}</p>`;
