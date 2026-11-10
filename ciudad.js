@@ -8,11 +8,9 @@
 //  - Eventos: desfile / manifestación pequeña, boda con coches decorados y ambulancia que sale de un hospital.
 //  - Barrios con carácter: más tráfico y gente en zonas con muchos edificios; menos en las afueras.
 //  - Sonido ambiente según el zoom (murmullo, bocinazos lejanos, campanas a las horas en punto; ver sounds.js).
-//  - Estaciones del año: hojas en otoño, nieve en invierno y pétalos en primavera (según el mes y el hemisferio).
 // Los vehículos nuevos (basura, reparto, autoescuela, autobuses con paradas, tranvía) viven en vehicles.js.
 // Para probar sin esperar, en la consola:
 //   cityEvent('works' | 'parade' | 'wedding' | 'ambulance' | 'steam' | 'bubble' | 'tram' | 'garbage' | 'van' | 'driving')
-//   citySeason('autumn' | 'winter' | 'spring' | 'summer' | 'auto')
 (function () {
   if (typeof map === 'undefined' || !map || !map.gl || !window.L) return;
   const gl = map.gl, KEY = 'cityLifeOn', REF_Z = 17, MIN_Z = 16, ACT_Z = 16.6, RAD = Math.PI / 180;
@@ -637,54 +635,6 @@
     if (on && d.getMinutes() === 0 && d.getSeconds() < 3 && lastBell !== d.getHours() && z >= 15) { lastBell = d.getHours(); au.bells(d.getHours() % 12 || 12, clamp(t, 0.3, 1)); }
   }
 
-  // ---------- Estaciones del año ----------
-  const cv = document.createElement('canvas'); cv.id = 'season-canvas'; cv.setAttribute('aria-hidden', 'true');
-  cv.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:640';
-  document.body.appendChild(cv);
-  const cx2 = cv.getContext('2d'); let CW = 0, CH = 0;
-  function resizeCv() { const dpr = Math.min(devicePixelRatio || 1, 2); CW = innerWidth; CH = innerHeight; cv.width = CW * dpr; cv.height = CH * dpr; cx2.setTransform(dpr, 0, 0, dpr, 0, 0); }
-  addEventListener('resize', resizeCv); resizeCv();
-  let seasonOv = null, partKind = null; const parts = [];
-  function seasonNow() {
-    if (seasonOv) return seasonOv === 'summer' ? null : seasonOv;
-    const lat = map.getCenter().lat; if (Math.abs(lat) < 18) return null;
-    const m = new Date().getMonth(), nm = lat >= 0 ? m : (m + 6) % 12;
-    if (nm === 11 || nm <= 1) return 'winter';
-    if (nm <= 4) return 'spring';
-    if (nm <= 7) return null;
-    return 'autumn';
-  }
-  const LEAF = ['#d9822b', '#b5541c', '#e0b13a', '#8c3b12', '#c4452d'], PETAL = ['#ffd1e0', '#fff', '#ffb3cf', '#f9e0ff'];
-  function mkPart(kind, top) {
-    const p = { x: rnd(-40, CW + 40), y: top ? rnd(-30, -4) : rnd(0, CH), r: 0, ph: rnd(0, 6.28), rot: rnd(0, 6.28), vr: rnd(-3, 3) };
-    if (kind === 'winter') { p.r = rnd(1.4, 3.4); p.vy = rnd(28, 60); p.vx = rnd(-8, 8); p.c = 'rgba(255,255,255,.85)'; }
-    else if (kind === 'autumn') { p.r = rnd(3, 6); p.vy = rnd(22, 48); p.vx = rnd(8, 30); p.c = pick(LEAF); }
-    else { p.r = rnd(2, 3.6); p.vy = rnd(18, 36); p.vx = rnd(6, 22); p.c = pick(PETAL); }
-    return p;
-  }
-  function seasonTick(dt) {
-    const kind = on && map.getZoom() >= 13 && !document.hidden ? seasonNow() : null;
-    if (kind !== partKind) { partKind = kind; parts.length = 0; cx2.clearRect(0, 0, CW, CH); }
-    if (!kind) return;
-    const want = Math.round((SMALL ? 34 : 70) * clamp((map.getZoom() - 12.5) / 3, 0.3, 1) * (1 - 0.6 * clamp(rainy(), 0, 1)));
-    while (parts.length < want) parts.push(mkPart(kind, false));
-    if (parts.length > want) parts.length = want;
-    cx2.clearRect(0, 0, CW, CH);
-    for (let i = 0; i < parts.length; i++) {
-      const p = parts[i];
-      p.ph += dt * 1.6; p.rot += p.vr * dt;
-      p.x += (p.vx + Math.sin(p.ph) * 14) * dt; p.y += p.vy * dt;
-      if (p.y > CH + 12 || p.x > CW + 60 || p.x < -60) { parts[i] = mkPart(kind, true); continue; }
-      cx2.fillStyle = p.c;
-      if (kind === 'winter') { cx2.beginPath(); cx2.arc(p.x, p.y, p.r, 0, 6.2832); cx2.fill(); }
-      else {
-        cx2.save(); cx2.translate(p.x, p.y); cx2.rotate(p.rot); cx2.scale(1, 0.55 + 0.45 * Math.abs(Math.sin(p.ph)));
-        cx2.beginPath(); cx2.ellipse(0, 0, p.r, p.r * 0.6, 0, 0, 6.2832); cx2.fill(); cx2.restore();
-      }
-    }
-  }
-  window.citySeason = s => { seasonOv = s && s !== 'auto' ? s : null; return seasonNow() || 'verano (sin partículas)'; };
-
   // ---------- Bucle principal ----------
   let running = false, last = performance.now();
   const T = { scan: 0, dens: 0, vent: rnd(3, 8), bub: rnd(2, 5), dog: rnd(4, 8), snd: 0, roof: 0, works: rnd(35, 60), parade: rnd(60, 100), wedding: rnd(80, 130), amb: rnd(50, 90), tram: rnd(20, 40), gar: rnd(25, 50), van: rnd(15, 35), dri: rnd(40, 70) };
@@ -693,7 +643,6 @@
     const dt = Math.min((t - last) / 1000, 0.1); last = t;
     const nowMs = performance.now(), z = map.getZoom();
     if (!document.hidden) {
-      seasonTick(dt);
       if (z >= MIN_Z && map.setRoads) map.setRoads(true, 'c'); else if (map.setRoads) map.setRoads(false, 'c');
       const fp = fpNow();
       if (Math.abs(fp - lastFp) > 0.004 || Math.abs(z - lastZ) > 0.02) { lastFp = fp; lastZ = z; rescale(); }
@@ -739,7 +688,6 @@
     endWorks(); endParade();
     hosp.forEach(hospHide);
     CL.zones.length = 0; CL.blockers = [];
-    parts.length = 0; partKind = null; cx2.clearRect(0, 0, CW, CH);
     if (window.cityAudio) window.cityAudio.level(0);
     if (map.setRoads) map.setRoads(false, 'c');
   }
