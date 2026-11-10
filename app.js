@@ -1225,6 +1225,10 @@ $('buy-parcel-btn').onclick = async () => {
     drawOwned({ world: selected.world, id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house });
     if (!isOtherWorld(selected)) invalidateTile(selected.x, selected.y);
     loadStats(); loadParcels(); loadProduction();
+    // Celebración: la cámara va a la casa nueva, confeti y cartel (celebrar.js); la primera vez de este navegador, más grande
+    let firstClaim = false;
+    try { firstClaim = !localStorage.getItem('firstClaimDone'); localStorage.setItem('firstClaimDone', '1'); } catch (e) {}
+    if (window.celebrateClaim) window.celebrateClaim({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, first: firstClaim });
   } catch (e) {
     setMsg(e.message, 'err'); flashToast('⚠️ ' + e.message); sfx('error');
     refreshCredits();
