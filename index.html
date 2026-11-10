@@ -342,15 +342,18 @@
 
     <div id="p-free" class="hidden">
       <p>🟢 Este terreno está libre.</p>
-      <label for="name">Nombre que aparecerá en el terreno</label>
-      <input id="name" type="text" maxlength="30"
-        placeholder="Escribe tu nombre" autocomplete="nickname">
       <label>Tu casa</label>
       <div id="house-pick-free" style="display:grid;grid-template-rows:repeat(2,52px);grid-auto-flow:column;grid-auto-columns:52px;gap:6px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scrollbar-width:none;padding:3px 3px 6px;margin-bottom:6px"></div>
+      <details id="custom-opts" style="margin:4px 0 10px">
+        <summary class="muted">✏️ Personalizar nombre, avatar y país (opcional)</summary>
+      <label for="name">Nombre que aparecerá en el terreno</label>
+      <input id="name" type="text" maxlength="30"
+        placeholder="Opcional: si lo dejas vacío te ponemos uno" autocomplete="nickname">
       <label>Tu avatar</label>
       <div id="avatars" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
       <label for="country">Tu país</label>
       <select id="country" style="width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);margin-bottom:10px"></select>
+      </details>
       <div id="credit-box" class="hidden">
         <p>🎟️ Te quedan <strong id="credits-left">0</strong> terrenos</p>
         <button id="credit-buy" class="primary" type="button">🎟️ Comprar créditos</button>

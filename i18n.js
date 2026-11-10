@@ -115,7 +115,7 @@
     r('Saltar ✕', 'Skip ✕', 'Pular ✕', 'Passer ✕', 'Überspringen ✕', 'Salta ✕'),
     r('Empezar', 'Start', 'Começar', 'Commencer', 'Starten', 'Inizia'),
     r('Activar sonido', 'Turn sound on', 'Ativar som', 'Activer le son', 'Ton einschalten', 'Attiva audio'),
-    r('Escribe el nombre que verá la gente, elige tu casa y pulsa «Reclamar terreno».', 'Type the name people will see, choose your house and tap “Claim this plot”.', 'Escreva o nome que as pessoas verão, escolha sua casa e toque em “Reivindicar este terreno”.', 'Écrivez le nom que les gens verront, choisissez votre maison et touchez « Revendiquer ce terrain ».', 'Gib den Namen ein, den die Leute sehen, wähle dein Haus und tippe auf „Dieses Grundstück beanspruchen“.', 'Scrivi il nome che vedranno gli altri, scegli la tua casa e premi «Rivendica questo terreno».'),
+    r('Elige tu casa (o deja el dado, que la elige por ti) y pulsa «Reclamar terreno». El nombre es opcional.', 'Choose your house (or keep the dice, which picks one for you) and tap “Claim this plot”. The name is optional.', 'Escolha sua casa (ou deixe o dado, que escolhe por você) e toque em “Reivindicar este terreno”. O nome é opcional.', 'Choisissez votre maison (ou gardez le dé, qui choisit pour vous) et touchez « Revendiquer ce terrain ». Le nom est facultatif.', 'Wähle dein Haus (oder lass den Würfel für dich wählen) und tippe auf „Dieses Grundstück beanspruchen“. Der Name ist optional.', 'Scegli la tua casa (o lascia il dado, che sceglie per te) e premi «Rivendica questo terreno». Il nome è facoltativo.'),
     r('Ir al botón', 'Go to the button', 'Ir ao botão', 'Aller au bouton', 'Zur Schaltfläche', 'Vai al pulsante'),
     // Botones del menú
     r('Jugadores en línea', 'Players online', 'Jogadores online', 'Joueurs en ligne', 'Spieler online', 'Giocatori online'),
@@ -141,6 +141,8 @@
     r('Mis créditos', 'My credits', 'Meus créditos', 'Mes crédits', 'Meine Credits', 'I miei crediti'),
     r('Casa del propietario', 'Owner’s house', 'Casa do proprietário', 'Maison du propriétaire', 'Haus des Besitzers', 'Casa del proprietario'),
     r('Escribe tu nombre', 'Type your name', 'Digite seu nome', 'Écrivez votre nom', 'Gib deinen Namen ein', 'Scrivi il tuo nome'),
+    r('Opcional: si lo dejas vacío te ponemos uno', 'Optional: leave it empty and we pick one', 'Opcional: se deixar vazio, escolhemos um', 'Facultatif : si vous le laissez vide, on en choisit un', 'Optional: leer lassen, dann wählen wir einen', 'Facoltativo: se lo lasci vuoto ne scegliamo uno'),
+    r('✏️ Personalizar nombre, avatar y país (opcional)', '✏️ Customize name, avatar and country (optional)', '✏️ Personalizar nome, avatar e país (opcional)', '✏️ Personnaliser nom, avatar et pays (facultatif)', '✏️ Name, Avatar und Land anpassen (optional)', '✏️ Personalizza nome, avatar e paese (facoltativo)'),
     r('Contraseña (mínimo 6 caracteres)', 'Password (at least 6 characters)', 'Senha (mínimo de 6 caracteres)', 'Mot de passe (6 caractères minimum)', 'Passwort (mindestens 6 Zeichen)', 'Password (minimo 6 caratteri)'),
     r('Tu apodo', 'Your nickname', 'Seu apelido', 'Votre pseudo', 'Dein Spitzname', 'Il tuo soprannome'),
     r('Ciudad, calle, monumento…', 'City, street, landmark…', 'Cidade, rua, monumento…', 'Ville, rue, monument…', 'Stadt, Straße, Sehenswürdigkeit…', 'Città, via, monumento…'),

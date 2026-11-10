@@ -1206,7 +1206,7 @@ $('buy-parcel-btn').onclick = async () => {
   if (!(!!packCode && credits > 0)) { $('buy-box').scrollIntoView({ behavior: 'smooth', block: 'center' }); setMsg('Elige un pack de créditos para reclamar este terreno.'); flashToast('Elige un pack de créditos para reclamar este terreno.'); return; }
   if (!selected || selected.owner) return;
   let owner;
-  try { owner = nameOrThrow(); } catch (e) { return; }   // nameOrThrow ya muestra el aviso
+  try { owner = nameOrThrow(true); } catch (e) { return; }   // sin nombre se pone uno por defecto
   const btn = $('buy-parcel-btn');
   btn.disabled = true;
   try {
@@ -1296,8 +1296,15 @@ $('daily-claim').onclick = async () => {
 };
 
 // ---------- Compra ----------
-function nameOrThrow() {
-  const n = $('name').value.replace(/\s+/g, ' ').trim();
+function nameOrThrow(auto = false) {
+  const inp = $('name');
+  let n = inp.value.replace(/\s+/g, ' ').trim();
+  // Reclamar en un toque: si no se escribió nombre, se pone uno por defecto («Vecino1234») en vez de pedirlo
+  if (n.length < 2 && auto && !inp.readOnly) {
+    n = 'Vecino' + (1000 + Math.floor(Math.random() * 9000));
+    inp.value = n;
+    flashToast('Tu nombre es «' + n + '». Puedes elegir otro en «Personalizar» antes de reclamar.');
+  }
   if (n.length < 2) { setMsg('Escribe tu nombre (mínimo 2 letras) antes de pagar', 'err'); flashToast('⚠️ Escribe tu nombre (mínimo 2 letras)'); throw new Error('nombre'); }
   return n;
 }
@@ -1991,7 +1998,7 @@ if ('serviceWorker' in navigator) {
     if (credits < 1 || ssGet('coachHide') === '1' || (welcome && !welcome.classList.contains('hidden'))) { box.classList.add('hidden'); return; }
     const panelOpen = !document.getElementById('panel').classList.contains('hidden');
     if (panelOpen && typeof selected !== 'undefined' && selected && !selected.owner) {
-      set('claim', 'Paso 2 de 2', 'Escribe el nombre que verá la gente, elige tu casa y pulsa «Reclamar terreno».', '⬇ Ir al botón');
+      set('claim', 'Paso 2 de 2', 'Elige tu casa (o deja el dado, que la elige por ti) y pulsa «Reclamar terreno». El nombre es opcional.', '⬇ Ir al botón');
     } else {
       set('pick', 'Paso 1 de 2', `Tienes ${credits} ${plural(credits, 'crédito', 'créditos')}. Toca una parcela libre del mapa para hacerla tuya.`, '📍 Ir a mi ubicación');
     }
