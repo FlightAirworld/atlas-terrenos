@@ -180,6 +180,7 @@
     if (/^(farmacia|supermercado|condis)$/.test(k)) return 'shop';
     if (/^(mcdonald|burgerking)$/.test(k)) return 'drive';
     if (/^(cepsa|gasolinera)$/.test(k)) return 'gas';
+    if (/^iglesia/.test(k)) return 'church';
     if (/^(restaurante|burrito-blanco|arcobaleno|la-cruilla)$/.test(k)) return 'bar';
     return null;
   }
@@ -292,6 +293,12 @@
       }
       sc.q.forEach((a, i) => { const t = slot(sc, i); if (Math.hypot(a.x - t.x, a.y - t.y) * scaleNow() > 1 && a.tx == null && !a.kill) { a.tx = t.x; a.ty = t.y; } });
       sc.timer2 -= dt; if (sc.timer2 <= 0) { sc.timer2 = rnd(4, 9); visitor(sc); }
+    },
+    home(sc, dt) { sc.timer -= dt; if (sc.timer <= 0) { sc.timer = rnd(14, 30); visitor(sc); } },   // de vez en cuando alguien entra o sale de casa
+    church(sc, dt) {                                               // iglesia: gente que entra y sale, y de vez en cuando sale un grupo (fin de misa)
+      sc.timer -= dt; if (sc.timer <= 0) { sc.timer = rnd(6, 12); visitor(sc); }
+      sc.timer2 -= dt;
+      if (sc.timer2 <= 0) { sc.timer2 = rnd(45, 75); const n = SMALL ? 3 : 4; for (let i = 0; i < n; i++) setTimeout(() => { if (scenes.get(sc.id) === sc) visitor(sc); }, i * 700); }
     },
     bar(sc, dt) { sc.timer -= dt; if (sc.timer <= 0) { sc.timer = rnd(5, 10); visitor(sc); } },
     drive(sc, dt) {                                                // autoservicio: llega un coche, espera en la ventanilla y se va
