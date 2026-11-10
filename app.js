@@ -261,11 +261,11 @@ let detailQueued = false;
 const ROAD_WIDTH = { motorway: 16, trunk: 14, primary: 12, secondary: 10, tertiary: 9, minor: 7 };   // ancho total, en metros
 // ---------- Calles horizontales entre edificios pegados ----------
 // Cuando dos edificios están pegados uno encima del otro, se traza una calle horizontal justo en la frontera entre los dos.
-// Si hay más de dos apilados, se traza una frontera sí y la siguiente no, para que la zona no se llene de calles.
+// Si hay más de dos apilados, hay calle en todas las fronteras.
 // Las calles de parcelas que se tocan en la misma fila se unen en una sola; al cruzar una calle real se empalman con ella
 // (mapshim.withSynth parte las dos en el cruce), y por ellas circulan coches y peatones como por cualquier otra calle.
 // Cuentan todas las parcelas ocupadas, también parques, bosques, jardines y prados.
-const SYNTH_HALF_M = 3.5, SYNTH_MIN_Z = 15, SYNTH_MAX_LINES = 150;
+const SYNTH_HALF_M = 3.5, SYNTH_MIN_Z = 15, SYNTH_MAX_LINES = 400;
 function synthLat(y) { return y * cfg.size - 90; }
 let synthRuns = [], synthPairs = new Set(), synthDirty = true;
 function rebuildSynth() {
@@ -282,9 +282,8 @@ function rebuildSynth() {
     if (occ.has(x + ',' + (y - 1))) all.push([x, y]);
   }
   all.sort((m, n) => m[1] - n[1]);
-  const pairs = new Set(), byY = new Map();                         // en una pila de parcelas, una frontera sí y la siguiente no (para que no se llene de calles)
-  for (const [x, y] of all) {
-    if (pairs.has(x + ',' + (y - 1))) continue;
+  const pairs = new Set(), byY = new Map();
+  for (const [x, y] of all) {                                       // TODAS las fronteras entre parcelas apiladas llevan calle (sin saltarse ninguna)
     pairs.add(x + ',' + y);
     if (!byY.has(y)) byY.set(y, []);
     byY.get(y).push(x);
