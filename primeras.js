@@ -63,6 +63,7 @@
     const go = box.querySelector('.fg-go');
     go.textContent = o.go; go.disabled = !!o.disabled; go.onclick = o.fn || null;
     go.style.display = o.go ? '' : 'none';
+    box.querySelector('.fg-x').style.display = o.noClose ? 'none' : '';   // sin ✕ cuando la tarjeta no se puede cerrar
     paintDots();
     ssSet('fgHide', '0');       // cada paso nuevo vuelve a mostrarse aunque la hayan cerrado antes
     box.classList.remove('hidden');
@@ -142,12 +143,9 @@
       badge: '✅ ' + `${n} ${plural(n, T('parcela conseguida'), T('parcelas conseguidas'))}`,
       title: '🎉 ' + T('¡Ya eres propietario!'),
       text: T('Crea tu cuenta con Google o con tu email para guardar tus parcelas y seguir jugando.') + (w > 0 ? ' ' + `🎁 ${T('Te regalamos')} ${w} ${T('créditos de bienvenida')}.` : '') + ' ' + T('Sin cuenta podrías perderlas.'),
-      go: '👤 ' + T('Crear mi cuenta'), fn: () => openLogin(loginMsg())
+      go: '👤 ' + T('Crear mi cuenta'), noClose: true,
+      fn: () => { hideBox(); openLogin(loginMsg()); }   // la tarjeta solo se quita al pulsar «Crear mi cuenta», y lleva al login
     });
-    if (ssGet('fgLoginAuto') !== '1') {           // una vez por visita se abre solo, para que no se quede a medias
-      ssSet('fgLoginAuto', '1');
-      setTimeout(() => { if (stage === 'login' && !logged()) openLogin(loginMsg()); }, 1500);
-    }
   }
   function stageNoGuest(msg) {
     stage = 'login'; shownKey = '';
