@@ -257,17 +257,66 @@ let detailQueued = false;
 // - Foto: se borra la franja de la calle en un canvas y se usa ese resultado como imagen de la parcela.
 // Solo se calcula para parcelas que se ven enteras y cerca del centro (ahí las teselas tienen todo su detalle).
 const ROAD_WIDTH = { motorway: 16, trunk: 14, primary: 12, secondary: 10, tertiary: 9, minor: 7 };   // ancho total, en metros
-// ---------- Calles horizontales entre filas de casas ----------
-// Cada SYNTH_EVERY filas de parcelas se traza una calle horizontal justo en la frontera entre dos filas.
-// SYNTH_EVERY = 1 → una calle entre cada fila; 2 → una cada dos filas; 0 → desactivadas (ahora desactivadas: solo se ven las calles reales del mapa de la Tierra).
-const SYNTH_EVERY = 0, SYNTH_HALF_M = 3.5, SYNTH_MIN_Z = 15, SYNTH_MAX_LINES = 150;
+// ---------- Calles horizontales entre edificios pegados ----------
+// Cuando dos edificios están pegados uno encima del otro, se traza una calle horizontal justo en la frontera entre los dos.
+// Las calles de parcelas que se tocan en la misma fila se unen en una sola; al cruzar una calle real se empalman con ella
+// (mapshim.withSynth parte las dos en el cruce), y por ellas circulan coches y peatones como por cualquier otra calle.
+// Las zonas verdes (parques, bosques, jardines...) no cuentan como edificio y no llevan calle.
+const SYNTH_HALF_M = 3.5, SYNTH_MIN_Z = 15, SYNTH_MAX_LINES = 150;
+const SYNTH_GREEN = /^(parque|jardin|bosque|cesped|cesped-2|parque-picnic|parque-futbol|parque-infantil|prado|claro-bosque)$/;
+const synthKeyOf = url => String(url || '').split('/').pop().replace(/\.[a-z]+$/i, '').toLowerCase();
 function synthLat(y) { return y * cfg.size - 90; }
+let synthRuns = [], synthPairs = new Set(), synthDirty = true;
+function rebuildSynth() {
+  synthDirty = false;
+  if (!cfg) return;
+  const occ = new Map();                                            // "x,y" -> parcela dibujada (solo edificios)
+  for (const ex of drawn.values()) {
+    const p = ex.p; if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+    if (SYNTH_GREEN.test(synthKeyOf(ex.url))) continue;
+    occ.set(p.x + ',' + p.y, ex);
+  }
+  const pairs = new Set(), byY = new Map();                         // pareja = parcela (x,y) con edificio justo debajo de otra (x,y-1)
+  for (const k of occ.keys()) {
+    const [x, y] = k.split(',').map(Number);
+    if (!occ.has(x + ',' + (y - 1))) continue;
+    pairs.add(k);
+    if (!byY.has(y)) byY.set(y, []);
+    byY.get(y).push(x);
+  }
+  const runs = [], sz = cfg.size;
+  for (const [y, xs] of byY) {                                      // parejas seguidas en la misma frontera = una sola calle
+    xs.sort((m, n) => m - n);
+    let a = xs[0], b = a;
+    for (let i = 1; i <= xs.length; i++) {
+      if (xs[i] === b + 1) { b = xs[i]; continue; }
+      runs.push({ lat: synthLat(y), w: a * sz - 180, e: (b + 1) * sz - 180 });
+      a = b = xs[i];
+    }
+  }
+  // las parcelas que ganan o pierden calle vuelven a calcular su recorte (y se restauran si la pierden)
+  const changed = [...pairs].filter(k => !synthPairs.has(k)).concat([...synthPairs].filter(k => !pairs.has(k)));
+  synthRuns = runs; synthPairs = pairs;
+  for (const k of changed) {
+    const [x, y] = k.split(',').map(Number);
+    for (const ex of [occ.get(k), occ.get(x + ',' + (y - 1))]) {
+      if (!ex) continue;
+      const old = roadCut.get(ex.p.id);
+      if (old && old.road) ex.hadCut = true;
+      roadCut.delete(ex.p.id);
+    }
+  }
+  if (changed.length) queueCuts();
+}
+function markSynthDirty() { synthDirty = true; if (typeof queueSynth === 'function') queueSynth(); }
 function synthLines(w, e, s, n) {
   const out = [];
-  if (!SYNTH_EVERY || !cfg) return out;
-  const y0 = Math.ceil((s + 90) / cfg.size), y1 = Math.floor((n + 90) / cfg.size);
-  for (let y = y0; y <= y1 && out.length < SYNTH_MAX_LINES; y++) {
-    if (y % SYNTH_EVERY === 0) out.push([[w, synthLat(y)], [e, synthLat(y)]]);
+  if (!cfg) return out;
+  if (synthDirty) rebuildSynth();
+  for (const r of synthRuns) {
+    if (r.lat < s || r.lat > n || r.e < w || r.w > e) continue;
+    out.push([[Math.max(r.w, w), r.lat], [Math.min(r.e, e), r.lat]]);
+    if (out.length >= SYNTH_MAX_LINES) break;
   }
   return out;
 }
@@ -276,7 +325,8 @@ function updateSynth() {
   if (!glReady || !cfg) return;
   const src = gl.getSource('synth'); if (!src) return;
   let feats = [];
-  if (SYNTH_EVERY && map.getZoom() - 1 >= SYNTH_MIN_Z) {
+  if (synthDirty) rebuildSynth();
+  if (map.getZoom() - 1 >= SYNTH_MIN_Z) {
     const b = gl.getBounds(), padLng = (b.getEast() - b.getWest()) * 0.5, padLat = (b.getNorth() - b.getSouth()) * 0.5;
     feats = synthLines(b.getWest() - padLng, b.getEast() + padLng, b.getSouth() - padLat, b.getNorth() + padLat)
       .map(l => ({ type: 'Feature', properties: { class: 'minor' }, geometry: { type: 'LineString', coordinates: l } }));
@@ -323,7 +373,12 @@ function runCuts() {
     if (r === undefined) continue;                                  // todavía no se ve entera
     done++;
     roadCut.set(ex.p.id, r);
-    if (r.road) applyCut(ex, r);
+    if (r.road) { ex.hadCut = false; applyCut(ex, r); }
+    else if (ex.hadCut) {                                           // ya no hay calle: la parcela vuelve a verse entera
+      ex.hadCut = false;
+      const f = ownedFeatures.get(ex.p.id); if (f) { f.geometry = { type: 'Polygon', coordinates: [ringOf(ex.p.x, ex.p.y)] }; flushOwned(); }
+      refreshPhoto(ex);
+    }
   }
 }
 
@@ -511,7 +566,7 @@ function drawOwned(p) {
     if (ex.url !== url || ex.level !== lvl) {
       const newHouse = ex.url !== url;
       ex.url = url; ex.level = lvl;
-      if (newHouse) refreshPhoto(ex);
+      if (newHouse) { refreshPhoto(ex); markSynthDirty(); }
       if (ex.starsEl) ex.starsEl.textContent = starsOf(lvl);
       const f = ownedFeatures.get(p.id); if (f) { f.properties.h = heightOf(url, lvl); flushOwned(); }
     }
@@ -527,6 +582,7 @@ function drawOwned(p) {
     geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] }
   });
   drawn.set(p.id, { p, srcId: 'img-' + p.id, url, level: lvl, starsEl: null, label: null, hasDetail: false });
+  markSynthDirty();
   flushOwned();
   updateDetail();
   queueCuts();
@@ -577,6 +633,7 @@ function removeParcelClient(id) {
   if (ex) { dropDetail(ex); drawn.delete(id); }
   ownedFeatures.delete(id);
   if (typeof roadCut !== 'undefined' && roadCut.delete) roadCut.delete(id);
+  markSynthDirty();
   flushOwned();
   if (selected && selected.id === id) { try { setSelected(null); } catch (e) {} selected = null; }
 }
