@@ -923,6 +923,7 @@ function showPanel(p) {
   }
   { const w = (p && p.world) || worldOfId(p && p.id); if (w !== pickerWorld) { pickerWorld = w; chosenHouse = null; if (window.rebuildHousePickers) window.rebuildHousePickers(); } }   // cada mundo, sus casas
   if (window.retosPanel) window.retosPanel(p);   // botón ❤️ «Me gusta» (retos.js)
+  if (window.vecinosPanel) window.vecinosPanel(p);   // vecinos de al lado (vecinos.js)
   updateBuyParcelBtn(p);
 }
 // Botón «Reclamar terreno» (debajo de Compartir): solo en terrenos libres. Con créditos reclama el terreno; sin créditos lleva a los packs
