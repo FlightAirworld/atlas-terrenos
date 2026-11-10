@@ -2249,24 +2249,53 @@ async function pushSocial(userId, payload) {
 }
 // Avisa a quienes tienen a este jugador como amigo: reclama un terreno o sube uno de nivel (máx. 1 aviso por pareja cada 6 h)
 const socialAt = new Map();
+const onlineAt = new Map();   // 'quien>amigo' -> última vez que se avisó de «conectado» (aparte, para no bloquear los avisos de compra/nivel)
+const ONLINE_PUSH_GAP_MS = 4 * 3600_000;   // como mucho un «X conectado» cada 4 h por pareja
 async function notifyFriendsOf(userId, kind, level) {
   if (!PUSH_ON) return;
   try {
     const me = await getProfile(userId);
     if (!me) return;
+    if (kind === 'online') { const st = await one('SELECT hide_online FROM push_state WHERE user_id = $1', [userId]); if (st && st.hide_online) return; }   // el jugador pidió no avisar
     const rows = await all('SELECT user_id FROM friends WHERE friend_id = $1 LIMIT 200', [userId]);
     const now = Date.now();
+    const isOnline = kind === 'online', seen = isOnline ? onlineAt : socialAt, gap = isOnline ? ONLINE_PUSH_GAP_MS : 6 * 3600_000;
     for (const r of rows) {
       const key = userId + '>' + r.user_id;
-      if (now - (socialAt.get(key) || 0) < 6 * 3600_000) continue;
-      if (await pushSocial(r.user_id, kind === 'claim'
+      if (now - (seen.get(key) || 0) < gap) continue;
+      if (await pushSocial(r.user_id, isOnline
+        ? { title: '🟢 ' + me.nickname + ' conectado', body: `${me.nickname} acaba de entrar al juego.`, tag: 'friend-online-' + userId, url: '/' }
+        : kind === 'claim'
         ? { title: '🏡 Tu amigo ha comprado un terreno', body: `${me.nickname} ha reclamado un terreno nuevo.`, tag: 'friend-act', url: '/' }
         : { title: '⭐ Tu amigo ha subido de nivel', body: `${me.nickname} ha subido un terreno al nivel ${level}.`, tag: 'friend-act', url: '/' })) {
-        socialAt.set(key, now);
-        if (socialAt.size > 5000) socialAt.clear();
+        seen.set(key, now);
+        if (seen.size > 5000) seen.clear();
       }
     }
   } catch (e) { console.error('push social:', e.message); }
+}
+// GET/POST /api/presence/setting: «Avisar a mis amigos cuando me conecte» (activado por defecto)
+async function presenceSetting(req, body) {
+  const user = await needUser(req);
+  if (body) {
+    const hide = body.show === false;
+    await run(`INSERT INTO push_state (user_id, hide_online, unseen) VALUES ($1,$2,0) ON CONFLICT (user_id) DO UPDATE SET hide_online = $2`, [user.id, hide]);
+    return { show: !hide };
+  }
+  const st = await one('SELECT hide_online FROM push_state WHERE user_id = $1', [user.id]);
+  return { show: !(st && st.hide_online) };
+}
+// POST /api/presence/hello: el juego lo llama una vez cada vez que un jugador con sesión entra; avisa a sus amigos («Pedro conectado»)
+const helloAt = new Map();   // userId -> última vez que se procesó (evita avisos repetidos si recarga la página)
+async function presenceHello(req) {
+  const user = await needUser(req);
+  const now = Date.now();
+  if (now - (helloAt.get(user.id) || 0) >= 10 * 60_000) {   // recargar la página no vuelve a avisar hasta pasados 10 min
+    helloAt.set(user.id, now);
+    if (helloAt.size > 5000) helloAt.clear();
+    notifyFriendsOf(user.id, 'online');   // sin esperar: no retrasa la respuesta
+  }
+  return { ok: true };
 }
 
 let pushBusy = false;
@@ -2534,6 +2563,9 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/profile') return profileGet(req);
   if (req.method === 'POST' && pn === '/api/profile') return profileSet(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/push/subscribe') return pushSubscribe(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/presence/hello') return presenceHello(req);
+  if (req.method === 'GET' && pn === '/api/presence/setting') return presenceSetting(req, null);
+  if (req.method === 'POST' && pn === '/api/presence/setting') return presenceSetting(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/push/unsubscribe') return pushUnsubscribe(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/friends') return friendsList(req);
   if (req.method === 'POST' && pn === '/api/friends/add') return friendsAdd(req, await readJson(req));
@@ -2636,6 +2668,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE INDEX IF NOT EXISTS push_subs_user ON push_subs (user_id)');
     await run('ALTER TABLE push_state ADD COLUMN IF NOT EXISTS last_full_push BIGINT');   // aviso "se llena pronto" (una vez por recogida)
     await run('CREATE TABLE IF NOT EXISTS push_state (user_id TEXT PRIMARY KEY, last_seen BIGINT, unseen INT NOT NULL DEFAULT 0, last_any BIGINT, last_prod_push BIGINT, last_daily_push TEXT)');
+    await run('ALTER TABLE push_state ADD COLUMN IF NOT EXISTS hide_online BOOLEAN NOT NULL DEFAULT false');   // true = no avisar a mis amigos cuando me conecto
     await run('ALTER TABLE push_state ADD COLUMN IF NOT EXISTS last_pres_push TEXT');   // mes del último aviso de premio de presidente
     if (PUSH_ON) { setTimeout(pushRun, 120_000).unref(); setInterval(pushRun, 15 * 60_000).unref(); }   // revisa cada 15 min quién tiene algo pendiente
     const purge = () => run('DELETE FROM chat_msgs WHERE created_at < $1', [Date.now() - CHAT_KEEP_MS]).then(() => run('DELETE FROM chat_reacts WHERE msg_id NOT IN (SELECT id FROM chat_msgs)')).catch(() => {});

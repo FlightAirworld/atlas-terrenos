@@ -2,6 +2,31 @@
 // Avisos al móvil (notificaciones push): botón 🔔 en el menú y una pregunta amable la primera vez.
 // El servidor (server.js, "Avisos al móvil") avisa de: racha en peligro, producción lista o a punto de llenarse y regalo diario.
 // Usa lo que ya hay en app.js: cfg, authToken, api(), prodState, dailyState, plural().
+// «Pedro conectado»: al entrar con sesión se avisa al servidor para que avise a los amigos (no hace falta tener activados los avisos propios)
+(function () {
+  let sent = false;
+  const pb = document.getElementById('presence-btn');
+  let show = true;
+  const paint = () => {
+    if (!pb) return;
+    pb.textContent = show ? '👀' : '🙈';
+    pb.title = show ? 'Tus amigos reciben un aviso cuando te conectas (toca para desactivarlo)' : 'Tus amigos NO reciben aviso cuando te conectas (toca para activarlo)';
+    pb.setAttribute('aria-label', pb.title);
+    pb.dataset.label = show ? 'Conexión: avisar' : 'Conexión: oculta';
+  };
+  if (pb) pb.addEventListener('click', async () => {
+    const next = !show;
+    try { const j = await api('/api/presence/setting', { method: 'POST', body: { show: next } }); show = j.show !== false; } catch { return; }
+    paint();
+  });
+  setInterval(() => {
+    if (typeof authToken === 'undefined' || !authToken || typeof api !== 'function') { sent = false; if (pb) pb.classList.add('hidden'); return; }
+    if (sent) return;
+    sent = true;
+    if (pb) { pb.classList.remove('hidden'); api('/api/presence/setting').then(j => { show = j.show !== false; paint(); }).catch(() => {}); }
+    api('/api/presence/hello', { method: 'POST', body: {} }).catch(() => {});
+  }, 3000);
+})();
 (function () {
   const btn = document.getElementById('push-btn');
   if (!btn || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
