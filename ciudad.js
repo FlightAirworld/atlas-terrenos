@@ -351,7 +351,8 @@
       cands.push({ id, kind, pr, d, dist });
     });
     cands.sort((a, b) => a.dist - b.dist);
-    const capHome = SMALL ? 5 : 9, capAct = SMALL ? 5 : 9;
+    const pc = n => window.Perf ? Perf.cap(n, 2) : n;           // modo ligero (ligero.js)
+    const capHome = pc(SMALL ? 5 : 9), capAct = pc(SMALL ? 5 : 9);
     let nh = 0, na = 0; const want = new Set();
     for (const c of cands) {
       if (c.kind === 'home') { if (nh >= capHome) continue; nh++; } else { if (na >= capAct) continue; na++; }

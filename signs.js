@@ -16,6 +16,7 @@
   if (typeof map === 'undefined' || !map || !window.roadGraph) return;
   const REF_Z = 17, MIN_ZOOM = 16.5, LINE = '#363c48', RED = '#d62828';
   const SMALL = Math.min(innerWidth, innerHeight) < 600, MAX_S = SMALL ? 8 : 14;
+  const pcap = (n, min) => window.Perf ? Perf.cap(n, min) : n;           // modo ligero (ligero.js)
   const RANK = { primary: 5, secondary: 4, tertiary: 3, minor: 2, service: 1 };
   const LIMIT = { primary: 50, secondary: 50, tertiary: 50, minor: 30, service: 30 };   // km/h según el tipo de calle
   const KMH = 1.25;                                    // km/h → unidades de velocidad de vehicles.js (un coche normal va a ~65)
@@ -120,7 +121,7 @@
     });
 
     let n = 0; act.forEach(S => { if (S.src === 's') n++; });
-    if (n >= MAX_S) return;
+    if (n >= pcap(MAX_S, 3)) return;
     const cand = [];
     g.ends.forEach(arr => {
       if (arr.length < 3) return;
@@ -146,7 +147,7 @@
     });
     cand.sort((a, b) => a.d - b.d);
     for (const c of cand) {
-      if (n >= MAX_S) break;
+      if (n >= pcap(MAX_S, 3)) break;
       if ([...act.values()].some(S => Math.hypot(S.C.x - c.C.x, S.C.y - c.C.y) < 40)) continue;
       c.br.sort((a, b) => RANK[b.cls] - RANK[a.cls]);
       const br = c.br.slice(0, 4);

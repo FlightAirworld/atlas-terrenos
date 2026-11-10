@@ -105,7 +105,7 @@
       }
     });
     best.forEach((o, id) => {
-      if (stations.has(id) || stations.size >= MAX_ST) return;
+      if (stations.has(id) || stations.size >= (window.Perf ? Perf.cap(MAX_ST, 2) : MAX_ST)) return;
       const c = scr(o); if (c.x < 40 || c.y < 40 || c.x > size.x - 40 || c.y > size.y - 40) return;
       const e = { x: o.x, y: o.y, th: o.th, side: o.side, mk: null, wrap: null, k: null };
       stationShow(e); stations.set(id, e);

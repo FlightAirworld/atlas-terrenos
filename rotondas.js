@@ -10,6 +10,7 @@
   if (typeof map === 'undefined' || !map || !window.roadGraph) return;
   const REF_Z = 17, MIN_ZOOM = 16.5, SNAP = 3;
   const SMALL = Math.min(innerWidth, innerHeight) < 600, MAX_R = SMALL ? 6 : 10;
+  const pcap = (n, min) => window.Perf ? Perf.cap(n, min) : n;           // modo ligero (ligero.js)
   const R_MIN = 5, R_MAX = 85, ROUND = 0.2;            // radio del anillo (px de mundo a REF_Z ≈ 1 m) y lo "redondo" que debe ser
   const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; };
   const rng = seed => () => { seed = (Math.imul(seed ^ (seed >>> 15), 2246822507) + 0x6D2B79F5) >>> 0; return ((seed ^ (seed >>> 13)) >>> 0) / 4294967296; };
@@ -180,7 +181,7 @@
     const size = map.getSize(), cx = size.x / 2, cy = size.y / 2;
     const scr = p => map.latLngToContainerPoint(map.unproject(p, REF_Z));
     active.forEach((P, k) => { const c = scr(P.C); if (c.x < -200 || c.y < -200 || c.x > size.x + 200 || c.y > size.y + 200) removeP(k); });
-    if (active.size >= MAX_R) return;
+    if (active.size >= pcap(MAX_R, 2)) return;
     const cand = [];
     findRings(g).forEach(r => {
       for (const P of active.values()) if (Math.hypot(P.C.x - r.C.x, P.C.y - r.C.y) < 10) return;   // ya tiene su plaza
@@ -189,7 +190,7 @@
       cand.push({ ...r, d: Math.hypot(c.x - cx, c.y - cy) });
     });
     cand.sort((a, b) => a.d - b.d);
-    for (const r of cand) { if (active.size >= MAX_R) break; add(r); }
+    for (const r of cand) { if (active.size >= pcap(MAX_R, 2)) break; add(r); }
   }
   const relayout = () => active.forEach(layout);
   map.on('zoom', relayout); map.on('pitch', relayout);

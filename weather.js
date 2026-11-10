@@ -38,7 +38,7 @@
       alpha: rnd(0.28, 0.5)
     };
   }
-  const nClouds = () => Math.max(5, Math.round(W / 140));
+  const nClouds = () => { const n = Math.max(5, Math.round(W / 140)); return window.Perf ? Perf.cap(n, 3) : n; };   // modo ligero (ligero.js)
   for (let i = 0; i < nClouds(); i++) clouds.push(makeCloud(false));
 
   function drawCloud(c, k) {
@@ -55,7 +55,7 @@
 
   // ---------- Lluvia ----------
   const drops = [];
-  const nDrops = () => Math.min(420, Math.round(W * H / 3500));
+  const nDrops = () => { const n = Math.min(420, Math.round(W * H / 3500)); return window.Perf ? Perf.cap(n, 40) : n; };
   function makeDrop(top) {
     return { x: rnd(-50, W + 50), y: top ? rnd(-H * 0.2, -10) : rnd(0, H), len: rnd(10, 22), v: rnd(650, 950), a: rnd(0.25, 0.55) };
   }
@@ -158,6 +158,7 @@
       if ((c.vx > 0 && c.x - c.w > W) || (c.vx < 0 && c.x + c.w < 0)) clouds[i] = makeCloud(true);
       else drawCloud(c, k);
     }
+    if (clouds.length > nClouds()) clouds.length = nClouds();
     if (clouds.length < nClouds() && Math.random() < dt * 0.3) clouds.push(makeCloud(true));
 
     // lluvia (ligeramente inclinada)
@@ -171,6 +172,7 @@
       ctx.strokeStyle = `rgba(190,210,235,${d.a})`;
       ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.len * slant, d.y - d.len); ctx.stroke();
     }
+    if (drops.length > nDrops()) drops.length = nDrops();
     while (drops.length < nDrops()) drops.push(makeDrop(false));
 
     // relámpago

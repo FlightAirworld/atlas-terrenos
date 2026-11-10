@@ -126,6 +126,12 @@
     return true;
   }
   function remove(i) { map.removeLayer(critters[i].mk); critters.splice(i, 1); }
+  const pcap = (n, min) => window.Perf ? Perf.cap(n, min) : n;           // modo ligero (ligero.js)
+  window.addEventListener('perfchange', () => {   // sobran patos o peces: se quitan los de más
+    for (const [kind, max] of [['duck', pcap(MAX_DUCKS, 1)], ['fish', pcap(MAX_FISH, 2)]]) {
+      for (let i = critters.length - 1; i >= 0 && count(kind) > max; i--) if (critters[i].kind === kind) remove(i);
+    }
+  });
   function clearAll() { while (critters.length) remove(0); }
   const count = k => critters.reduce((n, c) => n + (c.kind === k ? 1 : 0), 0);
 
@@ -143,7 +149,7 @@
     if (z < MIN_ZOOM) return;
     nextSpawn -= dt;
     if (nextSpawn <= 0) {
-      const wantDuck = count('duck') < MAX_DUCKS, wantFish = count('fish') < MAX_FISH;
+      const wantDuck = count('duck') < pcap(MAX_DUCKS, 1), wantFish = count('fish') < pcap(MAX_FISH, 2);
       let ok = true;
       if (wantDuck || wantFish) ok = spawn(wantDuck && (!wantFish || Math.random() < 0.4) ? 'duck' : 'fish');
       nextSpawn = ok ? rnd(1.2, 3.5) : 3;

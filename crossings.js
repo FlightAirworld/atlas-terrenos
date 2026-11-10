@@ -10,6 +10,7 @@
   if (typeof map === 'undefined' || !map || !window.roadGraph) return;
   const REF_Z = 17, MIN_ZOOM = 16.5, CYCLE = 20, ZEBRA = '#363c48';   // ZEBRA: color del paso de cebra y de la línea de parada
   const SMALL = Math.min(innerWidth, innerHeight) < 600, MAX_J = SMALL ? 8 : 14;
+  const pcap = (n, min) => window.Perf ? Perf.cap(n, min) : n;           // modo ligero (ligero.js)
   const RANK = { primary: 5, secondary: 4, tertiary: 3, minor: 2, service: 1 };   // las autovías no llevan semáforos
   const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
   const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; };
@@ -75,7 +76,7 @@
     const size = map.getSize(), cx = size.x / 2, cy = size.y / 2;
     const scr = p => map.latLngToContainerPoint(map.unproject(p, REF_Z));
     active.forEach((J, k) => { const c = scr(J.C); if (c.x < -140 || c.y < -140 || c.x > size.x + 140 || c.y > size.y + 140) removeJ(k); });
-    if (active.size >= MAX_J) return;
+    if (active.size >= pcap(MAX_J, 3)) return;
     const cand = [];
     g.ends.forEach(arr => {
       if (arr.length < 3) return;
@@ -98,7 +99,7 @@
       cand.push({ key, C, br, d: Math.hypot(c.x - cx, c.y - cy) });
     });
     cand.sort((a, b) => a.d - b.d);
-    for (const c of cand) { if (active.size >= MAX_J) break; add(c); }
+    for (const c of cand) { if (active.size >= pcap(MAX_J, 3)) break; add(c); }
   }
 
   // Distancia (px de pantalla) que le queda al vehículo v hasta una línea de parada con semáforo cerrado; Infinity si nada le obliga a parar.

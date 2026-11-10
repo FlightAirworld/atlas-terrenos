@@ -100,6 +100,8 @@
   }
   function remove(i) { map.removeLayer(walkers[i].mk); walkers.splice(i, 1); }
   function clearAll() { while (walkers.length) remove(0); }
+  const pcap = (n, min) => window.Perf ? Perf.cap(n, min) : n;           // modo ligero (ligero.js)
+  window.addEventListener('perfchange', () => { const c = pcap(MAX, 4); while (walkers.length > c) remove(walkers.length - 1); });
 
   map.on('zoomstart', () => { zooming = true; });
   map.on('zoomend', () => { zooming = false; if (map.getZoom() < MIN_ZOOM) clearAll(); });
@@ -118,7 +120,7 @@
       const raining = storm > 0.25;                             // con lluvia, todos salen con paraguas
       if (nextSpawn <= 0) {
         const dm = window.CityLife ? window.CityLife.mult() : 1;       // más gente en el centro, menos en las afueras (ciudad.js)
-        const cap = Math.round(MAX * dm * (storm > 0.6 ? 0.65 : 1));
+        const cap = Math.round(pcap(MAX, 4) * dm * (storm > 0.6 ? 0.65 : 1));
         let ok = true;
         if (z >= MIN_ZOOM && walkers.length < cap) ok = spawn();
         nextSpawn = !ok ? 1 : (walkers.length < cap * 0.4 ? rnd(0.25, 0.6) : rnd(0.4, 1.1)) * (storm > 0.6 ? 1.5 : 1);

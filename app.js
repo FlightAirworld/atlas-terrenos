@@ -564,11 +564,12 @@ function updateDetail() {
     const c = gl.getCenter();
     all.forEach(ex => { const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y); ex.d = Math.hypot((s + n) / 2 - c.lat, (w + e) / 2 - c.lng); });
     all.sort((a, b) => a.d - b.d);
-    const cap = DETAIL_CAP[resOf()] || 40;
+    const cap = window.Perf ? Perf.cap(DETAIL_CAP[resOf()] || 40, 10) : (DETAIL_CAP[resOf()] || 40);   // modo ligero (ligero.js)
     all.forEach((ex, i) => (i < cap || (ex.hasDetail && i < cap + DETAIL_KEEP)) ? addDetail(ex) : dropDetail(ex));
   });
 }
 gl.on('moveend', updateDetail);
+window.addEventListener('perfchange', updateDetail);   // al cambiar el modo ligero se ajusta cuántas fotos se muestran
 
 const isOtherWorld = p => !!(p && p.world && p.world !== 'tierra');   // parcela de la Luna, Marte… (cada mundo tiene las suyas)
 function drawOwned(p) {

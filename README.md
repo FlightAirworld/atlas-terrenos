@@ -187,6 +187,29 @@ Racha de 7 días: premios de cada día en `DAILY_REWARDS` (7 números separados 
 Para probar sin esperar, en la consola: `cityEvent('works' | 'parade' | 'wedding' | 'ambulance' | 'steam' | 'bubble' | 'tram' | 'garbage' | 'van' | 'driving')` y `citySeason('autumn' | 'winter' | 'spring' | 'summer' | 'auto')`.
 Las posiciones de bancos, colas, puertas y chimeneas dentro de cada parcela son aproximadas (constantes `P_(sc, u, v)` en `INIT`/`TICK` de `ciudad.js`): se ajustan viendo cada edificio.
 
+## Imágenes para compartir (`compartir.js`)
+
+En el panel de cualquier terreno con dueño hay dos botones que dibujan una tarjeta vertical de 1080×1350 (formato WhatsApp / Instagram) en el navegador, sin pasar por el servidor, y la comparten con la hoja de compartir del móvil o la descargan como PNG:
+
+- **🖼️ Crear imagen para compartir**: la casa del terreno, el dueño, el nivel y los «me gusta».
+- **🏘️ Crear imagen de mi barrio** (o «de este barrio» si no es tuyo): una vista de 5×5 parcelas alrededor del terreno, con la casa y el nombre de cada vecino, el borde de tu color en tus parcelas y un resumen («7 vecinos · 12 de 25 terrenos con dueño»). Solo en la Tierra. Si alguna tesela del barrio aún no estaba cargada, la pide al servidor (`loadTile`, la misma caché de 60 s del mapa).
+
+Las dos llevan «Redecora El Mundo» arriba y la dirección del juego abajo, y el texto que acompaña al compartir lleva el enlace `?t=<terreno>`.
+
+## Modo ligero (`ligero.js`)
+
+Si el juego va a trompicones, baja solo lo que se mueve para no colgarse en móviles flojos. Un vigilante mide los fotogramas por segundo con `requestAnimationFrame`: tras 10 s de arranque (el mapa aún carga), si la media de ventanas de 2 s queda por debajo de **24 fps** durante 3 ventanas seguidas, pasa al **nivel 1**; si aun así baja de **16 fps**, al **nivel 2**. No juzga con la pestaña oculta ni tras un hueco largo (app en segundo plano), y no se confunde con los móviles limitados a 30 fps.
+
+| Nivel | Cantidad de coches, gente, animales, patos, peces, lluvia, fotos del suelo… | Resolución del mapa | Extras |
+|---|---|---|---|
+| 0 normal | 100 % | la del móvil | — |
+| 1 ligero | ≈ 45 % | como mucho ×1,5 | sin animaciones decorativas, sombras ni desenfoques |
+| 2 muy ligero | ≈ 15 % | ×1 | ídem |
+
+- **Menú → ⚡ Modo ligero** rota entre *Auto* (por defecto), *Sí* (siempre ligero) y *No* (siempre al máximo). Se guarda en el navegador (`perfMode`). En automático, lo aprendido en ese móvil se recuerda 7 días (`perfLearned`) para arrancar ya en ligero, y los móviles con ≤ 2 GB de memoria o ≤ 2 núcleos arrancan en ligero.
+- Para programar: los demás scripts piden sus límites con `Perf.cap(n, mínimo)` en vez de un número fijo, y escuchan el evento `perfchange` para quitar lo que sobre (`people.js`, `vehicles.js`, `animals.js`, `rivers.js`, `weather.js`, `crossings.js`, `rotondas.js`, `signs.js`, `trains.js`, `ciudad.js`, `aliens.js` y las fotos del suelo de `app.js`).
+- La lógica de decisión está aislada y se prueba con `node --test` (`ligero.test.js`).
+
 ## Regalar créditos entre jugadores (`gifts.js`)
 
 - Botón 💝 en **Extras**, y también en la tarjeta que sale al tocar un apodo en el chat y en la lista de amigos. Se regala por **apodo** (no distingue mayúsculas).

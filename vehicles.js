@@ -605,6 +605,11 @@
     while (pax.length) removePax(0);
   }
   const trafficCount = () => { let n = 0; for (const v of vehicles) if (v.K.traffic) n++; return n; };
+  const pcap = (n, min) => window.Perf ? Perf.cap(n, min) : n;           // modo ligero (ligero.js)
+  window.addEventListener('perfchange', () => {   // al pasar a modo ligero sobran coches: se quitan los de más (los taxis y los de emergencias se dejan)
+    const c = pcap(MAX_TRAFFIC, 4);
+    for (let i = vehicles.length - 1; i >= 0 && trafficCount() > c; i--) if (vehicles[i].K.traffic && vehicles[i].kind !== 'taxi') removeVehicle(i);
+  });
   function pickTraffic() {
     let r = Math.random();
     for (const [k, p] of MIX) { if (r < p) return k; r -= p; }
@@ -1356,7 +1361,7 @@
       // Taxis
       nextTaxi -= dt;
       if (nextTaxi <= 0) {
-        if (z >= MIN_ZOOM && vehicles.filter(v => v.kind === 'taxi').length < MAX_TAXIS) spawn('taxi');
+        if (z >= MIN_ZOOM && vehicles.filter(v => v.kind === 'taxi').length < pcap(MAX_TAXIS, 1)) spawn('taxi');
         nextTaxi = rnd(18, 40);
       }
       // Avión (cada 5 min) y helicóptero (cada 3 min; este espera a que te acerques lo bastante)
@@ -1373,7 +1378,7 @@
       if (nextTraffic <= 0) {
         const n = trafficCount();
         let ok = true;
-        const maxT = Math.max(6, Math.round(MAX_TRAFFIC * (window.CityLife ? window.CityLife.mult() : 1)));   // más tráfico en el centro, menos en las afueras
+        const maxT = Math.max(window.Perf && Perf.lite ? 3 : 6, Math.round(pcap(MAX_TRAFFIC, 4) * (window.CityLife ? window.CityLife.mult() : 1)));   // más tráfico en el centro, menos en las afueras
         if (z >= MIN_ZOOM && n < (raining ? Math.round(maxT * 0.7) : maxT)) ok = !!spawn(pickTraffic(), true);
         nextTraffic = !ok ? 1 : (n < maxT * 0.7 ? rnd(0.3, 0.7) : rnd(0.7, 1.5));
       }

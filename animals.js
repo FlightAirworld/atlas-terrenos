@@ -105,6 +105,8 @@
   // ---------- Bucle ----------
   let last = performance.now(), nextPet = rnd(1, 3), running = false;
   function clearAll() { while (pets.length) removePet(0); }
+  const pcap = (n, min) => window.Perf ? Perf.cap(n, min) : n;           // modo ligero (ligero.js)
+  window.addEventListener('perfchange', () => { const c = pcap(MAX_PETS, 1); while (pets.length > c) removePet(pets.length - 1); });
   map.on('zoomstart', () => { zooming = true; });
   map.on('zoomend', () => { zooming = false; if (map.getZoom() < MIN_ZOOM) clearAll(); });
 
@@ -121,7 +123,7 @@
     nextPet -= dt;
     if (nextPet <= 0) {
       let ok = true;
-      if (z >= MIN_ZOOM && pets.length < MAX_PETS) ok = spawnPet();
+      if (z >= MIN_ZOOM && pets.length < pcap(MAX_PETS, 1)) ok = spawnPet();
       nextPet = !ok ? 2 : rnd(2, 6);
     }
     const view = map.getBounds().pad(0.4);

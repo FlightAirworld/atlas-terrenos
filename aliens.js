@@ -575,7 +575,7 @@
     want.sort((a, d) => a.d - d.d);
     const keep = new Map(); let nb = 0, np = 0;
     want.forEach(c => {
-      if (c.type === 'bld' ? nb >= CAP_B : np >= CAP_P) return;
+      if (c.type === 'bld' ? nb >= (window.Perf ? Perf.cap(CAP_B, 3) : CAP_B) : np >= CAP_P) return;   // modo ligero (ligero.js)
       if (taken(W.id, c.lng, c.lat) || (c.type === 'bld' && taken(W.id, c.lng, c.lat + 0.0005))) return;
       if (c.type === 'bld') nb++; else np++;
       keep.set(c.key, c);
@@ -669,8 +669,8 @@
     // población: se rellena sola y se recoloca dentro de la pantalla si te alejas de ella
     if (!W.ready) {
       W.ready = true;
-      for (let i = 0; i < N_WALK; i++) { const p = randIn(v, 0.08); W.walkers.push(makeEnt(W, 'alien', p.x, p.y)); }
-      for (let i = 0; i < (W.moon ? 0 : N_CRIT); i++) { const p = randIn(v, 0.05); W.critters.push(makeEnt(W, ['blob', 'bug', 'jelly'][i % 3], p.x, p.y)); }
+      for (let i = 0; i < (window.Perf ? Perf.cap(N_WALK, 2) : N_WALK); i++) { const p = randIn(v, 0.08); W.walkers.push(makeEnt(W, 'alien', p.x, p.y)); }
+      for (let i = 0; i < (W.moon ? 0 : window.Perf ? Perf.cap(N_CRIT, 1) : N_CRIT); i++) { const p = randIn(v, 0.05); W.critters.push(makeEnt(W, ['blob', 'bug', 'jelly'][i % 3], p.x, p.y)); }
     }
     for (let i = W.walkers.length - 1; i >= 0; i--) {   // los visitantes de los platillos se marchan al rato
       const e = W.walkers[i];
