@@ -29,6 +29,8 @@ const HAS_STRIPE = /^(sk|rk)_(test|live)_/.test(STRIPE_SECRET_KEY);
 const IS_PROD = process.env.NODE_ENV === 'production' || !!process.env.RENDER;   // Render define RENDER=true
 // FREE_MODE=1: juego gratuito. No se venden créditos (ni Stripe, ni PayPal, ni modo demo); se juega con los créditos que da el propio juego.
 const FREE_MODE = process.env.FREE_MODE === '1';
+// Enlace para "Invítame a un café" (p. ej. https://paypal.me/reeving/3). Solo se acepta si empieza por https://
+const COFFEE_URL = /^https:\/\//.test(process.env.COFFEE_URL || '') ? process.env.COFFEE_URL.trim() : '';
 const DEMO = !FREE_MODE && (process.env.DEMO === '1' || !(HAS_STRIPE || HAS_PAYPAL));
 if (DEMO && IS_PROD && process.env.DEMO !== '1') {
   // Sin esto, un fallo de configuración regalaría packs sin cobrar.
@@ -2591,7 +2593,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/admin/stats') return adminStats(req);
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
-    return { push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, free: FREE_MODE, demo: DEMO, stripe: !FREE_MODE && !DEMO && HAS_STRIPE, paypal: !FREE_MODE && !DEMO && HAS_PAYPAL, clientId: (FREE_MODE || DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, worlds: WORLDS, packSize: PACKS[0].credits, packs: PACKS,
+    return { coffee: COFFEE_URL || null, push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, free: FREE_MODE, demo: DEMO, stripe: !FREE_MODE && !DEMO && HAS_STRIPE, paypal: !FREE_MODE && !DEMO && HAS_PAYPAL, clientId: (FREE_MODE || DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, worlds: WORLDS, packSize: PACKS[0].credits, packs: PACKS,
       maxParcels: Number.isFinite(MAX_PARCELS_PER_ACCOUNT) ? MAX_PARCELS_PER_ACCOUNT : null, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, guestCredits: GUEST_CREDITS, welcomeCredits: WELCOME_CREDITS, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null, googleClientId: AUTH_ENABLED ? GOOGLE_CLIENT_ID : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {

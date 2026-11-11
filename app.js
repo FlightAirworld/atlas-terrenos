@@ -1952,6 +1952,11 @@ scheduleWalker(randBetween(20000, 60000));
 (async () => {
   cfg = await api('/api/config');
   if (cfg.free) document.body.classList.add('free-mode');   // oculta por CSS todos los botones de compra
+  if (cfg.coffee) {   // botón ☕ "Invítame a un café": abre el enlace de PayPal en otra pestaña
+    const cb = $('coffee-btn');
+    cb.classList.remove('hidden');
+    cb.addEventListener('click', () => window.open(cfg.coffee, '_blank', 'noopener'));
+  }
 
   if (adminViewEnabled()) setupAdminControls();
 
