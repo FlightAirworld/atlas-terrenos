@@ -386,6 +386,8 @@ const cardsMod = () => cardsMod.m || (cardsMod.m = require('./cards-server')({ p
 const triviaMod = () => triviaMod.m || (triviaMod.m = require('./trivia-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, numEnv }));
 // Rasca y gana (rasca-server.js): mismo patrón
 const rascaMod = () => rascaMod.m || (rascaMod.m = require('./rasca-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, numEnv }));
+// Juegos nuevos (minijuegos-server.js): racha diaria, Adivina el lugar, ¿Más o menos?, cofres del mapa y duelos
+const mjMod = () => mjMod.m || (mjMod.m = require('./minijuegos-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, cardsMod, pushToUser: (...a) => pushToUser(...a) }));
 // Parejas con tus cartas (parejas-server.js): mismo patrón
 const parejasMod = () => parejasMod.m || (parejasMod.m = require('./parejas-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, numEnv }));
 
@@ -2714,6 +2716,27 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/trivia/answer') return triviaMod().answer(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/rasca') return rascaMod().get(req);
   if (req.method === 'POST' && pn === '/api/rasca/play') return rascaMod().play(req);
+  if (req.method === 'GET' && pn === '/api/mj/racha') return mjMod().rachaGet(req);
+  if (req.method === 'POST' && pn === '/api/mj/racha/claim') return mjMod().rachaClaim(req);
+  if (req.method === 'GET' && pn === '/api/mj/adivina') return mjMod().adivinaGet(req);
+  if (req.method === 'POST' && pn === '/api/mj/adivina/answer') return mjMod().adivinaAnswer(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/mj/mm') return mjMod().mmGet(req);
+  if (req.method === 'POST' && pn === '/api/mj/mm/guess') return mjMod().mmGuess(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/mj/cofres') return mjMod().cofresGet(req);
+  if (req.method === 'POST' && pn === '/api/mj/cofres/claim') return mjMod().cofresClaim(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/mj/casino') return mjMod().casinoGet(req);
+  if (req.method === 'POST' && pn === '/api/mj/slots') return mjMod().slots(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/mj/plinko') return mjMod().plinko(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/mj/ruleta') return mjMod().ruleta(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/mj/minas') return mjMod().minasGet(req);
+  if (req.method === 'POST' && pn === '/api/mj/minas/start') return mjMod().minasStart(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/mj/minas/reveal') return mjMod().minasReveal(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/mj/minas/cash') return mjMod().minasCash(req);
+  if (req.method === 'POST' && pn === '/api/mj/moneda') return mjMod().moneda(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/mj/duelos') return mjMod().duelosGet(req);
+  if (req.method === 'POST' && pn === '/api/mj/duelos/reto') return mjMod().duelosReto(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/mj/duelos/aceptar') return mjMod().duelosAceptar(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/mj/duelos/rechazar') return mjMod().duelosRechazar(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/parejas') return parejasMod().get(req);
   if (req.method === 'POST' && pn === '/api/parejas/start') return parejasMod().start(req);
   if (req.method === 'POST' && pn === '/api/parejas/flip') return parejasMod().flip(req, await readJson(req));
@@ -2785,6 +2808,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
   .then(() => cardsMod().init()).then(() => cardsMod().ON && cardsMod().init2()).catch(e => console.error('No se pudieron crear las tablas de cartas:', e.message))
   .then(() => triviaMod().init()).catch(e => console.error('No se pudieron crear las tablas de la trivia:', e.message))
   .then(() => rascaMod().init()).catch(e => console.error('No se pudieron crear las tablas del rasca y gana:', e.message))
+  .then(() => mjMod().init()).catch(e => console.error('No se pudieron crear las tablas de los juegos nuevos:', e.message))
   .then(() => parejasMod().init()).catch(e => console.error('No se pudieron crear las tablas de las parejas:', e.message))
   .then(() => bots.start({ run, q, parcelFromLatLng, isUniqueViolation }))
   .then(async () => {   // tablas de "Invita y gana" (no hacen nada si ya existen)
@@ -3655,7 +3679,7 @@ const httpServer = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/' + INDEXNOW_KEY + '.txt') return send(200, INDEXNOW_KEY, 'text/plain; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });   // el archivo de clave que comprueban los buscadores
     let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname + (url.pathname.endsWith('/') ? 'index.html' : '')));   // /mundos/ -> mundos/index.html
     const rel = path.relative(PUBLIC, file);
-    if (!file.startsWith(PUBLIC + path.sep) || /(^|[\\/])(\.|node_modules)/.test(rel) || /^(server\.js|build-static\.js|package(-lock)?\.json|(trivia|rasca|parejas)-server\.js|trivia-bank\.js)$/.test(rel) || !MIME[path.extname(file)] || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(404, 'No encontrado', 'text/plain');
+    if (!file.startsWith(PUBLIC + path.sep) || /(^|[\\/])(\.|node_modules)/.test(rel) || /^(server\.js|build-static\.js|package(-lock)?\.json|(trivia|rasca|parejas|minijuegos)-server\.js|trivia-bank\.js)$/.test(rel) || !MIME[path.extname(file)] || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(404, 'No encontrado', 'text/plain');
     return sendStatic(req, res, file);
   } catch (e) {
     const status = e.status || 500;
