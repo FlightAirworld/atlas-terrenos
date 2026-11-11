@@ -187,3 +187,7 @@ ALTER TABLE guest_ip ENABLE ROW LEVEL SECURITY;
 -- Récord de jugadores reales conectados a la vez, por país (pantalla de administrador). El servidor también la crea solo si falta.
 CREATE TABLE IF NOT EXISTS online_peaks (cc TEXT PRIMARY KEY, n INT NOT NULL, at BIGINT NOT NULL);
 ALTER TABLE online_peaks ENABLE ROW LEVEL SECURITY;
+
+-- Última versión desplegada de la que se avisó a los buscadores (IndexNow). El servidor también la crea solo si falta.
+CREATE TABLE IF NOT EXISTS indexnow_state (id INT PRIMARY KEY, build TEXT NOT NULL, at BIGINT NOT NULL);
+ALTER TABLE indexnow_state ENABLE ROW LEVEL SECURITY;

@@ -6,6 +6,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { Pool, types } = require('pg');
 const telegram = require('./telegram');   // avisos al móvil del dueño (TELEGRAM_TOKEN y TELEGRAM_CHAT_ID; sin ellas queda apagado)
+const indexNow = require('./indexnow');   // aviso a buscadores (IndexNow) cuando se despliega una versión nueva
 const onlineStats = require('./online-stats');   // jugadores en línea por país (panel al tocar el contador)
 const bots = require('./bots');   // jugadores automáticos 🌍: uno por país, una parcela al día cada uno (BOTS=off los apaga; ver bots.js)
 const ambient = require('./ambient');   // jugadores y mensajes de chat simulados (AMBIENT=off para apagarlo)
@@ -1427,6 +1428,28 @@ async function walkerTap(req, body) {
   return { ok: true, reward: WALKER_REWARD, left: WALKER_DAILY_MAX - s.count };
 }
 
+// ---------- IndexNow: avisar a los buscadores de que la web cambió ----------
+// Al arrancar una versión nueva (RENDER_GIT_COMMIT distinto del último aviso) se mandan las URLs del sitemap.xml a IndexNow (Bing, Yandex...).
+// Así solo se avisa cuando de verdad hay cambios. POST /api/admin/indexnow (ADMIN_TOKEN) lo fuerza a mano. INDEXNOW_OFF=1 lo desactiva.
+const INDEXNOW_KEY = indexNow.keyFor(process.env);
+async function indexNowPing(force) {
+  const urls = indexNow.urlsFromSitemap(fs.readFileSync(path.join(PUBLIC, 'sitemap.xml'), 'utf8'));
+  const r = await indexNow.submit(INDEXNOW_KEY, urls);
+  console.log(`[indexnow] ${force ? 'manual' : 'despliegue'}: ${r.n} URLs, respuesta ${r.status}${r.ok ? ' (aceptado)' : ''}`);
+  return r;
+}
+async function indexNowOnDeploy() {
+  const build = String(process.env.RENDER_GIT_COMMIT || '');
+  if (!IS_PROD || !build || process.env.INDEXNOW_OFF === '1') return;   // en local o sin versión conocida no se avisa
+  await run('CREATE TABLE IF NOT EXISTS indexnow_state (id INT PRIMARY KEY, build TEXT NOT NULL, at BIGINT NOT NULL)');
+  await run('ALTER TABLE public.indexnow_state ENABLE ROW LEVEL SECURITY').catch(() => {});
+  const last = await one('SELECT build FROM indexnow_state WHERE id = 1');
+  if (last && last.build === build) return;   // esta versión ya se avisó
+  const r = await indexNowPing(false);
+  if (r.ok) await run('INSERT INTO indexnow_state (id, build, at) VALUES (1,$1,$2) ON CONFLICT (id) DO UPDATE SET build = $1, at = $2', [build, Date.now()]);
+}
+setTimeout(() => indexNowOnDeploy().catch(e => console.error('[indexnow]', e.message)), 90_000).unref();   // un poco después de arrancar
+
 // ---------- Jugadores en línea en tiempo real (SSE) ----------
 // Cada pestaña abierta mantiene una conexión GET /api/online (Server-Sent Events). Se cuenta un jugador por
 // identificador anónimo (cid), así que varias pestañas del mismo navegador cuentan como uno. Todo vive en memoria:
@@ -2600,6 +2623,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/health') return { ok: true };   // la pantalla de carga del sitio estático pregunta aquí si ya despertó
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineShown() };
   if (req.method === 'GET' && pn === '/api/online/countries') return onlineCountriesGet();
+  if (req.method === 'POST' && pn === '/api/admin/indexnow') { requireAdmin(req); return await indexNowPing(true); }   // avisar ya a los buscadores (sin cuerpo: manda todo el sitemap)
   if (req.method === 'GET' && pn === '/api/admin/online-real') { requireAdmin(req); return onlineRealGet(); }   // reales conectados (solo administrador: cabecera Authorization: Bearer ADMIN_TOKEN)
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
@@ -3609,6 +3633,7 @@ const httpServer = http.createServer(async (req, res) => {
       const page = await cardsMod().sharePage(cs[1], NEW_ORIGIN);
       return page ? send(200, page, 'text/html; charset=utf-8', { 'Cache-Control': 'public, max-age=300' }) : send(404, 'No encontrado', 'text/plain');
     }
+    if (req.method === 'GET' && url.pathname === '/' + INDEXNOW_KEY + '.txt') return send(200, INDEXNOW_KEY, 'text/plain; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });   // el archivo de clave que comprueban los buscadores
     let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname + (url.pathname.endsWith('/') ? 'index.html' : '')));   // /mundos/ -> mundos/index.html
     const rel = path.relative(PUBLIC, file);
     if (!file.startsWith(PUBLIC + path.sep) || /(^|[\\/])(\.|node_modules)/.test(rel) || /^(server\.js|build-static\.js|package(-lock)?\.json)$/.test(rel) || !MIME[path.extname(file)] || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(404, 'No encontrado', 'text/plain');
