@@ -1,41 +1,42 @@
-const CACHE = 'redecora-__BUILD__';   // __BUILD__ lo sustituye el servidor (server.js) o build-static.js por el commit de cada despliegue
-const SHELL = ['/', '/style.css', '/app.js', '/mapshim.js', '/sounds.js', '/voices.js', '/images/icon-192.png'];
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
-  self.skipWaiting();
-});
+'use strict';
+// Service worker mínimo: hace la app instalable y, sin conexión, muestra lo último que se vio.
+// Siempre intenta primero la red, así nunca se queda atascado en una versión vieja.
+// __BUILD__ lo sustituye build-static.js (o el servidor) en cada despliegue para renovar la caché.
+const CACHE = 'atlas-__BUILD__';
+
+self.addEventListener('install', () => self.skipWaiting());
+
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
-});
-self.addEventListener('fetch', e => {
-  const r = e.request, u = new URL(r.url);
-  if (r.method !== 'GET' || u.origin !== location.origin || u.pathname.startsWith('/api/')) return;
-  if (u.pathname.startsWith('/images/')) {   // las imágenes casi no cambian: primero la copia guardada (así no se vuelven a descargar)
-    e.respondWith(caches.match(r).then(m => m || fetch(r).then(res => {
-      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(r, copy)); }
-      return res;
-    })));
-    return;
-  }
-  e.respondWith(fetch(r).then(res => {
-    if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(r, copy)); }
-    return res;
-  }).catch(() => caches.match(r).then(m => m || caches.match('/'))));
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
 });
 
-// Avisos push (ver push.js y el apartado "Avisos al móvil" de server.js)
-self.addEventListener('push', e => {
-  let d = {};
-  try { d = e.data ? e.data.json() : {}; } catch (x) {}
-  e.waitUntil(self.registration.showNotification(d.title || 'Redecora El Mundo', {
-    body: d.body || '', tag: d.tag || 'redecora', icon: '/images/icon-192.png', badge: '/images/favicon-32.png', data: { url: d.url || '/' }
-  }));
-});
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || '/';
-  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-    for (const c of list) if ('focus' in c) return c.focus();
-    return clients.openWindow(url);
-  }));
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET' || req.headers.has('range')) return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;                 // mapas, Supabase, API externa: directo a la red
+  if (/^\/(api|auth|socket|ws|admin)/.test(url.pathname)) return;  // datos en vivo: nunca a caché
+
+  e.respondWith((async () => {
+    try {
+      const res = await fetch(req);
+      if (res && res.ok && res.type === 'basic') {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+      }
+      return res;
+    } catch (err) {
+      const hit = await caches.match(req);
+      if (hit) return hit;
+      if (req.mode === 'navigate') {
+        const home = await caches.match('/');
+        if (home) return home;
+      }
+      throw err;
+    }
+  })());
 });
