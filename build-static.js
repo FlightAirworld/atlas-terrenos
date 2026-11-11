@@ -13,7 +13,7 @@ if (!/^https?:\/\/[^/]+/.test(API_BASE)) {
 const OUT = path.join(__dirname, 'dist');
 const EXT = new Set(['.html', '.js', '.css', '.png', '.jpg', '.webp', '.svg', '.ico', '.webmanifest', '.xml', '.mp3']);
 const ROOT_EXTRA = new Set(['robots.txt']);   // .txt solo en la raíz (robots.txt); el resto de .txt no se publica
-const SKIP_ROOT = /^(server\.js|build-static\.js|package(-lock)?\.json|(trivia|rasca)-server\.js|trivia-bank\.js)$/;   // lo del servidor no se publica
+const SKIP_ROOT = /^(server\.js|build-static\.js|package(-lock)?\.json|(trivia|rasca|parejas)-server\.js|trivia-bank\.js)$/;   // lo del servidor no se publica
 
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
