@@ -1447,10 +1447,24 @@ function onlineFill(extra) {   // reparte `extra` jugadores entre los países se
   for (const r of rows) if (r.n) out.set(r.cc, r.n);
   return out;
 }
-function onlineRealGet() {   // solo jugadores REALES conectados ahora mismo (sin los de ambiente); para el administrador
-  return { ...onlineStats.tally(onlineClients.keys(), onlineCountryByCid), shown: onlineShown(), at: Date.now() };
+// Récord de jugadores reales conectados a la vez, por país. Se guarda en la base de datos (tabla online_peaks) para que no se pierda al reiniciar.
+const onlinePeaks = new Map();   // cc -> { n, at }
+let onlinePeaksLoaded = false, onlinePeaksAt = 0;
+function onlinePeaksCheck(real, force) {   // compara el recuento actual con los récords; como mucho una vez por segundo
+  const now = Date.now();
+  if (!onlinePeaksLoaded || (!force && now - onlinePeaksAt < 1000)) return;
+  onlinePeaksAt = now;
+  const r = real || onlineStats.tally(onlineClients.keys(), onlineCountryByCid);
+  for (const c of onlineStats.updatePeaks(onlinePeaks, r.countries, now)) {
+    run('INSERT INTO online_peaks (cc, n, at) VALUES ($1,$2,$3) ON CONFLICT (cc) DO UPDATE SET n = GREATEST(online_peaks.n, EXCLUDED.n), at = CASE WHEN EXCLUDED.n > online_peaks.n THEN EXCLUDED.at ELSE online_peaks.at END', [c.cc, c.n, c.at]).catch(() => {});
+  }
 }
-setInterval(() => { try { const r = onlineRealGet(); console.log(`[en línea] reales: ${r.total} | contador mostrado: ${r.shown}`); } catch {} }, 60_000).unref();   // una línea al minuto en el log
+function onlineRealGet() {   // solo jugadores REALES conectados ahora mismo (sin los de ambiente); para el administrador
+  const real = onlineStats.tally(onlineClients.keys(), onlineCountryByCid);
+  onlinePeaksCheck(real, true);
+  return { ...real, peaks: onlineStats.peaksList(onlinePeaks), shown: onlineShown(), at: Date.now() };
+}
+setInterval(() => { try { onlinePeaksCheck(); const r = onlineRealGet(); console.log(`[en línea] reales: ${r.total} | contador mostrado: ${r.shown}`); } catch {} }, 60_000).unref();   // una línea al minuto en el log
 function onlineCountriesGet() {   // GET /api/online/countries: reales conectados + (si ONLINE_FIXED) el reparto del resto hasta cuadrar con el contador
   const now = Date.now();
   if (!onlineCountriesCache.body || now - onlineCountriesCache.at > 1000) {   // como mucho una vez por segundo, aunque haya muchos jugadores mirando
@@ -1520,6 +1534,7 @@ function onlineStream(req, res, url) {
   let set = onlineClients.get(cid);
   if (!set) { set = new Set(); onlineClients.set(cid, set); }
   set.add(res);
+  onlinePeaksCheck();   // ¿un récord nuevo en su país?
   onlineByIp.set(ip, (onlineByIp.get(ip) || 0) + 1);
   res.write(`retry: 3000\n\ndata: ${onlineShown()}\n\n`);   // el recién llegado ve el número al instante
   if (santaActive) res.write(`event: santa\ndata: ${JSON.stringify({ type: 'start', now: Date.now(), ev: santaPublic(santaActive) })}\n\n`);   // si Papá Noel está de visita, el recién llegado lo ve
@@ -2771,7 +2786,14 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     for (const t of ['mission_progress', 'achievements', 'parcel_likes', 'retos_seen', 'album_claims', 'clans', 'clan_members', 'passes', 'activity_seen']) await run(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});   // solo el servidor accede (la clave pública no)
     const purgeMissions = () => run("DELETE FROM mission_progress WHERE period < $1 AND period NOT LIKE 'W%'", [new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10)]).catch(() => {});
     purgeMissions(); setInterval(purgeMissions, 6 * 3600_000).unref();
-  }).catch(e => console.error('No se pudieron crear las tablas de retos:', e.message));
+  }).catch(e => console.error('No se pudieron crear las tablas de retos:', e.message))
+  .then(async () => {   // récord de jugadores conectados a la vez por país (panel de administrador)
+    await run('CREATE TABLE IF NOT EXISTS online_peaks (cc TEXT PRIMARY KEY, n INT NOT NULL, at BIGINT NOT NULL)');
+    await run('ALTER TABLE public.online_peaks ENABLE ROW LEVEL SECURITY').catch(() => {});   // solo el servidor accede (la clave pública no)
+    for (const r of await all('SELECT cc, n, at FROM online_peaks')) onlinePeaks.set(r.cc, { n: Number(r.n), at: Number(r.at) });
+    onlinePeaksLoaded = true;
+    onlinePeaksCheck(null, true);   // los que ya están conectados al arrancar también cuentan
+  }).catch(e => console.error('No se pudo preparar el récord de jugadores en línea:', e.message));
 
 
 // ---------- Retos: misiones diarias y semanales, logros y "me gusta" en terrenos ----------

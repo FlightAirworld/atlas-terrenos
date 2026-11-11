@@ -29,4 +29,16 @@ function tally(cids, countries, max = 60) {
   return { total, unknown: unknown + rest, countries: list.slice(0, max) };
 }
 
-module.exports = { countryOf, tally, valid };
+// Récord de jugadores conectados a la vez por país. peaks: Map cc -> { n, at }; list: lo que devuelve tally().countries.
+// Si un país supera su récord, se actualiza (con la hora) y se devuelve la lista de los que cambiaron, para guardarlos.
+function updatePeaks(peaks, list, now) {
+  const changed = [];
+  for (const { cc, n } of list) {
+    const cur = peaks.get(cc);
+    if (!cur || n > cur.n) { const rec = { n, at: now }; peaks.set(cc, rec); changed.push({ cc, n, at: now }); }
+  }
+  return changed;
+}
+const peaksList = peaks => [...peaks].map(([cc, v]) => ({ cc, n: v.n, at: v.at })).sort((a, b) => b.n - a.n || (a.cc < b.cc ? -1 : 1));
+
+module.exports = { countryOf, tally, valid, updatePeaks, peaksList };

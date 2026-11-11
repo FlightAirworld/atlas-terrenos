@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { countryOf, tally } = require('./online-stats');
+const { countryOf, tally, updatePeaks, peaksList } = require('./online-stats');
 
 test('País: manda la cabecera del proxy; si no hay, el país elegido en el juego; si no, nada', () => {
   assert.strictEqual(countryOf({ 'cf-ipcountry': 'pt' }, 'ES'), 'PT');
@@ -35,4 +35,11 @@ test('Recuento: con más países que el máximo, el resto pasa a «sin identific
   const t = tally(ids, m, 60);
   assert.strictEqual(t.countries.length, 60);
   assert.strictEqual(t.countries.reduce((s, x) => s + x.n, 0) + t.unknown, 100);
+});
+test('Récords: solo se actualiza el país que supera su máximo, y nunca baja', () => {
+  const peaks = new Map();
+  assert.deepStrictEqual(updatePeaks(peaks, [{ cc: 'ES', n: 3 }, { cc: 'PT', n: 1 }], 100), [{ cc: 'ES', n: 3, at: 100 }, { cc: 'PT', n: 1, at: 100 }]);
+  assert.deepStrictEqual(updatePeaks(peaks, [{ cc: 'ES', n: 3 }, { cc: 'PT', n: 2 }], 200), [{ cc: 'PT', n: 2, at: 200 }]);   // ES empata: no cambia
+  assert.deepStrictEqual(updatePeaks(peaks, [], 300), []);                                                                      // se van todos: el récord se queda
+  assert.deepStrictEqual(peaksList(peaks), [{ cc: 'ES', n: 3, at: 100 }, { cc: 'PT', n: 2, at: 200 }]);
 });

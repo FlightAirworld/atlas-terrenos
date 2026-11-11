@@ -49,6 +49,11 @@
       <b>Por país</b>
       <div id="list"></div>
     </div>
+    <div class="card">
+      <b>Máximo a la vez por país</b>
+      <div class="sub">Récord de jugadores conectados al mismo tiempo. Se actualiza solo si se supera.</div>
+      <div id="peaks"></div>
+    </div>
     <button id="out" type="button">Salir</button>
   </div>
 </main>
@@ -77,6 +82,15 @@
     $('list').innerHTML = rows.length ? rows.join('') : '<div class="sub">Ahora mismo no hay jugadores reales conectados.</div>';
   }
 
+  function renderPeaks(j) {
+    var rows = (j.peaks || []).map(function (c) {
+      var nm; try { nm = names.of(c.cc) || c.cc; } catch (e) { nm = c.cc; }
+      var d = new Date(c.at).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      return '<div class="row"><span>' + flag(c.cc) + ' ' + esc(nm) + '<div class="sub">' + esc(d) + '</div></span><b>' + c.n + '</b></div>';
+    });
+    $('peaks').innerHTML = rows.length ? rows.join('') : '<div class="sub">Aún no hay récords.</div>';
+  }
+
   function load() {
     fetch(base + '/api/admin/online-real', { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' })
       .then(function (r) {
@@ -86,7 +100,7 @@
       })
       .then(function (j) {
         $('login').classList.add('hide'); $('data').classList.remove('hide');
-        render(j);
+        render(j); renderPeaks(j);
         if (!timer) timer = setInterval(load, 5000);
       })
       .catch(function (e) {
