@@ -279,11 +279,16 @@
           <button id="daily-btn" data-label="Regalo diario" type="button" title="Regalo diario" aria-label="Regalo diario">🎁<span id="daily-dot" class="hidden"></span></button>
           <button id="gift-btn" data-label="Regalar créditos" type="button" title="Regalar créditos a otro jugador" aria-label="Regalar créditos a otro jugador">💝</button>
           <button id="cards-btn" data-label="Cartas" type="button" title="Cartas coleccionables" aria-label="Cartas coleccionables">🃏</button>
-          <button id="roulette-btn" data-label="Ruleta diaria" type="button" title="Ruleta diaria" aria-label="Ruleta diaria">🎡</button>
-          <button id="fight-btn" data-label="Campeonato" type="button" title="Campeonato de luchas" aria-label="Campeonato de luchas">🥊</button>
-          <button id="trivia-btn" data-label="Trivia" type="button" title="Trivia del mundo: gana créditos" aria-label="Trivia del mundo: gana créditos">🧠</button>
-          <button id="rasca-btn" data-label="Rasca y gana" type="button" title="Rasca y gana: una tarjeta gratis al día" aria-label="Rasca y gana: una tarjeta gratis al día">🍀</button>
-          <button id="parejas-btn" data-label="Parejas" type="button" title="Parejas con tus cartas: gana créditos" aria-label="Parejas con tus cartas: gana créditos">🃏</button>
+          <div id="games-wrap">
+            <button id="games-btn" data-label="Juegos" type="button" title="Juegos" aria-label="Juegos" aria-expanded="false" aria-controls="games-items">🎮<span id="games-dot" class="hidden"></span></button>
+            <div id="games-items">
+              <button id="roulette-btn" data-label="Ruleta diaria" type="button" title="Ruleta diaria" aria-label="Ruleta diaria">🎡</button>
+              <button id="fight-btn" data-label="Campeonato" type="button" title="Campeonato de luchas" aria-label="Campeonato de luchas">🥊</button>
+              <button id="trivia-btn" data-label="Trivia" type="button" title="Trivia del mundo: gana créditos" aria-label="Trivia del mundo: gana créditos">🧠</button>
+              <button id="rasca-btn" data-label="Rasca y gana" type="button" title="Rasca y gana: una tarjeta gratis al día" aria-label="Rasca y gana: una tarjeta gratis al día">🍀</button>
+              <button id="parejas-btn" data-label="Parejas" type="button" title="Parejas con tus cartas: gana créditos" aria-label="Parejas con tus cartas: gana créditos">🃏</button>
+            </div>
+          </div>
           <button id="monthly-btn" data-label="Premios del mes" type="button" title="Premios del mes" aria-label="Premios del mes">🗓️</button>
           <button id="towns-btn" data-label="Población" type="button" title="Población de los pueblos" aria-label="Población de los pueblos">🏘️</button>
           <button id="howto-btn" data-label="Cómo jugar" type="button" title="Cómo jugar" aria-label="Cómo jugar">📖</button>
@@ -612,6 +617,7 @@
   <script src="trivia.js"></script>
   <script src="rasca.js"></script>
   <script src="parejas.js"></script>
+  <script src="juegos.js"></script>
   <script src="retos.js"></script>
   <script src="compartir.js"></script>
   <script src="redes.js"></script>
