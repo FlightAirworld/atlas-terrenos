@@ -346,6 +346,8 @@
     return null;
   }
   function detect() {
+    // Buscadores (Googlebot, Bing...): siempre en español, para que indexen el título y la descripción en español
+    try { if (/bot|crawl|spider|slurp|bingpreview|facebookexternalhit|lighthouse/i.test(navigator.userAgent || '')) return 'es'; } catch (e) {}
     const list = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || '']);
     for (const l of list) { const c = String(l).slice(0, 2).toLowerCase(); if (SUP.includes(c)) return c; }
     return fromTimezone() || 'en';
