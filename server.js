@@ -1436,15 +1436,47 @@ const onlineClients = new Map();   // cid -> Set de respuestas abiertas
 const onlineByIp = new Map();      // ip -> nº de conexiones abiertas
 const onlineCountryByCid = new Map();   // cid -> país (2 letras) del jugador conectado; se borra cuando se va
 let onlineCountriesCache = { at: 0, body: null };
-function onlineCountriesGet() {   // GET /api/online/countries: solo jugadores reales conectados ahora mismo (sin los simulados)
+// Reparto por país de los jugadores «de ambiente» (los que el contador suma por encima de los reales). Pesos aproximados.
+const ONLINE_FILL_W = { ES: 30, MX: 14, US: 8, AR: 9, CO: 7, CL: 5, PE: 4, PT: 3, FR: 3, DE: 3, IT: 3, GB: 3, BR: 3, VE: 2, EC: 2, UY: 1, BO: 1 };
+function onlineFill(extra) {   // reparte `extra` jugadores entre los países según los pesos (método del mayor resto): Map cc -> n
+  const out = new Map(); if (extra <= 0) return out;
+  const tot = Object.values(ONLINE_FILL_W).reduce((x, y) => x + y, 0);
+  const rows = Object.entries(ONLINE_FILL_W).map(([cc, w]) => { const q = extra * w / tot; return { cc, n: Math.floor(q), r: q - Math.floor(q) }; });
+  let left = extra - rows.reduce((x, r) => x + r.n, 0);
+  rows.slice().sort((x, y) => y.r - x.r).forEach(r => { if (left > 0) { r.n++; left--; } });
+  for (const r of rows) if (r.n) out.set(r.cc, r.n);
+  return out;
+}
+function onlineRealGet() {   // solo jugadores REALES conectados ahora mismo (sin los de ambiente); para el administrador
+  return { ...onlineStats.tally(onlineClients.keys(), onlineCountryByCid), shown: onlineShown(), at: Date.now() };
+}
+setInterval(() => { try { const r = onlineRealGet(); console.log(`[en línea] reales: ${r.total} | contador mostrado: ${r.shown}`); } catch {} }, 60_000).unref();   // una línea al minuto en el log
+function onlineCountriesGet() {   // GET /api/online/countries: reales conectados + (si ONLINE_FIXED) el reparto del resto hasta cuadrar con el contador
   const now = Date.now();
   if (!onlineCountriesCache.body || now - onlineCountriesCache.at > 1000) {   // como mucho una vez por segundo, aunque haya muchos jugadores mirando
-    onlineCountriesCache = { at: now, body: { ...onlineStats.tally(onlineClients.keys(), onlineCountryByCid), at: now } };
+    const real = onlineStats.tally(onlineClients.keys(), onlineCountryByCid);
+    let body = { ...real, at: now };
+    if (ONLINE_FIXED) {
+      const fill = onlineFill(onlineShown() - real.total);
+      const by = new Map(real.countries.map(x => [x.cc, x.n]));
+      for (const [cc, n] of fill) by.set(cc, (by.get(cc) || 0) + n);
+      const list = [...by].map(([cc, n]) => ({ cc, n })).sort((x, y) => y.n - x.n || (x.cc < y.cc ? -1 : 1));
+      body = { total: real.total + [...fill.values()].reduce((x, y) => x + y, 0), unknown: real.unknown, countries: list, at: now };
+    }
+    onlineCountriesCache = { at: now, body };
   }
   return onlineCountriesCache.body;
 }
 let onlineSent = -1, onlineTimer = null;
-const onlineShown = () => ambient.online() + onlineClients.size;   // jugadores simulados (ambient.js, suben y bajan solos) + reales
+const ONLINE_FIXED = Math.max(0, Number(process.env.ONLINE_FIXED ?? 3000)) || 0;   // «en línea» ronda este número (3000 por defecto; ONLINE_FIXED=0 vuelve al comportamiento anterior)
+const ONLINE_SWING = Math.max(0, Number(process.env.ONLINE_SWING ?? 0.03));          // variación máxima alrededor del número (0.03 = ±3 %; 0 = exacto)
+let onlineWalk = 0;   // desvío actual respecto a ONLINE_FIXED, en jugadores
+function onlineWalkStep() {   // caminata suave: tira hacia 3000 y se mueve unas decenas arriba y abajo
+  const lim = ONLINE_FIXED * ONLINE_SWING;
+  onlineWalk += -onlineWalk * 0.08 + ambient.rnd(-lim * 0.12, lim * 0.12);
+  onlineWalk = Math.max(-lim, Math.min(lim, onlineWalk));
+}
+const onlineShown = () => ONLINE_FIXED ? Math.max(Math.round(ONLINE_FIXED + onlineWalk), onlineClients.size) : ambient.online() + onlineClients.size;   // ronda ONLINE_FIXED (nunca por debajo de los reales) o, si ONLINE_FIXED=0, simulados (ambient.js) + reales
 
 function broadcastOnline(force) {
   const n = onlineShown();
@@ -1462,7 +1494,8 @@ setInterval(() => broadcastOnline(true), 20_000).unref();
 // El número simulado se mueve cada pocos segundos mientras haya alguien mirando
 (function ambientOnlineLoop() {
   setTimeout(() => {
-    if (ambient.ON && onlineClients.size) { ambient.step(); broadcastOnline(false); }
+    if (ONLINE_FIXED && onlineClients.size) { onlineWalkStep(); broadcastOnline(false); }
+    else if (ambient.ON && onlineClients.size) { ambient.step(); broadcastOnline(false); }
     ambientOnlineLoop();
   }, ambient.int(3000, 8000)).unref();
 })();
@@ -2552,6 +2585,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/health') return { ok: true };   // la pantalla de carga del sitio estático pregunta aquí si ya despertó
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineShown() };
   if (req.method === 'GET' && pn === '/api/online/countries') return onlineCountriesGet();
+  if (req.method === 'GET' && pn === '/api/admin/online-real') { requireAdmin(req); return onlineRealGet(); }   // reales conectados (solo administrador: cabecera Authorization: Bearer ADMIN_TOKEN)
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/names') return namesGet();

@@ -331,7 +331,8 @@ El motor (`window.rocketEngine` en `sounds.js`) suena sin cortarse desde el desp
 ## Jugadores en línea por país
 
 Al tocar el contador «en línea» se abre un panel con los jugadores conectados ahora mismo **por país**, con bandera y nombre (España 56, Portugal 44, Alemania 12…). Se actualiza solo cada 4 s mientras está abierto (`online.js` → `GET /api/online/countries`; la lógica está en `online-stats.js`).
-- Solo cuenta jugadores **realmente conectados**, no los simulados de `ambient.js`. Por defecto el ambiente simulado está apagado y el contador y el chat solo muestran jugadores reales; si pones `AMBIENT=on`, el contador suma los simulados y deja de coincidir con el total del panel.
+- **Ver solo los reales** (aunque el contador muestre 3000): `GET /api/admin/online-real` con la cabecera `Authorization: Bearer <ADMIN_TOKEN>` devuelve `{ total, unknown, countries, shown }` con los jugadores realmente conectados; además el servidor escribe cada minuto en el log «[en línea] reales: N | contador mostrado: M».
+- Con `ONLINE_FIXED` activo (3000 por defecto), el panel suma a los jugadores reales un reparto aproximado por país hasta cuadrar con el contador (`onlineFill` en `server.js`); con `ONLINE_FIXED=0` vuelve a contar solo jugadores **realmente conectados**, no los simulados de `ambient.js`. Por defecto el ambiente simulado está apagado y el contador y el chat solo muestran jugadores reales; si pones `AMBIENT=on`, el contador suma los simulados y deja de coincidir con el total del panel.
 - El país sale de la cabecera que pone el proxy o CDN (`cf-ipcountry` de Cloudflare, `cloudfront-viewer-country`, `x-vercel-ip-country`) y, si no hay, del país que el jugador tiene elegido en el juego. Si no hay ninguno, cuenta como «Sin identificar».
 - No se guarda nada en la base de datos: todo vive en memoria y desaparece cuando el jugador se desconecta. No se envían datos personales, solo números por país.
 

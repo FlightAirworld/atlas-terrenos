@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Jugadores reales en línea</title>
+  <script src="config.js"></script>
+  <style>
+    :root { --bg:#f6f7f9; --card:#fff; --text:#1c1f24; --muted:#6b7280; --line:#e5e7eb; --accent:#1a56c4; --ok:#16a34a; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#12151a; --card:#1b1f26; --text:#eceff4; --muted:#9aa3b2; --line:#2b313b; --accent:#6ea0ff; --ok:#4ade80; } }
+    * { box-sizing: border-box; }
+    body { margin:0; padding:16px; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    main { max-width:520px; margin:0 auto; }
+    h1 { font-size:1.25rem; margin:4px 0 14px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
+    label { display:block; font-size:.85rem; color:var(--muted); margin-bottom:6px; }
+    input { width:100%; padding:10px; font-size:1rem; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); }
+    button { margin-top:10px; width:100%; padding:11px; font-size:1rem; border:0; border-radius:8px; background:var(--accent); color:#fff; font-weight:600; }
+    .big { font-size:2.6rem; font-weight:800; line-height:1.1; }
+    .sub { color:var(--muted); font-size:.9rem; margin-top:4px; }
+    .row { display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+    .row:last-child { border-bottom:0; }
+    .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--muted); margin-right:6px; }
+    .dot.on { background:var(--ok); }
+    .err { color:#dc2626; font-size:.9rem; margin-top:8px; }
+    .hide { display:none; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Jugadores reales en línea</h1>
+
+  <div class="card" id="login">
+    <label for="tok">Clave de administrador (ADMIN_TOKEN)</label>
+    <input id="tok" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button id="go" type="button">Ver</button>
+    <div class="err hide" id="err"></div>
+  </div>
+
+  <div class="hide" id="data">
+    <div class="card">
+      <div class="big" id="real">–</div>
+      <div class="sub"><span class="dot" id="dot"></span>jugadores reales conectados ahora</div>
+      <div class="sub">Contador que ven los jugadores: <b id="shown">–</b></div>
+      <div class="sub" id="upd"></div>
+    </div>
+    <div class="card">
+      <b>Por país</b>
+      <div id="list"></div>
+    </div>
+    <button id="out" type="button">Salir</button>
+  </div>
+</main>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var base = (window.API_BASE || '').replace(/\/+$/, '');
+  var token = '', timer = null;
+  var names = new Intl.DisplayNames(['es'], { type: 'region' });
+
+  function flag(cc) { return String.fromCodePoint.apply(null, cc.toUpperCase().split('').map(function (c) { return 127397 + c.charCodeAt(0); })); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function fail(msg) { var e = $('err'); e.textContent = msg; e.classList.remove('hide'); }
+
+  function render(j) {
+    $('real').textContent = (j.total || 0).toLocaleString('es');
+    $('shown').textContent = (j.shown || 0).toLocaleString('es');
+    $('upd').textContent = 'Actualizado a las ' + new Date(j.at).toLocaleTimeString('es');
+    $('dot').classList.add('on');
+    var rows = (j.countries || []).map(function (c) {
+      var nm; try { nm = names.of(c.cc) || c.cc; } catch (e) { nm = c.cc; }
+      return '<div class="row"><span>' + flag(c.cc) + ' ' + esc(nm) + '</span><b>' + c.n + '</b></div>';
+    });
+    if (j.unknown > 0) rows.push('<div class="row"><span>🌐 Sin identificar</span><b>' + j.unknown + '</b></div>');
+    $('list').innerHTML = rows.length ? rows.join('') : '<div class="sub">Ahora mismo no hay jugadores reales conectados.</div>';
+  }
+
+  function load() {
+    fetch(base + '/api/admin/online-real', { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403) throw new Error('Clave incorrecta.');
+        if (!r.ok) throw new Error('Error del servidor (' + r.status + ').');
+        return r.json();
+      })
+      .then(function (j) {
+        $('login').classList.add('hide'); $('data').classList.remove('hide');
+        render(j);
+        if (!timer) timer = setInterval(load, 5000);
+      })
+      .catch(function (e) {
+        $('dot').classList.remove('on');
+        if (!timer) { fail(e.message || 'No se pudo conectar.'); }   // primer intento fallido: se queda en el login
+        else { $('upd').textContent = 'Sin conexión, reintentando…'; }
+      });
+  }
+
+  $('go').onclick = function () {
+    token = $('tok').value.trim();
+    $('err').classList.add('hide');
+    if (token) load();
+  };
+  $('tok').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('go').click(); });
+  $('out').onclick = function () { clearInterval(timer); timer = null; token = ''; $('tok').value = ''; $('data').classList.add('hide'); $('login').classList.remove('hide'); };
+})();
+</script>
+</body>
+</html>
