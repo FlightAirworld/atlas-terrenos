@@ -382,6 +382,8 @@ const cents = price => Math.round(Number(price) * 100);
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 // Cartas coleccionables (cards-server.js): se monta la primera vez que se usa, cuando ya existen run, all, dayKey, numEnv y rateHit
 const cardsMod = () => cardsMod.m || (cardsMod.m = require('./cards-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, numEnv, pushSocial: (...a) => pushSocial(...a), pushToUser: (...a) => pushToUser(...a) }));
+// Trivia de geografía (trivia-server.js): mismo patrón que las cartas
+const triviaMod = () => triviaMod.m || (triviaMod.m = require('./trivia-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, numEnv }));
 
 // ---------- Packs de terrenos (créditos) ----------
 const newPackCode = () => crypto.randomBytes(8).toString('hex').toUpperCase().match(/.{4}/g).join('-');
@@ -2703,6 +2705,9 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/cards/notifs/seen') return cardsMod().notifsSeen(req);
   if (req.method === 'GET' && pn === '/api/cards/auction') return cardsMod().auction(req);
   if (req.method === 'POST' && pn === '/api/cards/auction/bid') return cardsMod().bid(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/trivia') return triviaMod().get(req);
+  if (req.method === 'POST' && pn === '/api/trivia/start') return triviaMod().start(req);
+  if (req.method === 'POST' && pn === '/api/trivia/answer') return triviaMod().answer(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/gifts') return giftsGet(req, sp);
   if (req.method === 'POST' && pn === '/api/gifts/send') return giftSend(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/gifts/seen') return giftsSeen(req);
@@ -2769,6 +2774,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     if (OWNER_MONTHLY && OWNER_USER_ID) { setTimeout(ownerTick, 20_000).unref(); setInterval(ownerTick, HOUR_MS).unref(); }
   }).catch(e => console.error('No se pudieron crear las tablas de regalos / paga mensual:', e.message))
   .then(() => cardsMod().init()).then(() => cardsMod().ON && cardsMod().init2()).catch(e => console.error('No se pudieron crear las tablas de cartas:', e.message))
+  .then(() => triviaMod().init()).catch(e => console.error('No se pudieron crear las tablas de la trivia:', e.message))
   .then(() => bots.start({ run, q, parcelFromLatLng, isUniqueViolation }))
   .then(async () => {   // tablas de "Invita y gana" (no hacen nada si ya existen)
     await run('CREATE TABLE IF NOT EXISTS ref_codes (code TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, created_at BIGINT NOT NULL, last_ip TEXT)');
@@ -3638,7 +3644,7 @@ const httpServer = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/' + INDEXNOW_KEY + '.txt') return send(200, INDEXNOW_KEY, 'text/plain; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });   // el archivo de clave que comprueban los buscadores
     let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname + (url.pathname.endsWith('/') ? 'index.html' : '')));   // /mundos/ -> mundos/index.html
     const rel = path.relative(PUBLIC, file);
-    if (!file.startsWith(PUBLIC + path.sep) || /(^|[\\/])(\.|node_modules)/.test(rel) || /^(server\.js|build-static\.js|package(-lock)?\.json)$/.test(rel) || !MIME[path.extname(file)] || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(404, 'No encontrado', 'text/plain');
+    if (!file.startsWith(PUBLIC + path.sep) || /(^|[\\/])(\.|node_modules)/.test(rel) || /^(server\.js|build-static\.js|package(-lock)?\.json|trivia-(server|bank)\.js)$/.test(rel) || !MIME[path.extname(file)] || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(404, 'No encontrado', 'text/plain');
     return sendStatic(req, res, file);
   } catch (e) {
     const status = e.status || 500;
