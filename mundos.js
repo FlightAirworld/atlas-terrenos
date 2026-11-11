@@ -157,10 +157,11 @@
     const w = WORLDS[id], box = document.createElement('div');
     box.id = 'mundo-' + id; box.className = 'mundo hidden'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', w.name);
     box.innerHTML = `<div class="mundo-map" id="mundo-map-${id}"></div>
-      <div class="mundo-top"><button type="button" class="mundo-title" data-nosound>${planet(id)}<span></span>${IC.info}</button><div class="mundo-gos"></div><button type="button" class="mundo-pres hidden" data-nosound></button></div>
+      <div class="mundo-top"><button type="button" class="mundo-title" data-nosound>${planet(id)}<span></span>${IC.info}</button><div class="mundo-gos"></div><button type="button" class="mundo-online" data-nosound title="Jugadores en línea" aria-label="Jugadores en línea"><i></i><b>–</b></button><button type="button" class="mundo-pres hidden" data-nosound></button></div>
       <div class="mundo-note"></div>
       <div class="mundo-sheet hidden"><div class="mundo-card"><button type="button" class="mundo-x" aria-label="Cerrar">×</button><h2 class="mundo-h"></h2><div class="mundo-body"></div></div></div>`;
     box.querySelector('.mundo-title span').textContent = w.name;
+    { const on = box.querySelector('.mundo-online b'), n = window.onlineLast; if (on && Number.isFinite(n)) on.textContent = n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '').replace('.', ',') + 'k' : String(n); }
     const ttl = box.querySelector('.mundo-title'); ttl.setAttribute('aria-label', 'Información de ' + w.name); ttl.addEventListener('click', () => openInfo(id));
     box.querySelector('.mundo-note').textContent = w.note;
     const gos = box.querySelector('.mundo-gos');   // solo un botón «Mundos»; la lista de planetas se despliega al tocarlo
@@ -203,13 +204,18 @@
     .mundo .mundo-tb .tb-e { font-size: 16px; line-height: 1; }
     .mundo .mundo-title span { overflow: hidden; text-overflow: ellipsis; }
     @media (max-width: 389px) { .mundo .mundo-title .mundo-i { display: none; } }
-    @media (max-width: 339px) { .mundo .mundo-menus .tb-l { display: none; } }
+    @media (max-width: 399px) { .mundo .mundo-menus .tb-l { display: none; } .mundo .mundo-online { padding: 0 10px; } }   /* sitio para el botón «en línea» */
     .mundo .mundo-facts { display: grid; grid-template-columns: auto 1fr; gap: 7px 14px; margin: 12px 0; }
     .mundo .mundo-facts dt { opacity: .7; }
     .mundo .mundo-facts dd { margin: 0; font-weight: 700; text-align: right; }
     .mundo .mundo-kind { margin: 0 0 6px; font: 800 12px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .06em; opacity: .65; }
     .mundo .mundo-fun { margin: 10px 0 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.07); }
     .mundo .mundo-play { display: block; width: 100%; border: 0; border-radius: 99px; padding: 12px; background: #3ddc97; color: #04281d; font: 800 15px/1 system-ui, sans-serif; cursor: pointer; }
+    .mundo .mundo-online { flex: none; height: 40px; display: flex; align-items: center; gap: 7px; padding: 0 12px; border-radius: 99px; color: #fff; cursor: pointer; font: 800 15px/1 system-ui, sans-serif; font-variant-numeric: tabular-nums; background: rgba(10,14,28,.62); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.2); box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+    .mundo .mundo-online:active { transform: scale(.96); }
+    .mundo .mundo-online i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 0 rgba(34,197,94,.55); animation: mp-pulse 2.2s ease-out infinite; }
+    .mundo .mundo-online.off i { background: #9aa6b6; animation: none; }
+    @media (prefers-reduced-motion: reduce) { .mundo .mundo-online i { animation: none; } }
     .mundo .mundo-pres.fade { opacity: 0; }
     .mundo .mundo-pres { position: absolute; left: 12px; top: 100%; margin-top: 8px; max-width: calc(100% - 24px); transition: opacity .4s; border: 1px solid rgba(255,210,63,.55); background: rgba(0,0,0,.6); color: #ffe08a; border-radius: 99px; padding: 6px 12px; font: 800 13px/1 system-ui, sans-serif; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .mundo .mundo-pres.hidden { display: none; }

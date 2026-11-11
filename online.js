@@ -16,12 +16,16 @@
   }
 
   const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '').replace('.', ',') + 'k' : String(n);
+  // Botones «en línea» de los demás mundos (los crea mundos.js dentro de cada planeta): muestran el mismo número
+  function mirrors(fn) { document.querySelectorAll('.mundo-online').forEach(fn); }
   function show(n) {
     nEl.textContent = fmt(n);
     const txt = n === 1 ? '1 jugador en línea ahora' : n.toLocaleString('es') + ' jugadores en línea ahora';
     btn.title = txt; btn.setAttribute('aria-label', txt);
     if (tip) tip.textContent = txt;
     btn.classList.remove('off');
+    window.onlineLast = n;
+    mirrors(m => { const b = m.querySelector('b'); if (b) b.textContent = fmt(n); m.title = txt; m.setAttribute('aria-label', txt); m.classList.remove('off'); });
   }
 
   let es = null, closeTimer = null, retryTimer = null;
@@ -31,11 +35,11 @@
     if (window.apiState && !window.apiState.ready) return;      // servidor dormido: se abre cuando despierte
     let mine = ''; try { mine = localStorage.getItem('country') || ''; } catch (e) {}
     es = new EventSource('/api/online?cid=' + encodeURIComponent(cid) + (/^[A-Za-z]{2}$/.test(mine) ? '&country=' + mine.toUpperCase() : ''));
-    es.onopen = () => btn.classList.remove('off');
+    es.onopen = () => { btn.classList.remove('off'); mirrors(m => m.classList.remove('off')); };
     es.addEventListener('santa', e => { try { window.dispatchEvent(new CustomEvent('santa-msg', { detail: JSON.parse(e.data) })); } catch (x) {} });   // Papá Noel (santa.js)
     es.onmessage = e => { const n = parseInt(e.data, 10); if (Number.isFinite(n) && n >= 0) show(n); };
     es.onerror = () => {
-      btn.classList.add('off');                                   // sin conexión: punto gris
+      btn.classList.add('off'); mirrors(m => m.classList.add('off'));   // sin conexión: punto gris
       if (es && es.readyState === 2) { close(); retryTimer = setTimeout(open, 15000); }   // el navegador se rindió: reintento manual
     };
   }
@@ -136,6 +140,7 @@
     if (lastFocus && lastFocus.focus) lastFocus.focus();
   }
   btn.addEventListener('click', openPanel);
+  document.addEventListener('click', e => { if (e.target.closest && e.target.closest('.mundo-online')) openPanel(); });   // el mismo panel desde cualquier planeta
   $('op-close').addEventListener('click', closePanel);
   box.addEventListener('click', e => { if (e.target === box) closePanel(); });
   addEventListener('keydown', e => { if (e.key === 'Escape' && !box.classList.contains('hidden')) closePanel(); });
