@@ -80,6 +80,7 @@ module.exports = function (d) {
     if (!ON) return;
     await run('CREATE TABLE IF NOT EXISTS mj_streak (user_id TEXT PRIMARY KEY, last_day TEXT NOT NULL, streak INT NOT NULL)');
     await run('CREATE TABLE IF NOT EXISTS mj_streak_days (user_id TEXT NOT NULL, day TEXT NOT NULL, PRIMARY KEY (user_id, day))');
+    await run('CREATE TABLE IF NOT EXISTS mj_carry (user_id TEXT PRIMARY KEY, milli INT NOT NULL DEFAULT 0)');
     await run('CREATE TABLE IF NOT EXISTS mj_play (user_id TEXT NOT NULL, day TEXT NOT NULL, game TEXT NOT NULL, state TEXT NOT NULL, PRIMARY KEY (user_id, day, game))');
     await run('CREATE TABLE IF NOT EXISTS mj_chests (day TEXT NOT NULL, id INT NOT NULL, user_id TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (day, id))');
     await run('CREATE TABLE IF NOT EXISTS mj_duels (id BIGSERIAL PRIMARY KEY, from_id TEXT NOT NULL, to_id TEXT NOT NULL, stake INT NOT NULL, status TEXT NOT NULL, from_roll INT, to_roll INT, created_at BIGINT NOT NULL, done_at BIGINT)');
@@ -379,5 +380,55 @@ module.exports = function (d) {
     });
   }
 
-  return { ON, init, minasGet, minasStart, minasReveal, minasCash, ruleta: (r, b) => casinoPlay('ruleta', r, b), casinoGet, slots: (r, b) => casinoPlay('slots', r, b), plinko: (r, b) => casinoPlay('plinko', r, b), moneda: (r, b) => casinoPlay('moneda', r, b), rachaGet, rachaClaim, adivinaGet, adivinaAnswer, mmGet, mmGuess, cofresGet, cofresClaim, duelosGet, duelosReto, duelosAceptar, duelosRechazar };
+  // ---------- Gemas (3 en raya con niveles infinitos) ----------
+  // Jugar cuesta 1 crédito. El servidor da una semilla; el navegador juega con el mismo motor (match3-core.js) y al terminar manda sus movimientos:
+  // el servidor repite la partida entera, comprueba que es legal y paga lo ganado (máx. 5 créditos). Las milésimas sobrantes se guardan para la siguiente.
+  const M3 = require('./match3-core');
+  const GEMAS_MAX = Number(process.env.MJ_GEMAS_MAX || 10);   // partidas al día
+  async function gemasState(c, uid, day) {
+    await c.query("INSERT INTO mj_play (user_id, day, game, state) VALUES ($1,$2,'gemas',$3) ON CONFLICT DO NOTHING", [uid, day, JSON.stringify({ n: 0, active: null })]);
+    const st = JSON.parse((await c.query("SELECT state FROM mj_play WHERE user_id = $1 AND day = $2 AND game = 'gemas' FOR UPDATE", [uid, day])).rows[0].state);
+    return { st, save: () => c.query("UPDATE mj_play SET state = $3 WHERE user_id = $1 AND day = $2 AND game = 'gemas'", [uid, day, JSON.stringify(st)]) };
+  }
+  async function gemasGet(req) {
+    off(); const user = await needUser(req), uid = String(user.id), day = dayKey();
+    const r = (await all("SELECT state FROM mj_play WHERE user_id = $1 AND day = $2 AND game = 'gemas'", [uid, day]))[0];
+    const carry = (await all('SELECT milli FROM mj_carry WHERE user_id = $1', [uid]))[0];
+    return { ok: true, cost: 1, max: M3.MAX_MILLI, left: Math.max(0, GEMAS_MAX - (r ? JSON.parse(r.state).n : 0)), carry: carry ? Number(carry.milli) : 0 };
+  }
+  async function gemasStart(req) {
+    off(); const user = await needUser(req), uid = String(user.id), day = dayKey(); gate(uid, 'gemas');
+    const pack = await ensureUserPack(user);
+    return tx(async c => {
+      const { st, save } = await gemasState(c, uid, day);
+      if (st.n >= GEMAS_MAX) throw new HttpError(409, 'Hoy ya has jugado tus ' + GEMAS_MAX + ' partidas. ¡Vuelve mañana!');
+      const pay = await c.query('UPDATE packs SET credits = credits - 1 WHERE code = $1 AND credits >= 1 RETURNING credits', [pack.code]);
+      if (!pay.rowCount) throw new HttpError(402, 'Necesitas 1 crédito para jugar');
+      const seed = crypto.randomInt(1, 2 ** 31);
+      st.n++; st.active = { seed, started: Date.now() }; await save();   // si había otra partida abierta sin cerrar, se pierde
+      return { ok: true, seed, credits: Number(pay.rows[0].credits), left: GEMAS_MAX - st.n };
+    });
+  }
+  async function gemasFinish(req, body) {
+    off(); const user = await needUser(req), uid = String(user.id), day = dayKey(); gate(uid, 'gemas');
+    const raw = body && Array.isArray(body.moves) ? body.moves.slice(0, 5000) : [];
+    const moves = raw.map(m => (Array.isArray(m) ? m.slice(0, 3).map(Number) : [])).filter(m => m.length === 3 && m.every(Number.isInteger));
+    const pack = await ensureUserPack(user);
+    return tx(async c => {
+      const { st, save } = await gemasState(c, uid, day);
+      if (!st.active) throw new HttpError(409, 'No tienes ninguna partida abierta');
+      const { seed, started } = st.active; st.active = null; await save();
+      const r = M3.replay(seed, moves), elapsed = Date.now() - started;
+      const honest = r.lastT <= elapsed + 2000;   // no puede haber jugado más tiempo del que ha pasado de verdad
+      const milli = honest ? Math.min(M3.MAX_MILLI, r.state.milli) : 0;
+      await c.query('INSERT INTO mj_carry (user_id, milli) VALUES ($1, 0) ON CONFLICT DO NOTHING', [uid]);
+      const carry = Number((await c.query('SELECT milli FROM mj_carry WHERE user_id = $1 FOR UPDATE', [uid])).rows[0].milli);
+      const total = carry + milli, paid = Math.floor(total / 1000), rest = total % 1000;
+      await c.query('UPDATE mj_carry SET milli = $2 WHERE user_id = $1', [uid, rest]);
+      const credits = paid ? await credit(c, pack.code, paid) : Number((await c.query('SELECT credits FROM packs WHERE code = $1', [pack.code])).rows[0].credits);
+      return { ok: true, milli, paid, carry: rest, level: r.state.level, gems: r.state.gems, score: r.state.score, credits, honest };
+    });
+  }
+
+  return { ON, init, gemasGet, gemasStart, gemasFinish, minasGet, minasStart, minasReveal, minasCash, ruleta: (r, b) => casinoPlay('ruleta', r, b), casinoGet, slots: (r, b) => casinoPlay('slots', r, b), plinko: (r, b) => casinoPlay('plinko', r, b), moneda: (r, b) => casinoPlay('moneda', r, b), rachaGet, rachaClaim, adivinaGet, adivinaAnswer, mmGet, mmGuess, cofresGet, cofresClaim, duelosGet, duelosReto, duelosAceptar, duelosRechazar };
 };

@@ -2724,6 +2724,9 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/mj/mm/guess') return mjMod().mmGuess(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/mj/cofres') return mjMod().cofresGet(req);
   if (req.method === 'POST' && pn === '/api/mj/cofres/claim') return mjMod().cofresClaim(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/mj/gemas') return mjMod().gemasGet(req);
+  if (req.method === 'POST' && pn === '/api/mj/gemas/start') return mjMod().gemasStart(req);
+  if (req.method === 'POST' && pn === '/api/mj/gemas/finish') return mjMod().gemasFinish(req, await readJson(req, 200_000));   // una partida larga son muchos movimientos
   if (req.method === 'GET' && pn === '/api/mj/casino') return mjMod().casinoGet(req);
   if (req.method === 'POST' && pn === '/api/mj/slots') return mjMod().slots(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/mj/plinko') return mjMod().plinko(req, await readJson(req));
@@ -2757,10 +2760,10 @@ async function route(req, res, url) {
   throw new HttpError(404, 'No encontrado');
 }
 
-function readJson(req) {
+function readJson(req, max = 10_000) {
   return new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
-    req.on('data', c => { size += c.length; if (size > 10_000) { reject(new HttpError(413, 'Petición demasiado grande')); req.destroy(); } else chunks.push(c); });
+    req.on('data', c => { size += c.length; if (size > max) { reject(new HttpError(413, 'Petición demasiado grande')); req.destroy(); } else chunks.push(c); });
     req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString() || '{}')); } catch { reject(new HttpError(400, 'JSON no válido')); } });
   });
 }
