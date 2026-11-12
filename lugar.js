@@ -31,6 +31,7 @@
   document.body.appendChild(el);
 
   const flagOf = cc => /^[A-Z]{2}$/.test(cc || '') ? String.fromCodePoint(...[...cc].map(ch => 127397 + ch.charCodeAt(0))) : '🌐';
+  const subOf = p => (p.sub && typeof gl !== 'undefined' && gl && gl.getZoom() >= 12) ? p.sub : '';   // el barrio solo con el mapa cerca
   const lang = () => ((document.documentElement.lang || 'es').slice(0, 2).toLowerCase());
   function countryName(cc) { try { return new Intl.DisplayNames([lang()], { type: 'region' }).of(cc) || cc; } catch (e) { return cc || ''; } }
 
@@ -47,10 +48,12 @@
     el.replaceChildren();
     const f = document.createElement('span'); f.className = 'lg-f'; f.textContent = flagOf(p.cc); f.setAttribute('aria-hidden', 'true');
     const t = document.createElement('span'); t.className = 'lg-t';
-    t.append(p.city || p.region);
-    if (p.city && p.region) { const r = document.createElement('span'); r.className = 'lg-r'; r.textContent = ' · ' + p.region; t.append(r); }
+    const sub = subOf(p);
+    const main = [sub, p.city].filter(Boolean).join(', ') || p.region || countryName(p.cc);
+    t.append(main);
+    if ((sub || p.city) && p.region) { const r = document.createElement('span'); r.className = 'lg-r'; r.textContent = ' · ' + p.region; t.append(r); }
     el.append(f, t);
-    el.title = (p.cc ? countryName(p.cc) + ': ' : '') + [p.city, p.region].filter(Boolean).join(', ');
+    el.title = (p.cc ? countryName(p.cc) + ': ' : '') + [sub, p.city, p.region].filter(Boolean).join(', ');
     clearTimeout(hideT); clearTimeout(outT);
     el.classList.remove('hidden', 'out', 'blink');
     el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';   // reinicia el parpadeo con cada lugar nuevo
@@ -60,7 +63,8 @@
   // ---------- Qué lugar es el centro del mapa ----------
   let lastCell = '', lastKey = '', pending = null, seq = 0, retryAt = 0;
   const cells = new Map();   // celda de ~1 km -> lugar (para no volver a preguntar al volver a un sitio)
-  const keyOf = p => [p.cc, p.region, p.city].join('|');
+  const keyOf = p => [p.cc, p.region, p.city, subOf(p)].join('|');
+  const known = p => !!(p && (p.city || p.region || p.cc));
 
   function offer(p) {   // lugar nuevo: se enseña (o queda pendiente si ahora algo tapa el mapa)
     const k = keyOf(p);
@@ -68,6 +72,16 @@
     lastKey = k;
     if (blocked()) { pending = p; return; }
     pending = null; show(p);
+  }
+  // Respaldo: si el servidor no contesta (Nominatim ocupado o bloqueado) se pregunta directamente desde el navegador del jugador
+  async function direct(lat, lng) {
+    try {
+      const r = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + lat.toFixed(4) + '&longitude=' + lng.toFixed(4) + '&localityLanguage=' + lang());
+      if (!r.ok) return null;
+      const j = await r.json();
+      const cc = /^[A-Za-z]{2}$/.test(j.countryCode || '') ? String(j.countryCode).toUpperCase() : null;
+      return { city: j.city || j.locality || null, region: j.principalSubdivision || null, cc, sub: null };
+    } catch (e) { return null; }
   }
   async function check() {
     if (typeof gl === 'undefined' || !gl || blocked() || (gl.isMoving && gl.isMoving()) || gl.getZoom() < MIN_ZOOM || Date.now() < retryAt) return;
@@ -77,16 +91,18 @@
     if (cell === lastCell) return;
     lastCell = cell;
     const hit = cells.get(cell);
-    if (hit) return hit.city || hit.region ? offer(hit) : undefined;
+    if (hit) return known(hit) ? offer(hit) : undefined;
     const my = ++seq;
+    let j = null;
     try {
       const r = await fetch(base + '/api/where?lat=' + c.lat.toFixed(4) + '&lng=' + c.lng.toFixed(4) + '&lang=' + lang());
-      if (!r.ok) throw new Error('where ' + r.status);
-      const j = await r.json();
-      if (cells.size > 500) cells.clear();
-      cells.set(cell, j);
-      if (my === seq && (j.city || j.region)) offer(j);   // si el mapa ya se movió a otro sitio, esta respuesta ya no vale
-    } catch (e) { lastCell = ''; retryAt = Date.now() + 15000; }   // sin red o servidor ocupado: se reintenta en un rato
+      if (r.ok) j = await r.json();
+    } catch (e) {}
+    if (!known(j)) j = await direct(c.lat, c.lng) || j;   // el servidor falló o no supo: respaldo desde el navegador
+    if (!known(j)) { lastCell = ''; retryAt = Date.now() + 5000; return; }   // sin red o servicios ocupados: se reintenta en unos segundos
+    if (cells.size > 500) cells.clear();
+    cells.set(cell, j);
+    if (my === seq) offer(j);   // si el mapa ya se movió a otro sitio, esta respuesta ya no vale
   }
 
   let timer = null;

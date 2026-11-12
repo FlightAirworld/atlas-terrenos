@@ -2031,23 +2031,25 @@ async function placeGet(req, url) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 85 || Math.abs(lng) > 180) throw new HttpError(400, 'Punto no válido');
   const lang = PLACE_LANGS.has(url.searchParams.get('lang')) ? url.searchParams.get('lang') : 'es';
   if (!CITY_GEOCODE) return { ok: true, city: null, region: null, cc: null };
-  const key = lang + '|' + Math.round(lat / 0.01) + ',' + Math.round(lng / 0.01);
+  const key = 'v2|' + lang + '|' + Math.round(lat / 0.01) + ',' + Math.round(lng / 0.01);
   let hit = placeCache.get(key);
   if (!hit) {
     if (rateHit('where:' + clientIp(req), 60_000) > 40) throw new HttpError(429, 'Demasiadas consultas');   // solo cuentan las que llegan a Nominatim
     if (nomNext - Date.now() > 8000) throw new HttpError(503, 'Servicio ocupado, reintenta');   // cola de espera demasiado larga
     await nomGate();
-    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=${lang}&lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}`,
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=14&addressdetails=1&accept-language=${lang}&lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}`,
       { headers: { 'User-Agent': 'redecora-el-mundo/1.0 (' + (process.env.CITY_CONTACT || 'https://redecoraelmundo.com') + ')' }, signal: AbortSignal.timeout(10_000) });
     if (!r.ok) throw new HttpError(503, 'Sin geocodificación ahora mismo');
     const a = ((await r.json()) || {}).address || {};
     const clean = v => String(v || '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 80) || null;
-    const city = clean(a.city || a.town || a.village || a.municipality || a.hamlet || a.suburb || a.county);
+    const city = clean(a.city || a.town || a.village || a.municipality || a.hamlet || a.city_district || a.suburb || a.county);
+    let sub = clean(a.neighbourhood || a.suburb || a.quarter || a.city_district || a.borough);   // barrio
+    if (sub && city && sub.toLowerCase() === city.toLowerCase()) sub = null;
     let region = clean(a.state || a.region || a.province || a.state_district || a.county);
     const same = (x, y) => !!x && !!y && x.toLowerCase() === y.toLowerCase();
     if (same(region, city)) region = [a.state_district, a.county].map(clean).find(v => v && !same(v, city)) || null;   // «Madrid, Madrid» no aporta
     const cc = /^[A-Za-z]{2}$/.test(a.country_code || '') ? String(a.country_code).toUpperCase() : null;
-    hit = { city, region, cc };
+    hit = { city, region, cc, sub };
     if (placeCache.size > 20000) placeCache.clear();
     placeCache.set(key, hit);
   }
