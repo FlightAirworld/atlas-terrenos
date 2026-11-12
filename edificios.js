@@ -454,8 +454,14 @@
         const dlist = T.body(v); let n0 = 0;   // al principio se colocan las personas, antes de abrir la puerta
         while (n0 < dlist.length && (dlist[n0][0] === 'put' || dlist[n0][0] === 'hold')) await step(dlist[n0++]);
         const nEntrada = entradaN > 0 ? `Entrada ${Math.min(entradaN, ENTRIES_MAX)} de ${ENTRIES_MAX} de hoy · ` : '';
-        sub.textContent = nEntrada + 'Llegas a la puerta…'; await sleep(900);
-        door.classList.add('open'); sound('puerta'); if (T.bell) { await sleep(300); sound('adios'); } await sleep(800);
+        sub.textContent = nEntrada + 'Llegas a la puerta…'; await sleep(650);
+        // Primero se toca el timbre y se espera respuesta; después se abre la puerta.
+        const bell = document.createElement('div'); bell.className = 'e-doorbell'; bell.textContent = '🔔';
+        bell.style.cssText = 'position:absolute;left:91px;bottom:220px;font-size:25px;z-index:30;filter:drop-shadow(0 2px 2px #0008);animation:v-pop .35s ease-out'; room.appendChild(bell);
+        sub.textContent = nEntrada + 'Tocas el timbre…'; sound('click'); await sleep(450); sound('click'); await sleep(950);
+        bell.textContent = '🔔'; bell.style.transform = 'scale(1.15)';
+        sub.textContent = nEntrada + 'Te abren la puerta…'; await sleep(450);
+        door.classList.add('open'); sound('puerta'); await sleep(800); bell.remove();
         me.el.style.opacity = '1';
         await walkTo(me, SP('in'), 85); door.classList.remove('open'); sound('puerta');
         await run(dlist.slice(n0).map(x => (x[0] === 'sub' ? ['sub', nEntrada + x[1]] : x)));

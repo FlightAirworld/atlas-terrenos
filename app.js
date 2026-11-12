@@ -749,20 +749,30 @@ function syncLabels() {
 map.on('zoomend', syncLabels); gl.on('zoom', syncLabels); gl.on('moveend', syncLabels); syncLabels();
 
 // ---------- Selección de parcela ----------
-async function selectAt(latlng) {
+async function selectAt(latlng, terrainHint) {
   if (map.getZoom() < MIN_ZOOM_BUY) { map.flyTo(latlng, MIN_ZOOM_BUY + 1); return; }
   const lng = ((latlng.lng + 180) % 360 + 360) % 360 - 180;     // normaliza al dar la vuelta al mundo
   let p;
   try { p = await api(`/api/parcel?lat=${latlng.lat}&lng=${lng}`, { method: 'GET' }); } catch (e) { return; }
+  if (terrainHint && !p.visitTerrain) p.visitTerrain = terrainHint;
   selected = p;
   setSelected(p);
   showPanel(p);
   sfx('select');
 }
 map.on('click', e => {
-  // Si se pulsa un edificio 3D, se elige su parcela (no el suelo que queda detrás)
+  // Si se pulsa un edificio 3D, se elige su parcela (no el suelo que queda detrás).
+  // También guardamos la clase del suelo visible para las visitas a parcelas sin edificio.
+  let terrainHint = null;
+  try {
+    const layers = ['wt-water', 'st-water', 'st-landcover', 'st-landuse'];
+    const features = glReady ? gl.queryRenderedFeatures(e.point, { layers }) : [];
+    const props = features.map(f => ({ layer: f.layer && f.layer.id, p: f.properties || {} }));
+    if (props.some(x => /water/.test(String(x.layer)) || /water|river|lake|reservoir|sea/i.test(String(x.p.class || x.p.type || x.p.natural || '')))) terrainHint = 'water';
+    else if (props.some(x => /landcover/.test(String(x.layer)) && /grass|meadow|grassland|lawn/i.test(String(x.p.class || x.p.type || '')))) terrainHint = 'grass';
+  } catch (_) {}
   const hit = glReady ? gl.queryRenderedFeatures(e.point, { layers: ['owned-3d'] })[0] : null;
-  selectAt(hit ? { lat: hit.properties.clat, lng: hit.properties.clng } : e.latlng);
+  selectAt(hit ? { lat: hit.properties.clat, lng: hit.properties.clng } : e.latlng, terrainHint);
 });
 // ---------- Administración: reclamar parcelas gratis ----------
 // El cuadro solo aparece si abres el juego con #admin al final de la dirección (se recuerda en ese dispositivo).
