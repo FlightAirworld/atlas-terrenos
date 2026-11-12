@@ -2937,6 +2937,8 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE TABLE IF NOT EXISTS retos_seen (user_id TEXT PRIMARY KEY, likes_seen BIGINT NOT NULL DEFAULT 0)');
     await run('CREATE TABLE IF NOT EXISTS house_visits (parcel_id TEXT NOT NULL, user_id TEXT NOT NULL, day TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (parcel_id, user_id, day))');
     await run('CREATE INDEX IF NOT EXISTS house_visits_user_day ON house_visits (user_id, day)');
+    await run('CREATE TABLE IF NOT EXISTS house_entries (user_id TEXT NOT NULL, day TEXT NOT NULL, n INT NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))');   // entradas en casas por jugador y día (límite VISIT_ENTRIES_MAX)
+    run('DELETE FROM house_entries WHERE day < $1', [new Date(Date.now() - 3 * 86400_000).toLocaleDateString('en-CA', { timeZone: DAILY_TZ })]).catch(() => {});
     await run('CREATE TABLE IF NOT EXISTS album_claims (user_id TEXT NOT NULL, key TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, key))');
     await run('CREATE TABLE IF NOT EXISTS clans (id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, emoji TEXT NOT NULL, leader_id TEXT NOT NULL, created_at BIGINT NOT NULL)');
     await run('CREATE UNIQUE INDEX IF NOT EXISTS clans_name_lower ON clans (lower(name))');
@@ -2945,7 +2947,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE INDEX IF NOT EXISTS parcels_user_idx ON parcels (user_id)');
     await run('CREATE TABLE IF NOT EXISTS passes (user_id TEXT PRIMARY KEY, until BIGINT NOT NULL, bought_at BIGINT NOT NULL, times INT NOT NULL DEFAULT 1)');
     await run('CREATE TABLE IF NOT EXISTS activity_seen (user_id TEXT PRIMARY KEY, seen_at BIGINT NOT NULL DEFAULT 0)');
-    for (const t of ['mission_progress', 'achievements', 'parcel_likes', 'retos_seen', 'house_visits', 'album_claims', 'clans', 'clan_members', 'passes', 'activity_seen']) await run(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});   // solo el servidor accede (la clave pública no)
+    for (const t of ['mission_progress', 'achievements', 'parcel_likes', 'retos_seen', 'house_visits', 'house_entries', 'album_claims', 'clans', 'clan_members', 'passes', 'activity_seen']) await run(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});   // solo el servidor accede (la clave pública no)
     const purgeMissions = () => run("DELETE FROM mission_progress WHERE period < $1 AND period NOT LIKE 'W%'", [new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10)]).catch(() => {});
     purgeMissions(); setInterval(purgeMissions, 6 * 3600_000).unref();
   }).catch(e => console.error('No se pudieron crear las tablas de retos:', e.message))
@@ -3156,9 +3158,10 @@ async function likePost(req, body) {
 // ---------- Visitar una casa (visita.js) ----------
 // El visitante entra en la casa de otro jugador, hay una animación automática de ~40 s y, al despedirse, recibe VISIT_CREDITS crédito.
 // /api/visit/start apunta la hora de entrada; /api/visit/finish solo paga si pasó el tiempo mínimo de la animación.
-// Límites: una recompensa por visitante, casa y día, y como mucho VISIT_DAILY_MAX recompensas al día por visitante.
+// Límites: como mucho VISIT_ENTRIES_MAX (3) entradas en casas al día por visitante; una recompensa por visitante, casa y día, y como mucho VISIT_DAILY_MAX recompensas al día.
 const VISIT_CREDITS = Math.max(0, Math.floor(Number(process.env.VISIT_CREDITS ?? 1)));
 const VISIT_DAILY_MAX = Math.max(1, Math.floor(Number(process.env.VISIT_DAILY_MAX ?? 10)));
+const VISIT_ENTRIES_MAX = Math.max(1, Math.floor(Number(process.env.VISIT_ENTRIES_MAX ?? 3)));   // veces al día que un jugador puede ENTRAR en casas (cuenten o no como regalo)
 const VISIT_MIN_MS = 25_000, VISIT_MAX_MS = 15 * 60_000;
 const visitStarts = new Map();   // visitante|casa -> hora de entrada
 async function visitParcel(body, user) {
@@ -3173,12 +3176,15 @@ async function visitStart(req, body) {
   const user = await needUser(req);
   if (rateHit('visit:' + user.id, 60_000) > 20) throw new HttpError(429, 'Vas muy rápido. Espera un minuto');
   const par = await visitParcel(body, user);
+  const day = dayKey();
+  // Máximo VISIT_ENTRIES_MAX entradas al día: el contador sube de forma atómica y no pasa del tope (si ya está en el tope no devuelve fila)
+  const ent = await one('INSERT INTO house_entries (user_id, day, n) VALUES ($1,$2,1) ON CONFLICT (user_id, day) DO UPDATE SET n = house_entries.n + 1 WHERE house_entries.n < $3 RETURNING n', [user.id, day, VISIT_ENTRIES_MAX]);
+  if (!ent) return { ok: true, entryLimit: true, entries: VISIT_ENTRIES_MAX, entriesMax: VISIT_ENTRIES_MAX };
   if (visitStarts.size > 5000) visitStarts.clear();
   visitStarts.set(user.id + '|' + par.id, Date.now());
-  const day = dayKey();
   const done = await one('SELECT 1 AS x FROM house_visits WHERE parcel_id = $1 AND user_id = $2 AND day = $3', [par.id, user.id, day]);
   const n = Number((await one('SELECT COUNT(*) AS n FROM house_visits WHERE user_id = $1 AND day = $2', [user.id, day])).n);
-  return { ok: true, reward: VISIT_CREDITS, canReward: VISIT_CREDITS > 0 && !done && n < VISIT_DAILY_MAX, already: !!done, limit: n >= VISIT_DAILY_MAX };
+  return { ok: true, reward: VISIT_CREDITS, canReward: VISIT_CREDITS > 0 && !done && n < VISIT_DAILY_MAX, already: !!done, limit: n >= VISIT_DAILY_MAX, entries: Number(ent.n), entriesMax: VISIT_ENTRIES_MAX };
 }
 async function visitFinish(req, body) {
   const user = await needUser(req);

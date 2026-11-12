@@ -189,8 +189,9 @@
   // Fuera de la Tierra (window.earthMuted) solo suenan los del viaje (cuenta atrás, cohete, platillos, gritos) y los de la interfaz (clics, seleccionar y comprar)
   const TRAVEL_SFX = { beep: 1, beepgo: 1, cohete: 1, retro: 1, grito: 1, grito2: 1, ufo: 1, select: 1, claim: 1, coin: 1, error: 1, open: 1, click: 1, pop: 1 };   // + los del panel de compra (comprar un terreno en otro planeta)
   const SFX_CAT = { ufo: 'marcianos', charla: 'gente', risa: 'gente' };   // el resto de efectos cuentan como «Efectos y botones»
+  const HOUSE_SFX = { click: 1, open: 1, puerta: 1, silla: 1, vasos: 1, charla: 1, risa: 1, adios: 1, coin: 1, gift: 1, pop: 1, select: 1 };   // los únicos que suenan dentro de una casa (visita.js)
   function play(name) {
-    if (window.fightMuted || mode < 1 || (window.earthMuted && !TRAVEL_SFX[name]) || !window.soundOn(SFX_CAT[name] || 'efectos')) return;
+    if ((window.fightMuted && !(window.houseInside && HOUSE_SFX[name])) || mode < 1 || (window.earthMuted && !TRAVEL_SFX[name]) || !window.soundOn(SFX_CAT[name] || 'efectos')) return;
     if (!ensure()) return;
     if (ctx.state === 'suspended') ctx.resume();
     const f = SFX[name]; if (f) f(ctx.currentTime + 0.01);
@@ -309,6 +310,11 @@
       if (window.weatherMute) window.weatherMute(v || !!window.earthMuted);
       if (v && window.atlasVoice) window.atlasVoice.stop();
     } catch (e) {}
+  };
+  // Visita a una casa (visita.js): fuera no se oye nada (ciudad, música, lluvia, coches, trenes, voces de peatones...); dentro solo suenan la puerta, las sillas, los vasos y la charla.
+  window.houseMute = function (v) {
+    v = !!v; window.houseInside = v;
+    if (window.fightMute) window.fightMute(v);   // reutiliza el silencio del campeonato: corta ciudad, música, lluvia, coches, trenes y voces de fuera
   };
   window.soundMode = () => (window.earthMuted || window.fightMuted ? 0 : mode);   // siempre 2 (lo usan vehicles.js y trains.js para aviones, sirenas y trenes)
 })();

@@ -123,6 +123,8 @@ CREATE TABLE IF NOT EXISTS retos_seen (user_id TEXT PRIMARY KEY, likes_seen BIGI
 CREATE TABLE IF NOT EXISTS house_visits (parcel_id TEXT NOT NULL, user_id TEXT NOT NULL, day TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (parcel_id, user_id, day));
 CREATE INDEX IF NOT EXISTS house_visits_user_day ON house_visits (user_id, day);
 ALTER TABLE house_visits ENABLE ROW LEVEL SECURITY;
+CREATE TABLE IF NOT EXISTS house_entries (user_id TEXT NOT NULL, day TEXT NOT NULL, n INT NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day));
+ALTER TABLE house_entries ENABLE ROW LEVEL SECURITY;
 
 -- Álbum, clanes
 CREATE TABLE IF NOT EXISTS album_claims (user_id TEXT NOT NULL, key TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, key));

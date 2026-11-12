@@ -49,6 +49,15 @@ Otras variables: `DATABASE_URL` (obligatoria), `ADMIN_TOKEN`, `PACKS` (packs a l
 - Variables opcionales: `CARDS_BLACK_MIN` (puja de salida, 100), `CARDS_BLACK_STEP` (subida mínima entre pujas, 1), `CARDS_PRICE_MAX` (máximo en una oferta de compra, 1.000.000).
 - Si prefieres crear las tablas a mano: `migration-cards.sql` (el servidor también las crea solo al arrancar).
 
+## Visitar una casa 🚪 (`visita.js`)
+
+- El botón «ENTRA A LA CASA» abre una escena automática de ~1,5 min: llamas a la puerta, te abren, el anfitrión te ofrece un refresco (va a la nevera y te lo trae), brindáis, os sentáis en el sofá y charláis, y al irte todos dicen «HASTA LA PRÓXIMA».
+- Las personas tienen cuerpo (cabeza, tronco, brazos, piernas y zapatos), caminan por la casa, se giran, gesticulan y mueven la boca al hablar. Se dibujan con CSS (sin imágenes).
+- Todo cambia al azar en cada visita: decoración, vista de la ventana (según la hora), mascota, quién hay, su aspecto, los temas y las frases. El aspecto del anfitrión se repite siempre igual para el mismo dueño.
+- **Hablado**: cada persona usa la voz del navegador (speechSynthesis) con su propio tono y velocidad. Si no hay voz, o está apagada en 🔊 «Gente y voces», se lee en pantalla.
+- **Silencio fuera**: mientras estás dentro (`window.houseMute(true)` en `sounds.js`) no suena nada de fuera (ciudad, música, lluvia, coches, trenes, voces de peatones); solo la puerta, las sillas, los vasos y la conversación.
+- **Límite**: como mucho `VISIT_ENTRIES_MAX` entradas al día por jugador (por defecto 3). Lo cuenta el servidor en la tabla `house_entries` (se crea sola al arrancar; también está en `schema.sql`). Sin cuenta se cuenta en el navegador. Aparte siguen los límites del regalo: 1 crédito por casa y día y `VISIT_DAILY_MAX` regalos al día.
+
 ## Cómo funciona
 
 - El mundo es una rejilla de parcelas de 0,001° (~111 m). Cada una tiene id `x:y` calculado desde lat/lng.
