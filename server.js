@@ -3680,6 +3680,7 @@ const httpServer = http.createServer(async (req, res) => {
       return page ? send(200, page, 'text/html; charset=utf-8', { 'Cache-Control': 'public, max-age=300' }) : send(404, 'No encontrado', 'text/plain');
     }
     if (req.method === 'GET' && url.pathname === '/' + INDEXNOW_KEY + '.txt') return send(200, INDEXNOW_KEY, 'text/plain; charset=utf-8', { 'Cache-Control': 'public, max-age=3600' });   // el archivo de clave que comprueban los buscadores
+    if (req.method === 'GET' && /^\/(en|fr|de|it|pt|ja|zh)$/.test(url.pathname)) { res.writeHead(301, { Location: url.pathname + '/' + url.search }); return res.end(); }   // páginas por idioma: /en -> /en/
     let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname + (url.pathname.endsWith('/') ? 'index.html' : '')));   // /mundos/ -> mundos/index.html
     const rel = path.relative(PUBLIC, file);
     if (!file.startsWith(PUBLIC + path.sep) || /(^|[\\/])(\.|node_modules)/.test(rel) || /^(server\.js|build-static\.js|package(-lock)?\.json|(trivia|rasca|parejas|minijuegos)-server\.js|trivia-bank\.js)$/.test(rel) || !MIME[path.extname(file)] || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(404, 'No encontrado', 'text/plain');

@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://redecoraelmundo.com/</loc>
-    <lastmod>2026-11-11</lastmod>
+    <xhtml:link rel="alternate" hreflang="es" href="https://redecoraelmundo.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://redecoraelmundo.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://redecoraelmundo.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://redecoraelmundo.com/de/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://redecoraelmundo.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://redecoraelmundo.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://redecoraelmundo.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://redecoraelmundo.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://redecoraelmundo.com/"/>
+    <lastmod>2026-11-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
@@ -29,5 +38,110 @@
     <lastmod>2026-11-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://redecoraelmundo.com/en/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://redecoraelmundo.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://redecoraelmundo.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://redecoraelmundo.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://redecoraelmundo.com/de/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://redecoraelmundo.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://redecoraelmundo.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://redecoraelmundo.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://redecoraelmundo.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://redecoraelmundo.com/"/>
+    <lastmod>2026-11-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://redecoraelmundo.com/fr/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://redecoraelmundo.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://redecoraelmundo.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://redecoraelmundo.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://redecoraelmundo.com/de/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://redecoraelmundo.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://redecoraelmundo.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://redecoraelmundo.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://redecoraelmundo.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://redecoraelmundo.com/"/>
+    <lastmod>2026-11-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://redecoraelmundo.com/de/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://redecoraelmundo.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://redecoraelmundo.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://redecoraelmundo.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://redecoraelmundo.com/de/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://redecoraelmundo.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://redecoraelmundo.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://redecoraelmundo.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://redecoraelmundo.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://redecoraelmundo.com/"/>
+    <lastmod>2026-11-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://redecoraelmundo.com/it/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://redecoraelmundo.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://redecoraelmundo.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://redecoraelmundo.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://redecoraelmundo.com/de/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://redecoraelmundo.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://redecoraelmundo.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://redecoraelmundo.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://redecoraelmundo.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://redecoraelmundo.com/"/>
+    <lastmod>2026-11-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://redecoraelmundo.com/pt/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://redecoraelmundo.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://redecoraelmundo.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://redecoraelmundo.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://redecoraelmundo.com/de/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://redecoraelmundo.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://redecoraelmundo.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://redecoraelmundo.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://redecoraelmundo.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://redecoraelmundo.com/"/>
+    <lastmod>2026-11-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://redecoraelmundo.com/ja/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://redecoraelmundo.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://redecoraelmundo.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://redecoraelmundo.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://redecoraelmundo.com/de/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://redecoraelmundo.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://redecoraelmundo.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://redecoraelmundo.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://redecoraelmundo.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://redecoraelmundo.com/"/>
+    <lastmod>2026-11-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://redecoraelmundo.com/zh/</loc>
+    <xhtml:link rel="alternate" hreflang="es" href="https://redecoraelmundo.com/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://redecoraelmundo.com/en/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://redecoraelmundo.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://redecoraelmundo.com/de/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://redecoraelmundo.com/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://redecoraelmundo.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://redecoraelmundo.com/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://redecoraelmundo.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://redecoraelmundo.com/"/>
+    <lastmod>2026-11-12</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
   </url>
 </urlset>
