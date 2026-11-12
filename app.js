@@ -904,14 +904,16 @@ function showPanel(p) {
   $('p-free').classList.toggle('hidden', owned);
   if (owned) {
     $('p-owner').textContent = [flagOf(p.country), p.owner].filter(Boolean).join(' ');
-    $('p-owner-icon').textContent = p.avatar || '👤';
+    const av = (p.avatar && !/[A-Za-z0-9]/.test(p.avatar)) ? p.avatar : '';   // solo emojis: un texto tipo «avatar-5» se ignora
+    $('p-owner-icon').textContent = av || '👤';
     $('p-photo').src = houseFor(p.id, p.house);
     $('house-edit').classList.toggle('hidden', !p.mine);
     $('gift-owner-btn').classList.toggle('hidden', !!p.mine || !p.giftable);   // solo en terrenos de otros jugadores con cuenta
     $('house-pick-wrap').classList.add('hidden');
     { const c = cfg.houseCost ?? 1; $('house-change-btn').textContent = '🏠 CAMBIAR CASA' + (c > 0 ? ` (${c} 🎟️)` : ' (gratis)'); }
     if (p.mine) markHouse($('house-pick-edit'), p.house && String(p.house).replace(/\.png$/i, '.webp'));
-    $('p-avatar').textContent = p.avatar || '';
+    $('p-avatar').textContent = av;
+    $('p-avatar').style.display = av ? '' : 'none';
     $('p-since').textContent = 'Comprado el ' + new Date(p.since).toLocaleDateString('es-ES');
     renderLevelBox(p);
   } else {
@@ -996,7 +998,7 @@ try { const s = localStorage.getItem('avatar'); if (AVATARS.includes(s)) avatar 
 let chosenHouse = null;   // casa elegida para el terreno que vas a reclamar (null = al azar)
 // Casas que el servidor acepta pero que no estaban en el selector, y casas de eventos activos (se rellenan solas desde /api/events).
 // OJO: HOUSES NO se toca (el reparto al azar de las parcelas sin casa elegida depende de su orden y tamaño).
-const EXTRA_HOUSES = ['images/cesped-2.webp', 'images/parque-picnic.webp', 'images/desierto-1.webp', 'images/desierto-2.webp', 'images/prado.webp', 'images/claro-bosque.webp', 'images/parque-futbol.webp', 'images/mar.webp', 'images/mar-peces.webp'];
+const EXTRA_HOUSES = ['images/cesped-2.webp', 'images/parque-picnic.webp', 'images/desierto-1.webp', 'images/desierto-2.webp', 'images/prado.webp', 'images/claro-bosque.webp', 'images/parque-futbol.webp', 'images/mar.webp', 'images/mar-peces.webp', 'images/casa-piscina.webp', 'images/casa-bungalow.webp', 'images/casa-moderna.webp', 'images/adosados.webp', 'images/edificio-pisos.webp', 'images/hotel.webp', 'images/supermercado-5.webp', 'images/informatica.webp', 'images/jugueteria.webp', 'images/estanco.webp', 'images/perfumeria.webp', 'images/pasteleria.webp', 'images/ferreteria.webp', 'images/ferreteria-2.webp', 'images/boutique.webp', 'images/restaurante-2.webp', 'images/gasolinera.webp', 'images/consulado-espana.webp', 'images/consulado-mexico.webp', 'images/consulado-alemania.webp', 'images/carcel.webp'];
 // Casas del Pase Oro 👑 (mismas que GOLD_HOUSES de server.js). Sin pase salen con candado; window.atlasGold lo pone retos.js.
 const GOLD_HOUSES = ['images/casa-2.webp', 'images/casa-3.webp', 'images/rascacielos.webp', 'images/parque-atracciones.webp', 'images/puerto.webp', 'images/aeropuerto.webp', 'images/ayuntamiento.webp', 'images/banco.webp', 'images/hospital.webp', 'images/iglesia.webp', 'images/piscina.webp', 'images/estacion.webp'];
 let eventHouses = [];
@@ -1005,14 +1007,15 @@ const pickableHouses = () => pickerWorld !== 'tierra' ? WORLD_HOUSES[pickerWorld
 const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '').replace(/[-_]/g, ' ');
 // Categorías del selector de casas: al tocar una (🎬 Cines, 🏠 Casas…) solo salen las de ese tipo. Lo que no esté aquí va a «Otros» (así las casas nuevas siempre se ven).
 const HOUSE_CATS = [
-  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2'] },
-  { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica'] },
-  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'Farmacia'] },
-  { icon: '🍽️', name: 'Restaurantes', files: ['Restaurante'] },
+  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2', 'casa-piscina', 'casa-bungalow', 'casa-moderna', 'adosados'] },
+  { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica', 'edificio-pisos', 'hotel'] },
+  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'Farmacia', 'supermercado-5', 'informatica', 'jugueteria', 'estanco', 'perfumeria', 'pasteleria', 'ferreteria', 'ferreteria-2', 'boutique'] },
+  { icon: '🍽️', name: 'Restaurantes', files: ['Restaurante', 'restaurante-2'] },
   { icon: '🎬', name: 'Cines', files: ['cine', 'teatro'] },
   { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros', 'parque-futbol'] },
   { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
-  { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto'] },
+  { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto', 'consulado-espana', 'consulado-mexico', 'consulado-alemania', 'carcel'] },
+  { icon: '⛽', name: 'Motor', files: ['gasolinera'] },
   { icon: '🚀', name: 'Espacio', files: Object.values(WORLD_HOUSES).flat().map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) },
   { icon: '👑', name: 'Oro', files: GOLD_HOUSES.map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) },
   { icon: '🎉', name: 'Eventos', files: [] }   // casas de edición limitada del evento activo (se rellena sola)
@@ -1021,13 +1024,13 @@ const HOUSE_CATS = [
 const HOUSE_PREFIX = [
   ['Casas', ['casa', 'chalet', 'villa', 'mansion', 'adosado']],
   ['Edificios', ['piso', 'edificio', 'torre', 'bloque', 'rascacielos', 'apartamento', 'hotel', 'oficina']],
-  ['Tiendas', ['super', 'supermercado', 'tienda', 'farmacia', 'panaderia', 'banco', 'centro-comercial', 'mercado']],
+  ['Tiendas', ['super', 'supermercado', 'tienda', 'farmacia', 'panaderia', 'banco', 'centro-comercial', 'mercado', 'informatica', 'jugueteria', 'estanco', 'perfumeria', 'pasteleria', 'ferreteria', 'boutique']],
   ['Restaurantes', ['restaurante', 'cafe', 'cafeteria', 'bar', 'pizzeria', 'heladeria']],
   ['Cines', ['cine', 'teatro', 'museo', 'discoteca']],
   ['Deportes', ['estadio', 'rugby', 'plaza-de-toros', 'futbol', 'baloncesto', 'tenis', 'piscina', 'pabellon', 'gimnasio', 'golf']],
   ['Parques', ['parque', 'bosque', 'jardin', 'claro', 'cesped', 'desierto', 'lago', 'playa', 'huerto']],
   ['Motor', ['gasolinera', 'taller', 'parking', 'garaje', 'lavadero']],
-  ['Servicios', ['colegio', 'hospital', 'bomberos', 'policia', 'iglesia', 'aeropuerto', 'helipuerto', 'fabrica', 'ayuntamiento', 'estacion']]
+  ['Servicios', ['colegio', 'hospital', 'bomberos', 'policia', 'iglesia', 'aeropuerto', 'helipuerto', 'fabrica', 'ayuntamiento', 'estacion', 'consulado', 'carcel']]
 ];
 const houseCatOf = h => {
   if (eventHouses.includes(h)) return 'Eventos';

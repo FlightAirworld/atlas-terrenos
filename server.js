@@ -149,7 +149,28 @@ const HOUSES = [
   'images/pisos-4.webp',
   'images/pisos-5.webp',
   'images/casa-7.webp',
-  'images/casa-8.webp'
+  'images/casa-8.webp',
+  'images/casa-piscina.webp',
+  'images/casa-bungalow.webp',
+  'images/casa-moderna.webp',
+  'images/adosados.webp',
+  'images/edificio-pisos.webp',
+  'images/hotel.webp',
+  'images/supermercado-5.webp',
+  'images/informatica.webp',
+  'images/jugueteria.webp',
+  'images/estanco.webp',
+  'images/perfumeria.webp',
+  'images/pasteleria.webp',
+  'images/ferreteria.webp',
+  'images/ferreteria-2.webp',
+  'images/boutique.webp',
+  'images/restaurante-2.webp',
+  'images/gasolinera.webp',
+  'images/consulado-espana.webp',
+  'images/consulado-mexico.webp',
+  'images/consulado-alemania.webp',
+  'images/carcel.webp'
 ];
 // Reparto al azar de las parcelas sin casa elegida: es la lista HOUSES de app.js en el MISMO orden (el servidor la usa para el álbum). No la cambies de orden ni de tamaño.
 const CLIENT_RANDOM_POOL = [
@@ -3216,14 +3237,15 @@ async function likesTop() {
 // ---------- Álbum de colecciones ----------
 // Categorías de casas (deben ser las mismas que HOUSE_CATS / HOUSE_PREFIX de app.js). Una casa que no esté en ninguna va a «Otros».
 const HOUSE_CATS = [
-  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2'] },
-  { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica'] },
-  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'Farmacia'] },
-  { icon: '🍽️', name: 'Restaurantes', files: ['Restaurante'] },
+  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2', 'casa-piscina', 'casa-bungalow', 'casa-moderna', 'adosados'] },
+  { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica', 'edificio-pisos', 'hotel'] },
+  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'Farmacia', 'supermercado-5', 'informatica', 'jugueteria', 'estanco', 'perfumeria', 'pasteleria', 'ferreteria', 'ferreteria-2', 'boutique'] },
+  { icon: '🍽️', name: 'Restaurantes', files: ['Restaurante', 'restaurante-2'] },
   { icon: '🎬', name: 'Cines', files: ['cine', 'teatro'] },
   { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros', 'parque-futbol'] },
   { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
-  { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto'] }
+  { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto', 'consulado-espana', 'consulado-mexico', 'consulado-alemania', 'carcel'] },
+  { icon: '⛽', name: 'Motor', files: ['gasolinera'] }
 ];
 const houseBase = h => String(h).replace(/^images\//, '').replace(/\.(png|webp)$/i, '');
 const catOfHouse = h => { const b = houseBase(h), c = HOUSE_CATS.find(c => c.files.includes(b)); return c ? c.name : 'Otros'; };
