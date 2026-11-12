@@ -3633,8 +3633,8 @@ function shouldRedirectOldHost(req, pathname) {
 
 const httpServer = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  if (shouldRedirectOldHost(req, url.pathname)) {   // 307 = temporal: si algún día quieres quitarlo, los navegadores no se quedan con la redirección guardada
-    res.writeHead(307, { Location: NEW_ORIGIN + url.pathname + url.search, 'Cache-Control': 'no-store' });
+  if (shouldRedirectOldHost(req, url.pathname)) {   // 301 = permanente: Google pasa las direcciones antiguas al dominio nuevo y las olvida. 'no-store' evita que el navegador se quede con la redirección guardada
+    res.writeHead(301, { Location: NEW_ORIGIN + url.pathname + url.search, 'Cache-Control': 'no-store' });
     return res.end();
   }
   const send = (status, body, type = 'application/json; charset=utf-8', extra = {}) => {
