@@ -1497,6 +1497,51 @@ function onlineRealGet() {   // solo jugadores REALES conectados ahora mismo (si
   onlinePeaksCheck(real, true);
   return { ...real, peaks: onlineStats.peaksList(onlinePeaks), shown: onlineShown(), at: Date.now() };
 }
+// Jugadores con cuenta que se conectan: el cliente avisa con POST /api/online/seen (entrar, volver a la pestaña y cada ~10 min abierto).
+// Se guarda una fila por jugador y día (país de la conexión, región/ciudad si el proxy las da, nº de avisos). Como mucho una escritura cada 5 min por jugador.
+let onlinePlayersReady = false;
+const onlineSeenAt = new Map();   // user_id -> última vez que se escribió
+async function onlineSeen(req, body) {
+  const user = await userFrom(req);
+  if (!user || !onlinePlayersReady) return { ok: true };
+  const now = Date.now(), uid = String(user.id);
+  if (now - (onlineSeenAt.get(uid) || 0) < 5 * 60_000) return { ok: true };
+  const cc = onlineStats.countryOf(req.headers, body && body.country);
+  if (!cc) return { ok: true };   // sin país no se puede repartir por país
+  if (onlineSeenAt.size > 5000) onlineSeenAt.clear();
+  onlineSeenAt.set(uid, now);
+  const pl = onlineStats.placeOf(req.headers);
+  await run('INSERT INTO online_players (user_id, day, cc, region, city, first_at, last_at) VALUES ($1,$2,$3,$4,$5,$6,$6) ON CONFLICT (user_id, day) DO UPDATE SET last_at = EXCLUDED.last_at, pings = online_players.pings + 1, cc = EXCLUDED.cc, region = COALESCE(EXCLUDED.region, online_players.region), city = COALESCE(EXCLUDED.city, online_players.city)',
+    [uid, dayKey(), cc, pl.region, pl.city, now]).catch(() => {});
+  return { ok: true };
+}
+// GET /api/admin/online-players?cc=ES: los jugadores con cuenta que más días se han conectado desde ese país, y de dónde son.
+// «De dónde»: el pueblo/ciudad donde más terrenos tiene; si no tiene terrenos con ciudad, la ciudad de su conexión (si el proxy la da). La región sale de la conexión.
+async function onlinePlayersGet(url) {
+  const cc = String(url.searchParams.get('cc') || '').toUpperCase();
+  if (!/^[A-Z]{2}$/.test(cc)) throw new HttpError(400, 'País no válido');
+  const rows = await all(`SELECT user_id, COUNT(*) AS days, SUM(pings) AS pings, MIN(first_at) AS first_at, MAX(last_at) AS last_at,
+      (ARRAY_AGG(region ORDER BY last_at DESC) FILTER (WHERE region IS NOT NULL))[1] AS region,
+      (ARRAY_AGG(city ORDER BY last_at DESC) FILTER (WHERE city IS NOT NULL))[1] AS conn_city
+    FROM online_players WHERE cc = $1 GROUP BY user_id ORDER BY days DESC, pings DESC, last_at DESC LIMIT 20`, [cc]);
+  const since = (await one('SELECT MIN(first_at) AS t FROM online_players')).t;
+  const ids = rows.map(r => r.user_id);
+  const nicks = new Map(), towns = new Map();
+  if (ids.length) {
+    (await all('SELECT user_id::text AS uid, nickname FROM profiles WHERE user_id::text = ANY($1::text[])', [ids])).forEach(r => nicks.set(r.uid, r.nickname));
+    (await all('SELECT user_id::text AS uid, city, COUNT(*) AS n FROM parcels WHERE user_id::text = ANY($1::text[]) AND world = \'tierra\' AND city IS NOT NULL AND city <> $2 GROUP BY user_id, city', [ids, CITY_NONE]))
+      .forEach(r => { const cur = towns.get(r.uid); if (!cur || Number(r.n) > cur.n) towns.set(r.uid, { city: r.city, n: Number(r.n) }); });
+  }
+  const now = Date.now();
+  return {
+    cc, since: since == null ? null : Number(since), at: now,
+    players: rows.map(r => ({
+      nick: nicks.get(r.user_id) || 'Jugador', days: Number(r.days), pings: Number(r.pings) || 0, lastAt: Number(r.last_at),
+      online: now - Number(r.last_at) < 12 * 60_000,
+      region: r.region || null, city: (towns.get(r.user_id) || {}).city || r.conn_city || null, cityFrom: towns.has(r.user_id) ? 'terrenos' : (r.conn_city ? 'conexion' : null)
+    }))
+  };
+}
 setInterval(() => { try { onlinePeaksCheck(); const r = onlineRealGet(); console.log(`[en línea] reales: ${r.total} | contador mostrado: ${r.shown}`); } catch {} }, 60_000).unref();   // una línea al minuto en el log
 function onlineCountriesGet() {   // GET /api/online/countries: reales conectados + (si ONLINE_FIXED) el reparto del resto hasta cuadrar con el contador
   const now = Date.now();
@@ -2634,7 +2679,9 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineShown() };
   if (req.method === 'GET' && pn === '/api/online/countries') return onlineCountriesGet();
   if (req.method === 'POST' && pn === '/api/admin/indexnow') { requireAdmin(req); return await indexNowPing(true); }   // avisar ya a los buscadores (sin cuerpo: manda todo el sitemap)
-  if (req.method === 'GET' && pn === '/api/admin/online-real') { requireAdmin(req); return onlineRealGet(); }   // reales conectados (solo administrador: cabecera Authorization: Bearer ADMIN_TOKEN)
+  if (req.method === 'GET' && pn === '/api/admin/online-real') { requireAdmin(req); return onlineRealGet(); }
+  if (req.method === 'GET' && pn === '/api/admin/online-players') { requireAdmin(req); return onlinePlayersGet(url); }   // jugadores que más se conectan en un país (?cc=ES)
+  if (req.method === 'POST' && pn === '/api/online/seen') return onlineSeen(req, await readJson(req));   // el jugador con cuenta avisa de que está conectado   // reales conectados (solo administrador: cabecera Authorization: Bearer ADMIN_TOKEN)
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);
   if (req.method === 'POST' && pn === '/api/ref/attach') return refAttach(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/names') return namesGet();
@@ -2861,6 +2908,11 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE TABLE IF NOT EXISTS online_peaks (cc TEXT PRIMARY KEY, n INT NOT NULL, at BIGINT NOT NULL)');
     await run('ALTER TABLE public.online_peaks ENABLE ROW LEVEL SECURITY').catch(() => {});   // solo el servidor accede (la clave pública no)
     for (const r of await all('SELECT cc, n, at FROM online_peaks')) onlinePeaks.set(r.cc, { n: Number(r.n), at: Number(r.at) });
+    // Jugadores con cuenta que se conectan (una fila por jugador y día): sirve para ver, por país, quién entra más (panel de administrador)
+    await run('CREATE TABLE IF NOT EXISTS online_players (user_id TEXT NOT NULL, day TEXT NOT NULL, cc TEXT NOT NULL, region TEXT, city TEXT, first_at BIGINT NOT NULL, last_at BIGINT NOT NULL, pings INT NOT NULL DEFAULT 1, PRIMARY KEY (user_id, day))');
+    await run('CREATE INDEX IF NOT EXISTS online_players_cc ON online_players (cc, user_id)');
+    await run('ALTER TABLE public.online_players ENABLE ROW LEVEL SECURITY').catch(() => {});   // solo el servidor accede
+    onlinePlayersReady = true;
     onlinePeaksLoaded = true;
     onlinePeaksCheck(null, true);   // los que ya están conectados al arrancar también cuentan
   }).catch(e => console.error('No se pudo preparar el récord de jugadores en línea:', e.message));

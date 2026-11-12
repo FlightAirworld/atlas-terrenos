@@ -8,6 +8,21 @@ const HEADERS = ['cf-ipcountry', 'cloudfront-viewer-country', 'x-vercel-ip-count
 const NOT_A_COUNTRY = new Set(['XX', 'T1', 'ZZ', 'A1', 'A2', 'O1']);   // desconocido, Tor, proxies anónimos, satélite...
 const valid = c => typeof c === 'string' && /^[A-Za-z]{2}$/.test(c) && !NOT_A_COUNTRY.has(c.toUpperCase());
 
+// Región y ciudad aproximadas de la conexión, si el proxy/CDN las pone (Cloudflare: «Add visitor location headers»; Vercel; CloudFront).
+// Son orientativas (salen de la red del jugador, no de su GPS). Sin cabeceras devuelve null en cada campo.
+const REGION_HEADERS = ['cf-region', 'x-vercel-ip-country-region', 'cloudfront-viewer-country-region-name'];
+const CITY_HEADERS = ['cf-ipcity', 'x-vercel-ip-city', 'cloudfront-viewer-city'];
+function cleanPlace(v) {
+  if (typeof v !== 'string' || !v) return null;
+  let t = v; try { t = decodeURIComponent(v); } catch { /* se deja tal cual */ }
+  t = t.replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 80);
+  return t || null;
+}
+function placeOf(headers) {
+  const pick = list => { for (const h of list) { const v = cleanPlace(headers && headers[h]); if (v) return v; } return null; };
+  return { region: pick(REGION_HEADERS), city: pick(CITY_HEADERS) };
+}
+
 // headers: req.headers (en minúsculas); chosen: país que el jugador tiene elegido en el juego (opcional).
 function countryOf(headers, chosen) {
   for (const h of HEADERS) { const v = headers && headers[h]; if (valid(v)) return String(v).toUpperCase(); }
@@ -41,4 +56,4 @@ function updatePeaks(peaks, list, now) {
 }
 const peaksList = peaks => [...peaks].map(([cc, v]) => ({ cc, n: v.n, at: v.at })).sort((a, b) => b.n - a.n || (a.cc < b.cc ? -1 : 1));
 
-module.exports = { countryOf, tally, valid, updatePeaks, peaksList };
+module.exports = { placeOf, countryOf, tally, valid, updatePeaks, peaksList };

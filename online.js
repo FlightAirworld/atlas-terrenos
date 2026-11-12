@@ -53,6 +53,20 @@
   addEventListener('pagehide', close);
   addEventListener('pageshow', e => { if (e.persisted) open(); });
 
+  // ---------- Aviso de «estoy conectado» (solo con cuenta) ----------
+  // El servidor apunta un día de conexión por jugador y país (panel de administrador: quién se conecta más). Sin cuenta no se manda nada.
+  let seenToken = null, seenAt = 0;
+  function seen(force) {
+    if (document.hidden || typeof authToken === 'undefined' || !authToken || typeof api !== 'function') return;
+    if (!force && authToken === seenToken && Date.now() - seenAt < 10 * 60e3) return;
+    seenToken = authToken; seenAt = Date.now();
+    let mine = ''; try { mine = localStorage.getItem('country') || ''; } catch (e) {}
+    api('/api/online/seen', { method: 'POST', body: /^[A-Za-z]{2}$/.test(mine) ? { country: mine.toUpperCase() } : {} }).catch(() => {});
+  }
+  setInterval(seen, 30000);                                                    // entrar en la cuenta / cada ~10 min abierto
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) seen(); });
+  setTimeout(seen, 4000);
+
   // ---------- Panel: jugadores en línea por país (se abre al tocar el contador) ----------
   // Solo cuenta jugadores realmente conectados. Se actualiza solo cada pocos segundos mientras está abierto.
   const REFRESH_MS = 4000;

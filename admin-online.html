@@ -25,6 +25,15 @@
     .dot.on { background:var(--ok); }
     .err { color:#dc2626; font-size:.9rem; margin-top:8px; }
     .hide { display:none; }
+    .tap { cursor:pointer; -webkit-tap-highlight-color:transparent; }
+    .tap .chev { color:var(--muted); font-size:.8rem; margin-left:6px; }
+    .det { margin:2px 0 8px; padding:6px 10px; border-left:3px solid var(--accent); background:var(--bg); border-radius:0 8px 8px 0; }
+    .pl { display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+    .pl:last-child { border-bottom:0; }
+    .pl .nm { font-weight:700; }
+    .pl .on { color:var(--ok); font-size:.8rem; font-weight:600; margin-left:6px; }
+    .pl .days { text-align:right; white-space:nowrap; font-weight:800; }
+    .pl .days small { display:block; font-weight:500; color:var(--muted); font-size:.75rem; }
   </style>
 </head>
 <body>
@@ -47,11 +56,12 @@
     </div>
     <div class="card">
       <b>Por país</b>
+      <div class="sub">Toca un país para ver qué jugadores con cuenta se conectan más.</div>
       <div id="list"></div>
     </div>
     <div class="card">
       <b>Máximo a la vez por país</b>
-      <div class="sub">Récord de jugadores conectados al mismo tiempo. Se actualiza solo si se supera.</div>
+      <div class="sub">Récord de jugadores conectados al mismo tiempo. Se actualiza solo si se supera. Toca un país para ver sus jugadores.</div>
       <div id="peaks"></div>
     </div>
     <button id="out" type="button">Salir</button>
@@ -63,20 +73,66 @@
   var $ = function (id) { return document.getElementById(id); };
   var base = (window.API_BASE || '').replace(/\/+$/, '');
   var token = '', timer = null;
+  var openCc = null, det = {}, detTimer = null;   // país abierto, datos de sus jugadores y su refresco
   var names = new Intl.DisplayNames(['es'], { type: 'region' });
 
   function flag(cc) { return String.fromCodePoint.apply(null, cc.toUpperCase().split('').map(function (c) { return 127397 + c.charCodeAt(0); })); }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function fail(msg) { var e = $('err'); e.textContent = msg; e.classList.remove('hide'); }
 
+  function when(t) { return new Date(t).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+  function nameOf(cc) { try { return names.of(cc) || cc; } catch (e) { return cc; } }
+
+  // Detalle de un país: los jugadores con cuenta que más días se han conectado desde allí
+  function detailHtml(cc) {
+    var d = det[cc];
+    if (!d) return '<div class="det"><div class="sub">Cargando jugadores…</div></div>';
+    if (d.error) return '<div class="det"><div class="sub">' + esc(d.error) + '</div></div>';
+    if (!d.players.length) {
+      return '<div class="det"><div class="sub">Aún no hay jugadores con cuenta registrados desde este país.' +
+        (d.since ? ' Se cuenta desde el ' + esc(when(d.since)) + '.' : ' Se empieza a contar desde que se estrenó este panel.') + '</div></div>';
+    }
+    var rows = d.players.map(function (p, i) {
+      var place = [p.city, p.region].filter(Boolean).map(esc).join(' · ');
+      var src = p.cityFrom === 'terrenos' ? ' <span title="Donde más terrenos tiene">🏠</span>' : '';
+      return '<div class="pl"><div><span class="nm">' + (i + 1) + '. ' + esc(p.nick) + '</span>' + (p.online ? '<span class="on">● ahora</span>' : '') +
+        '<div class="sub">' + (place ? '📍 ' + place + src : '📍 Sin ubicación') + '</div></div>' +
+        '<div class="days">' + p.days + (p.days === 1 ? ' día' : ' días') + '<small>última: ' + esc(when(p.lastAt)) + '</small></div></div>';
+    });
+    return '<div class="det">' + rows.join('') + '<div class="sub" style="margin-top:6px">Ordenados por días distintos conectados' +
+      (d.since ? ' (desde el ' + esc(when(d.since)) + ')' : '') + '. 🏠 = pueblo donde más terrenos tiene; si no, el de su conexión.</div></div>';
+  }
+  function item(cc, left, right, extra) {
+    var isOpen = openCc === cc;
+    return '<div class="item"><div class="row tap" data-cc="' + esc(cc) + '"><span>' + left + '</span><span><b>' + right + '</b><span class="chev">' + (isOpen ? '▴' : '▾') + '</span></span></div>' +
+      (isOpen ? detailHtml(cc) : '') + '</div>';
+  }
+
+  function loadDetail(cc) {
+    fetch(base + '/api/admin/online-players?cc=' + encodeURIComponent(cc), { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('Error del servidor (' + r.status + ').'); return r.json(); })
+      .then(function (j) { det[cc] = j; })
+      .catch(function (e) { det[cc] = { error: e.message || 'No se pudo cargar.' }; })
+      .then(function () { if (openCc === cc) repaint(); });
+  }
+  function toggle(cc) {
+    clearInterval(detTimer); detTimer = null;
+    if (openCc === cc) { openCc = null; repaint(); return; }
+    openCc = cc; delete det[cc]; repaint(); loadDetail(cc);
+    detTimer = setInterval(function () { if (openCc) loadDetail(openCc); }, 30000);
+  }
+
+  var last = null;
+  function repaint() { if (last) { render(last); renderPeaks(last); } }
+
   function render(j) {
+    last = j;
     $('real').textContent = (j.total || 0).toLocaleString('es');
     $('shown').textContent = (j.shown || 0).toLocaleString('es');
     $('upd').textContent = 'Actualizado a las ' + new Date(j.at).toLocaleTimeString('es');
     $('dot').classList.add('on');
     var rows = (j.countries || []).map(function (c) {
-      var nm; try { nm = names.of(c.cc) || c.cc; } catch (e) { nm = c.cc; }
-      return '<div class="row"><span>' + flag(c.cc) + ' ' + esc(nm) + '</span><b>' + c.n + '</b></div>';
+      return item(c.cc, flag(c.cc) + ' ' + esc(nameOf(c.cc)), c.n);
     });
     if (j.unknown > 0) rows.push('<div class="row"><span>🌐 Sin identificar</span><b>' + j.unknown + '</b></div>');
     $('list').innerHTML = rows.length ? rows.join('') : '<div class="sub">Ahora mismo no hay jugadores reales conectados.</div>';
@@ -84,12 +140,17 @@
 
   function renderPeaks(j) {
     var rows = (j.peaks || []).map(function (c) {
-      var nm; try { nm = names.of(c.cc) || c.cc; } catch (e) { nm = c.cc; }
-      var d = new Date(c.at).toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-      return '<div class="row"><span>' + flag(c.cc) + ' ' + esc(nm) + '<div class="sub">' + esc(d) + '</div></span><b>' + c.n + '</b></div>';
+      return item(c.cc, flag(c.cc) + ' ' + esc(nameOf(c.cc)) + '<div class="sub">' + esc(when(c.at)) + '</div>', c.n);
     });
     $('peaks').innerHTML = rows.length ? rows.join('') : '<div class="sub">Aún no hay récords.</div>';
   }
+
+  function onTap(e) {
+    var r = e.target.closest ? e.target.closest('.tap') : null;
+    if (r && r.getAttribute('data-cc')) toggle(r.getAttribute('data-cc'));
+  }
+  $('list').addEventListener('click', onTap);
+  $('peaks').addEventListener('click', onTap);
 
   function load() {
     fetch(base + '/api/admin/online-real', { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' })
@@ -116,7 +177,7 @@
     if (token) load();
   };
   $('tok').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('go').click(); });
-  $('out').onclick = function () { clearInterval(timer); timer = null; token = ''; $('tok').value = ''; $('data').classList.add('hide'); $('login').classList.remove('hide'); };
+  $('out').onclick = function () { clearInterval(timer); clearInterval(detTimer); timer = null; detTimer = null; openCc = null; det = {}; last = null; token = ''; $('tok').value = ''; $('data').classList.add('hide'); $('login').classList.remove('hide'); };
 })();
 </script>
 </body>

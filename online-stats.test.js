@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { countryOf, tally, updatePeaks, peaksList } = require('./online-stats');
+const { placeOf, countryOf, tally, updatePeaks, peaksList } = require('./online-stats');
 
 test('País: manda la cabecera del proxy; si no hay, el país elegido en el juego; si no, nada', () => {
   assert.strictEqual(countryOf({ 'cf-ipcountry': 'pt' }, 'ES'), 'PT');
@@ -42,4 +42,12 @@ test('Récords: solo se actualiza el país que supera su máximo, y nunca baja',
   assert.deepStrictEqual(updatePeaks(peaks, [{ cc: 'ES', n: 3 }, { cc: 'PT', n: 2 }], 200), [{ cc: 'PT', n: 2, at: 200 }]);   // ES empata: no cambia
   assert.deepStrictEqual(updatePeaks(peaks, [], 300), []);                                                                      // se van todos: el récord se queda
   assert.deepStrictEqual(peaksList(peaks), [{ cc: 'ES', n: 3, at: 100 }, { cc: 'PT', n: 2, at: 200 }]);
+});
+
+test('Lugar: región y ciudad salen de las cabeceras del proxy (con %XX decodificado) y se limpian', () => {
+  assert.deepStrictEqual(placeOf({ 'cf-region': 'Andalucía', 'cf-ipcity': 'Sevilla' }), { region: 'Andalucía', city: 'Sevilla' });
+  assert.deepStrictEqual(placeOf({ 'x-vercel-ip-city': 'M%C3%A1laga', 'x-vercel-ip-country-region': 'AN' }), { region: 'AN', city: 'Málaga' });
+  assert.deepStrictEqual(placeOf({}), { region: null, city: null });
+  assert.deepStrictEqual(placeOf(undefined), { region: null, city: null });
+  assert.ok(!/[<>]/.test(placeOf({ 'cf-ipcity': '<b>Vigo</b>' }).city));   // sin etiquetas HTML
 });
