@@ -119,6 +119,11 @@ CREATE INDEX IF NOT EXISTS parcel_likes_at ON parcel_likes (created_at);
 CREATE INDEX IF NOT EXISTS parcel_likes_user ON parcel_likes (user_id);
 CREATE TABLE IF NOT EXISTS retos_seen (user_id TEXT PRIMARY KEY, likes_seen BIGINT NOT NULL DEFAULT 0);
 
+-- Visitas a casas (visita.js): una recompensa por visitante, casa y día
+CREATE TABLE IF NOT EXISTS house_visits (parcel_id TEXT NOT NULL, user_id TEXT NOT NULL, day TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (parcel_id, user_id, day));
+CREATE INDEX IF NOT EXISTS house_visits_user_day ON house_visits (user_id, day);
+ALTER TABLE house_visits ENABLE ROW LEVEL SECURITY;
+
 -- Álbum, clanes
 CREATE TABLE IF NOT EXISTS album_claims (user_id TEXT NOT NULL, key TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, key));
 CREATE TABLE IF NOT EXISTS clans (id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, emoji TEXT NOT NULL, leader_id TEXT NOT NULL, created_at BIGINT NOT NULL);

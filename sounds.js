@@ -96,6 +96,13 @@
       });
       g.connect(sfxBus); o.start(t + 0.05); lfo.start(t + 0.05); o.stop(t + 1.7); lfo.stop(t + 1.7);
     },
+    // Visitas a casas (visita.js): puerta, charla (murmullo de voces con sílabas), vasos, risas y sillas
+    puerta: t => { tone(sfxBus, 'sine', 140, t, 0.12, 0.8, { slideTo: 70 }); tone(sfxBus, 'square', 90, t + 0.02, 0.06, 0.3); tone(sfxBus, 'sine', hz(88), t + 0.35, 0.5, 0.25); tone(sfxBus, 'sine', hz(93), t + 0.45, 0.6, 0.2); },   // golpe de la puerta + timbre
+    charla: t => { const base = 150 + Math.random() * 120, n = 4 + Math.floor(Math.random() * 4); for (let i = 0; i < n; i++) { const f = base * (0.8 + Math.random() * 0.7), d = 0.08 + Math.random() * 0.08, at = t + i * 0.13; tone(sfxBus, 'sawtooth', f, at, d, 0.16, { slideTo: f * (0.85 + Math.random() * 0.4) }); tone(sfxBus, 'triangle', f * 2.4, at, d, 0.07); } },
+    vasos:  t => { [0, 0.09, 0.2].forEach((d, i) => { tone(sfxBus, 'sine', hz(96 + i * 3), t + d, 0.35, 0.3); tone(sfxBus, 'sine', hz(103 + i * 2), t + d, 0.25, 0.15); }); },
+    risa:   t => { const b = 260 + Math.random() * 80; for (let i = 0; i < 5; i++) tone(sfxBus, 'sawtooth', b - i * 12, t + i * 0.12, 0.09, 0.2, { slideTo: b * 0.75 - i * 10 }); },
+    silla:  t => { tone(sfxBus, 'triangle', 220, t, 0.12, 0.35, { slideTo: 120 }); tone(sfxBus, 'sine', 80, t + 0.1, 0.1, 0.4); },
+    adios:  t => { [79, 76, 72].forEach((n, i) => tone(sfxBus, 'triangle', hz(n), t + i * 0.16, 0.4, 0.4)); },
     // Cuenta atrás del cohete
     beep:   t => tone(sfxBus, 'sine', 880, t, 0.14, 0.5),
     ufo: t => { tone(sfxBus, 'sine', 640, t, 0.55, 0.3, { slideTo: 330 }); tone(sfxBus, 'sine', 330, t + 0.5, 0.55, 0.3, { slideTo: 700 }); tone(sfxBus, 'triangle', 1280, t, 1.05, 0.06); },
@@ -181,7 +188,7 @@
 
   // Fuera de la Tierra (window.earthMuted) solo suenan los del viaje (cuenta atrás, cohete, platillos, gritos) y los de la interfaz (clics, seleccionar y comprar)
   const TRAVEL_SFX = { beep: 1, beepgo: 1, cohete: 1, retro: 1, grito: 1, grito2: 1, ufo: 1, select: 1, claim: 1, coin: 1, error: 1, open: 1, click: 1, pop: 1 };   // + los del panel de compra (comprar un terreno en otro planeta)
-  const SFX_CAT = { ufo: 'marcianos' };   // el resto de efectos cuentan como «Efectos y botones»
+  const SFX_CAT = { ufo: 'marcianos', charla: 'gente', risa: 'gente' };   // el resto de efectos cuentan como «Efectos y botones»
   function play(name) {
     if (window.fightMuted || mode < 1 || (window.earthMuted && !TRAVEL_SFX[name]) || !window.soundOn(SFX_CAT[name] || 'efectos')) return;
     if (!ensure()) return;

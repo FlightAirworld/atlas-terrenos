@@ -918,6 +918,7 @@ function showPanel(p) {
     buildPackPicker();
   }
   { const w = (p && p.world) || worldOfId(p && p.id); if (w !== pickerWorld) { pickerWorld = w; chosenHouse = null; if (window.rebuildHousePickers) window.rebuildHousePickers(); } }   // cada mundo, sus casas
+  if (window.visitaPanel) window.visitaPanel(p);   // botón «ENTRA A LA CASA» (visita.js)
   if (window.retosPanel) window.retosPanel(p);   // botón ❤️ «Me gusta» (retos.js)
   if (window.vecinosPanel) window.vecinosPanel(p);   // vecinos de al lado (vecinos.js)
   updateBuyParcelBtn(p);

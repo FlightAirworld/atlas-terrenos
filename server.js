@@ -2729,6 +2729,8 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/retos') return retosGet(req);
   if (req.method === 'POST' && pn === '/api/retos/claim') return retosClaim(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/retos/seen') return retosSeen(req);
+  if (req.method === 'POST' && pn === '/api/visit/start') return visitStart(req, await readJson(req));
+  if (req.method === 'POST' && pn === '/api/visit/finish') return visitFinish(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/like') return likePost(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/likes/top') return likesTop();
   if (req.method === 'GET' && pn === '/api/events') return eventsPublic();
@@ -2933,6 +2935,8 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE INDEX IF NOT EXISTS parcel_likes_at ON parcel_likes (created_at)');
     await run('CREATE INDEX IF NOT EXISTS parcel_likes_user ON parcel_likes (user_id)');
     await run('CREATE TABLE IF NOT EXISTS retos_seen (user_id TEXT PRIMARY KEY, likes_seen BIGINT NOT NULL DEFAULT 0)');
+    await run('CREATE TABLE IF NOT EXISTS house_visits (parcel_id TEXT NOT NULL, user_id TEXT NOT NULL, day TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (parcel_id, user_id, day))');
+    await run('CREATE INDEX IF NOT EXISTS house_visits_user_day ON house_visits (user_id, day)');
     await run('CREATE TABLE IF NOT EXISTS album_claims (user_id TEXT NOT NULL, key TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, key))');
     await run('CREATE TABLE IF NOT EXISTS clans (id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, emoji TEXT NOT NULL, leader_id TEXT NOT NULL, created_at BIGINT NOT NULL)');
     await run('CREATE UNIQUE INDEX IF NOT EXISTS clans_name_lower ON clans (lower(name))');
@@ -2941,7 +2945,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE INDEX IF NOT EXISTS parcels_user_idx ON parcels (user_id)');
     await run('CREATE TABLE IF NOT EXISTS passes (user_id TEXT PRIMARY KEY, until BIGINT NOT NULL, bought_at BIGINT NOT NULL, times INT NOT NULL DEFAULT 1)');
     await run('CREATE TABLE IF NOT EXISTS activity_seen (user_id TEXT PRIMARY KEY, seen_at BIGINT NOT NULL DEFAULT 0)');
-    for (const t of ['mission_progress', 'achievements', 'parcel_likes', 'retos_seen', 'album_claims', 'clans', 'clan_members', 'passes', 'activity_seen']) await run(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});   // solo el servidor accede (la clave pública no)
+    for (const t of ['mission_progress', 'achievements', 'parcel_likes', 'retos_seen', 'house_visits', 'album_claims', 'clans', 'clan_members', 'passes', 'activity_seen']) await run(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});   // solo el servidor accede (la clave pública no)
     const purgeMissions = () => run("DELETE FROM mission_progress WHERE period < $1 AND period NOT LIKE 'W%'", [new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10)]).catch(() => {});
     purgeMissions(); setInterval(purgeMissions, 6 * 3600_000).unref();
   }).catch(e => console.error('No se pudieron crear las tablas de retos:', e.message))
@@ -3147,6 +3151,52 @@ async function likePost(req, body) {
     }
   }
   return { ok: true, liked: true, likes, added: !!ins.rowCount };
+}
+
+// ---------- Visitar una casa (visita.js) ----------
+// El visitante entra en la casa de otro jugador, hay una animación automática de ~40 s y, al despedirse, recibe VISIT_CREDITS crédito.
+// /api/visit/start apunta la hora de entrada; /api/visit/finish solo paga si pasó el tiempo mínimo de la animación.
+// Límites: una recompensa por visitante, casa y día, y como mucho VISIT_DAILY_MAX recompensas al día por visitante.
+const VISIT_CREDITS = Math.max(0, Math.floor(Number(process.env.VISIT_CREDITS ?? 1)));
+const VISIT_DAILY_MAX = Math.max(1, Math.floor(Number(process.env.VISIT_DAILY_MAX ?? 10)));
+const VISIT_MIN_MS = 25_000, VISIT_MAX_MS = 15 * 60_000;
+const visitStarts = new Map();   // visitante|casa -> hora de entrada
+async function visitParcel(body, user) {
+  const id = String(body && body.id || '');
+  const par = id && await one('SELECT id, user_id FROM parcels WHERE id = $1', [id]);
+  if (!par) throw new HttpError(404, 'Ese terreno no existe');
+  if (!par.user_id) throw new HttpError(409, 'Esta casa no tiene un dueño con cuenta');
+  if (String(par.user_id) === String(user.id)) throw new HttpError(409, 'Esta casa es tuya');
+  return par;
+}
+async function visitStart(req, body) {
+  const user = await needUser(req);
+  if (rateHit('visit:' + user.id, 60_000) > 20) throw new HttpError(429, 'Vas muy rápido. Espera un minuto');
+  const par = await visitParcel(body, user);
+  if (visitStarts.size > 5000) visitStarts.clear();
+  visitStarts.set(user.id + '|' + par.id, Date.now());
+  const day = dayKey();
+  const done = await one('SELECT 1 AS x FROM house_visits WHERE parcel_id = $1 AND user_id = $2 AND day = $3', [par.id, user.id, day]);
+  const n = Number((await one('SELECT COUNT(*) AS n FROM house_visits WHERE user_id = $1 AND day = $2', [user.id, day])).n);
+  return { ok: true, reward: VISIT_CREDITS, canReward: VISIT_CREDITS > 0 && !done && n < VISIT_DAILY_MAX, already: !!done, limit: n >= VISIT_DAILY_MAX };
+}
+async function visitFinish(req, body) {
+  const user = await needUser(req);
+  const par = await visitParcel(body, user);
+  const key = user.id + '|' + par.id, t0 = visitStarts.get(key);
+  visitStarts.delete(key);
+  const el = t0 ? Date.now() - t0 : -1;
+  if (el < VISIT_MIN_MS || el > VISIT_MAX_MS) return { ok: true, rewarded: false, reason: 'time' };
+  if (VISIT_CREDITS < 1) return { ok: true, rewarded: false, reason: 'off' };
+  const day = dayKey();
+  const n = Number((await one('SELECT COUNT(*) AS n FROM house_visits WHERE user_id = $1 AND day = $2', [user.id, day])).n);
+  if (n >= VISIT_DAILY_MAX) return { ok: true, rewarded: false, reason: 'limit' };
+  const ins = await run('INSERT INTO house_visits (parcel_id, user_id, day, created_at) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING', [par.id, user.id, day, Date.now()]);
+  if (!ins.rowCount) return { ok: true, rewarded: false, reason: 'already' };
+  const pack = await ensureUserPack(user);
+  const up = await one('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING credits', [VISIT_CREDITS, pack.code]);
+  track(user.id, 'visit_house');
+  return { ok: true, rewarded: true, reward: VISIT_CREDITS, credits: up.credits };
 }
 let topLikesCache = { at: 0, list: [] };
 async function likesTop() {
