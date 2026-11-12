@@ -143,26 +143,37 @@
 
   // ================= 📍 Adivina el lugar =================
   function adivinaScreen(s) {
+    body.dataset.busy = '';
     if (s.done) {
       return show('📍 Adivina el lugar',
         `<p class="mj-big">${s.score >= 5 ? '🏆' : '✅'} ${s.score} de 5 aciertos</p>
          <p class="mj-info" style="text-align:center">${s.paid ? 'Has ganado <b>' + s.paid + ' ' + word(s.paid) + '</b>' + (s.score === 5 ? ' y un sobre de cartas 🃏' : '') + '.' : 'Hoy no ha habido premio.'} Vuelve mañana con preguntas nuevas.</p>`);
     }
+    if (!s.q || !Array.isArray(s.q.opts)) return adivina();   // respuesta incompleta: se pide el estado real al servidor
     show('📍 Adivina el lugar',
       `<p class="mj-small" style="margin:0">Pregunta ${s.i + 1} de 5 · 3 créditos si aciertas todas</p>
        <p class="mj-big" style="margin-top:8px">${esc(s.q.clue)}</p>
        <div class="mj-opts">${s.q.opts.map((o, i) => `<button type="button" data-a="${i}">${esc(o)}</button>`).join('')}</div>`);
-    body.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', async () => {
-      body.querySelectorAll('[data-a]').forEach(x => (x.disabled = true));
+    const opts = () => body.querySelectorAll('[data-a]');
+    // Si algo falla (red lenta, el servidor ya contó la respuesta, etc.) se vuelve a pedir el estado real: así nunca queda bloqueado
+    const resync = async text => {
+      try { adivinaScreen(await api('/api/mj/adivina')); if (text) say(text, true); }
+      catch (e2) { body.dataset.busy = ''; opts().forEach(x => (x.disabled = false)); fail(e2); }
+    };
+    opts().forEach(b => b.addEventListener('click', async () => {
+      if (body.dataset.busy === '1') return; body.dataset.busy = '1';
+      opts().forEach(x => (x.disabled = true));
+      let r;
+      try { r = await post('/api/mj/adivina/answer', { a: Number(b.dataset.a) }); }
+      catch (e) { return resync((e && e.message) || 'Algo ha fallado. Inténtalo de nuevo'); }
       try {
-        const r = await post('/api/mj/adivina/answer', { a: Number(b.dataset.a) });
         b.classList.add(r.correct ? 'ok' : 'bad');
-        if (!r.correct) body.querySelector(`[data-a="${r.right}"]`).classList.add('ok');
+        const right = body.querySelector(`[data-a="${r.right}"]`); if (!r.correct && right) right.classList.add('ok');
         ding(r.correct ? 'claim' : 'click'); if (r.credits != null) setCredits(r.credits);
-        const nx = document.createElement('div'); nx.className = 'mj-act';
-        nx.innerHTML = `<button type="button">${r.done ? 'Ver resultado' : 'Siguiente'}</button>`; body.appendChild(nx);
-        nx.firstChild.addEventListener('click', () => adivinaScreen(r));
-      } catch (e) { fail(e); body.querySelectorAll('[data-a]').forEach(x => (x.disabled = false)); }
+      } catch (e) { /* un fallo de sonido o de créditos no debe bloquear el juego */ }
+      const nx = document.createElement('div'); nx.className = 'mj-act';
+      nx.innerHTML = `<button type="button">${r.done ? 'Ver resultado' : 'Siguiente'}</button>`; body.appendChild(nx);
+      nx.firstChild.addEventListener('click', () => { nx.firstChild.disabled = true; try { adivinaScreen(r); } catch (e) { resync(); } });
     }));
   }
   async function adivina() { try { adivinaScreen(await api('/api/mj/adivina')); } catch (e) { fail(e); } }
