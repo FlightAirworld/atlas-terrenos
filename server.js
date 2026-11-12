@@ -2003,9 +2003,16 @@ const CITY_GEOCODE = process.env.CITY_GEOCODE !== '0';
 const CITY_NONE = 'Sin ciudad';
 const cityCache = new Map();   // celda de ~500 m -> nombre de la ciudad
 const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+let nomNext = 0;   // Nominatim pide como mucho 1 consulta por segundo: todas las del servidor pasan por esta puerta
+async function nomGate() {
+  const now = Date.now(), at = Math.max(now, nomNext);
+  nomNext = at + 1100;
+  if (at > now) await sleepMs(at - now);
+}
 async function reverseCity(lat, lng) {
   const key = Math.round(lat / 0.005) + ',' + Math.round(lng / 0.005);
   if (cityCache.has(key)) return { name: cityCache.get(key), cached: true };
+  await nomGate();
   const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=es&lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}`,
     { headers: { 'User-Agent': 'redecora-el-mundo/1.0 (' + (process.env.CITY_CONTACT || 'https://redecoraelmundo.com') + ')' }, signal: AbortSignal.timeout(10_000) });
   if (!r.ok) throw new Error('Nominatim ' + r.status);
@@ -2014,6 +2021,37 @@ async function reverseCity(lat, lng) {
   if (cityCache.size > 20000) cityCache.clear();
   cityCache.set(key, name);
   return { name, cached: false };
+}
+// «¿Dónde estoy?»: pueblo/ciudad, región y país del punto del mapa (etiqueta intermitente de lugar.js). Geocodificación inversa con Nominatim,
+// guardada por celdas de ~1 km (1 consulta nueva por celda para todos los jugadores). GET /api/where?lat=..&lng=..&lang=es -> { ok, city, region, cc }
+const placeCache = new Map();   // 'lang|celda' -> { city, region, cc }
+const PLACE_LANGS = new Set(['es', 'en', 'fr', 'de', 'it', 'pt', 'ja', 'zh']);
+async function placeGet(req, url) {
+  const lat = Number(url.searchParams.get('lat')), lng = Number(url.searchParams.get('lng'));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 85 || Math.abs(lng) > 180) throw new HttpError(400, 'Punto no válido');
+  const lang = PLACE_LANGS.has(url.searchParams.get('lang')) ? url.searchParams.get('lang') : 'es';
+  if (!CITY_GEOCODE) return { ok: true, city: null, region: null, cc: null };
+  const key = lang + '|' + Math.round(lat / 0.01) + ',' + Math.round(lng / 0.01);
+  let hit = placeCache.get(key);
+  if (!hit) {
+    if (rateHit('where:' + clientIp(req), 60_000) > 40) throw new HttpError(429, 'Demasiadas consultas');   // solo cuentan las que llegan a Nominatim
+    if (nomNext - Date.now() > 8000) throw new HttpError(503, 'Servicio ocupado, reintenta');   // cola de espera demasiado larga
+    await nomGate();
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=${lang}&lat=${lat.toFixed(5)}&lon=${lng.toFixed(5)}`,
+      { headers: { 'User-Agent': 'redecora-el-mundo/1.0 (' + (process.env.CITY_CONTACT || 'https://redecoraelmundo.com') + ')' }, signal: AbortSignal.timeout(10_000) });
+    if (!r.ok) throw new HttpError(503, 'Sin geocodificación ahora mismo');
+    const a = ((await r.json()) || {}).address || {};
+    const clean = v => String(v || '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 80) || null;
+    const city = clean(a.city || a.town || a.village || a.municipality || a.hamlet || a.suburb || a.county);
+    let region = clean(a.state || a.region || a.province || a.state_district || a.county);
+    const same = (x, y) => !!x && !!y && x.toLowerCase() === y.toLowerCase();
+    if (same(region, city)) region = [a.state_district, a.county].map(clean).find(v => v && !same(v, city)) || null;   // «Madrid, Madrid» no aporta
+    const cc = /^[A-Za-z]{2}$/.test(a.country_code || '') ? String(a.country_code).toUpperCase() : null;
+    hit = { city, region, cc };
+    if (placeCache.size > 20000) placeCache.clear();
+    placeCache.set(key, hit);
+  }
+  return { ok: true, ...hit };
 }
 let cityBusy = false;
 async function cityTick() {
@@ -2678,6 +2716,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/health') return { ok: true };   // la pantalla de carga del sitio estático pregunta aquí si ya despertó
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineShown() };
   if (req.method === 'GET' && pn === '/api/online/countries') return onlineCountriesGet();
+  if (req.method === 'GET' && pn === '/api/where') return placeGet(req, url);   // pueblo, región y país de un punto del mapa (etiqueta de lugar)
   if (req.method === 'POST' && pn === '/api/admin/indexnow') { requireAdmin(req); return await indexNowPing(true); }   // avisar ya a los buscadores (sin cuerpo: manda todo el sitemap)
   if (req.method === 'GET' && pn === '/api/admin/online-real') { requireAdmin(req); return onlineRealGet(); }
   if (req.method === 'GET' && pn === '/api/admin/online-players') { requireAdmin(req); return onlinePlayersGet(url); }   // jugadores que más se conectan en un país (?cc=ES)
