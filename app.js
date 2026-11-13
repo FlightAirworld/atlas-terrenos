@@ -43,6 +43,16 @@ const MAP_STYLE = {
     { id: 'st-park', type: 'fill', source: 'roads', 'source-layer': 'park', paint: { 'fill-color': '#9fd58a', 'fill-opacity': 0.9 } },
     { id: 'st-water', type: 'fill', source: 'roads', 'source-layer': 'water', paint: { 'fill-color': '#7cc4e8' } },
     { id: 'st-waterway', type: 'line', source: 'roads', 'source-layer': 'waterway', paint: { 'line-color': '#7cc4e8', 'line-width': WATER_W } },
+    // Aeropuertos y helipuertos (pistas, calles de rodaje, plataformas): se dibujan en el mapa estilizado y las parcelas no los tapan (ver roadAreaFor)
+    { id: 'st-aero-fill', type: 'fill', source: 'roads', 'source-layer': 'aeroway', minzoom: 11,
+      filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
+      paint: { 'fill-color': ['match', ['get', 'class'], 'helipad', '#c3cddb', 'runway', '#b7b7c0', 'taxiway', '#c6c6ce', '#d3d3da'], 'fill-outline-color': '#a9a9b4' } },
+    { id: 'st-taxiway', type: 'line', source: 'roads', 'source-layer': 'aeroway', minzoom: 11,
+      filter: ['all', ['==', ['get', 'class'], 'taxiway'], ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]]],
+      paint: { 'line-color': '#c6c6ce', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.8, 16, 7, 19, 26] } },
+    { id: 'st-runway', type: 'line', source: 'roads', 'source-layer': 'aeroway', minzoom: 11,
+      filter: ['all', ['==', ['get', 'class'], 'runway'], ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]]],
+      paint: { 'line-color': '#b7b7c0', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 1.5, 16, 16, 19, 55] } },
     { id: 'st-buildings', type: 'fill', source: 'roads', 'source-layer': 'building', minzoom: 14, paint: { 'fill-color': '#d9d2c3', 'fill-outline-color': '#c2baa8' } },
     { id: 'st-road-casing', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
       filter: ['all', ['!=', ['get', 'brunnel'], 'tunnel'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service']]]],
@@ -79,7 +89,17 @@ const MAP_STYLE = {
       layout: { visibility: 'none' },
       filter: ['all', ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor']]], ['!=', ['get', 'brunnel'], 'tunnel']],
       paint: { 'line-opacity': 0.01, 'line-width': 3 }
-    }
+    },
+    // Capas invisibles para que las parcelas "respeten" las vías del tren y los aeropuertos/helipuertos (ver roadAreaFor)
+    { id: 'rail-q', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 15,
+      filter: ['all', ['==', ['get', 'class'], 'rail'], ['!=', ['get', 'brunnel'], 'tunnel'], ['!', ['has', 'service']]],
+      paint: { 'line-opacity': 0.01, 'line-width': 3 } },
+    { id: 'aero-line-q', type: 'line', source: 'roads', 'source-layer': 'aeroway', minzoom: 15,
+      filter: ['all', ['in', ['get', 'class'], ['literal', ['runway', 'taxiway']]], ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]]],
+      paint: { 'line-opacity': 0.01, 'line-width': 3 } },
+    { id: 'aero-fill-q', type: 'fill', source: 'roads', 'source-layer': 'aeroway', minzoom: 15,
+      filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
+      paint: { 'fill-opacity': 0.01, 'fill-color': '#000000' } }
   ]
   // El relieve (source 'dem') queda apagado: se activa con el botón de montaña del mapa
 };
@@ -263,7 +283,8 @@ let detailQueued = false;
 // - Volumen 3D: se sustituye el polígono de la parcela por "parcela - calles" (turf).
 // - Foto: se borra la franja de la calle en un canvas y se usa ese resultado como imagen de la parcela.
 // Solo se calcula para parcelas que se ven enteras y cerca del centro (ahí las teselas tienen todo su detalle).
-const ROAD_WIDTH = { motorway: 16, trunk: 14, primary: 12, secondary: 10, tertiary: 9, minor: 7 };   // ancho total, en metros
+const ROAD_WIDTH = { motorway: 16, trunk: 14, primary: 12, secondary: 10, tertiary: 9, minor: 7, rail: 6, runway: 45, taxiway: 20 };   // ancho total, en metros (vías del tren y pistas también se respetan)
+const WATERWAY_WIDTH = { river: 14, canal: 10, stream: 4 };   // ancho de los ríos (líneas) en metros; lagos y mar son polígonos de agua
 // ---------- Calles horizontales entre edificios pegados ----------
 // Cuando dos edificios están pegados uno encima del otro, se traza una calle horizontal justo en la frontera entre los dos.
 // Si hay más de dos apilados, hay calle en todas las fronteras.
@@ -397,7 +418,9 @@ function lineParts(coords, box) {
   return (g.type === 'LineString' ? [g.coordinates] : g.coordinates).filter(l => l.length >= 2);
 }
 
-// Devuelve { road, rest } para la parcela, o undefined si aún no se puede calcular
+// Devuelve { road, rest } para la parcela, o undefined si aún no se puede calcular.
+// "road" es todo lo que se come la parcela: calles, vías del tren, pistas y helipuertos, ríos, lagos y mar.
+// Nada de eso se tapa con una casa: la foto se recorta y se ve lo de debajo (si la parcela estuviera cubierta entera, se deja la casa entera).
 function roadAreaFor(p) {
   const [[s, w], [n, e]] = boundsOf(p.x, p.y);
   const pts = [[w, s], [e, s], [e, n], [w, n]].map(q => gl.project(q));
@@ -405,26 +428,43 @@ function roadAreaFor(p) {
   const xs = pts.map(q => q.x), ys = pts.map(q => q.y);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   if (!(x0 >= 0 && y0 >= 0 && x1 <= W && y1 <= H)) return undefined;
-  const feats = gl.queryRenderedFeatures([[x0, y0], [x1, y1]], { layers: ['roads-q'] });
+  const bb = [[x0, y0], [x1, y1]], has = id => !!gl.getLayer(id);
+  const q = ids => { const l = ids.filter(has); if (!l.length) return []; try { return gl.queryRenderedFeatures(bb, { layers: l }); } catch (er) { return []; } };
+  const feats = q(['roads-q', 'rail-q', 'aero-line-q']);          // líneas con ancho: calles, vías, pistas
+  const wlines = q(['wt-waterway']);                                // ríos y arroyos (líneas)
+  const polys = q(['wt-water', 'aero-fill-q']);                     // lagos, mar, plataformas y helipuertos (polígonos)
   const none = { road: null, rest: null };
   const pad = cfg.size * 0.3, box = [w - pad, s - pad, e + pad, n + pad];
   const sy = synthLines(w - pad, e + pad, s - 1e-9, n + 1e-9);           // calles horizontales que pasan por los bordes de esta parcela
-  if (!feats.length && !sy.length) return none;
+  if (!feats.length && !sy.length && !wlines.length && !polys.length) return none;
   let area = null;
+  const add = g => { if (g) area = area ? turf.union(area, g) : g; };
   for (const l of sy) {
-    try {
-      const bf = turf.buffer(turf.lineString(l), SYNTH_HALF_M, { units: 'meters', steps: 2 });
-      if (bf) area = area ? turf.union(area, bf) : bf;
-    } catch (err) {}
+    try { add(turf.buffer(turf.lineString(l), SYNTH_HALF_M, { units: 'meters', steps: 2 })); } catch (err) {}
   }
-  for (const f of feats) {
-    const g = f.geometry; if (!g) continue;
+  const lineBuf = (f, half) => {
+    const g = f.geometry; if (!g) return;
     const lines = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
-    const half = (ROAD_WIDTH[f.properties && f.properties.class] || 7) / 2;
     for (const l of lines) for (const part of lineParts(l, box)) {
+      try { add(turf.buffer(turf.lineString(part), half, { units: 'meters', steps: 2 })); } catch (err) {}
+    }
+  };
+  for (const f of feats) lineBuf(f, (ROAD_WIDTH[f.properties && f.properties.class] || 7) / 2);
+  for (const f of wlines.slice(0, 12)) {
+    const pr = f.properties || {};
+    if (pr.brunnel === 'tunnel' || pr.class === 'drain' || pr.class === 'ditch') continue;
+    lineBuf(f, (WATERWAY_WIDTH[pr.class] || 3) / 2);
+  }
+  for (const f of polys.slice(0, 16)) {
+    const g = f.geometry; if (!g || (g.type !== 'Polygon' && g.type !== 'MultiPolygon')) continue;
+    let c; try { c = turf.bboxClip(turf.feature(g), box); } catch (err) { continue; }
+    const cg = c && c.geometry; if (!cg || !cg.coordinates || !cg.coordinates.length) continue;
+    for (const pc of (cg.type === 'Polygon' ? [cg.coordinates] : cg.coordinates)) {
+      if (!pc.length || !pc[0] || pc[0].length < 4) continue;
       try {
-        const bf = turf.buffer(turf.lineString(part), half, { units: 'meters', steps: 2 });
-        if (bf) area = area ? turf.union(area, bf) : bf;
+        let pf = turf.polygon(pc);
+        try { const b = turf.buffer(pf, 0.4, { units: 'meters', steps: 1 }); if (b) pf = b; } catch (err) {}   // un pelín más grande: sin rendijas entre teselas
+        add(pf);
       } catch (err) {}
     }
   }
@@ -432,8 +472,8 @@ function roadAreaFor(p) {
   try {
     const parcel = turf.polygon([ringOf(p.x, p.y)]);
     const rest = turf.difference(parcel, area);
-    if (!rest) return none;                                          // la calle cubriría todo: se deja la casa entera
-    if (turf.area(rest) / turf.area(parcel) > 0.995) return none;    // la calle no toca realmente la parcela
+    if (!rest) return none;                                          // lo de debajo cubriría todo: se deja la casa entera
+    if (turf.area(rest) / turf.area(parcel) > 0.995) return none;    // no toca realmente la parcela
     return { road: area, rest };
   } catch (err) { return none; }
 }
