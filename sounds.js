@@ -102,6 +102,16 @@
     vasos:  t => { [0, 0.09, 0.2].forEach((d, i) => { tone(sfxBus, 'sine', hz(96 + i * 3), t + d, 0.35, 0.3); tone(sfxBus, 'sine', hz(103 + i * 2), t + d, 0.25, 0.15); }); },
     risa:   t => { const b = 260 + Math.random() * 80; for (let i = 0; i < 5; i++) tone(sfxBus, 'sawtooth', b - i * 12, t + i * 0.12, 0.09, 0.2, { slideTo: b * 0.75 - i * 10 }); },
     silla:  t => { tone(sfxBus, 'triangle', 220, t, 0.12, 0.35, { slideTo: 120 }); tone(sfxBus, 'sine', 80, t + 0.1, 0.1, 0.4); },
+    // ----- Timbre y sonidos de las escenas de edificios y parcelas (edificios.js, visita.js, terrenos-visita.js) -----
+    timbre:   t => { tone(sfxBus, 'sine', hz(88), t, 1.0, 0.55); tone(sfxBus, 'triangle', hz(100), t, 0.55, 0.16); tone(sfxBus, 'sine', hz(84), t + 0.55, 1.3, 0.55); tone(sfxBus, 'triangle', hz(96), t + 0.55, 0.7, 0.16); },   // ding-dong
+    campanilla: t => { tone(sfxBus, 'sine', hz(96), t, 0.9, 0.5); tone(sfxBus, 'sine', hz(108), t, 0.5, 0.2); },   // campanilla del mostrador del hotel
+    ascensor: t => { tone(sfxBus, 'sine', hz(91), t, 0.5, 0.45); tone(sfxBus, 'sine', hz(86), t + 0.32, 0.7, 0.45); },
+    silbato:  t => { const o = ctx.createOscillator(), g = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(2600, t); lfo.frequency.value = 38; lg.gain.value = 230; lfo.connect(lg); lg.connect(o.frequency); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.5, t + 0.03); g.gain.setValueAtTime(0.5, t + 0.45); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.62); o.connect(g); g.connect(sfxBus); o.start(t); lfo.start(t); o.stop(t + 0.7); lfo.stop(t + 0.7); },
+    balon:    t => { tone(sfxBus, 'sine', 170, t, 0.16, 1.0, { slideTo: 55 }); tone(sfxBus, 'triangle', 340, t, 0.05, 0.3); },
+    gol:      t => { [72, 76, 79, 84, 88].forEach((n, i) => tone(sfxBus, 'triangle', hz(n), t + i * 0.1, 0.55, 0.45)); for (let i = 0; i < 10; i++) tone(sfxBus, 'sawtooth', 220 + Math.random() * 260, t + 0.4 + i * 0.05, 0.4, 0.05, { slideTo: 300 + Math.random() * 200 }); },   // fanfarria + gritería de la grada
+    cavar:    t => { const src = ctx.createBufferSource(); src.buffer = noiseBuf(1); const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700; const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.9, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.28); src.connect(lp); lp.connect(g); g.connect(sfxBus); src.start(t); src.stop(t + 0.35); tone(sfxBus, 'sine', 120, t, 0.12, 0.6, { slideTo: 60 }); },
+    burbujas: t => { for (let i = 0; i < 5; i++) { const f = 420 + Math.random() * 500; tone(sfxBus, 'sine', f, t + i * 0.13 + Math.random() * 0.05, 0.12, 0.3, { slideTo: f * 1.8 }); } },
+    chapoteo: t => { const src = ctx.createBufferSource(); src.buffer = noiseBuf(1); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7; const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.8, t + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7); src.connect(bp); bp.connect(g); g.connect(sfxBus); src.start(t); src.stop(t + 0.8); },
     adios:  t => { [79, 76, 72].forEach((n, i) => tone(sfxBus, 'triangle', hz(n), t + i * 0.16, 0.4, 0.4)); },
     // Cuenta atrás del cohete
     beep:   t => tone(sfxBus, 'sine', 880, t, 0.14, 0.5),
@@ -189,7 +199,7 @@
   // Fuera de la Tierra (window.earthMuted) solo suenan los del viaje (cuenta atrás, cohete, platillos, gritos) y los de la interfaz (clics, seleccionar y comprar)
   const TRAVEL_SFX = { beep: 1, beepgo: 1, cohete: 1, retro: 1, grito: 1, grito2: 1, ufo: 1, select: 1, claim: 1, coin: 1, error: 1, open: 1, click: 1, pop: 1 };   // + los del panel de compra (comprar un terreno en otro planeta)
   const SFX_CAT = { ufo: 'marcianos', charla: 'gente', risa: 'gente' };   // el resto de efectos cuentan como «Efectos y botones»
-  const HOUSE_SFX = { click: 1, open: 1, puerta: 1, silla: 1, vasos: 1, charla: 1, risa: 1, adios: 1, coin: 1, gift: 1, pop: 1, select: 1 };   // los únicos que suenan dentro de una casa (visita.js)
+  const HOUSE_SFX = { click: 1, open: 1, puerta: 1, silla: 1, vasos: 1, charla: 1, risa: 1, adios: 1, coin: 1, gift: 1, pop: 1, select: 1, timbre: 1, campanilla: 1, ascensor: 1, silbato: 1, balon: 1, gol: 1, cavar: 1, burbujas: 1, chapoteo: 1 };   // los únicos que suenan dentro de una casa (visita.js)
   function play(name) {
     if ((window.fightMuted && !(window.houseInside && HOUSE_SFX[name])) || mode < 1 || (window.earthMuted && !TRAVEL_SFX[name]) || !window.soundOn(SFX_CAT[name] || 'efectos')) return;
     if (!ensure()) return;

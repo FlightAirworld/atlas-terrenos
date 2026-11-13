@@ -181,6 +181,11 @@
     #edif .e-door { position: absolute; left: 8px; bottom: 132px; width: 74px; height: 150px; border: 5px solid #455a64; border-bottom: 0; border-radius: 6px 6px 0 0; background: linear-gradient(135deg, #bfe6ffcc, #e8f6ffcc); z-index: 3; transform-origin: left center; transition: transform .9s ease; display: grid; place-items: center; font-size: 28px; }
     #edif .e-door.open { transform: perspective(600px) rotateY(-72deg); }
     #edif .e-gone { opacity: 0 !important; }
+    #edif .e-doorbell { width: 34px; height: 34px; border-radius: 50%; background: #f0c040; border: 3px solid #455a64; display: grid; place-items: center; text-align: center; line-height: 1; box-shadow: 0 2px 0 #0004; }
+    #edif .e-doorbell.ring { animation: e-ring .5s ease-in-out 2; background: #fff176; }
+    #edif .e-wave { position: absolute; width: 44px; height: 44px; border-radius: 50%; border: 3px solid #ffe680; z-index: 29; pointer-events: none; animation: e-wave 1s ease-out 2; }
+    @keyframes e-ring { 0%, 100% { transform: rotate(0) scale(1); } 25% { transform: rotate(-14deg) scale(1.2); } 75% { transform: rotate(14deg) scale(1.2); } }
+    @keyframes e-wave { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(2.2); opacity: 0; } }
   `;
   document.head.appendChild(st2);
 
@@ -291,6 +296,85 @@
         ['V', 'La cuenta, por favor.'], ['sfx', 'pop'], ['E', 'Son {t} euros.'], ['V', 'Pago con tarjeta. Y quédese con el cambio.'], ['sfx', 'click'], ['sfx', 'coin'], ['hold', 'V', null],
         ['E', '¡Muchas gracias! Vuelva pronto.'], ['V', 'Seguro que sí. ¡Estaba todo buenísimo!'], ['stand', 'V']]
     }
+    ,
+    futbol: {
+      t: 'Campo de fútbol', ic: '⚽', sign: 'ESTADIO ⚽', sx: 150, sc: '#2e7d32', wall: 'linear-gradient(#7ec8f5 0 46%, #cfe9ff 46% 100%)', floor: 'repeating-linear-gradient(90deg, #3f9b3a 0 60px, #48a843 60px 120px)', cnt: '#ffffff', uni: '#1565c0', uniD: '#212121', bell: 1,
+      roles: { E: 'entrenador', D: 'árbitro', C: 'jugador' },
+      dec: [['sh', 205, 212, 330, ['👏', '🎉', '🙌', '📣', '👏', '🎉', '🙌', '📣']], ['sh', 205, 252, 330, ['🙌', '👏', '🎉', '📣', '🙌', '👏', '🎉', '🙌']], ['it', '🥅', 500, 104, 76, 4], ['it', '🚩', 190, 100, 26, 4], ['it', '🪑🪑', 215, 100, 28, 4], ['it', '🏆', 330, 262, 30, 3]],
+      sp: { in: [135, .35], center: [245, .35], ball: [335, .2], goal: [470, .55], bench: [215, .85], coach: [270, .85], ref: [400, .85], shoot: [345, .25], door: [45, 1] },
+      v: () => ({ pos: P(['delantero', 'centrocampista', 'defensa', 'extremo']), n: P(['7', '9', '10', '11']), eq: P(['Los Leones', 'Real Barrio', 'Deportivo Mundial', 'Atlético Vecinal']) }),
+      body: v => [['put', 'E', 'coach'], ['put', 'D', 'ref'], ['put', 'C', 'ball'], ['hold', 'C', '⚽'], ['hold', 'D', '📯'], ['sub', 'Entras al campo de fútbol'],
+        ['E', '¡Bienvenido al campo! Soy el entrenador de {eq}. ¿Vienes a la prueba?', { to: 'V' }], ['V', 'Sí, quiero jugar de {pos}.'],
+        ['E', 'Estupendo. Toma la camiseta del equipo: el dorsal {n} está libre.'], ['hold', 'E', '👕'], ['wait', 500], ['hold', 'E', null], ['hold', 'V', '👕'], ['sfx', 'pop'],
+        ['V', '¡Gracias, entrenador! Me la pongo ahora mismo.'], ['wait', 600], ['hold', 'V', null],
+        ['sub', 'Calentamiento sobre el césped'], ['go', 'V', 'center', 85], ['E', 'Primero, calentamiento. ¡Dos vueltas al campo!'],
+        ['go', 'V', 'goal', 125], ['go', 'V', 'bench', 125], ['go', 'V', 'goal', 125], ['go', 'V', 'center', 125], ['cheer', 'V'], ['E', '¡Muy bien! Ahora un pase con tu compañero.'],
+        ['sub', 'Pase con un compañero'], ['C', '¡Aquí, aquí! ¡Pásamela!', { to: 'V' }], ['hold', 'C', null], ['hold', 'V', '⚽'], ['sfx', 'balon'], ['wait', 450], ['hold', 'V', null], ['hold', 'C', '⚽'], ['V', '¡Toma!'],
+        ['sfx', 'balon'], ['wait', 450], ['hold', 'C', null], ['hold', 'V', '⚽'], ['C', '¡Buen control! Tienes un pie de oro.'],
+        ['sub', 'Lanzas un penalti'], ['go', 'V', 'shoot', 85], ['D', 'Atención: penalti a favor. ¡Portero, a su sitio!'], ['sfx', 'silbato'], ['E', 'Tranquilo. Respira y chuta con confianza.'],
+        ['sfx', 'balon'], ['hold', 'V', null], ['wait', 650], ['sfx', 'gol'], ['cheer', 'V'], ['cheer', 'C'], ['cheer', 'E'], ['D', '¡GOOOL! ¡Qué disparo tan potente!', { big: true }],
+        ['V', '¡Gooool! ¡No me lo puedo creer!'], ['E', 'Prueba superada: ya eres uno más del equipo. Mañana, entrenamiento a las cinco.'], ['V', '¡Allí estaré! ¡Gracias a todos, hasta mañana!']]
+    },
+    hotel: {
+      t: 'Hotel', ic: '🏨', sign: 'HOTEL ★★★★', sx: 150, sc: '#6a1b9a', wall: '#f3e9dc', floor: '#8e3b46', cnt: '#6d4c41', uni: '#263238', uniD: '#b71c1c', bell: 1,
+      roles: { E: 'recepcionista', D: 'botones', C: 'huésped' },
+      dec: [['it', '🖼️', 130, 225, 42, 2], ['it', '🕰️', 365, 262, 30, 2], ['it', '🗝️', 430, 262, 26, 2], ['cn', 330, 170], ['it', '🛎️', 360, 128, 26, 21], ['it', '💻', 440, 128, 26, 21], ['it', '🔑', 405, 128, 22, 21], ['it', '🪴', 120, 100, 46, 4], ['it', '🛋️', 205, 96, 54, 12], ['it', '🛗', 520, 146, 66, 4]],
+      sp: { in: [135, .35], front: [345, .28], behind: [440, .92], sofa: [215, .45], lift: [510, .6], lift2: [462, .58], bag: [180, .5], door: [45, 1], C0: [345, .28] },
+      v: () => ({ room: P(['204', '312', '108', '415']), noches: P(['dos', 'tres', 'cuatro']), piso: P(['segunda', 'tercera', 'primera', 'cuarta']) }),
+      body: v => [['put', 'E', 'behind'], ['put', 'D', 'bag'], ['put', 'C', 'C0'], ['hold', 'C', '🗝️'], ['sub', 'Entras en el hotel'],
+        ['C', 'Gracias por todo. La estancia ha sido maravillosa.', { to: 'E' }], ['E', 'Gracias a usted. ¡Que tenga buen viaje!'], ['sfx', 'pop'], ['hold', 'C', null], ['bg', 'C', 'door', 85], ['wait', 900],
+        ['E', '¡Buenas tardes y bienvenido al hotel!', { to: 'V' }], ['go', 'V', 'front', 85], ['sfx', 'campanilla'], ['sub', 'Haces el registro en recepción'],
+        ['V', 'Buenas tardes. Tengo una reserva para esta noche.'], ['E', 'Enseguida lo busco… sí, aquí está. Son {noches} noches, ¿verdad?'], ['V', 'Exacto, {noches} noches.'],
+        ['E', 'Necesito su documento de identidad, por favor.'], ['hold', 'V', '🪪'], ['wait', 700], ['hold', 'V', null], ['sfx', 'click'], ['wait', 300], ['sfx', 'click'],
+        ['E', 'Todo en orden. Su habitación es la {room}, en la {piso} planta. El desayuno se sirve de siete a diez.'], ['hold', 'E', '🔑'], ['wait', 500], ['hold', 'E', null], ['hold', 'V', '🔑'], ['sfx', 'pop'],
+        ['V', '¡Perfecto! Muchas gracias.'], ['E', 'Le acompaña nuestro botones con el equipaje.'],
+        ['bg', 'D', 'front', 90], ['wait', 1200], ['D', '¡Bienvenido! Yo me encargo de las maletas.', { to: 'V' }], ['hold', 'D', '🧳'], ['sfx', 'pop'],
+        ['sub', 'Subes en el ascensor'], ['go', 'D', 'lift', 90], ['go', 'V', 'lift2', 90], ['sfx', 'ascensor'], ['wait', 1200], ['sfx', 'ascensor'],
+        ['D', 'Aquí está su habitación, la {room}. Que descanse mucho.'], ['hold', 'D', null], ['hold', 'V', '💶'], ['V', 'Muchas gracias por su ayuda. Esto es para usted.'], ['sfx', 'coin'], ['hold', 'V', null],
+        ['D', '¡Muy amable! Si necesita algo, llame a recepción.'], ['V', '¡Qué ganas de descansar! Luego bajo a dar un paseo.']]
+    },
+    hospital: {
+      t: 'Hospital', ic: '🏥', sign: 'HOSPITAL ✚', sx: 150, sc: '#c62828', wall: '#eef7fb', floor: '#cfd8dc', cnt: '#ffffff', uni: '#e0f2f1', uniD: '#00897b', bell: 0,
+      roles: { E: 'enfermera', D: 'doctora' },
+      dec: [['it', '✚', 125, 222, 56, 2], ['it', '🩺', 250, 264, 30, 2], ['it', '🛏️', 500, 100, 62, 6], ['cn', 330, 170], ['it', '🌡️', 370, 128, 24, 21], ['it', '💻', 430, 128, 26, 21], ['it', '🪑', 250, 96, 44, 12], ['it', '🪴', 128, 100, 44, 4]],
+      sp: { in: [135, .35], front: [345, .28], behind: [440, .92], chair: [250, .5], doc: [330, .75], door: [45, 1], pasillo: [150, .85] },
+      v: () => P([{ s: 'mucha fiebre desde anoche', t: '38,6', d: 'Reposo, mucho líquido y un antitérmico cada ocho horas', e: '💊' }, { s: 'un dolor fuerte en el tobillo', t: '36,7', d: 'Reposo, hielo y una venda de compresión', e: '🩹' }, { s: 'dolor de garganta y mucha tos', t: '37,4', d: 'Beber líquidos calientes y tomar este jarabe', e: '🧴' }]),
+      body: v => [['put', 'E', 'behind'], ['put', 'D', 'pasillo'], ['sub', 'Entras en urgencias'],
+        ['E', 'Buenas tardes. ¿Qué le ocurre?', { to: 'V' }], ['go', 'V', 'front', 85], ['V', 'Buenas tardes. Tengo {s}.'], ['E', 'Siento oírlo. Voy a tomarle la temperatura.'], ['hold', 'E', '🌡️'], ['wait', 900], ['sfx', 'beep'], ['hold', 'E', null],
+        ['E', 'Tiene {t} grados. Siéntese y enseguida le atiende la doctora.'], ['sit', 'V', 'chair', 1], ['sub', 'Esperas a la doctora'], ['wait', 800],
+        ['bg', 'D', 'doc', 85], ['wait', 1200], ['D', 'Buenas tardes, soy la doctora. Cuénteme qué le pasa.', { to: 'V' }], ['V', 'Tengo {s}.'],
+        ['hold', 'D', '🩺'], ['sfx', 'click'], ['wait', 900], ['D', 'Respire hondo… otra vez… Muy bien.'], ['hold', 'D', null],
+        ['D', 'No es nada grave. {d}.'], ['hold', 'D', '📄'], ['wait', 600], ['hold', 'D', null], ['hold', 'V', '{e}'], ['sfx', 'pop'],
+        ['V', 'Muchas gracias, doctora. Me quedo mucho más tranquilo.'], ['D', 'Si empeora, vuelva sin dudarlo. ¡Que se mejore!'], ['stand', 'V']]
+    },
+    cine: {
+      t: 'Cine', ic: '🎬', sign: 'CINE 🎬', sx: 150, sc: '#4a148c', wall: '#2b1b3d', floor: '#5d1a1a', cnt: '#8d6e63', uni: '#b71c1c', uniD: '#212121', bell: 0,
+      roles: { E: 'taquillera', D: 'acomodador', C: 'cliente' },
+      dec: [['it', '🎞️', 130, 224, 44, 2], ['it', '🍿', 255, 262, 34, 2], ['cn', 330, 170], ['it', '🎟️', 360, 128, 24, 21], ['it', '🍿', 410, 128, 28, 21], ['it', '🥤', 450, 128, 26, 21], ['it', '🪑🪑🪑', 215, 98, 30, 12]],
+      sp: { in: [135, .35], front: [345, .28], behind: [440, .92], seat: [230, .6], door: [45, 1], C0: [345, .28], sala: [260, .85] },
+      v: () => { const p = P([['una comedia', '😂'], ['una de aventuras', '🏔️'], ['una de ciencia ficción', '🚀'], ['una de misterio', '🕵️']]); return { p, h: P(['seis', 'siete y media', 'ocho']), pr: P(['9,50', '11,00', '8,50']) }; },
+      body: v => [['put', 'E', 'behind'], ['put', 'D', 'sala'], ['put', 'C', 'C0'], ['hold', 'C', '🎟️'], ['sub', 'Llegas a la taquilla del cine'],
+        ['C', 'Gracias, ya tengo la entrada. ¡Que disfrute de la sesión!', { to: 'E' }], ['E', 'Igualmente. ¡Hasta luego!'], ['bg', 'C', 'door', 85], ['wait', 800],
+        ['E', '¡Bienvenido al cine! ¿Qué película quiere ver?', { to: 'V' }], ['go', 'V', 'front', 85], ['V', 'Me apetece {p[0]}. ¿Hay sesión a las {h}?'], ['E', 'Sí, quedan buenos asientos. Son {pr} euros.'],
+        ['V', 'Pago con tarjeta.'], ['sfx', 'click'], ['sfx', 'coin'], ['hold', 'E', '🎟️'], ['wait', 500], ['hold', 'E', null], ['hold', 'V', '🎟️'], ['sfx', 'pop'],
+        ['E', 'Aquí tiene su entrada. ¿Quiere palomitas?'], ['V', 'Claro, unas palomitas y un refresco.'], ['hold', 'V', '🍿'], ['sfx', 'vasos'], ['E', 'Que disfrute de la película.'],
+        ['sub', 'Entras en la sala'], ['go', 'V', 'sala', 85], ['D', 'Buenas, ¿me enseña su entrada?', { to: 'V' }], ['V', 'Aquí la tiene.'], ['D', 'Fila cinco, butaca doce. Sígame con cuidado.'],
+        ['sit', 'V', 'seat', 1], ['sub', 'Empieza la película'], ['eat', 'V'], ['wait', 1500], ['V', '¡Qué buena pinta tiene la película! Me va a encantar.'], ['eat', 'V'], ['wait', 1200], ['sfx', 'risa'], ['stand', 'V']]
+    },
+    pasteleria: {
+      t: 'Pastelería', ic: '🍰', sign: 'PASTELERÍA 🧁', sx: 150, sc: '#ec407a', wall: '#fff0f5', floor: '#f8bbd0', cnt: '#ffffff', uni: '#ffffff', uniD: '#f48fb1', bell: 1,
+      roles: { E: 'pastelera', C: 'cliente' },
+      dec: [['sh', 100, 215, 170, ['🥐', '🍞', '🥖', '🥐']], ['sh', 345, 215, 195, ['🍰', '🧁', '🍩', '🍪', '🎂', '🍰']], ['sh', 345, 266, 195, ['🧁', '🍩', '🥧', '🍪', '🧁']], ['cn', 310, 240], ['it', '🧾', 360, 128, 22, 21], ['it', '🎂', 420, 128, 28, 21], ['it', '🪴', 120, 100, 44, 4]],
+      sp: { in: [135, .35], front: [350, .3], behind: [450, .92], shelf: [420, .92], C0: [350, .3], door: [45, 1] },
+      v: () => { const t = P([['una tarta de chocolate', '🎂'], ['una tarta de queso', '🍰'], ['seis cupcakes', '🧁'], ['una docena de donuts', '🍩']]); return { t, pr: P(['18,50', '22,00', '15,90', '12,60']) }; },
+      body: v => [['put', 'E', 'behind'], ['put', 'C', 'C0'], ['hold', 'C', '🥐'], ['sub', 'Entras en la pastelería'],
+        ['C', 'Mmm, ¡qué bien huele! Me llevo las magdalenas de siempre.', { to: 'E' }], ['E', 'Marchando. Aquí tiene, calentitas.'], ['sfx', 'pop'], ['bg', 'C', 'door', 85], ['wait', 800],
+        ['E', '¡Buenos días! ¿Qué le pongo?', { to: 'V' }], ['go', 'V', 'front', 85], ['V', 'Buenos días. Quiero {t[0]}, por favor.'],
+        ['E', 'Excelente elección. Ahora mismo se la preparo.'], ['go', 'E', 'shelf', 100], ['hold', 'E', '{t[1]}'], ['sfx', 'vasos'], ['go', 'E', 'behind', 100],
+        ['E', 'Se la envuelvo para regalo. ¿Quiere una tarjeta con dedicatoria?'], ['V', 'Sí, que ponga: felicidades, ¡a disfrutar!'], ['sfx', 'click'], ['wait', 600],
+        ['E', 'Son {pr} euros.'], ['V', 'Pago con tarjeta.'], ['sfx', 'click'], ['sfx', 'coin'], ['hold', 'E', null], ['hold', 'V', '{t[1]}'],
+        ['E', 'Aquí tiene. ¡Que aproveche y vuelva pronto!'], ['V', 'Seguro que sí. ¡Está todo buenísimo! Gracias.']]
+    }
   };
   // Qué edificio es cada casa (por el nombre del archivo de la imagen)
   function kindOfBuilding(p) {
@@ -302,6 +386,11 @@
     if (/^(policia|comisaria)/.test(k)) return 'policia';
     if (/^(colegio|escuela|instituto)/.test(k)) return 'colegio';
     if (/^(restaurante|cafe|cafeteria|bar|pizzeria)/.test(k)) return 'restaurante';
+    if (/^(estadio|parque-futbol|campo|futbol)/.test(k)) return 'futbol';
+    if (/^hotel/.test(k)) return 'hotel';
+    if (/^(hospital|clinica)/.test(k)) return 'hospital';
+    if (/^cine/.test(k)) return 'cine';
+    if (/^(pasteleria|panaderia)/.test(k)) return 'pasteleria';
     return null;
   }
 
@@ -359,7 +448,7 @@
     const mk = (a, isMe) => { const ch = Object.assign({}, a, { x: 0, d: 0, dir: 1, seated: false, hold: null, q: Promise.resolve(), wt: 0 }); ch.el = buildFig(a, isMe); ch.flip = ch.el.querySelector('.v-flip'); ch.head = ch.el.querySelector('.head'); ch.holdEl = ch.el.querySelector('.hold'); room.appendChild(ch.el); return ch; };
     const staff = (n, uni) => { const a = look(n[0], n[1] === 'f', 'adult', Math.random); if (uni) { a.top = uni; a.dress = false; a.sleeve = '100%'; } return a; };
     const me = mk(Object.assign(look('Tú', Math.random() < 0.5, 'adult', Math.random), { pitch: 1, rate: 1.05 }), true);
-    const A = { E: mk(Object.assign(staff(nm[0], T.uni), { name: nm[0][0] + ' · ' + (T.roles.E || '') })), D: mk(Object.assign(staff(nm[1], T.uni), { name: nm[1][0] + ' · ' + (T.roles.D || '') })), C: mk(Object.assign(look(nm[2][0], nm[2][1] === 'f', 'adult', Math.random), { name: nm[2][0] })), V: me };
+    const A = { E: mk(Object.assign(staff(nm[0], T.uni), { name: nm[0][0] + ' · ' + (T.roles.E || '') })), D: mk(Object.assign(staff(nm[1], T.uniD || T.uni), { name: nm[1][0] + ' · ' + (T.roles.D || '') })), C: mk(Object.assign(look(nm[2][0], nm[2][1] === 'f', 'adult', Math.random), { name: nm[2][0] })), V: me };
     v.D = nm[1][0];
     Object.values(A).forEach(c => { c.el.style.opacity = '0'; });
     const SP = n => { const s = T.sp[n]; return { x: s[0], d: s[1] }; };
@@ -457,10 +546,13 @@
         sub.textContent = nEntrada + 'Llegas a la puerta…'; await sleep(650);
         // Primero se toca el timbre y se espera respuesta; después se abre la puerta.
         const bell = document.createElement('div'); bell.className = 'e-doorbell'; bell.textContent = '🔔';
-        bell.style.cssText = 'position:absolute;left:91px;bottom:220px;font-size:25px;z-index:30;filter:drop-shadow(0 2px 2px #0008);animation:v-pop .35s ease-out'; room.appendChild(bell);
-        sub.textContent = nEntrada + 'Tocas el timbre…'; sound('click'); await sleep(450); sound('click'); await sleep(950);
-        bell.textContent = '🔔'; bell.style.transform = 'scale(1.15)';
-        sub.textContent = nEntrada + 'Te abren la puerta…'; await sleep(450);
+        bell.style.cssText = 'position:absolute;left:92px;bottom:226px;font-size:18px;z-index:30;animation:v-pop .35s ease-out'; room.appendChild(bell);
+        const wave = document.createElement('div'); wave.className = 'e-wave'; wave.style.cssText = 'left:87px;bottom:221px;'; wave.hidden = true; room.appendChild(wave);
+        sub.textContent = nEntrada + 'Tocas el timbre…'; await sleep(450);
+        bell.classList.add('ring'); wave.hidden = false; sound('timbre'); await sleep(1500);   // ding-dong
+        bell.classList.remove('ring'); wave.remove();
+        sub.textContent = nEntrada + 'Esperas a que te abran…'; await sleep(700);
+        sub.textContent = nEntrada + 'Te abren la puerta…'; await sleep(350);
         door.classList.add('open'); sound('puerta'); await sleep(800); bell.remove();
         me.el.style.opacity = '1';
         await walkTo(me, SP('in'), 85); door.classList.remove('open'); sound('puerta');

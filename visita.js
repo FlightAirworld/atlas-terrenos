@@ -44,6 +44,12 @@
     #visita .v-door { position: absolute; left: 10px; bottom: 132px; width: 70px; height: 150px; background: #5a3418; border-radius: 6px 6px 0 0; transform-origin: left center; transition: transform .9s ease; z-index: 3; box-shadow: inset 0 0 0 5px #7a4b24; }
     #visita .v-door::after { content: ''; position: absolute; right: 9px; top: 76px; width: 9px; height: 9px; border-radius: 50%; background: #f0c040; }
     #visita .v-door.open { transform: perspective(600px) rotateY(-72deg); }
+    #visita .v-bell { position: absolute; left: 88px; bottom: 214px; width: 26px; height: 26px; border-radius: 50%; background: #f0c040; border: 3px solid #7a4b24; display: grid; place-items: center; font-size: 13px; line-height: 1; z-index: 6; box-shadow: 0 2px 0 #0004; }
+    #visita .v-bell.ring { animation: v-ring .5s ease-in-out 2; background: #fff176; }
+    #visita .v-bell-wave { position: absolute; left: 82px; bottom: 208px; width: 38px; height: 38px; border-radius: 50%; border: 3px solid #ffe680; opacity: 0; z-index: 5; pointer-events: none; }
+    #visita .v-bell-wave.on { animation: v-wave 1s ease-out 2; }
+    @keyframes v-ring { 0%, 100% { transform: rotate(0) scale(1); } 25% { transform: rotate(-14deg) scale(1.15); } 75% { transform: rotate(14deg) scale(1.15); } }
+    @keyframes v-wave { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(2.2); opacity: 0; } }
     #visita .v-sofa-back { position: absolute; left: 204px; width: 172px; bottom: 118px; height: 78px; background: var(--sofa, #8e5a3c); border-radius: 22px 22px 0 0; z-index: 5; box-shadow: inset 0 -10px 0 #0002; }
     #visita .v-sofa-front { position: absolute; left: 200px; width: 180px; bottom: 82px; height: 40px; background: var(--sofa, #8e5a3c); border-radius: 10px 10px 4px 4px; z-index: 17; box-shadow: inset 0 6px 0 #fff2, inset 0 -8px 0 #0003; filter: brightness(1.08); }
     #visita .v-sofa-arm { position: absolute; width: 18px; bottom: 82px; height: 66px; background: var(--sofa, #8e5a3c); border-radius: 10px 10px 4px 4px; z-index: 17; box-shadow: inset -3px 0 0 #0003; }
@@ -303,7 +309,7 @@
       <div class="v-wrap"><div class="v-room">
         <div class="v-floor"></div><div class="v-base"></div><div class="v-rug"></div>
         <div class="v-win"><span class="v-sky"></span></div>
-        <div class="v-doorframe"></div><div class="v-door"></div>
+        <div class="v-doorframe"></div><div class="v-door"></div><div class="v-bell-wave"></div><div class="v-bell">🔔</div>
         <div class="v-sofa-back"></div><div class="v-sofa-front"></div><div class="v-sofa-arm" style="left:198px"></div><div class="v-sofa-arm" style="left:364px"></div>
         <div class="v-plant"></div><div class="v-lamp"></div><div class="v-shelf"></div><div class="v-shelf-i"></div><div class="v-clock">🕰️</div>
         <div class="v-fridge"><div class="in"><span>🥤</span><span>🧃</span><span>🍹</span></div><div class="fd"></div></div>
@@ -483,7 +489,12 @@
       try {
         const nEntrada = entradaN > 0 ? `Entrada ${Math.min(entradaN, ENTRIES_MAX)} de ${ENTRIES_MAX} de hoy · ` : '';
         sub.textContent = nEntrada + 'Llamando a la puerta…';
-        await sleep(700); sound('click'); await sleep(380); sound('click'); await sleep(380); sound('click');
+        await sleep(700);
+        const bellEl = room.querySelector('.v-bell'), waveEl = room.querySelector('.v-bell-wave');
+        sub.textContent = nEntrada + 'Tocas el timbre…';
+        bellEl.classList.add('ring'); waveEl.classList.add('on'); sound('timbre'); await sleep(1500);   // ding-dong
+        bellEl.classList.remove('ring'); waveEl.classList.remove('on');
+        sub.textContent = nEntrada + 'Esperas a que abran…'; await sleep(500);
         // el anfitrión viene a abrir
         await say(host, pick(['¡Ya voy!', '¡Un momento, ya voy!', '¡Voy, voy!']), { gap: 80 });
         host.busy = true; others.forEach(o => { o.busy = true; });
