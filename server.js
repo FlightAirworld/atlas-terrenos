@@ -3184,6 +3184,9 @@ const VISIT_CREDITS = Math.max(0, Math.floor(Number(process.env.VISIT_CREDITS ??
 const VISIT_DAILY_MAX = Math.max(1, Math.floor(Number(process.env.VISIT_DAILY_MAX ?? 10)));
 const VISIT_ENTRIES_MAX = Math.max(1, Math.floor(Number(process.env.VISIT_ENTRIES_MAX ?? 3)));   // veces al día que un jugador puede ENTRAR en casas (cuenten o no como regalo)
 const VISIT_MIN_MS = 25_000, VISIT_MAX_MS = 15 * 60_000;
+// Apodos que pueden entrar en casas y edificios SIN límite diario de entradas (lista separada por comas; por defecto Redecora63).
+// Solo quita el tope de entradas: los créditos de regalo siguen con sus límites (1 por casa y día, VISIT_DAILY_MAX al día).
+const VISIT_UNLIMITED = new Set(String(process.env.VISIT_UNLIMITED_NICKS ?? 'Redecora63').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
 const visitStarts = new Map();   // visitante|casa -> hora de entrada
 async function visitParcel(body, user) {
   const id = String(body && body.id || '');
@@ -3199,13 +3202,15 @@ async function visitStart(req, body) {
   const par = await visitParcel(body, user);
   const day = dayKey();
   // Máximo VISIT_ENTRIES_MAX entradas al día: el contador sube de forma atómica y no pasa del tope (si ya está en el tope no devuelve fila)
-  const ent = await one('INSERT INTO house_entries (user_id, day, n) VALUES ($1,$2,1) ON CONFLICT (user_id, day) DO UPDATE SET n = house_entries.n + 1 WHERE house_entries.n < $3 RETURNING n', [user.id, day, VISIT_ENTRIES_MAX]);
+  const prof = await getProfile(user.id);
+  const unlimited = !!(prof && VISIT_UNLIMITED.has(String(prof.nickname).toLowerCase()));   // cuenta sin tope de entradas: no se cuenta
+  const ent = unlimited ? { n: 0 } : await one('INSERT INTO house_entries (user_id, day, n) VALUES ($1,$2,1) ON CONFLICT (user_id, day) DO UPDATE SET n = house_entries.n + 1 WHERE house_entries.n < $3 RETURNING n', [user.id, day, VISIT_ENTRIES_MAX]);
   if (!ent) return { ok: true, entryLimit: true, entries: VISIT_ENTRIES_MAX, entriesMax: VISIT_ENTRIES_MAX };
   if (visitStarts.size > 5000) visitStarts.clear();
   visitStarts.set(user.id + '|' + par.id, Date.now());
   const done = await one('SELECT 1 AS x FROM house_visits WHERE parcel_id = $1 AND user_id = $2 AND day = $3', [par.id, user.id, day]);
   const n = Number((await one('SELECT COUNT(*) AS n FROM house_visits WHERE user_id = $1 AND day = $2', [user.id, day])).n);
-  return { ok: true, reward: VISIT_CREDITS, canReward: VISIT_CREDITS > 0 && !done && n < VISIT_DAILY_MAX, already: !!done, limit: n >= VISIT_DAILY_MAX, entries: Number(ent.n), entriesMax: VISIT_ENTRIES_MAX };
+  return { ok: true, reward: VISIT_CREDITS, canReward: VISIT_CREDITS > 0 && !done && n < VISIT_DAILY_MAX, already: !!done, limit: n >= VISIT_DAILY_MAX, entries: unlimited ? 0 : Number(ent.n), entriesMax: unlimited ? null : VISIT_ENTRIES_MAX, unlimited };
 }
 async function visitFinish(req, body) {
   const user = await needUser(req);

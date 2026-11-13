@@ -403,13 +403,13 @@
       if (typeof authToken !== 'undefined' && authToken) {
         try { info = await api('/api/visit/start', { method: 'POST', body: { id: p.id } }); } catch (e) { info = { error: e.message }; }
         if (info && info.entryLimit) { setLocalEntries(ENTRIES_MAX); running = null; toast(`Hoy ya has entrado ${ENTRIES_MAX} veces. ¡Vuelve mañana!`); return; }
-        if (info && !info.error && info.entries != null) setLocalEntries(Number(info.entries) || 0);
+        if (info && !info.error && !info.unlimited && info.entries != null) setLocalEntries(Number(info.entries) || 0);
       } else info = { error: 'sin cuenta' };
       if (info.error) {
         if (localEntries() >= ENTRIES_MAX) { running = null; toast(`Hoy ya has entrado ${ENTRIES_MAX} veces. ¡Vuelve mañana!`); return; }
         setLocalEntries(localEntries() + 1);
       }
-      entradaN = info.error ? localEntries() : (Number(info.entries) || localEntries());
+      entradaN = info.unlimited ? 0 : info.error ? localEntries() : (Number(info.entries) || localEntries());
     }
     runScene(p, SCN[kind], info, entradaN);
   }
