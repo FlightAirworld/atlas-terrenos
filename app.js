@@ -262,6 +262,40 @@ function ringOf(x, y) {
   const [[s, w], [n, e]] = boundsOf(x, y);
   return [[w, s], [e, s], [e, n], [w, n], [w, s]];
 }
+// ---------- Vista lejana: todas las parcelas como puntos de color ----------
+// Con el mapa alejado (zoom < 13) no se cargan casas; en su lugar se pide al servidor la lista compacta de TODAS las parcelas
+// (/api/parcels/overview) y se pintan como puntos del color de su dueño sobre el satélite. Al acercarse se funden con las casas.
+const farFeatures = new Map();   // "x,y" -> punto en el centro de la parcela
+let farAt = 0, farBusy = false, farQueued = false;
+function farAdd(x, y, owner, col) {
+  const s = cfg.size;
+  farFeatures.set(x + ',' + y, { type: 'Feature', properties: { color: col || colorFor(String(owner || '')) }, geometry: { type: 'Point', coordinates: [x * s - 180 + s / 2, y * s - 90 + s / 2] } });
+}
+function farFlush() {
+  if (!glReady || farQueued) return;
+  farQueued = true;
+  requestAnimationFrame(() => {
+    farQueued = false;
+    const src = gl.getSource('far');
+    if (src) src.setData({ type: 'FeatureCollection', features: [...farFeatures.values()] });
+  });
+}
+async function loadOverview(force) {
+  if (!glReady || !cfg || farBusy) return;
+  if (!force && Date.now() - farAt < 120000) return;   // se refresca como mucho cada 2 minutos
+  farBusy = true;
+  try {
+    const d = await api('/api/parcels/overview');
+    const cols = d.o.map(colorFor);
+    farFeatures.clear();
+    for (let i = 0; i + 2 < d.p.length; i += 3) farAdd(d.p[i], d.p[i + 1], null, cols[d.p[i + 2]]);
+    for (const ex of drawn.values()) if (ex.p && !isOtherWorld(ex.p)) farAdd(ex.p.x, ex.p.y, ex.p.owner);   // las recién compradas que el servidor aún no devolvió
+    farAt = Date.now();
+    farFlush();
+  } catch (e) {} finally { farBusy = false; }
+}
+map.on('moveend', () => { if (map.getZoom() < 14) loadOverview(false); });
+
 function flushOwned() {
   if (!glReady || ownedDirty) return;
   ownedDirty = true;
@@ -633,6 +667,7 @@ function drawOwned(p) {
     geometry: { type: 'Polygon', coordinates: [ringOf(p.x, p.y)] }
   });
   drawn.set(p.id, { p, srcId: 'img-' + p.id, url, level: lvl, starsEl: null, label: null, hasDetail: false });
+  farAdd(p.x, p.y, p.owner); farFlush();
   markSynthDirty();
   flushOwned();
   updateDetail();
@@ -686,7 +721,7 @@ document.addEventListener('click', e => { if (e.target.closest && e.target.close
 // Quita una parcela del mapa al instante (la usa el piromano, arson.js)
 function removeParcelClient(id) {
   const ex = drawn.get(id);
-  if (ex) { dropDetail(ex); drawn.delete(id); }
+  if (ex) { dropDetail(ex); drawn.delete(id); if (ex.p) farFeatures.delete(ex.p.x + ',' + ex.p.y); farFlush(); }
   ownedFeatures.delete(id);
   if (typeof roadCut !== 'undefined' && roadCut.delete) roadCut.delete(id);
   markSynthDirty();
@@ -712,6 +747,19 @@ gl.on('load', () => {
     id: 'owned-flat', type: 'fill', source: 'owned', minzoom: MIN_ZOOM_PARCELS - 0.5,
     paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.85, 'fill-outline-color': 'rgba(255,255,255,.7)' }
   }, 'wt-water');
+  // Vista lejana: un punto de color por parcela comprada (todas las del mundo). Se funde al acercarse, cuando salen los cuadros y las casas.
+  gl.addSource('far', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  gl.addLayer({
+    id: 'owned-far', type: 'circle', source: 'far', maxzoom: 14.1,
+    paint: {
+      'circle-color': ['get', 'color'],
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 0, 2, 5, 3.5, 9, 5, 13, 4.5],
+      'circle-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0.95, 14, 0],
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 0, 0.6, 10, 1.2],
+      'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0.9, 14, 0]
+    }
+  }, 'owned-flat');
   gl.addLayer({
     id: 'owned-3d', type: 'fill-extrusion', source: 'owned',
     paint: {
@@ -738,6 +786,7 @@ gl.on('load', () => {
   applyBaseMode();
   pendingParcels.forEach(drawOwned); pendingParcels.clear();
   loadParcels();
+  loadOverview(true);
   // Quien ya vio la introducción entra volando directamente; el nuevo espera a que acabe el vídeo
   if (flightRequested || introAlreadySeen()) introFlight();
 });

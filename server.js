@@ -92,6 +92,7 @@ const isUniqueViolation = e => e && e.code === '23505';
 
 const q = {
   parcelById: id => one('SELECT * FROM parcels WHERE id = $1', [id]),
+  parcelsOverview: () => all("SELECT x, y, owner FROM parcels WHERE world = 'tierra' LIMIT 400000"),
   parcelsInBox: (x0, x1, y0, y1, world = 'tierra') => all('SELECT id, x, y, owner, avatar, country, house, level FROM parcels WHERE world = $5 AND x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1, world]),
   insertParcel: (id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house) =>
     run('INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, house) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', [id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house]),
@@ -3679,6 +3680,28 @@ function sendStatic(req, res, file) {
 const TILE = 16;   // debe coincidir con TILE de app.js
 const TILE_TTL_MS = 10_000;
 const tileCache = new Map();   // "tx,ty" -> { at, body, etag }
+// Vista lejana: todas las parcelas de la Tierra en formato compacto (solo posición y dueño) para pintarlas de color con el mapa alejado.
+// { s: tamaño de parcela, o: [dueños], p: [x, y, índiceDueño, x, y, índiceDueño, …] }
+let overviewCache = null;
+const OVERVIEW_TTL_MS = 60_000;
+async function sendOverview(req, res, send) {
+  if (!overviewCache || Date.now() - overviewCache.at > OVERVIEW_TTL_MS) {
+    const rows = await q.parcelsOverview();
+    const idx = new Map(), owners = [], flat = [];
+    for (const r of rows) {
+      const name = String(r.owner || '');
+      let i = idx.get(name);
+      if (i === undefined) { i = owners.length; idx.set(name, i); owners.push(name); }
+      flat.push(r.x, r.y, i);
+    }
+    const body = JSON.stringify({ s: SIZE, o: owners, p: flat });
+    overviewCache = { at: Date.now(), body, etag: '"' + require('node:crypto').createHash('md5').update(body).digest('hex').slice(0, 20) + '"' };
+  }
+  const extra = { 'ETag': overviewCache.etag, 'Cache-Control': 'no-cache' };
+  if (req.headers['if-none-match'] === overviewCache.etag) { res.writeHead(304, { ...extra, 'X-Content-Type-Options': 'nosniff' }); return res.end(); }
+  return send(200, overviewCache.body, undefined, extra);
+}
+
 async function sendTile(req, res, url, send) {
   const tx = Number(url.searchParams.get('tx')), ty = Number(url.searchParams.get('ty'));
   if (!Number.isInteger(tx) || !Number.isInteger(ty) || tx < 0 || ty < 0 || tx * TILE >= MAX_X || ty * TILE >= MAX_Y) throw new HttpError(400, 'Tesela no válida');
@@ -3843,6 +3866,7 @@ const httpServer = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/webhooks/stripe') return send(200, JSON.stringify(await stripeWebhook(req)));   // antes de route(): necesitan el cuerpo sin tocar para comprobar la firma
     if (req.method === 'POST' && url.pathname === '/api/webhooks/paypal') return send(200, JSON.stringify(await paypalWebhook(req)));
     if (req.method === 'GET' && /^\/api\/(moon|mars)-tile\//.test(url.pathname)) return await sendPlanetTile(req, res, url);   // teselas de la Luna y Marte (imágenes, no JSON)
+    if (req.method === 'GET' && url.pathname === '/api/parcels/overview') return await sendOverview(req, res, send);   // todas las parcelas (vista lejana)
     if (req.method === 'GET' && url.pathname === '/api/parcels/tile') return await sendTile(req, res, url, send);   // await: así un error 400 lo recoge el catch de abajo
     if (url.pathname.startsWith('/api/')) {
       const out = await route(req, res, url);
