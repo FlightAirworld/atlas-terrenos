@@ -1059,7 +1059,10 @@ const EXTRA_HOUSES = ['images/cesped-2.webp', 'images/parque-picnic.webp', 'imag
 const GOLD_HOUSES = ['images/casa-2.webp', 'images/casa-3.webp', 'images/rascacielos.webp', 'images/parque-atracciones.webp', 'images/puerto.webp', 'images/aeropuerto.webp', 'images/ayuntamiento.webp', 'images/banco.webp', 'images/hospital.webp', 'images/iglesia.webp', 'images/piscina.webp', 'images/estacion.webp'];
 let eventHouses = [];
 let pickerWorld = 'tierra';   // mundo de la parcela abierta: en un planeta el selector solo enseña las casas de ese planeta
-const pickableHouses = () => pickerWorld !== 'tierra' ? WORLD_HOUSES[pickerWorld] : HOUSES.concat(EXTRA_HOUSES, GOLD_HOUSES, eventHouses);
+// Las casas NUEVAS salen siempre las primeras del selector: primero las de evento y luego cada lista del final al principio (lo último que se añade queda arriba).
+// Solo cambia el orden en que se enseñan; HOUSES, EXTRA_HOUSES y GOLD_HOUSES no se tocan.
+const pickableHouses = () => pickerWorld !== 'tierra' ? WORLD_HOUSES[pickerWorld]
+  : [...new Set([...eventHouses, ...EXTRA_HOUSES.slice().reverse(), ...GOLD_HOUSES.slice().reverse(), ...HOUSES.slice().reverse()])];
 const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '').replace(/[-_]/g, ' ');
 // Categorías del selector de casas: al tocar una (🎬 Cines, 🏠 Casas…) solo salen las de ese tipo. Lo que no esté aquí va a «Otros» (así las casas nuevas siempre se ven).
 const HOUSE_CATS = [
