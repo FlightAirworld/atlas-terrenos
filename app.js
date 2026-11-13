@@ -1,6 +1,6 @@
 'use strict';
 const $ = id => document.getElementById(id);
-const MIN_ZOOM_PARCELS = 15;   // por debajo no se muestran parcelas
+const MIN_ZOOM_PARCELS = 13;   // por debajo no se cargan ni se muestran parcelas (antes 15: al alejar un poco desaparecían)
 const MIN_ZOOM_BUY = 16;       // para comprar hay que acercarse
 let cfg, map, gl, selected = null, paypalLoaded = null;
 let sb = null, authToken = null, authUser = null, linkedFor = null;   // sesión (Supabase Auth)
@@ -256,7 +256,7 @@ function flushOwned() {
 // El volumen 3D (una sola capa para todas) se mantiene siempre.
 // Cuántas parcelas (las más cercanas al centro) mantienen su foto a la vez. Con el zoom lejano la foto pesa poco (128 px) y caben muchas;
 // al acercar, cada foto es mayor (256 / 512 px) y se baja para no agotar la memoria del móvil.
-const DETAIL_CAP = { t: 120, s: 70, m: 40 }, DETAIL_KEEP = 20;   // DETAIL_KEEP: margen para que no parpadeen las del borde al mover un poco el mapa
+const DETAIL_CAP = { t: 260, s: 90, m: 45 }, DETAIL_KEEP = 80;   // DETAIL_KEEP: margen para que no parpadeen las del borde al mover un poco el mapa
 let detailQueued = false;
 // ---------- Casas recortadas por las calles ----------
 // Las calles reales (teselas de OpenFreeMap) se restan de cada parcela: la casa queda cortada por la carretera.
@@ -555,7 +555,7 @@ function updateDetail() {
   requestAnimationFrame(() => {
     detailQueued = false;
     const all = [...drawn.values()];
-    if (map.getZoom() < 16) { all.forEach(dropDetail); return; }
+    if (map.getZoom() < MIN_ZOOM_PARCELS) { all.forEach(dropDetail); return; }   // solo se sueltan las fotos al alejar mucho; las parcelas siguen en el mapa como cuadro de color
     const c = gl.getCenter();
     all.forEach(ex => { const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y); ex.d = Math.hypot((s + n) / 2 - c.lat, (w + e) / 2 - c.lng); });
     all.sort((a, b) => a.d - b.d);
@@ -666,6 +666,12 @@ gl.on('load', () => {
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: { 'line-color': '#7cc4e8', 'line-opacity': 0.9, 'line-width': WATER_W } });
   gl.addSource('owned', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  // Cuadro plano de color por cada parcela comprada (también en vista plana): si una parcela no tiene su foto montada
+  // (lejos del centro o con el zoom alejado) sigue viéndose en el mapa en vez de desaparecer. Las fotos van encima.
+  gl.addLayer({
+    id: 'owned-flat', type: 'fill', source: 'owned', minzoom: MIN_ZOOM_PARCELS - 0.5,
+    paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.85, 'fill-outline-color': 'rgba(255,255,255,.7)' }
+  }, 'wt-water');
   gl.addLayer({
     id: 'owned-3d', type: 'fill-extrusion', source: 'owned',
     paint: {
@@ -705,7 +711,7 @@ function setSelected(p) {
 
 // Parcelas por teselas fijas de TILE×TILE casillas (las mismas que el servidor): cada tesela se guarda en el cliente TILE_TTL_MS
 // y, al mover el mapa, solo se piden las que faltan. Antes se pedía todo el recuadro visible en cada movimiento.
-const TILE = 16, TILE_TTL_MS = 60_000, MAX_TILES_PER_LOAD = 36, TILE_PARALLEL = 6;   // TILE debe coincidir con server.js
+const TILE = 16, TILE_TTL_MS = 60_000, MAX_TILES_PER_LOAD = 90, TILE_PARALLEL = 8;   // TILE debe coincidir con server.js
 const tileCache = new Map();   // "tx,ty" -> { at, busy }
 function invalidateTile(x, y) { tileCache.delete(Math.floor(x / TILE) + ',' + Math.floor(y / TILE)); }   // p. ej. tras comprar una parcela
 async function loadTile(tx, ty) {
