@@ -11,6 +11,7 @@
     ['trenes', '🚆', 'Trenes'],
     ['aviones', '✈️', 'Aviones y helicópteros'],
     ['animales', '🐕', 'Animales'],
+    ['mar', '🌊', 'Mar: olas, barcos y ferry'],
     ['marcianos', '👽', 'Marcianos y platillos'],
     ['lluvia', '⛈️', 'Lluvia y truenos'],
     ['campanas', '⛪', 'Campanas']

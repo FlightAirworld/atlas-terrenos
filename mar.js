@@ -9,6 +9,10 @@
 //  · PUERTO + FERRY: en algunas costas hay un muelle de madera con gente esperando y, al otro lado del agua, otro muelle.
 //    El ferry hace el viaje de uno a otro: al llegar atraca, baja gente, sube gente, y sale otra vez. Los puertos son siempre los mismos
 //    en el mismo sitio (se deciden con el número de la celda del mapa, no al azar).
+//  · SONIDO (Web Audio, sin archivos; categoría «🌊 Mar» del botón 🔊): olas, gaviotas, motor de las lanchas, bocina y campana del ferry,
+//    chapoteo y música de peligro cuando un tiburón empieza a perseguir. Suena más fuerte cuanto más cerca del centro de la pantalla.
+//  · VOCES (voices.js → atlasVoice): bañistas que gritan «¡Tiburón!», tripulaciones que piden socorro o saludan, gente de la playa
+//    que charla, y el megáfono del ferry («¡Última llamada!»). Respetan la categoría «Gente y voces».
 // Se activa y desactiva con el mismo botón de la gente (🚶), igual que rivers.js. Para probar: con zoom >= 16 junto al mar.
 (function () {
   if (typeof map === 'undefined' || !map || !map.gl) return;
@@ -227,6 +231,116 @@
     setTimeout(() => b.remove(), ms || 2600);
   }
 
+  // ---------- Sonido y voces ----------
+  let ctx = null, bus = null, nbuf = null, amb = null, eng = null, nextGull = 6, nextChat = 14, tickAt = 0, waterFrac = 0;
+  const audioOk = () => !document.hidden && !window.houseInside && (!window.soundMode || window.soundMode() >= 1) && (!window.soundOn || window.soundOn('mar'));
+  function ac() {
+    if (ctx) return ctx;
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+    try { ctx = new AC(); } catch (e) { return null; }
+    bus = ctx.createGain(); bus.gain.value = 0.7; bus.connect(ctx.destination);
+    return ctx;
+  }
+  const audioRunning = () => { if (!ac()) return false; if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} } return ctx.state === 'running'; };
+  function tone(type, f0, f1, t, dur, vol, x) {
+    x = x || {};
+    const o = ctx.createOscillator(), g = ctx.createGain(), a = x.a || 0.01;
+    o.type = type; o.frequency.setValueAtTime(f0, t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + a);
+    if (x.hold) { g.gain.setValueAtTime(vol, t + dur - x.hold); }
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    let last = g;
+    if (x.lp) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = x.lp; g.connect(f); last = f; }
+    o.connect(g); last.connect(bus);
+    if (x.vib) { const l = ctx.createOscillator(), lg = ctx.createGain(); l.frequency.value = x.vib[0]; lg.gain.value = x.vib[1]; l.connect(lg); lg.connect(o.frequency); l.start(t); l.stop(t + dur + 0.05); }
+    o.start(t); o.stop(t + dur + 0.05);
+  }
+  function noiseBuf() { if (!nbuf) { nbuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const d = nbuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; } return nbuf; }
+  function burst(t, dur, vol, fc) {
+    const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    s.buffer = noiseBuf(); s.loop = true; f.type = 'lowpass'; f.frequency.value = fc;
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(bus); s.start(t); s.stop(t + dur + 0.05);
+  }
+  // Cuánto se oye algo según lo cerca que está del centro de la pantalla (0 si queda fuera)
+  function near(x, y) {
+    const p = map.latLngToContainerPoint(toLL(x, y)), sz = map.getSize();
+    if (p.x < 0 || p.y < 0 || p.x > sz.x || p.y > sz.y) return 0;
+    const d = Math.hypot(p.x - sz.x / 2, p.y - sz.y / 2) / (0.62 * Math.hypot(sz.x, sz.y));
+    return clamp(1 - d, 0, 1);
+  }
+  const SND = {
+    splash: (t, v) => { burst(t, 0.45, 0.5 * v, 1100); tone('sine', 420, 140, t, 0.3, 0.35 * v); burst(t + 0.18, 0.3, 0.25 * v, 700); },
+    gull: (t, v) => { for (let i = 0; i < 3; i++) { const u = t + i * 0.32; tone('triangle', 1900, 1250, u, 0.26, 0.2 * v, { vib: [38, 90] }); tone('sine', 3800, 2500, u, 0.2, 0.05 * v); } },
+    horn: (t, v) => { tone('sawtooth', 98, 92, t, 1.5, 0.3 * v, { lp: 520, a: 0.08, hold: 0.5 }); tone('square', 123, 116, t, 1.5, 0.18 * v, { lp: 480, a: 0.08, hold: 0.5 }); },
+    bell: (t, v) => { for (let i = 0; i < 3; i++) { tone('sine', 1760, 1760, t + i * 0.28, 0.9, 0.22 * v); tone('sine', 2637, 2637, t + i * 0.28, 0.5, 0.08 * v); } },
+    // peligro: dos notas graves que se aceleran (un tiburón empieza a perseguir)
+    sting: (t, v) => { [0, 0.6, 1.05, 1.4, 1.68, 1.9, 2.08].forEach((d, i) => tone('sine', i % 2 ? 87.3 : 82.4, i % 2 ? 87.3 : 82.4, t + d, 0.28, 0.5 * v, { lp: 320, a: 0.02 })); },
+    ding: (t, v) => { tone('sine', 1568, 1568, t, 0.6, 0.2 * v); tone('sine', 2093, 2093, t + 0.12, 0.7, 0.16 * v); }
+  };
+  function sfx(name, x, y, vol) {
+    if (!audioOk() || !audioRunning()) return;
+    const g = x == null ? 1 : near(x, y); if (g < 0.05) return;
+    try { SND[name](ctx.currentTime + 0.02, clamp(g * (vol == null ? 1 : vol), 0.05, 1.3)); } catch (e) {}
+  }
+  // Frase en un globo y, si se puede, dicha en voz alta (cada personaje conserva su voz)
+  function say(c, text, o) {
+    o = o || {};
+    bubble(c, text, o.ms);
+    const av = window.atlasVoice; if (!av || !audioOk()) return;
+    const g = near(c.x, c.y); if (g < 0.08) return;
+    if (!c.vp) c.vp = c.announcer ? { k: 'human', pitch: 0.85, rate: 0.95, vi: 0.3, chirp: 0 } : av.profile('human');
+    try { av.speak(tr(text), c.vp, { force: !!o.force, vol: clamp(0.35 + g, 0.3, 1) }); } catch (e) {}
+  }
+  // Ambiente continuo: olas (ruido suave que sube y baja) y motor de las lanchas; se ajustan cada poco según lo que se ve
+  function ambStart() {
+    if (amb || !audioRunning()) return;
+    const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), l = ctx.createOscillator(), lg = ctx.createGain();
+    s.buffer = noiseBuf(); s.loop = true; f.type = 'lowpass'; f.frequency.value = 650; g.gain.value = 0;
+    l.frequency.value = 0.11; lg.gain.value = 260; l.connect(lg); lg.connect(f.frequency);   // el filtro sube y baja: «shhh… shhh…»
+    s.connect(f); f.connect(g); g.connect(bus); s.start(); l.start();
+    amb = { g, nodes: [s, l] };
+    const o = ctx.createOscillator(), og = ctx.createGain(), of = ctx.createBiquadFilter(), vl = ctx.createOscillator(), vg = ctx.createGain();
+    o.type = 'sawtooth'; o.frequency.value = 58; of.type = 'lowpass'; of.frequency.value = 240; og.gain.value = 0;
+    vl.frequency.value = 9; vg.gain.value = 5; vl.connect(vg); vg.connect(o.frequency);
+    o.connect(of); of.connect(og); og.connect(bus); o.start(); vl.start();
+    eng = { g: og, nodes: [o, vl] };
+  }
+  function ambLevel(wave, motor) {
+    if (!amb || !ctx) return;
+    amb.g.gain.setTargetAtTime(wave, ctx.currentTime, 0.9);
+    eng.g.gain.setTargetAtTime(motor, ctx.currentTime, 0.5);
+  }
+  function audioStop() { if (amb && ctx) ambLevel(0, 0); }
+  const CHAT = {
+    swim: ['¡Qué buena está el agua!', '¡Al agua, patos!', '¡Mira cómo nado!', '¡Qué calor, menos mal que hay mar!'],
+    beach: ['¡Qué calorcito!', '¡Pásame la crema solar!', '¡Qué día de playa!', '¡Qué bien se está aquí!'],
+    sail: ['¡Buen viento hoy!', '¡Ahoy, marinero!', '¡Larga la vela!'],
+    motor: ['¡A toda máquina!', '¡Agárrate fuerte!', '¡Qué velocidad!'],
+    fish: ['¡Pican los peces!', '¡Hoy toca pescado!', '¡Ya tengo uno!'],
+    row: ['Un, dos… un, dos…', '¡Qué remos más duros!']
+  };
+  function audioTick(t) {
+    if (t - tickAt < 1500) return; tickAt = t;
+    if (!audioOk()) { audioStop(); return; }
+    // fracción de la pantalla que es agua (muestreo)
+    let w = 0; const N = 14;
+    for (let i = 0; i < N; i++) { const p = randView(); if (inWater(p.x, p.y)) w++; }
+    waterFrac = w / N;
+    ambStart();
+    let motor = 0;
+    for (const c of ents) if (c.kind === 'boat' && (c.type === 'motor' || c.type === 'fish')) motor = Math.max(motor, near(c.x, c.y) * (c.type === 'motor' ? 1 : 0.5));
+    ambLevel(0.1 * Math.sqrt(waterFrac) * clamp(map.getZoom() - 15, 0.4, 1.4), 0.05 * motor);
+    nextGull -= 1.5; nextChat -= 1.5;
+    if (nextGull <= 0) { nextGull = rnd(8, 18); if (waterFrac > 0.15) sfx('gull', null, null, 0.7); }
+    if (nextChat <= 0) {          // alguien dice algo por su cuenta
+      nextChat = rnd(10, 22);
+      const pool = ents.filter(c => (c.kind === 'swim' && c.state === 'swim') || c.kind === 'beach' || c.kind === 'boat').filter(c => near(c.x, c.y) > 0.25);
+      if (pool.length) { const c = pick(pool), key = c.kind === 'boat' ? c.type : c.kind; say(c, pick(CHAT[key])); }
+    }
+  }
+
   // ---------- Criaturas del mar ----------
   const ents = [];
   const count = k => ents.reduce((n, c) => n + (c.kind === k ? 1 : 0), 0);
@@ -334,7 +448,8 @@
   }
   function hitBoat(b) {
     b.shake = 1.4; if (b.el) b.el.classList.add('mr-shake');
-    bubble(b, pick(['¡Socorro! 🦈', '¡Un tiburón! 😱', '¡Cuidado! 🦈']), 2400);
+    sfx('splash', b.x, b.y);
+    say(b, pick(['¡Socorro, un tiburón!', '¡Un tiburón! ¡Cuidado!', '¡Nos ataca un tiburón!']), { force: true, ms: 2600 });
   }
   function updShark(c, dt) {
     c.cool -= dt; c.tt -= dt; c.chk -= dt; c.look -= dt;
@@ -350,7 +465,9 @@
           if (d < range && d < best) { best = d; c.target = o; }
         }
       }
+      const prev = c.mode;
       c.mode = c.mode === 'retreat' ? 'retreat' : (c.target ? 'hunt' : 'patrol');
+      if (prev !== 'hunt' && c.mode === 'hunt') sfx('sting', c.x, c.y, 0.9);   // empieza la persecución: música de peligro
     }
     if (c.mode === 'hunt' && c.target && ents.includes(c.target)) {
       const t = c.target, ang = Math.atan2(t.y - c.y, t.x - c.x), d = dist(c.x, c.y, t.x, t.y);
@@ -369,7 +486,8 @@
   function scare(s, attacked) {
     if (s.state !== 'swim') return;
     s.state = 'flee'; s.v = 17;
-    bubble(s, attacked ? pick(['¡¡Tiburón!! 😱', '¡Aaah! 🦈', '¡Socorro! 😱']) : pick(['¡Un tiburón! 😱', '¡Fuera del agua! 🦈']), 2600);
+    if (attacked) sfx('splash', s.x, s.y);
+    say(s, attacked ? pick(['¡Tiburón! ¡Socorro!', '¡Aaah, un tiburón!', '¡Socorro, que me muerde!']) : pick(['¡Un tiburón! ¡Fuera del agua!', '¡Tiburón, tiburón!']), { force: attacked, ms: 2600 });
   }
   function updSwim(c, dt) {
     const t = { x: -c.ny, y: c.nx };
@@ -381,7 +499,7 @@
       if (c.fear <= 0) { c.fear = 0.5; for (const s of sharks()) if (dist(c.x, c.y, s.x, s.y) < 130) { scare(c, false); break; } }
     } else if (c.state === 'flee') {
       c.d -= c.v * dt; c.u += Math.sin(c.age * 9) * 4 * dt;
-      if (c.d <= 0) { c.state = 'out'; c.outT = 0; bubble(c, '¡Uf! 😮‍💨', 2200); }
+      if (c.d <= 0) { c.state = 'out'; c.outT = 0; say(c, pick(['¡Uf, me salvé!', '¡Qué susto, madre mía!']), { ms: 2400 }); }
     } else if (c.state === 'out') { c.outT += dt; if (c.outT > 3 && c.life > c.age + 1.5) c.life = c.age + 1.5; }
     c.x = c.ex + c.nx * c.d + t.x * c.u; c.y = c.ey + c.ny * c.d + t.y * c.u;
     c.h = c.state === 'flee' ? Math.atan2(-c.ny, -c.nx) : Math.atan2(t.y * c.dir, t.x * c.dir);
@@ -503,6 +621,8 @@
       f.t += dt;
       f.h += clamp(angDiff(f.hWant, f.h), -0.8 * dt, 0.8 * dt);
       const { pg, d } = dockAt(P);
+      f.announcer = true;
+      if (!f.did.hello && f.t > 0.2) { f.did.hello = true; sfx('horn', f.x, f.y, 0.9); setTimeout(() => { if (P.active && P.f) sfx('bell', P.f.x, P.f.y); }, 1700); say(f, 'Atención, pasajeros: hemos llegado a puerto', { ms: 3200 }); }
       if (!f.did.alight && f.t > 1) {          // bajan del ferry hacia la tierra
         f.did.alight = true;
         const n = Math.min(f.deckN, 2 + Math.floor(Math.random() * 3));
@@ -514,7 +634,7 @@
         }, i * 900 * rnd(0.8, 1.3));
       }
       if (!f.did.board && f.t > 6) {           // suben los que esperaban en el muelle
-        f.did.board = true;
+        f.did.board = true; sfx('ding', f.x, f.y);
         const n = Math.min(P.waiters.filter(w => w.pg === pg).length, 2 + Math.floor(Math.random() * 3));
         let k = 0;
         for (const w of P.waiters.filter(w => w.pg === pg).slice(0, n)) {
@@ -527,7 +647,8 @@
         }
         for (let i = 0; i < n; i++) setTimeout(() => { if (P.active && P.f) newWaiter(P, pg); }, 7000 + i * 1500);   // llegan otros a la cola
       }
-      if (f.t > 16) { f.st = 'sail'; f.t = 0; f.did = { alight: false, board: false }; }
+      if (!f.did.last && f.t > 12) { f.did.last = true; say(f, '¡Última llamada! El ferry zarpa en un minuto', { ms: 3200 }); }
+      if (f.t > 16) { f.st = 'sail'; f.t = 0; f.did = { alight: false, board: false }; sfx('horn', f.x, f.y); say(f, '¡Zarpamos! Buen viaje', { ms: 2600 }); }
     } else if (f.st === 'sail') {
       const to = f.at === 'A' ? P.dockB : P.dockA, d = dist(f.x, f.y, to.x, to.y);
       const ang = Math.atan2(to.y - f.y, to.x - f.x);
@@ -568,11 +689,11 @@
   function frame(t) {
     requestAnimationFrame(frame);
     const dt = Math.min((t - last) / 1000, 0.1); last = t;
-    if (!isOn()) { if (running) { running = false; clearAll(); } return; }
+    if (!isOn()) { if (running) { running = false; clearAll(); audioStop(); } return; }
     running = true;
     if (document.hidden || zooming) return;
     const z = map.getZoom();
-    if (z < MIN_ZOOM) return;
+    if (z < MIN_ZOOM) { audioStop(); return; }
     if (wDirty && (t - wBuiltAt > 700) && !(gl.isMoving && gl.isMoving())) buildWater();
     if (!W.length) return;
     S = clamp(Math.pow(2, z - REF_Z) * SC_EXAG, 0.3, 3.2); BEAR = gl.getBearing() * Math.PI / 180;
@@ -587,6 +708,7 @@
       nextSpawn = wants.length && pick(wants)() ? rnd(0.8, 2.2) : 2.5;
     }
     if (t - portScanAt > 3000) { portScanAt = t; scanPorts(); }
+    audioTick(t);
     // Puertos: se montan los que están cerca de la pantalla y se desmontan al alejarse
     const view = map.getBounds().pad(0.3);
     let nActive = 0;
