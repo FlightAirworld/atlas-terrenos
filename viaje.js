@@ -152,19 +152,22 @@
   const trf = p => `translate(${p.x - 17}px, ${p.y - 58}px)`;   // los pies del muñeco en el punto p
   const moveTo = (el, a, b, ms) => el.animate([{ transform: trf(a) }, { transform: trf(b) }], { duration: ms, easing: 'linear', fill: 'forwards' }).finished.catch(() => {});
   // El astronauta camina hasta el cohete, sube por la rampa y entra; la puerta se cierra. `drop` = lo que baja el suelo respecto a la base del cohete.
-  async function boardRocket(ov, rocket, suit, drop) {
+  async function boardRocket(ov, rocket, suit, drop, slow) {
     if (!Element.prototype.animate) return;
+    const f = slow ? 1.6 : 1;   // en la Tierra la subida va más despacio para que se vea bien
     const rr = rocket.getBoundingClientRect(), k = rr.width / 100;
     const P = (u, v) => ({ x: rr.left + u * k, y: rr.top + v * k });
     const gnd = P(17, 228), door = P(46, 195), step = { x: gnd.x - 18, y: gnd.y + drop }, start = { x: Math.max(-30, gnd.x - 150), y: gnd.y + drop };
-    const w = makeWalker(suit); ov.appendChild(w);
+    const w = makeWalker(suit, slow ? '¡Allá voy!' : ''); ov.appendChild(w);
     try {
       w.style.transform = trf(start); w.classList.add('walking');
       rocket.classList.add('open'); sfx('beep');
-      await moveTo(w, start, step, 1000);
-      await moveTo(w, step, gnd, 250);
-      await moveTo(w, gnd, door, 520);
+      if (slow) await wait(700);   // primero se ve la puerta abierta y la rampa
+      await moveTo(w, start, step, 1000 * f);
+      await moveTo(w, step, gnd, 250 * f);
+      await moveTo(w, gnd, door, 520 * f);
       w.classList.remove('walking');
+      if (slow) { w.classList.add('say'); await wait(900); w.classList.remove('say'); }   // en la puerta dice «¡Allá voy!» antes de entrar
       await w.animate([{ opacity: 1, transform: trf(door) }, { opacity: 0, transform: trf(door) + ' scale(.5)' }], { duration: 300, fill: 'forwards' }).finished.catch(() => {});
     } finally {
       w.remove(); rocket.classList.add('occ');   // pase lo que pase, el jugador queda dentro (se le ve la cabeza por la ventanilla)
@@ -172,6 +175,14 @@
     await wait(250); rocket.classList.remove('open'); sfx('beep');
     await wait(450);
   }
+  // Resuelve cuando el navegador lleva `need` fotogramas seguidos sin tirones (o a los `maxMs`, por si la pestaña no pinta)
+  const stableFrames = (need, maxMs) => new Promise(res => {
+    let last = performance.now(), ok = 0, done = false;
+    const fin = () => { if (!done) { done = true; res(); } };
+    setTimeout(fin, maxMs);
+    const tick = now => { if (done) return; ok = now - last < 100 ? ok + 1 : 0; last = now; if (ok >= need) fin(); else requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  });
   const sfx = n => { try { if (window.sfx) window.sfx(n); } catch (e) {} };
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const reduced = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -415,8 +426,9 @@
       };
       // Se sube al cohete solo cuando la pantalla del viaje ya se ha pintado: en la Tierra (con el mapa y todo lo que corre detrás) el primer pintado tarda,
       // y la subida empezaba antes de que se viera. Si el navegador no pinta (pestaña oculta), a los 1,5 s se sube igualmente.
-      const painted = new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, from === 'tierra' ? 500 : 250))));
-      Promise.race([painted, wait(1500)]).then(() => boardRocket(ov, rocket, from !== 'tierra', 14)).catch(() => {}).then(go);
+      // En la Tierra la pantalla se queda en azul un par de segundos antes de verse el cohete, así que se espera ese tiempo y a que los fotogramas vayan fluidos.
+      const minWait = from === 'tierra' ? 2300 : 250;
+      Promise.all([wait(minWait), stableFrames(6, 4500)]).then(() => boardRocket(ov, rocket, from !== 'tierra', 14, from === 'tierra')).catch(() => {}).then(go);
     });
     prom.takeoff = takeoff;
     return prom;
