@@ -348,5 +348,9 @@ button.close:hover { background: rgba(128, 128, 128, .18); color: var(--fg); }
 
 /* Casilla de edad: mientras no esté marcada, el botón invisible de Google no recibe el toque (lo recibe el nuestro, que avisa) */
 body.age-pending #login-google-gsi { pointer-events: none !important; }
+.age-check { border-radius: 10px; padding: 6px; margin-left: -6px; }
+.age-check input { width: 22px !important; height: 22px; }
+.age-check.age-flash { animation: ageFlash 1.4s ease-out; }
+@keyframes ageFlash { 0%, 100% { background: transparent; box-shadow: none; } 15%, 55% { background: #fff1ef; box-shadow: 0 0 0 2px #c0392b; } }
 /* Juego gratuito (FREE_MODE): fuera todos los botones de compra */
 body.free-mode #panel-buy, body.free-mode #credit-buy, body.free-mode #mine-buy, body.free-mode #buy-box, body.free-mode #buy, body.free-mode #demo-pay, body.free-mode #demo-pay-2 { display: none !important; }

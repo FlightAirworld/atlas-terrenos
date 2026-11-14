@@ -1639,7 +1639,7 @@ function applyNick() {
 }
 function setLoginMsg(text, kind = '') { const m = $('login-msg'); m.textContent = text; m.className = 'msg ' + kind; }
 function openLogin(reason) {
-  setLoginMsg(reason || '');
+  setLoginMsg(reason || (!authToken && inAppBrowser() ? '⚠️ Estás dentro de otra app (Instagram, Facebook, TikTok…) y Google no deja entrar desde aquí. Abre redecoraelmundo.com en Chrome (menú ⋮ → «Abrir en el navegador») o entra con tu email.' : ''), reason ? '' : (inAppBrowser() ? 'err' : ''));
   updateAuthUi();
   $('login').classList.remove('hidden');
 }
@@ -1731,11 +1731,20 @@ $('buy-login').onclick = () => openLogin('Entra para comprar tu pack 🎁');
 const ageOk = () => !!($('age-ok') && $('age-ok').checked);
 const syncAge = () => document.body.classList.toggle('age-pending', !ageOk());
 function needAge() {
-  if (ageOk()) return true;
-  setLoginMsg('Marca la casilla para confirmar que tienes 16 años o más', 'err');
+  if (ageOk()) { const e = $('age-err'); if (e) e.classList.add('hidden'); return true; }
+  // El aviso sale JUNTO a la casilla (antes solo salía abajo del todo y muchos no sabían por qué «Entrar con Google» no hacía nada)
+  const e = $('age-err'), box = document.querySelector('label.age-check');
+  if (e) e.classList.remove('hidden');
+  setLoginMsg('');
+  if (box) {
+    try { box.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (x) {}
+    box.classList.remove('age-flash'); void box.offsetWidth; box.classList.add('age-flash');
+  }
   return false;
 }
-if ($('age-ok')) { $('age-ok').onchange = () => { syncAge(); if (ageOk()) setLoginMsg(''); }; syncAge(); }
+// Navegadores dentro de otras apps (Instagram, Facebook, TikTok…): Google no permite iniciar sesión ahí (error 403 disallowed_useragent)
+const inAppBrowser = () => /FBAN|FBAV|FB_IAB|Instagram|TikTok|musical_ly|Snapchat|Line\/|Twitter|LinkedInApp|Pinterest|MicroMessenger/i.test(navigator.userAgent || '');
+if ($('age-ok')) { $('age-ok').onchange = () => { syncAge(); if (ageOk()) { setLoginMsg(''); const e = $('age-err'); if (e) e.classList.add('hidden'); } }; syncAge(); }
 
 async function initGoogleId() {
   try {
