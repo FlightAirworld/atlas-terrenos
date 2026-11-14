@@ -18,6 +18,10 @@
     #viaje.fade { opacity: 0; }
     body.viajando #where-banner, body.viajando #ayto-banner, body.viajando #lugar { display: none !important; }   /* avisos flotantes de la Tierra: no tapan el despegue */
     #viaje .sky { position: absolute; inset: 0; background: linear-gradient(#4d9be6 0%, #8ccbff 65%, #d8f0ff 100%); transition: opacity 3.6s ease-in; }
+    /* vehicles.js define .sky (z-index 650: cielo de los aviones) y .pad (transparente !important) para TODA la página: tapaban el cohete, el suelo y la cuenta atrás
+       con el azul del cielo (solo se veía una pantalla azul hasta que se desvanecía). Aquí se anulan dentro de #viaje. */
+    #viaje .sky { z-index: 0; overflow: visible; }
+    #viaje .pad { background: #555 !important; border: 0 !important; }
     #viaje.go .sky { opacity: 0; }
     #viaje.luna .sky, #viaje.mercurio .sky, #viaje.pluton .sky { display: none; }
     #viaje.marte .sky { background: linear-gradient(#b9764a 0%, #dd9d6c 65%, #f0c9a0 100%); }
