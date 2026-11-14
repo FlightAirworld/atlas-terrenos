@@ -450,7 +450,7 @@
     const me = mk(Object.assign(look('Tú', Math.random() < 0.5, 'adult', Math.random), window.playerCssLook ? window.playerCssLook() : {}, { pitch: 1, rate: 1.05 }), true);
     const A = { E: mk(Object.assign(staff(nm[0], T.uni), { name: nm[0][0] + ' · ' + (T.roles.E || '') })), D: mk(Object.assign(staff(nm[1], T.uniD || T.uni), { name: nm[1][0] + ' · ' + (T.roles.D || '') })), C: mk(Object.assign(look(nm[2][0], nm[2][1] === 'f', 'adult', Math.random), { name: nm[2][0] })), V: me };
     v.D = nm[1][0];
-    Object.values(A).forEach(c => { if (c !== me) c.el.style.opacity = '0'; });
+    Object.values(A).forEach(c => { c.el.style.opacity = '0'; });
     const SP = n => { const s = T.sp[n]; return { x: s[0], d: s[1] }; };
     const fill = t => String(t).replace(/\{(\w+)(?:\[(\d)\])?\}/g, (m, k, i) => { const x = v[k]; return x == null ? m : (i != null ? x[i] : x); });
     const feetBottom = d => 10 + d * 108, depthScale = d => 1 - d * 0.28;
@@ -471,7 +471,7 @@
     }
     const setHold = (ch, e) => { ch.hold = e; ch.holdEl.textContent = e || ''; ch.el.classList.toggle('holding', !!e); };
     const gesto = (ch, cls, ms) => { ch.el.classList.add(cls); setTimeout(() => ch.el.classList.remove(cls), ms); };
-    place(me, 62, 1, 0); face(me, 10);   // a la puerta, a la vista, mirando al timbre
+    place(me, SP('door').x, 1, 0);   // detrás de la puerta, sin verse hasta que le abren
 
     // ----- Hablar: burbuja + voz -----
     let speaker = null, raf = 0, last = null;
@@ -543,17 +543,18 @@
         const dlist = T.body(v); let n0 = 0;   // al principio se colocan las personas, antes de abrir la puerta
         while (n0 < dlist.length && (dlist[n0][0] === 'put' || dlist[n0][0] === 'hold')) await step(dlist[n0++]);
         const nEntrada = entradaN > 0 ? `Entrada ${Math.min(entradaN, ENTRIES_MAX)} de ${ENTRIES_MAX} de hoy · ` : '';
-        sub.textContent = nEntrada + 'Llegas a la puerta…'; await sleep(1300);
+        sub.textContent = nEntrada + 'Llegas a la puerta…'; await sleep(650);
         // Primero se toca el timbre y se espera respuesta; después se abre la puerta.
         const bell = document.createElement('div'); bell.className = 'e-doorbell'; bell.textContent = '🔔';
         bell.style.cssText = 'position:absolute;left:92px;bottom:226px;font-size:18px;z-index:30;animation:v-pop .35s ease-out'; room.appendChild(bell);
         const wave = document.createElement('div'); wave.className = 'e-wave'; wave.style.cssText = 'left:87px;bottom:221px;'; wave.hidden = true; room.appendChild(wave);
         sub.textContent = nEntrada + 'Tocas el timbre…'; await sleep(450);
-        bell.classList.add('ring'); wave.hidden = false; gesto(me, 'cheer', 1800); sound('timbre'); await sleep(1500);   // ding-dong
+        bell.classList.add('ring'); wave.hidden = false; sound('timbre'); await sleep(1500);   // ding-dong
         bell.classList.remove('ring'); wave.remove();
         sub.textContent = nEntrada + 'Esperas a que te abran…'; await sleep(700);
         sub.textContent = nEntrada + 'Te abren la puerta…'; await sleep(350);
         door.classList.add('open'); sound('puerta'); await sleep(800); bell.remove();
+        me.el.style.opacity = '1';   // se abre la puerta y ya se le ve
         await walkTo(me, SP('in'), 85); door.classList.remove('open'); sound('puerta');
         await run(dlist.slice(n0).map(x => (x[0] === 'sub' ? ['sub', nEntrada + x[1]] : x)));
         // salida

@@ -361,7 +361,7 @@
     const SEAT_D = 0.85, SEAT_Z = 14;
     const SEATS = [{ x: 238 }, { x: 290 }, { x: 342 }];
     const STAND = [{ x: 125, d: 0.42 }, { x: 175, d: 0.1 }, { x: 225, d: 0.05 }, { x: 300, d: 0.08 }, { x: 365, d: 0.06 }, { x: 420, d: 0.22 }, { x: 495, d: 0.4 }, { x: 440, d: 0.75 }, { x: 150, d: 0.6 }, { x: 95, d: 0.28 }];
-    const DOOR = { x: 62, d: 1.0 }, NEAR_DOOR = { x: 118, d: 0.4 }, FRIDGE = { x: 440, d: 0.75 };
+    const DOOR = { x: 45, d: 1.0 }, NEAR_DOOR = { x: 118, d: 0.4 }, FRIDGE = { x: 440, d: 0.75 };
 
     function place(ch, x, d, ms) {
       const s = depthScale(d), el = ch.el;
@@ -398,7 +398,7 @@
     // Colocación inicial: cada uno en un sitio al azar de la casa
     const startSpots = shuffle(STAND.filter(s => s.x > 200)).slice(0, 1 + others.length);
     [host, ...others].forEach((ch, i) => { const s = startSpots[i]; place(ch, s.x, s.d, 0); face(ch, Math.random() < 0.5 ? -10 : 10); if (Math.random() < 0.55) setHold(ch, pick(DRINKS)[1]); });
-    place(me, DOOR.x, DOOR.d, 0); face(me, 10);   // el visitante espera a la puerta, a la vista, mirando al timbre
+    place(me, DOOR.x, DOOR.d, 0); me.flip.style.opacity = '0';   // el visitante espera detrás de la puerta, sin verse; aparece cuando se abre
     setHold(host, null);   // el anfitrión aún no tiene nada en la mano
 
     // ----- Bucles de fondo: gente que pasea, mascota y tele -----
@@ -488,11 +488,11 @@
     (async () => {
       try {
         const nEntrada = entradaN > 0 ? `Entrada ${Math.min(entradaN, ENTRIES_MAX)} de ${ENTRIES_MAX} de hoy · ` : '';
-        sub.textContent = nEntrada + 'Llegas a la puerta…';
-        await sleep(1300);
+        sub.textContent = nEntrada + 'Llamando a la puerta…';
+        await sleep(700);
         const bellEl = room.querySelector('.v-bell'), waveEl = room.querySelector('.v-bell-wave');
         sub.textContent = nEntrada + 'Tocas el timbre…';
-        bellEl.classList.add('ring'); waveEl.classList.add('on'); gesto(me, 'cheer', 1800); sound('timbre'); await sleep(1500);   // ding-dong
+        bellEl.classList.add('ring'); waveEl.classList.add('on'); sound('timbre'); await sleep(1500);   // ding-dong
         bellEl.classList.remove('ring'); waveEl.classList.remove('on');
         sub.textContent = nEntrada + 'Esperas a que abran…'; await sleep(500);
         // el anfitrión viene a abrir
@@ -501,6 +501,7 @@
         await walkTo(host, NEAR_DOOR.x, NEAR_DOOR.d, 115);
         face(host, -1);
         door.classList.add('open'); sound('puerta'); await sleep(1000);
+        me.flip.style.opacity = '1';   // se abre la puerta y ya se le ve
         sub.textContent = nEntrada + 'Te dan la bienvenida';
         await say(host, ['¡PASA, BIENVENIDO!', '¡Adelante, estás en tu casa!', '¡Qué alegría verte! Pasa, pasa.'], { big: true, to: me });
         // el visitante entra caminando
