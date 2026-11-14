@@ -218,7 +218,7 @@
     el.className = 'v-fig ' + a.style + (a.dress ? ' dress' : '') + (a.beard ? ' has-beard' : '') + (a.glasses ? ' has-glasses' : '');
     el.style.cssText += `--skin:${a.skin};--hair:${a.hair};--top:${a.top};--pants:${a.pants};--btm:${a.btm};--shoe:${a.shoe};--sleeve:${a.sleeve}`;
     el.innerHTML = '<div class="v-flip"><div class="v-body">' +
-      '<i class="leg l"></i><i class="leg r"></i><i class="skirt"></i><i class="arm l"></i><b class="torso"></b><i class="arm r"><span class="hold"></span></i><b class="neck"></b>' +
+      '<i class="leg l"></i><i class="leg r"></i><i class="skirt"></i><i class="arm l"></i><b class="torso">' + (a.flag ? '<span class="flagp">' + a.flag + '</span>' : '') + '</b><i class="arm r"><span class="hold"></span></i><b class="neck"></b>' +
       '<b class="head"><i class="hb"></i><i class="beard"></i><i class="nose"></i><i class="mouth"></i><i class="eye l"></i><i class="eye r"></i><i class="brow l"></i><i class="brow r"></i><i class="glasses"></i><i class="hf"></i></b>' +
       '</div></div>';
     if (isMe) { const m = document.createElement('div'); m.className = 'v-me'; m.textContent = 'Tú'; el.appendChild(m); }
@@ -342,7 +342,7 @@
     const hostLook = (() => { const r = seeded('casa:' + p.owner); const f = r() < 0.5; return look(p.owner, f, r() < 0.25 ? 'old' : 'adult', r); })();
     const nOthers = 1 + Math.floor(Math.random() * 2);   // 2 o 3 personas con el anfitrión (más tú)
     const othersSrc = shuffle(GENTE.filter(g => g[0] !== p.owner)).slice(0, nOthers);
-    const meLook = look('Tú', Math.random() < 0.5, 'adult', Math.random); meLook.pitch = 1; meLook.rate = 1.05;
+    const meLook = Object.assign(look('Tú', Math.random() < 0.5, 'adult', Math.random), window.playerCssLook ? window.playerCssLook() : {}); meLook.pitch = 1; meLook.rate = 1.05;
     const mkActor = (a, isMe) => { const ch = Object.assign({}, a, { x: 0, d: 0, dir: 1, seated: false, busy: false, hold: null, q: Promise.resolve(), wt: 0 }); ch.el = buildFig(a, isMe); ch.flip = ch.el.querySelector('.v-flip'); ch.head = ch.el.querySelector('.head'); ch.holdEl = ch.el.querySelector('.hold'); room.appendChild(ch.el); return ch; };
     const host = mkActor(hostLook), me = mkActor(meLook, true);
     const others = othersSrc.map(g => mkActor(look(g[0], g[1] === 'f', g[2], Math.random)));
@@ -361,7 +361,7 @@
     const SEAT_D = 0.85, SEAT_Z = 14;
     const SEATS = [{ x: 238 }, { x: 290 }, { x: 342 }];
     const STAND = [{ x: 125, d: 0.42 }, { x: 175, d: 0.1 }, { x: 225, d: 0.05 }, { x: 300, d: 0.08 }, { x: 365, d: 0.06 }, { x: 420, d: 0.22 }, { x: 495, d: 0.4 }, { x: 440, d: 0.75 }, { x: 150, d: 0.6 }, { x: 95, d: 0.28 }];
-    const DOOR = { x: 45, d: 1.0 }, NEAR_DOOR = { x: 118, d: 0.4 }, FRIDGE = { x: 440, d: 0.75 };
+    const DOOR = { x: 62, d: 1.0 }, NEAR_DOOR = { x: 118, d: 0.4 }, FRIDGE = { x: 440, d: 0.75 };
 
     function place(ch, x, d, ms) {
       const s = depthScale(d), el = ch.el;
@@ -370,7 +370,7 @@
       el.style.zIndex = String(ch.seated ? SEAT_Z : 10 + Math.round((1 - d) * 30));
       ch.x = x; ch.d = d;
     }
-    function face(ch, dx) { if (Math.abs(dx) < 3) return; ch.dir = dx > 0 ? 1 : -1; ch.flip.style.transform = `scaleX(${ch.dir})`; }
+    function face(ch, dx) { if (Math.abs(dx) < 3) return; ch.dir = dx > 0 ? 1 : -1; ch.flip.style.transform = `scaleX(${ch.dir})`; ch.el.style.setProperty('--fx', ch.dir); }
     const faceTo = (a, b) => face(a, b.x - a.x);
     // Camina (una orden tras otra para la misma persona)
     function walkTo(ch, x, d, speed) {
@@ -386,7 +386,7 @@
     const spot = () => { const free = STAND.filter(s => all.every(o => !o.el.style.left || Math.hypot(o.x - s.x, (o.d - s.d) * 108) > 62)); return pick(free.length ? free : STAND); };
     async function sitAt(ch, seat) {
       await walkTo(ch, seat.x, 0.5);
-      ch.flip.style.transform = 'scaleX(1)'; ch.dir = 1;   // sentados miran de frente
+      ch.flip.style.transform = 'scaleX(1)'; ch.dir = 1; ch.el.style.setProperty('--fx', 1);   // sentados miran de frente
       ch.seated = true; ch.el.classList.add('sit'); sound('silla');
       place(ch, seat.x, SEAT_D, 700); await sleep(720);
     }
@@ -398,7 +398,7 @@
     // Colocación inicial: cada uno en un sitio al azar de la casa
     const startSpots = shuffle(STAND.filter(s => s.x > 200)).slice(0, 1 + others.length);
     [host, ...others].forEach((ch, i) => { const s = startSpots[i]; place(ch, s.x, s.d, 0); face(ch, Math.random() < 0.5 ? -10 : 10); if (Math.random() < 0.55) setHold(ch, pick(DRINKS)[1]); });
-    place(me, DOOR.x, DOOR.d, 0); me.flip.style.opacity = '0';   // el visitante aparece cuando se abre la puerta
+    place(me, DOOR.x, DOOR.d, 0); face(me, 10);   // el visitante espera a la puerta, a la vista, mirando al timbre
     setHold(host, null);   // el anfitrión aún no tiene nada en la mano
 
     // ----- Bucles de fondo: gente que pasea, mascota y tele -----
@@ -488,11 +488,11 @@
     (async () => {
       try {
         const nEntrada = entradaN > 0 ? `Entrada ${Math.min(entradaN, ENTRIES_MAX)} de ${ENTRIES_MAX} de hoy · ` : '';
-        sub.textContent = nEntrada + 'Llamando a la puerta…';
-        await sleep(700);
+        sub.textContent = nEntrada + 'Llegas a la puerta…';
+        await sleep(1300);
         const bellEl = room.querySelector('.v-bell'), waveEl = room.querySelector('.v-bell-wave');
         sub.textContent = nEntrada + 'Tocas el timbre…';
-        bellEl.classList.add('ring'); waveEl.classList.add('on'); sound('timbre'); await sleep(1500);   // ding-dong
+        bellEl.classList.add('ring'); waveEl.classList.add('on'); gesto(me, 'cheer', 1800); sound('timbre'); await sleep(1500);   // ding-dong
         bellEl.classList.remove('ring'); waveEl.classList.remove('on');
         sub.textContent = nEntrada + 'Esperas a que abran…'; await sleep(500);
         // el anfitrión viene a abrir
@@ -501,7 +501,6 @@
         await walkTo(host, NEAR_DOOR.x, NEAR_DOOR.d, 115);
         face(host, -1);
         door.classList.add('open'); sound('puerta'); await sleep(1000);
-        me.flip.style.opacity = '1';
         sub.textContent = nEntrada + 'Te dan la bienvenida';
         await say(host, ['¡PASA, BIENVENIDO!', '¡Adelante, estás en tu casa!', '¡Qué alegría verte! Pasa, pasa.'], { big: true, to: me });
         // el visitante entra caminando

@@ -162,7 +162,7 @@
     el.className = 'v-fig ' + a.style + (a.dress ? ' dress' : '') + (a.beard ? ' has-beard' : '') + (a.glasses ? ' has-glasses' : '');
     el.style.cssText += `--skin:${a.skin};--hair:${a.hair};--top:${a.top};--pants:${a.pants};--btm:${a.btm};--shoe:${a.shoe};--sleeve:${a.sleeve}`;
     el.innerHTML = '<div class="v-flip"><div class="v-body">' +
-      '<i class="leg l"></i><i class="leg r"></i><i class="skirt"></i><i class="arm l"></i><b class="torso"></b><i class="arm r"><span class="hold"></span></i><b class="neck"></b>' +
+      '<i class="leg l"></i><i class="leg r"></i><i class="skirt"></i><i class="arm l"></i><b class="torso">' + (a.flag ? '<span class="flagp">' + a.flag + '</span>' : '') + '</b><i class="arm r"><span class="hold"></span></i><b class="neck"></b>' +
       '<b class="head"><i class="hb"></i><i class="beard"></i><i class="nose"></i><i class="mouth"></i><i class="eye l"></i><i class="eye r"></i><i class="brow l"></i><i class="brow r"></i><i class="glasses"></i><i class="hf"></i></b>' +
       '</div></div>';
     if (isMe) { const m = document.createElement('div'); m.className = 'v-me'; m.textContent = 'Tú'; el.appendChild(m); }
@@ -447,10 +447,10 @@
     const nm = shuffle(NAMES).slice(0, 3), v = T.v ? T.v() : {};
     const mk = (a, isMe) => { const ch = Object.assign({}, a, { x: 0, d: 0, dir: 1, seated: false, hold: null, q: Promise.resolve(), wt: 0 }); ch.el = buildFig(a, isMe); ch.flip = ch.el.querySelector('.v-flip'); ch.head = ch.el.querySelector('.head'); ch.holdEl = ch.el.querySelector('.hold'); room.appendChild(ch.el); return ch; };
     const staff = (n, uni) => { const a = look(n[0], n[1] === 'f', 'adult', Math.random); if (uni) { a.top = uni; a.dress = false; a.sleeve = '100%'; } return a; };
-    const me = mk(Object.assign(look('Tú', Math.random() < 0.5, 'adult', Math.random), { pitch: 1, rate: 1.05 }), true);
+    const me = mk(Object.assign(look('Tú', Math.random() < 0.5, 'adult', Math.random), window.playerCssLook ? window.playerCssLook() : {}, { pitch: 1, rate: 1.05 }), true);
     const A = { E: mk(Object.assign(staff(nm[0], T.uni), { name: nm[0][0] + ' · ' + (T.roles.E || '') })), D: mk(Object.assign(staff(nm[1], T.uniD || T.uni), { name: nm[1][0] + ' · ' + (T.roles.D || '') })), C: mk(Object.assign(look(nm[2][0], nm[2][1] === 'f', 'adult', Math.random), { name: nm[2][0] })), V: me };
     v.D = nm[1][0];
-    Object.values(A).forEach(c => { c.el.style.opacity = '0'; });
+    Object.values(A).forEach(c => { if (c !== me) c.el.style.opacity = '0'; });
     const SP = n => { const s = T.sp[n]; return { x: s[0], d: s[1] }; };
     const fill = t => String(t).replace(/\{(\w+)(?:\[(\d)\])?\}/g, (m, k, i) => { const x = v[k]; return x == null ? m : (i != null ? x[i] : x); });
     const feetBottom = d => 10 + d * 108, depthScale = d => 1 - d * 0.28;
@@ -460,7 +460,7 @@
       el.style.left = x + 'px'; el.style.bottom = feetBottom(d) + 'px'; el.style.transform = `scale(${s})`; el.style.setProperty('--s', String(s));
       el.style.zIndex = String(ch.seated ? 14 : 10 + Math.round((1 - d) * 30)); ch.x = x; ch.d = d;
     }
-    function face(ch, dx) { if (Math.abs(dx) < 3) return; ch.dir = dx > 0 ? 1 : -1; ch.flip.style.transform = `scaleX(${ch.dir})`; }
+    function face(ch, dx) { if (Math.abs(dx) < 3) return; ch.dir = dx > 0 ? 1 : -1; ch.flip.style.transform = `scaleX(${ch.dir})`; ch.el.style.setProperty('--fx', ch.dir); }
     function walkTo(ch, sp, speed) {
       const run = async () => {
         const dist = Math.hypot(sp.x - ch.x, (sp.d - ch.d) * 108), ms = Math.max(350, dist / (speed || 90) * 1000), my = ++ch.wt;
@@ -471,7 +471,7 @@
     }
     const setHold = (ch, e) => { ch.hold = e; ch.holdEl.textContent = e || ''; ch.el.classList.toggle('holding', !!e); };
     const gesto = (ch, cls, ms) => { ch.el.classList.add(cls); setTimeout(() => ch.el.classList.remove(cls), ms); };
-    place(me, SP('door').x, 1, 0);
+    place(me, 62, 1, 0); face(me, 10);   // a la puerta, a la vista, mirando al timbre
 
     // ----- Hablar: burbuja + voz -----
     let speaker = null, raf = 0, last = null;
@@ -543,18 +543,17 @@
         const dlist = T.body(v); let n0 = 0;   // al principio se colocan las personas, antes de abrir la puerta
         while (n0 < dlist.length && (dlist[n0][0] === 'put' || dlist[n0][0] === 'hold')) await step(dlist[n0++]);
         const nEntrada = entradaN > 0 ? `Entrada ${Math.min(entradaN, ENTRIES_MAX)} de ${ENTRIES_MAX} de hoy · ` : '';
-        sub.textContent = nEntrada + 'Llegas a la puerta…'; await sleep(650);
+        sub.textContent = nEntrada + 'Llegas a la puerta…'; await sleep(1300);
         // Primero se toca el timbre y se espera respuesta; después se abre la puerta.
         const bell = document.createElement('div'); bell.className = 'e-doorbell'; bell.textContent = '🔔';
         bell.style.cssText = 'position:absolute;left:92px;bottom:226px;font-size:18px;z-index:30;animation:v-pop .35s ease-out'; room.appendChild(bell);
         const wave = document.createElement('div'); wave.className = 'e-wave'; wave.style.cssText = 'left:87px;bottom:221px;'; wave.hidden = true; room.appendChild(wave);
         sub.textContent = nEntrada + 'Tocas el timbre…'; await sleep(450);
-        bell.classList.add('ring'); wave.hidden = false; sound('timbre'); await sleep(1500);   // ding-dong
+        bell.classList.add('ring'); wave.hidden = false; gesto(me, 'cheer', 1800); sound('timbre'); await sleep(1500);   // ding-dong
         bell.classList.remove('ring'); wave.remove();
         sub.textContent = nEntrada + 'Esperas a que te abran…'; await sleep(700);
         sub.textContent = nEntrada + 'Te abren la puerta…'; await sleep(350);
         door.classList.add('open'); sound('puerta'); await sleep(800); bell.remove();
-        me.el.style.opacity = '1';
         await walkTo(me, SP('in'), 85); door.classList.remove('open'); sound('puerta');
         await run(dlist.slice(n0).map(x => (x[0] === 'sub' ? ['sub', nEntrada + x[1]] : x)));
         // salida

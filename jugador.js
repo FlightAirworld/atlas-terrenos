@@ -75,6 +75,13 @@
     return `${legs(L.pants, '#222')}<rect x="11" y="22" width="18" height="22" rx="7" fill="${L.shirt}"/><rect x="6" y="24" width="5" height="16" rx="2.5" fill="${L.shirt}"/><rect x="29" y="24" width="5" height="16" rx="2.5" fill="${L.shirt}"/>`
       + `<circle cx="8.5" cy="41" r="2.6" fill="${L.skin}"/><circle cx="31.5" cy="41" r="2.6" fill="${L.skin}"/>${patch}` + headParts(L);
   };
+  // Aspecto del muñeco para las escenas de visita (casas y edificios, que dibujan a las personas con trozos de CSS):
+  // mismos colores, mismo peinado y la misma bandera en el pecho que el muñeco del mapa.
+  window.playerCssLook = function () {
+    const L = window.playerLook();
+    return { style: ['h-short', 'h-long', 'h-cap', 'h-bun', 'h-curly'][L.hs] || 'h-short', skin: L.skin, hair: L.hair, top: L.shirt, pants: L.pants, shoe: '#222', sleeve: '82%', dress: false, beard: false, glasses: false, flag: window.playerFlag() };
+  };
+
   window.playerSVG = o => `<svg viewBox="0 0 40 68" aria-hidden="true"><g class="face">${window.playerBody(o)}</g></svg>`;
 
   const st = document.createElement('style');
@@ -94,6 +101,12 @@
     @keyframes pwBob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
     @keyframes pwIn { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: none; } }`;
   document.head.appendChild(st);
+  const st2 = document.createElement('style');
+  st2.textContent = `
+    :is(#visita, #edif) .v-fig .flagp { left: 3px; top: 8px; width: 26px; height: 19px; border-radius: 4px; background: #fff; box-shadow: 0 0 0 1px #0004; display: grid; place-items: center; font-size: 15px; line-height: 1; font-family: ${EMOJI}; transform: scaleX(var(--fx, 1)); }
+    :is(#visita, #edif) .v-fig.h-cap .hf { left: -2px; top: -3px; width: 32px; height: 14px; border-radius: 15px 15px 3px 3px; background: var(--top); }
+    :is(#visita, #edif) .v-fig.h-cap .hf::after { content: ''; position: absolute; left: 18px; top: 10px; width: 18px; height: 5px; border-radius: 3px; background: var(--top); filter: brightness(.85); }`;
+  document.head.appendChild(st2);
 
   // ---------- El muñeco que se queda en el mapa ----------
   // Está fijo en el centro del mapa (donde aterrizó) y camina mientras el mapa se mueve: mira hacia donde va el centro (si arrastras el mapa a la derecha, el suelo pasa
