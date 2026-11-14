@@ -33,14 +33,36 @@
     #viaje.go .pad { transform: translateY(300%); opacity: 0; transition: transform 3.6s ease-in, opacity 1.2s ease-in 1.2s; }
     #viaje .count { position: absolute; left: 0; right: 0; top: 18%; text-align: center; font: 900 96px/1 system-ui, sans-serif; color: #fff; text-shadow: 0 4px 18px rgba(0,0,0,.55); pointer-events: none; }
     #viaje .count.pop { animation: viajePop .6s ease-out; }
+    #viaje .count.word { font-size: min(15vw, 64px); }   /* «¡Despegue!» cabe en pantallas estrechas */
     @keyframes viajePop { from { transform: scale(1.6); opacity: .2; } to { transform: scale(1); opacity: 1; } }
-    .rocket { position: fixed; left: 50%; width: 90px; height: 200px; margin-left: -45px; pointer-events: none; will-change: transform; }
+    .rocket { position: fixed; left: 50%; width: 96px; height: 230px; margin-left: -48px; pointer-events: none; will-change: transform; }
     .rocket svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 6px 8px rgba(0,0,0,.35)); }
     .rocket .flame { transform-box: fill-box; transform-origin: 50% 0; opacity: 0; animation: viajeFlame .12s infinite alternate; }
     .rocket.on .flame { opacity: 1; }
     @keyframes viajeFlame { from { transform: scaleY(.8) scaleX(.9); } to { transform: scaleY(1.15) scaleX(1.05); } }
     .rocket .earth-only { display: none; } .rocket.tierra .earth-only { display: inline; }
     .rocket .moon-only { display: none; } .rocket:not(.tierra) .moon-only { display: inline; }
+    .rocket .pax { opacity: 0; transition: opacity .2s; } .rocket.occ .pax { opacity: 1; }
+    .rocket .legs { transform-box: fill-box; transform-origin: 50% 0; transform: scaleY(.15); opacity: 0; transition: transform .6s, opacity .3s; }
+    .rocket.legs-out .legs { transform: none; opacity: 1; }
+    .rocket .door-panel { transform-box: fill-box; transform-origin: 0 50%; transition: transform .4s; }
+    .rocket.open .door-panel { transform: scaleX(.12); }
+    .rocket .ramp { opacity: 0; transition: opacity .3s; } .rocket.open .ramp { opacity: 1; }
+    .wk { position: fixed; left: 0; top: 0; width: 34px; height: 58px; pointer-events: none; will-change: transform; }
+    .wk svg { width: 100%; height: 100%; overflow: visible; display: block; filter: drop-shadow(0 3px 3px rgba(0,0,0,.35)); }
+    .wk .face { transform-box: view-box; transform-origin: 20px 34px; }
+    .wk.left .face { transform: scaleX(-1); }
+    .wk .lg { transform-box: fill-box; transform-origin: 50% 0; }
+    .wk.walking .l1 { animation: wkA .32s infinite alternate ease-in-out; }
+    .wk.walking .l2 { animation: wkB .32s infinite alternate ease-in-out; }
+    .wk.walking svg { animation: wkBob .32s infinite alternate; }
+    @keyframes wkA { from { transform: rotate(-24deg); } to { transform: rotate(24deg); } }
+    @keyframes wkB { from { transform: rotate(24deg); } to { transform: rotate(-24deg); } }
+    @keyframes wkBob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+    .wk .shout { position: absolute; left: 50%; bottom: 100%; margin-bottom: 10px; transform: translateX(-50%) scale(.4); opacity: 0; background: #fff; color: #d62839; font: 900 15px/1.1 system-ui, sans-serif; padding: 7px 11px; border-radius: 14px; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,.35); transition: transform .25s, opacity .25s; }
+    .wk.suit .shout { color: #1b3fa0; }
+    .wk.say .shout { opacity: 1; transform: translateX(-50%) scale(1); }
+    .dust { position: fixed; width: 26px; height: 26px; border-radius: 50%; z-index: 1955; pointer-events: none; }
     #viaje .puff { position: absolute; bottom: 24%; left: 50%; width: 40px; height: 40px; margin-left: -20px; border-radius: 50%; background: rgba(240,240,240,.85); opacity: 0; }
     #viaje.luna .puff { background: rgba(180,180,180,.8); }
     #viaje.marte .puff { background: rgba(214,150,110,.85); }
@@ -66,24 +88,87 @@
     @keyframes viajePuff { 0% { opacity: .9; transform: translate(0,0) scale(.5); } 100% { opacity: 0; transform: translate(var(--dx), -20px) scale(4); } }`;
   document.head.appendChild(st);
 
-  // Cohete (la ventanilla enseña al muñeco: gorra azul en la Tierra, casco de astronauta en la Luna)
-  const ROCKET = `
-  <svg viewBox="0 0 90 200" aria-hidden="true">
-    <path d="M28 120 L8 168 L28 152 Z M62 120 L82 168 L62 152 Z" fill="#e63946" stroke="#9d1f2a" stroke-width="1.2"/>
-    <path d="M45 4 C62 30 62 52 62 72 L28 72 C28 52 28 30 45 4 Z" fill="#e63946" stroke="#9d1f2a" stroke-width="1.2"/>
-    <rect x="28" y="70" width="34" height="84" rx="3" fill="#f1f1f1" stroke="#bdbdbd" stroke-width="1.2"/>
-    <rect x="28" y="130" width="34" height="8" fill="#e63946"/>
-    <circle cx="45" cy="98" r="13" fill="#1d2b53" stroke="#9aa5b8" stroke-width="2.5"/>
-    <circle cx="45" cy="100" r="7" fill="#ffd9b3"/>
-    <path d="M37.5 99 A7.5 7.5 0 0 1 52.5 99 Z" fill="#2b6cff" class="earth-only"/>
-    <circle cx="45" cy="100" r="9.5" fill="rgba(255,255,255,.25)" stroke="#f4f4f4" stroke-width="2" class="moon-only"/>
-    <rect x="35" y="152" width="20" height="8" rx="2" fill="#666"/>
-    <g class="flame"><path d="M36 160 Q45 232 54 160 Z" fill="#ff9f1c"/><path d="M40 160 Q45 208 50 160 Z" fill="#ffe066"/></g>
+  // Bandera del país del jugador (la que eligió o detectó el juego); sin país no se pone ninguna
+  const myFlag = () => {
+    let c = ''; try { c = localStorage.getItem('country') || ''; } catch (e) {}
+    if (!/^[A-Za-z]{2}$/.test(c)) { const sel = document.getElementById('country'); c = (sel && sel.value) || ''; }
+    return /^[A-Za-z]{2}$/.test(c) ? String.fromCodePoint(...[...c.toUpperCase()].map(ch => 127397 + ch.charCodeAt(0))) : '';
+  };
+  // Cohete con relieve: morro rojo, cuerpo plateado con paneles, ventanilla, bandera del jugador, puerta con rampa, patas de aterrizaje y tobera.
+  // (la ventanilla enseña al pasajero: gorra azul en la Tierra, casco de astronauta en otros mundos; vacía hasta que sube)
+  const rocketSVG = flag => `
+  <svg viewBox="0 0 100 240" aria-hidden="true">
+    <defs>
+      <linearGradient id="rkB" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#aab2c0"/><stop offset=".28" stop-color="#ffffff"/><stop offset=".6" stop-color="#e4e8ee"/><stop offset="1" stop-color="#8d96a6"/></linearGradient>
+      <linearGradient id="rkN" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#8f1d28"/><stop offset=".3" stop-color="#ff6773"/><stop offset=".65" stop-color="#d62f3e"/><stop offset="1" stop-color="#7a1420"/></linearGradient>
+      <linearGradient id="rkF" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#b3222f"/><stop offset="1" stop-color="#e84855"/></linearGradient>
+      <radialGradient id="rkG" cx=".35" cy=".3" r=".9"><stop offset="0" stop-color="#8fd0ff"/><stop offset=".55" stop-color="#25407e"/><stop offset="1" stop-color="#0d1630"/></radialGradient>
+      <linearGradient id="rkE" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#4a4a4a"/><stop offset=".5" stop-color="#9c9c9c"/><stop offset="1" stop-color="#3e3e3e"/></linearGradient>
+    </defs>
+    <g class="legs">
+      <path d="M36 176 L19 226 M64 176 L81 226" stroke="#7d8696" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+      <path d="M36 190 L22 216 M64 190 L78 216" stroke="#a7afbd" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <ellipse cx="17" cy="227" rx="7" ry="2.4" fill="#555"/><ellipse cx="83" cy="227" rx="7" ry="2.4" fill="#555"/>
+    </g>
+    <path d="M32 138 Q14 160 12 206 L32 192 Z" fill="url(#rkF)" stroke="#8c1b26" stroke-width="1"/>
+    <path d="M68 138 Q86 160 88 206 L68 192 Z" fill="url(#rkF)" stroke="#8c1b26" stroke-width="1"/>
+    <path d="M39 196 L35 213 Q50 218 65 213 L61 196 Z" fill="url(#rkE)" stroke="#333" stroke-width="1"/>
+    <rect x="32" y="72" width="36" height="126" rx="2" fill="url(#rkB)" stroke="#aeb5c2" stroke-width="1"/>
+    <path d="M50 4 C58 20 68 44 68 76 L32 76 C32 44 42 20 50 4 Z" fill="url(#rkN)" stroke="#8c1b26" stroke-width="1"/>
+    <rect x="32" y="74" width="36" height="5" fill="#2a3042"/>
+    <rect x="32" y="146" width="36" height="7" fill="#e63946"/>
+    <path d="M32 160 H68 M32 186 H68" stroke="#c3c9d4" stroke-width=".8" fill="none"/>
+    <g fill="#aab2c0"><circle cx="35.5" cy="86" r=".9"/><circle cx="64.5" cy="86" r=".9"/><circle cx="35.5" cy="140" r=".9"/><circle cx="64.5" cy="140" r=".9"/></g>
+    <circle cx="50" cy="104" r="13.5" fill="#8c96a8" stroke="#586074" stroke-width="1.5"/>
+    <circle cx="50" cy="104" r="10.5" fill="url(#rkG)"/>
+    <g class="pax">
+      <circle cx="50" cy="106" r="6.5" fill="#ffd9b3"/>
+      <path d="M43.5 105 A6.5 6.5 0 0 1 56.5 105 Z" fill="#2b6cff" class="earth-only"/>
+      <circle cx="50" cy="106" r="8.6" fill="rgba(255,255,255,.22)" stroke="#f4f4f4" stroke-width="1.8" class="moon-only"/>
+    </g>
+    <path d="M43 99 A8 8 0 0 1 51 95" stroke="#fff" stroke-width="1.6" fill="none" opacity=".6" stroke-linecap="round"/>
+    ${flag ? `<rect x="36" y="121" width="28" height="19" rx="3" fill="#fff" stroke="#b9bfca"/><text x="50" y="135.5" text-anchor="middle" font-size="14" font-family="'Apple Color Emoji','Noto Color Emoji','Segoe UI Emoji',sans-serif">${flag}</text>` : ''}
+    <rect x="43" y="166" width="14" height="28" rx="2" fill="#141a28"/>
+    <g class="door-panel"><rect x="43" y="166" width="14" height="28" rx="2" fill="#d5dae3" stroke="#8d95a6" stroke-width="1"/><circle cx="54.5" cy="181" r="1.2" fill="#586074"/></g>
+    <g class="ramp"><path d="M45 195 L17 227" stroke="#7a8396" stroke-width="4" stroke-linecap="round" fill="none"/><path d="M37.2 199.4 L41.6 203.4 M31.6 205.8 L36 209.8 M26 212.2 L30.4 216.2 M20.4 218.6 L24.8 222.6" stroke="#fff" stroke-width="1.5" fill="none"/></g>
+    <g class="flame"><path d="M38 212 Q50 290 62 212 Z" fill="#ff9f1c"/><path d="M42 212 Q50 262 58 212 Z" fill="#ffe066"/><path d="M46 212 Q50 240 54 212 Z" fill="#fff"/></g>
   </svg>`;
   function rocketEl(world, z) {
     const el = document.createElement('div');
-    el.className = 'rocket ' + world; el.style.zIndex = z; el.innerHTML = ROCKET;
+    el.className = 'rocket ' + world; el.style.zIndex = z; el.innerHTML = rocketSVG(myFlag());
     return el;
+  }
+  // Astronauta que sube al cohete o baja de él: persona con gorra en la Tierra, con traje espacial fuera de ella
+  function makeWalker(suit, text) {
+    const legs = c => `<g class="lg l1"><rect x="13" y="42" width="6" height="22" rx="3" fill="${c}"/><rect x="11.5" y="61" width="9" height="5" rx="2.5" fill="#222"/></g><g class="lg l2"><rect x="21" y="42" width="6" height="22" rx="3" fill="${c}"/><rect x="19.5" y="61" width="9" height="5" rx="2.5" fill="#222"/></g>`;
+    const body = suit
+      ? `<rect x="5" y="22" width="9" height="20" rx="3" fill="#c9c9c9" stroke="#999" stroke-width=".8"/>${legs('#f4f4f4')}<rect x="11" y="22" width="18" height="22" rx="7" fill="#f4f4f4" stroke="#bdbdbd"/><rect x="6" y="24" width="5" height="16" rx="2.5" fill="#f4f4f4" stroke="#bdbdbd" stroke-width=".6"/><rect x="29" y="24" width="5" height="16" rx="2.5" fill="#f4f4f4" stroke="#bdbdbd" stroke-width=".6"/><rect x="15" y="27" width="10" height="6" rx="1.5" fill="#e63946"/><circle cx="21" cy="14" r="10.5" fill="#f4f4f4" stroke="#bdbdbd"/><ellipse cx="24" cy="14" rx="7" ry="6" fill="#1d2b53"/><ellipse cx="26" cy="12" rx="2.4" ry="1.5" fill="#fff" opacity=".7"/>`
+      : `${legs('#2b3a67')}<rect x="11" y="22" width="18" height="22" rx="7" fill="#ff9f1c"/><rect x="6" y="24" width="5" height="16" rx="2.5" fill="#ff9f1c"/><rect x="29" y="24" width="5" height="16" rx="2.5" fill="#ff9f1c"/><circle cx="8.5" cy="41" r="2.6" fill="#ffd9b3"/><circle cx="31.5" cy="41" r="2.6" fill="#ffd9b3"/><circle cx="20" cy="14" r="8" fill="#ffd9b3"/><path d="M11.5 13 A8.5 8.5 0 0 1 28.5 13 Z" fill="#2b6cff"/><rect x="20" y="11" width="11" height="3" rx="1.5" fill="#1d4fc4"/><circle cx="24" cy="16" r="1" fill="#222"/>`;
+    const el = document.createElement('div');
+    el.className = 'wk' + (suit ? ' suit' : ''); el.style.zIndex = 4;
+    el.innerHTML = `<svg viewBox="0 0 40 68" aria-hidden="true"><g class="face">${body}</g></svg><div class="shout"></div>`;
+    if (text) el.querySelector('.shout').textContent = text;
+    return el;
+  }
+  const trf = p => `translate(${p.x - 17}px, ${p.y - 58}px)`;   // los pies del muñeco en el punto p
+  const moveTo = (el, a, b, ms) => el.animate([{ transform: trf(a) }, { transform: trf(b) }], { duration: ms, easing: 'linear', fill: 'forwards' }).finished.catch(() => {});
+  // El astronauta camina hasta el cohete, sube por la rampa y entra; la puerta se cierra. `drop` = lo que baja el suelo respecto a la base del cohete.
+  async function boardRocket(ov, rocket, suit, drop) {
+    if (!Element.prototype.animate) return;
+    const rr = rocket.getBoundingClientRect(), k = rr.width / 100;
+    const P = (u, v) => ({ x: rr.left + u * k, y: rr.top + v * k });
+    const gnd = P(17, 228), door = P(46, 195), step = { x: gnd.x - 18, y: gnd.y + drop }, start = { x: Math.max(-30, gnd.x - 150), y: gnd.y + drop };
+    const w = makeWalker(suit); ov.appendChild(w);
+    w.style.transform = trf(start); w.classList.add('walking');
+    rocket.classList.add('open'); sfx('beep');
+    await moveTo(w, start, step, 1000);
+    await moveTo(w, step, gnd, 250);
+    await moveTo(w, gnd, door, 520);
+    w.classList.remove('walking');
+    await w.animate([{ opacity: 1, transform: trf(door) }, { opacity: 0, transform: trf(door) + ' scale(.5)' }], { duration: 300, fill: 'forwards' }).finished.catch(() => {});
+    w.remove(); rocket.classList.add('occ');
+    await wait(250); rocket.classList.remove('open'); sfx('beep');
+    await wait(450);
   }
   const sfx = n => { try { if (window.sfx) window.sfx(n); } catch (e) {} };
   const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -279,14 +364,15 @@
       ov.innerHTML = `<div class="sky"></div><div class="stars">${stars}</div><div class="ground"></div><div class="pad"></div>
         <div class="count"></div><div class="trip"></div><div class="tripsub"></div>` + [-60, -25, 25, 60].map(dx => `<div class="puff" style="--dx:${dx * 2}px"></div>`).join('');
       const rocket = rocketEl(from, 3);
-      rocket.style.bottom = 'calc(24% + 8px)';
+      rocket.style.bottom = 'calc(24% - 1px)'; rocket.classList.add('legs-out');   // apoyado en sus patas sobre la plataforma
       ov.appendChild(rocket);
       document.body.appendChild(ov);
       const W = innerWidth, H = innerHeight;
       const count = ov.querySelector('.count'), banner = ov.querySelector('.trip'), sub = ov.querySelector('.tripsub');
       const dist = Math.abs(AU[from] - AU[to]);
       banner.textContent = TRIP[to]; sub.textContent = farMsg(dist);
-      const say = (txt, snd) => { count.textContent = txt; count.classList.remove('pop'); void count.offsetWidth; count.classList.add('pop'); sfx(snd); };
+      const say = (txt, snd) => { count.textContent = txt; count.classList.toggle('word', txt.length > 2); count.classList.remove('pop'); void count.offsetWidth; count.classList.add('pop'); sfx(snd); };
+      const go = () => {   // se sube al cohete y después empieza la cuenta atrás
       say('3', 'beep');
       wait(800).then(() => say('2', 'beep'));
       wait(1600).then(() => say('1', 'beep'));
@@ -294,6 +380,7 @@
         say('¡Despegue!', 'beepgo');
         try { if (window.rocketEngine) window.rocketEngine.start(); else sfx('cohete'); } catch (e) {}   // el motor sigue sonando hasta que el astronauta aterriza (rocketDrop)
         rocket.classList.add('on'); ov.querySelectorAll('.puff').forEach(p => p.classList.add('on'));
+        wait(500).then(() => rocket.classList.remove('legs-out'));   // las patas se pliegan al despegar
         rocket.firstElementChild.animate([{ transform: 'translateX(-1.5px)' }, { transform: 'translateX(1.5px)' }], { duration: 60, direction: 'alternate', iterations: Infinity });
       });
       const RISE = -H * 0.22;
@@ -317,11 +404,13 @@
         ov.classList.add('fade'); resolve();
         setTimeout(() => { ov.remove(); launching = false; try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {} }, 900);
       });
+      };
+      boardRocket(ov, rocket, from !== 'tierra', 14).catch(() => {}).then(go);
     });
   };
 
   // Llega el cohete arriba del mapa, el muñeco salta en paracaídas y el cohete se va
-  window.rocketDrop = async function (opts) {
+  const legacyDrop = async function (opts) {
     opts = opts || {};
     const tgt = document.getElementById(opts.target || 'map');
     const engine = (fn, v) => { try { if (window.rocketEngine) window.rocketEngine[fn](v); } catch (e) {} };
@@ -341,7 +430,7 @@
     // el muñeco sale por la parte baja del cohete
     engine('level', 1.1);   // durante el salto el motor se oye más bajito (así se oye el grito)
     const landed = window.skydive(5000, {
-      target: opts.target || 'map', suit: !!opts.suit, startY: top + 200 * scale - 70,
+      target: opts.target || 'map', suit: !!opts.suit, startY: top + 230 * scale - 70,
       scream: opts.suit ? 'grito2' : 'grito', shout: opts.suit ? '¡Yujuuu!' : '¡Aaaaah!'
     });
     await wait(900);
@@ -349,5 +438,59 @@
     el.animate([{ transform: `translateY(0) scale(${scale})` }, { transform: `translateY(${-(top + 300)}px) scale(${scale})` }],
       { duration: 1800, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'forwards' }).onfinish = () => el.remove();
     try { await landed; } finally { engine('stop'); }   // el astronauta ya ha aterrizado: se apaga el motor
+  };
+
+  // Llegada: el cohete baja con los motores, despliega las patas y se posa en el suelo; se abre la puerta y el astronauta baja por la rampa.
+  window.rocketDrop = async function (opts) {
+    opts = opts || {};
+    const tgt = document.getElementById(opts.target || 'map');
+    const engine = (fn, v) => { try { if (window.rocketEngine) window.rocketEngine[fn](v); } catch (e) {} };
+    if (!tgt || !Element.prototype.animate || reduced()) { engine('stop'); if (window.stopMusic) window.stopMusic(); return; }
+    const r = tgt.getBoundingClientRect();
+    if (r.width < 120 || r.height < 280) return window.skydive ? legacyDrop(opts) : (engine('stop'), undefined);   // mapa demasiado pequeño: salto en paracaídas como antes
+    const world = opts.world || (opts.suit ? 'luna' : 'tierra');
+    const el = rocketEl(world, 1960), K = 0.96;
+    const groundY = Math.max(r.top + 260, Math.min(r.bottom - 40, r.top + r.height * 0.72)), cx = r.left + r.width / 2;
+    const top = groundY - 228 * K;
+    el.style.left = cx + 'px'; el.style.top = top + 'px';
+    el.classList.add('on', 'occ');
+    document.body.appendChild(el);
+    const dustColor = SURF[world] ? SURF[world][0] : world === 'luna' ? '#b3b3b3' : world === 'marte' ? '#d6966e' : '#d8d2c4';
+    const dust = () => { for (let i = 0; i < 8; i++) {
+      const d = document.createElement('div'); d.className = 'dust'; d.style.cssText = `left:${cx}px;top:${groundY}px;background:${dustColor}`; document.body.appendChild(d);
+      const dx = (i - 3.5) * 24 + (Math.random() * 10 - 5);
+      d.animate([{ transform: 'translate(-50%,-50%) scale(.4)', opacity: .85 }, { transform: `translate(calc(-50% + ${dx}px), calc(-50% - ${6 + Math.random() * 14}px)) scale(${2 + Math.random()})`, opacity: 0 }],
+        { duration: 1300, easing: 'ease-out', fill: 'forwards' }).onfinish = () => d.remove(); } };
+    sfx('retro');
+    const down = el.animate([{ transform: `translateY(${-(top + 280)}px)` }, { transform: 'translateY(0)' }], { duration: 2600, easing: 'cubic-bezier(.1,.6,.2,1)', fill: 'forwards' });
+    wait(1700).then(() => el.classList.add('legs-out'));
+    try {
+      await down.finished.catch(() => {});
+      dust(); sfx('retro');                                   // toca el suelo
+      el.classList.remove('on'); engine('stop'); if (window.stopMusic) window.stopMusic();
+      el.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(3px)' }, { transform: 'translateY(0)' }], { duration: 350 });
+      await wait(700);
+      el.classList.add('open'); sfx('beepgo');
+      await wait(450);
+      el.classList.remove('occ');
+      const rr = el.getBoundingClientRect(), k = rr.width / 100;
+      const gnd = { x: rr.left + 17 * k, y: rr.top + 228 * k }, door = { x: rr.left + 46 * k, y: rr.top + 195 * k };
+      const end = { x: Math.max(r.left + 36, gnd.x - 90), y: gnd.y + 4 };
+      const w = makeWalker(!!opts.suit, opts.suit ? '¡Yujuuu!' : '¡Ya estoy en casa!'); w.style.zIndex = 1962; w.classList.add('walking', 'left');
+      document.body.appendChild(w);
+      w.style.transform = trf(door);
+      w.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });
+      await moveTo(w, door, gnd, 650);
+      await moveTo(w, gnd, end, 1300);
+      w.classList.remove('walking'); w.classList.add('say');
+      sfx(opts.suit ? 'grito2' : 'beep');
+      el.classList.remove('open');                           // la puerta se cierra
+      await wait(2300);
+      w.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 700, fill: 'forwards' });
+      el.classList.remove('legs-out'); el.classList.add('on'); sfx('retro');   // el cohete se va
+      el.animate([{ transform: 'translateY(0)' }, { transform: `translateY(${-(top + 300)}px)` }], { duration: 1800, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'forwards' }).onfinish = () => el.remove();
+      await wait(800);
+      w.remove();
+    } finally { engine('stop'); if (!document.body.contains(el)) return; setTimeout(() => el.remove(), 2500); }
   };
 })();
