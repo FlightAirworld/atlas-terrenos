@@ -1,7 +1,7 @@
 'use strict';
-// Jugadores automáticos 🌍: uno por país (Francia, Australia, Alemania, Rusia, China, Japón, Italia, México, Brasil, España, Portugal,
-// Bélgica, India, Suecia, Suiza y Marruecos; los datos están en bots-data.js). Cada uno reclama UNA parcela al día, al azar,
-// siempre dentro de su país.
+// Jugadores automáticos 🌍: uno por país, en TODOS los países del mundo (197: los 193 de la ONU + Vaticano, Palestina, Kosovo y
+// Taiwán), cada uno con su bandera y un apodo típico de su país. Los datos están en bots-data.js (16 países a mano) y en
+// bots-data-mundo.js + bots-mundo-<región>.js (el resto). Cada uno reclama UNA parcela al día, al azar, siempre dentro de su país.
 //   · Sin cuenta (user_id NULL): no cobran, no reciben ni gastan créditos y no pueden ser presidentes de pueblo.
 //   · Salen en el mapa y en el ranking con su nombre y su bandera (campo country de la parcela).
 //   · Para no caer nunca fuera de su país no usan coordenadas al azar: eligen un municipio del INTERIOR de una lista (lejos de
@@ -16,7 +16,7 @@
 //   BOT_NAME_DE=Hans      cambia el nombre del de Alemania (BOT_NAME_<PAÍS>); también vale FRANCOIS_NAME para Francia
 //   FRANCOIS=off          apaga solo a Francóis (compatibilidad)
 // Para quitar las parcelas de un bot:  DELETE FROM parcels WHERE currency = 'BOT' AND country = 'DE';
-const DATA = require('./bots-data');
+const DATA = require('./bots-data').concat(require('./bots-data-mundo'));   // 16 países a mano + el resto del mundo (bots-data-mundo.js)
 
 const ALL_ON = String(process.env.BOTS || '').toLowerCase() !== 'off';
 const OFF = new Set(String(process.env.BOTS_OFF || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean));

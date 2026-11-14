@@ -319,26 +319,118 @@ El motor (`window.rocketEngine` en `sounds.js`) suena sin cortarse desde el desp
 
 ## Jugadores automáticos 🌍 (uno por país)
 
-16 jugadores anónimos con su bandera que reclaman **una parcela al día cada uno, al azar y siempre dentro de su país** (`bots.js` + datos en `bots-data.js`):
+197 jugadores ficticios, **uno en cada país del mundo** (los 193 de la ONU más Ciudad del Vaticano, Palestina, Kosovo y Taiwán), cada uno con su bandera y un apodo típico de su país. Reclaman **una parcela al día cada uno, al azar y siempre dentro de su país** (`bots.js`; datos en `bots-data.js` para los 16 primeros y en `bots-data-mundo.js` + `bots-mundo-europa/asia/africa/america/oceania.js` para el resto):
 
 | País | Jugador | País | Jugador |
 |---|---|---|---|
-| 🇫🇷 Francia | Francóis | 🇪🇸 España | Manolo |
-| 🇦🇺 Australia | Bruce | 🇵🇹 Portugal | Tiago |
-| 🇩🇪 Alemania | Günther | 🇧🇪 Bélgica | Jef |
-| 🇷🇺 Rusia | Dmitri | 🇮🇳 India | Raj |
-| 🇨🇳 China | Wei | 🇸🇪 Suecia | Sven |
-| 🇯🇵 Japón | Haruto | 🇨🇭 Suiza | Ueli |
-| 🇮🇹 Italia | Luca | 🇲🇦 Marruecos | Youssef |
-| 🇲🇽 México | Alejandro | 🇧🇷 Brasil | João |
+| 🇦🇫 Afganistán | Ahmad | 🇦🇱 Albania | Besnik |
+| 🇩🇪 Alemania | Günther | 🇦🇩 Andorra | Jordi |
+| 🇦🇴 Angola | Mano | 🇦🇬 Antigua y Barbuda | Winston |
+| 🇸🇦 Arabia Saudí | Abdullah | 🇩🇿 Argelia | Karim |
+| 🇦🇷 Argentina | Pibe | 🇦🇲 Armenia | Armen |
+| 🇦🇺 Australia | Bruce | 🇦🇹 Austria | Sepp |
+| 🇦🇿 Azerbaiyán | Elchin | 🇧🇸 Bahamas | Junkanoo |
+| 🇧🇩 Bangladés | Rahim | 🇧🇧 Barbados | Bajan |
+| 🇧🇭 Baréin | Hamad | 🇧🇪 Bélgica | Jef |
+| 🇧🇿 Belice | Kriol | 🇧🇯 Benín | Koffi |
+| 🇧🇾 Bielorrusia | Sasha | 🇧🇴 Bolivia | Chato |
+| 🇧🇦 Bosnia y Herzegovina | Emir | 🇧🇼 Botsuana | Tumelo |
+| 🇧🇷 Brasil | João | 🇧🇳 Brunéi | Awang |
+| 🇧🇬 Bulgaria | Gosho | 🇧🇫 Burkina Faso | Moussa |
+| 🇧🇮 Burundi | Ndayi | 🇧🇹 Bután | Tashi |
+| 🇨🇻 Cabo Verde | Tchutcha | 🇰🇭 Camboya | Sokha |
+| 🇨🇲 Camerún | Ngono | 🇨🇦 Canadá | Gordie |
+| 🇶🇦 Catar | Jassim | 🇹🇩 Chad | Mahamat |
+| 🇨🇿 Chequia | Honza | 🇨🇱 Chile | Huaso |
+| 🇨🇳 China | Wei | 🇨🇾 Chipre | Andreas |
+| 🇻🇦 Ciudad del Vaticano | Pietro | 🇨🇴 Colombia | Parcero |
+| 🇰🇲 Comoras | Ahmed | 🇨🇬 Congo | Bakala |
+| 🇰🇵 Corea del Norte | Chol-su | 🇰🇷 Corea del Sur | Min-jun |
+| 🇨🇷 Costa Rica | Tico | 🇨🇮 Côte d’Ivoire | Kouassi |
+| 🇭🇷 Croacia | Ivica | 🇨🇺 Cuba | Asere |
+| 🇩🇰 Dinamarca | Lars | 🇩🇲 Dominica | Waitukubuli |
+| 🇪🇨 Ecuador | Pana | 🇪🇬 Egipto | Hamada |
+| 🇸🇻 El Salvador | Cuscatleco | 🇦🇪 Emiratos Árabes Unidos | Khalid |
+| 🇪🇷 Eritrea | Tesfay | 🇸🇰 Eslovaquia | Jano |
+| 🇸🇮 Eslovenia | Janez | 🇪🇸 España | Manolo |
+| 🇺🇸 Estados Unidos | Tex | 🇪🇪 Estonia | Toomas |
+| 🇸🇿 Esuatini | Sipho | 🇪🇹 Etiopía | Abebe |
+| 🇵🇭 Filipinas | Juan | 🇫🇮 Finlandia | Matti |
+| 🇫🇯 Fiyi | Bula | 🇫🇷 Francia | Francóis |
+| 🇬🇦 Gabón | Ndong | 🇬🇲 Gambia | Lamin |
+| 🇬🇪 Georgia | Giorgi | 🇬🇭 Ghana | Kwame |
+| 🇬🇩 Granada | Spice | 🇬🇷 Grecia | Kostas |
+| 🇬🇹 Guatemala | Chapín | 🇬🇳 Guinea | Mamadou |
+| 🇬🇶 Guinea Ecuatorial | Esono | 🇬🇼 Guinea-Bisáu | Braima |
+| 🇬🇾 Guyana | Bai | 🇭🇹 Haití | Ti Jean |
+| 🇭🇳 Honduras | Catracho | 🇭🇺 Hungría | Laci |
+| 🇮🇳 India | Raj | 🇮🇩 Indonesia | Budi |
+| 🇮🇶 Irak | Hassan | 🇮🇷 Irán | Reza |
+| 🇮🇪 Irlanda | Paddy | 🇮🇸 Islandia | Gunnar |
+| 🇲🇭 Islas Marshall | Iokwe | 🇸🇧 Islas Salomón | Pijin |
+| 🇮🇱 Israel | Yossi | 🇮🇹 Italia | Luca |
+| 🇯🇲 Jamaica | Irie | 🇯🇵 Japón | Haruto |
+| 🇯🇴 Jordania | Omar | 🇰🇿 Kazajistán | Nurlan |
+| 🇰🇪 Kenia | Juma | 🇰🇬 Kirguistán | Bolot |
+| 🇰🇮 Kiribati | Mauri | 🇽🇰 Kosovo | Arben |
+| 🇰🇼 Kuwait | Fahad | 🇱🇦 Laos | Khamla |
+| 🇱🇸 Lesoto | Thabo | 🇱🇻 Letonia | Jānis |
+| 🇱🇧 Líbano | Elie | 🇱🇷 Liberia | Boima |
+| 🇱🇾 Libia | Salem | 🇱🇮 Liechtenstein | Hansi |
+| 🇱🇹 Lituania | Jonas | 🇱🇺 Luxemburgo | Jang |
+| 🇲🇰 Macedonia del Norte | Aco | 🇲🇬 Madagascar | Rakoto |
+| 🇲🇾 Malasia | Ali | 🇲🇼 Malaui | Chisomo |
+| 🇲🇻 Maldivas | Moosa | 🇲🇱 Mali | Seydou |
+| 🇲🇹 Malta | Karmenu | 🇲🇦 Marruecos | Youssef |
+| 🇲🇺 Mauricio | Ram | 🇲🇷 Mauritania | Mohamed |
+| 🇲🇽 México | Alejandro | 🇫🇲 Micronesia | Kasi |
+| 🇲🇩 Moldavia | Ion | 🇲🇨 Mónaco | Grimaldi |
+| 🇲🇳 Mongolia | Bat | 🇲🇪 Montenegro | Marko |
+| 🇲🇿 Mozambique | Tomás | 🇲🇲 Myanmar (Birmania) | Maung |
+| 🇳🇦 Namibia | Tangeni | 🇳🇷 Nauru | Deiye |
+| 🇳🇵 Nepal | Sherpa | 🇳🇮 Nicaragua | Nica |
+| 🇳🇪 Níger | Oumarou | 🇳🇬 Nigeria | Emeka |
+| 🇳🇴 Noruega | Ola | 🇳🇿 Nueva Zelanda | Kiwi |
+| 🇴🇲 Omán | Said | 🇳🇱 Países Bajos | Jan |
+| 🇵🇰 Pakistán | Bilal | 🇵🇼 Palaos | Alii |
+| 🇵🇦 Panamá | Pelao | 🇵🇬 Papúa Nueva Guinea | Wantok |
+| 🇵🇾 Paraguay | Karai | 🇵🇪 Perú | Cholo |
+| 🇵🇱 Polonia | Staszek | 🇵🇹 Portugal | Tiago |
+| 🇬🇧 Reino Unido | Tommy | 🇨🇫 República Centroafricana | Fidèle |
+| 🇨🇩 República Democrática del Congo | Papy | 🇩🇴 República Dominicana | Tíguere |
+| 🇷🇼 Ruanda | Jean | 🇷🇴 Rumanía | Ionel |
+| 🇷🇺 Rusia | Dmitri | 🇼🇸 Samoa | Tui |
+| 🇰🇳 San Cristóbal y Nieves | Kittian | 🇸🇲 San Marino | Titano |
+| 🇻🇨 San Vicente y las Granadinas | Vincy | 🇱🇨 Santa Lucía | Piton |
+| 🇸🇹 Santo Tomé y Príncipe | Tomé | 🇸🇳 Senegal | Cheikh |
+| 🇷🇸 Serbia | Mile | 🇸🇨 Seychelles | Pyer |
+| 🇸🇱 Sierra Leona | Sorie | 🇸🇬 Singapur | Ah Beng |
+| 🇸🇾 Siria | Samir | 🇸🇴 Somalia | Farah |
+| 🇱🇰 Sri Lanka | Nimal | 🇿🇦 Sudáfrica | Piet |
+| 🇸🇩 Sudán | Osman | 🇸🇸 Sudán del Sur | Deng |
+| 🇸🇪 Suecia | Sven | 🇨🇭 Suiza | Ueli |
+| 🇸🇷 Surinam | Sranan | 🇹🇭 Tailandia | Somchai |
+| 🇹🇼 Taiwán | Ah-Ming | 🇹🇿 Tanzania | Baraka |
+| 🇹🇯 Tayikistán | Bahrom | 🇵🇸 Territorios Palestinos | Khalil |
+| 🇹🇱 Timor-Leste | Zeca | 🇹🇬 Togo | Kodjo |
+| 🇹🇴 Tonga | Malo | 🇹🇹 Trinidad y Tobago | Trini |
+| 🇹🇳 Túnez | Mongi | 🇹🇲 Turkmenistán | Merdan |
+| 🇹🇷 Turquía | Mehmet | 🇹🇻 Tuvalu | Tavita |
+| 🇺🇦 Ucrania | Taras | 🇺🇬 Uganda | Okello |
+| 🇺🇾 Uruguay | Gurí | 🇺🇿 Uzbekistán | Rustam |
+| 🇻🇺 Vanuatu | Bislama | 🇻🇪 Venezuela | Chamo |
+| 🇻🇳 Vietnam | Minh | 🇾🇪 Yemen | Yahya |
+| 🇩🇯 Yibuti | Abdi | 🇿🇲 Zambia | Chanda |
+| 🇿🇼 Zimbabue | Tendai |  |  |
 
-- Sin cuenta: no cobran, no reciben ni gastan créditos y no pueden ser presidentes de pueblo. Salen en el mapa y en el ranking con su nombre.
-- No usan coordenadas al azar: eligen un municipio del interior de una lista (lejos de costas y fronteras) y se desplazan como mucho 1,4 km del centro (0,8 km en Portugal, Bélgica y Suiza). Además cada país tiene una caja de seguridad.
-- Una vez al día, a una hora distinta cada día (08:00-22:00 en la zona horaria de su país). La tabla `bot_runs` impide que reclamen dos veces el mismo día aunque se reinicie el servidor.
+- Sin cuenta: no cobran, no reciben ni gastan créditos y no pueden ser presidentes de pueblo. Salen en el mapa y en el ranking con su bandera (el código del país) y su apodo.
+- No usan coordenadas al azar: eligen un municipio de una lista (3 a 25 por país, céntricos y lejos de la frontera) y se desplazan como mucho 1,4 km del centro; en los países pequeños el desplazamiento es menor (0,8 km, 0,3 km o 0,1 km en Mónaco, Vaticano o Nauru). Además cada país tiene una caja de seguridad: un punto fuera de ella no se reclama.
+- Los países diminutos (Vaticano, Mónaco, Nauru, Tuvalu, San Marino…) tienen muy pocas parcelas posibles: cuando se llenan, el jugador simplemente no reclama más ese día.
+- Una vez al día, a una hora distinta cada día (08:00-22:00 en la zona horaria de su país). La tabla `bot_runs` impide que reclamen dos veces el mismo día aunque se reinicie el servidor. **Al desplegar por primera vez**, los que ya hayan pasado su hora de hoy reclaman de golpe en el primer minuto; a partir de ahí, una por día y país.
 - La casa es al azar y el pueblo lo pone `cityTick` solo.
-- Variables: `BOTS=off` los apaga todos; `BOTS_OFF=DE,RU` apaga solo los de esos países; `BOT_NAME_DE=Hans` cambia un nombre (`FRANCOIS_NAME` para Francia); `FRANCOIS=off` apaga solo a Francóis.
+- Variables: `BOTS=off` los apaga todos; `BOTS_OFF=DE,RU` apaga solo los de esos países; `BOT_NAME_DE=Hans` cambia un apodo (`FRANCOIS_NAME` para Francia); `FRANCOIS=off` apaga solo a Francóis.
 - Quitar las parcelas de uno: `DELETE FROM parcels WHERE currency = 'BOT' AND country = 'DE';` (todos: sin el filtro de país).
-- Para añadir otro país, copia un bloque de `bots-data.js` y pon municipios del interior.
+- Para añadir o cambiar un país, edita su línea en `bots-mundo-<región>.js` (formato en la cabecera de `bots-data-mundo.js`); `node --test bots.test.js` comprueba que todos los puntos caen dentro de su caja.
 
 ## Jugadores en línea por país
 
