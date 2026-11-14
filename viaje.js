@@ -413,7 +413,10 @@
         setTimeout(() => { ov.remove(); launching = false; document.body.classList.remove('viajando'); try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {} }, 900);
       });
       };
-      boardRocket(ov, rocket, from !== 'tierra', 14).catch(() => {}).then(go);
+      // Se sube al cohete solo cuando la pantalla del viaje ya se ha pintado: en la Tierra (con el mapa y todo lo que corre detrás) el primer pintado tarda,
+      // y la subida empezaba antes de que se viera. Si el navegador no pinta (pestaña oculta), a los 1,5 s se sube igualmente.
+      const painted = new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, from === 'tierra' ? 500 : 250))));
+      Promise.race([painted, wait(1500)]).then(() => boardRocket(ov, rocket, from !== 'tierra', 14)).catch(() => {}).then(go);
     });
     prom.takeoff = takeoff;
     return prom;

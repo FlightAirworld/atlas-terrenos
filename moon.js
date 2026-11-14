@@ -73,10 +73,14 @@
     if (traveling || !box.classList.contains('hidden')) return;
     traveling = true;
     const launch = window.rocketLaunch ? window.rocketLaunch('tierra') : Promise.resolve();
-    box.classList.remove('hidden');                       // el mapa lunar se prepara debajo de la pantalla del cohete
-    if (!mm) build(); else mm.resize();
-    mm.jumpTo({ center: [10, 10], zoom: 0.8 });
-    launch.then(() => {
+    // El mapa lunar se prepara debajo de la pantalla del cohete, pero cuando ya ha despegado (launch.takeoff), no mientras el jugador sube al cohete:
+    // construir el mapa a media subida dejaba la animación cortada y en la Tierra no se veía subir.
+    const prep = ((launch && launch.takeoff) || Promise.resolve()).then(() => {
+      box.classList.remove('hidden');
+      if (!mm) build(); else mm.resize();
+      mm.jumpTo({ center: [10, 10], zoom: 0.8 });
+    });
+    launch.then(() => prep).then(() => {
       mm.flyTo({ center: [23.47, 0.67], zoom: 4.2, duration: 6500, essential: true });   // llegada al lugar del Apolo 11 (Mar de la Tranquilidad)
       return window.rocketDrop ? window.rocketDrop({ target: 'moon-map', suit: true }) : null;
     }).catch(() => {}).then(() => { traveling = false; });
