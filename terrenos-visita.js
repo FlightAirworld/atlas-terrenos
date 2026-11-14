@@ -104,6 +104,7 @@
     #terrain-visit .w-chest{z-index:7;transform:translate(-50%,0);line-height:1}
     #terrain-visit .w-gem{z-index:8;opacity:0;transform:translate(-50%,0);line-height:1}
     #terrain-visit .w-gem.on{opacity:1;animation:tv-pop .6s ease-out}
+    #terrain-visit .tv-fig .flagp{transform-box:fill-box;transform-origin:50% 50%;transform:scaleX(var(--fx,1))}
     #terrain-visit .tv-fig .helmet{transition:transform .8s cubic-bezier(.3,1.4,.5,1),opacity .4s;transform:translateY(-46px);opacity:0}
     #terrain-visit .tv-fig.helm .helmet{transform:translateY(0);opacity:1}
     @media(prefers-reduced-motion:reduce){#terrain-visit .g-cloud,#terrain-visit .w-rays,#terrain-visit .w-surface,#terrain-visit .w-fish{animation:none!important}}
@@ -115,28 +116,32 @@
   const sound = n => { try { if (window.sfx) window.sfx(n); } catch (e) {} };
   const svgNS = 'http://www.w3.org/2000/svg';
 
+  // Tu aspecto (el del muñeco del mapa): color de piel, pelo y bandera de tu país en el pecho
+  const me = () => { let o = {}; try { o = (window.playerCssLook && window.playerCssLook()) || {}; } catch (e) {} return { skin: o.skin || '#f6c9a0', hair: o.hair || '#4a2f1b', flag: o.flag || '' }; };
+  const flagPatch = (f, x, y, w, h, fs) => `<g class="flagp"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2.5" fill="#fff" stroke="rgba(0,0,0,.3)" stroke-width=".8"/>${f ? `<text x="${x + w / 2}" y="${y + h - 2.2}" text-anchor="middle" font-size="${fs}" font-family="'Apple Color Emoji','Noto Color Emoji','Segoe UI Emoji',sans-serif">${f}</text>` : ''}</g>`;
+
   // Minero: casco amarillo con linterna, chaleco naranja, pala/pico en la mano delantera
-  const MINER = `<svg viewBox="0 0 64 96" aria-hidden="true"><g class="leg-r"><rect x="33" y="58" width="11" height="30" rx="4" fill="#2f4a6b"/><rect x="31" y="84" width="17" height="9" rx="4" fill="#3a2a1d"/></g>
-    <g class="arm-b"><rect x="12" y="34" width="9" height="28" rx="4.5" fill="#f0b98b"/></g>
+  const MINER = () => { const P = me(); return `<svg viewBox="0 0 64 96" aria-hidden="true"><g class="leg-r"><rect x="33" y="58" width="11" height="30" rx="4" fill="#2f4a6b"/><rect x="31" y="84" width="17" height="9" rx="4" fill="#3a2a1d"/></g>
+    <g class="arm-b"><rect x="12" y="34" width="9" height="28" rx="4.5" fill="${P.skin}"/></g>
     <g class="leg-l"><rect x="20" y="58" width="11" height="30" rx="4" fill="#355a85"/><rect x="18" y="84" width="17" height="9" rx="4" fill="#3a2a1d"/></g>
-    <rect x="14" y="30" width="36" height="36" rx="10" fill="#e8742a"/><rect x="14" y="48" width="36" height="6" fill="#ffd23f" opacity=".9"/>
-    <rect x="28" y="22" width="8" height="10" fill="#f0b98b"/><circle cx="32" cy="16" r="13" fill="#f6c9a0"/>
+    <rect x="14" y="30" width="36" height="36" rx="10" fill="#e8742a"/>${flagPatch(P.flag, 21, 33, 22, 13, 11)}<rect x="14" y="48" width="36" height="6" fill="#ffd23f" opacity=".9"/>
+    <rect x="28" y="22" width="8" height="10" fill="${P.skin}"/><circle cx="32" cy="16" r="13" fill="${P.skin}"/>
     <circle cx="36" cy="16" r="1.8" fill="#2a211c"/><path d="M33 22 q4 3 8 0" stroke="#9a4545" stroke-width="1.8" fill="none" stroke-linecap="round"/>
     <path d="M17 13 a15 14 0 0 1 30 0 z" fill="#ffd23f"/><rect x="15" y="12" width="34" height="4" rx="2" fill="#e0b21c"/><circle cx="46" cy="8" r="4.2" fill="#fffbe0" stroke="#7a6a20" stroke-width="1.2"/>
-    <g class="arm-f"><rect x="43" y="34" width="9" height="28" rx="4.5" fill="#f0b98b"/><g><rect x="46" y="52" width="3" height="40" rx="1.5" fill="#7a4b24"/><path d="M34 52 q14 -12 28 0 q-14 -5 -28 0z" fill="#8a949c"/></g></g></svg>`;
+    <g class="arm-f"><rect x="43" y="34" width="9" height="28" rx="4.5" fill="${P.skin}"/><g><rect x="46" y="52" width="3" height="40" rx="1.5" fill="#7a4b24"/><path d="M34 52 q14 -12 28 0 q-14 -5 -28 0z" fill="#8a949c"/></g></g></svg>` };
 
   // Buceador con escafandra: traje azul, botas pesadas, casco de latón con remaches y ventanilla
-  const DIVER = `<svg viewBox="0 0 64 96" aria-hidden="true"><g class="leg-r"><rect x="33" y="60" width="11" height="26" rx="5" fill="#1d3a5c"/><rect x="30" y="82" width="19" height="11" rx="4" fill="#2b2b2b"/></g>
+  const DIVER = () => { const P = me(); return `<svg viewBox="0 0 64 96" aria-hidden="true"><g class="leg-r"><rect x="33" y="60" width="11" height="26" rx="5" fill="#1d3a5c"/><rect x="30" y="82" width="19" height="11" rx="4" fill="#2b2b2b"/></g>
     <g class="arm-b"><rect x="12" y="38" width="10" height="28" rx="5" fill="#23466f"/><circle cx="17" cy="68" r="5" fill="#2b2b2b"/></g>
     <g class="leg-l"><rect x="19" y="60" width="11" height="26" rx="5" fill="#23466f"/><rect x="16" y="82" width="19" height="11" rx="4" fill="#2b2b2b"/></g>
-    <rect x="14" y="34" width="36" height="34" rx="11" fill="#2a5282"/><rect x="14" y="52" width="36" height="6" fill="#8a6a2a"/><rect x="29" y="50" width="6" height="10" rx="1.5" fill="#d1a733"/>
+    <rect x="14" y="34" width="36" height="34" rx="11" fill="#2a5282"/><rect x="14" y="52" width="36" height="6" fill="#8a6a2a"/>${flagPatch(P.flag, 22, 41, 20, 10, 9)}<rect x="29" y="50" width="6" height="10" rx="1.5" fill="#d1a733"/>
     <ellipse cx="32" cy="34" rx="20" ry="7" fill="#c8a13a"/>
     <g class="helmet"><circle cx="32" cy="20" r="19" fill="#c8a13a" stroke="#8a6a1a" stroke-width="2"/><circle cx="32" cy="20" r="14.5" fill="#a9822a"/>
       <circle cx="35" cy="21" r="10.5" fill="#bfeaff" stroke="#6b4f12" stroke-width="2.5"/><circle cx="35" cy="21" r="10.5" fill="#7fd0ee" opacity=".35"/><path d="M29 17 a8 8 0 0 1 8 -4" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".9"/>
       <circle cx="17" cy="14" r="1.8" fill="#6b4f12"/><circle cx="14" cy="24" r="1.8" fill="#6b4f12"/><circle cx="23" cy="34" r="1.8" fill="#6b4f12"/><circle cx="41" cy="34" r="1.8" fill="#6b4f12"/>
       <rect x="29" y="-3" width="7" height="8" rx="2" fill="#8a6a1a"/></g>
-    <circle class="facebare" cx="32" cy="20" r="0" fill="#f6c9a0"/>
-    <g class="arm-f"><rect x="42" y="38" width="10" height="28" rx="5" fill="#2a5282"/><circle cx="47" cy="68" r="5" fill="#2b2b2b"/></g></svg>`;
+    <g class="facebare"><circle cx="32" cy="19" r="13" fill="${P.skin}"/><path d="M19 17 a13 12 0 0 1 26 0 c-5 -4 -21 -4 -26 0z" fill="${P.hair}"/><circle cx="36" cy="20" r="1.8" fill="#2a211c"/><path d="M33 25 q4 3 8 0" stroke="#9a4545" stroke-width="1.8" fill="none" stroke-linecap="round"/></g>
+    <g class="arm-f"><rect x="42" y="38" width="10" height="28" rx="5" fill="#2a5282"/><circle cx="47" cy="68" r="5" fill="#2b2b2b"/></g></svg>` };
 
   function makeFig(svg, cls) {
     const f = document.createElement('div'); f.className = 'tv-fig ' + (cls || '');
@@ -157,11 +162,11 @@
     const worm = add('g-worm', 'left:30%;top:262px', '🪱'), ants = add('g-ants', 'left:34%;top:268px', '🐜 🐜 🐜 🐜');
     const bone = add('g-item pop', 'left:56%;top:250px;font-size:34px', '🦴'), chest = add('g-item pop', 'left:80%;top:244px;font-size:40px', '🧰');
     const gem = add('g-item pop', 'left:80%;top:206px;font-size:34px', '💎'), spark = add('g-spark', 'left:76%;top:214px', '✨ ✨');
-    const miner = makeFig(MINER); S.appendChild(miner);
+    const miner = makeFig(MINER()); S.appendChild(miner);
     const light = document.createElement('div'); light.className = 'g-light'; miner.appendChild(light);
     const W = () => S.clientWidth, X = pct => W() * pct / 100;
     const place = (xPct, top, ms, ease) => { miner.style.transition = ms ? `left ${ms}ms ${ease || 'linear'}, top ${ms}ms ${ease || 'linear'}` : 'none'; miner.style.left = xPct + '%'; miner.style.top = top + 'px'; };
-    const face = dir => { miner.querySelector('.tv-flip').style.transform = `scaleX(${dir})`; };
+    const face = dir => { miner.querySelector('.tv-flip').style.transform = `scaleX(${dir})`; miner.style.setProperty('--fx', dir); };
     const puff = (x, y, n) => { for (let i = 0; i < n; i++) { const p = document.createElement('div'); p.className = 'puff'; p.style.left = x + 'px'; p.style.top = y + 'px'; p.style.setProperty('--dx', rnd(-34, 34) + 'px'); p.style.setProperty('--dy', rnd(-46, -12) + 'px'); S.appendChild(p); setTimeout(() => p.remove(), 800); } };
     const dig = async (x, y, times) => { miner.classList.add('dig'); for (let i = 0; i < times; i++) { sound('cavar'); puff(x, y, 7); await T.sleep(560); } miner.classList.remove('dig'); };
 
@@ -209,7 +214,7 @@
     const hose = document.createElementNS(svgNS, 'path'); hose.setAttribute('fill', 'none'); hose.setAttribute('stroke', '#2d2d2d'); hose.setAttribute('stroke-width', '4'); hose.setAttribute('stroke-linecap', 'round'); hose.setAttribute('stroke-dasharray', '1 0');
     const hose2 = document.createElementNS(svgNS, 'path'); hose2.setAttribute('fill', 'none'); hose2.setAttribute('stroke', '#6a6a6a'); hose2.setAttribute('stroke-width', '1.2'); hose2.setAttribute('stroke-dasharray', '5 4');
     hoseSvg.append(hose, hose2); S.appendChild(hoseSvg);
-    const diver = makeFig(DIVER); S.appendChild(diver);
+    const diver = makeFig(DIVER()); S.appendChild(diver);
 
     // Movimiento suave del buceador hacia un objetivo (la manguera lo sigue desde la barca)
     const st = { x: 0, y: 0, tx: 0, ty: 0, k: 0.06, under: false, t0: performance.now() };
@@ -247,15 +252,15 @@
     T.cap('Desciendes despacio. ¡El agua está transparente!'); target(W() * 0.33, 112, 0.025); await T.sleep(3000); sound('burbujas');
     // 4) Nadar entre peces
     T.cap('Nadas entre peces de colores, tortugas y algas…'); target(W() * 0.5, 142, 0.02); await T.sleep(3600); sound('burbujas');
-    diver.querySelector('.tv-flip').style.transform = 'scaleX(1)';
+    diver.querySelector('.tv-flip').style.transform = 'scaleX(1)'; diver.style.setProperty('--fx', 1);
     // 5) Cofre del fondo
     T.cap('¡Algo brilla en el fondo del mar!'); target(W() * 0.7, 170, 0.025); await T.sleep(3600);
     sound('pop'); await T.sleep(500); gem.classList.add('on'); sound('coin'); T.cap('¡Un cofre del tesoro con un diamante! 💎'); await T.sleep(3000);
     // 6) Subir
-    diver.querySelector('.tv-flip').style.transform = 'scaleX(-1)';
+    diver.querySelector('.tv-flip').style.transform = 'scaleX(-1)'; diver.style.setProperty('--fx', -1);
     T.cap('Subes a la superficie con cuidado, soltando burbujas…'); sound('burbujas'); target(W() * 0.25, 58, 0.02); await T.sleep(4200);
     st.under = false; diver.classList.remove('swim'); target(W() * 0.19, -38, 0.06); splash(W() * 0.25, 84); sound('chapoteo'); await T.sleep(1800);
-    diver.querySelector('.tv-flip').style.transform = 'scaleX(1)';
+    diver.querySelector('.tv-flip').style.transform = 'scaleX(1)'; diver.style.setProperty('--fx', 1);
     T.cap('¡Misión cumplida! Has explorado el fondo del mar.'); sound('gift'); await T.sleep(1200);
     cancelAnimationFrame(raf);
   }
