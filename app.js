@@ -854,6 +854,20 @@ async function selectAt(latlng, terrainHint) {
   setSelected(p);
   showPanel(p);
   sfx('select');
+  walkToParcel(p, latlng);
+}
+// El muñeco está fijo en el centro del mapa y camina cuando el mapa se mueve: para que «vaya» a la parcela tocada,
+// se desliza el mapa (a velocidad constante) hasta dejar esa parcela justo bajo sus pies.
+function walkToParcel(p, latlng) {
+  try {
+    if (!glReady || !(window.playerWalker && window.playerWalker.el && window.playerWalker.el())) return;
+    const lat = Number.isFinite(p.south) ? p.south + cfg.size / 2 : latlng.lat;
+    const lng = Number.isFinite(p.west) ? p.west + cfg.size / 2 : latlng.lng;
+    const a = gl.project(gl.getCenter()), b = gl.project([lng, lat]);
+    const px = Math.hypot(a.x - b.x, a.y - b.y);
+    if (px < 4) return;
+    gl.easeTo({ center: [lng, lat], duration: Math.max(450, Math.min(2200, px * 2.2)), easing: x => x, essential: true });
+  } catch (e) { /* si algo falla, el muñeco se queda donde está */ }
 }
 map.on('click', e => {
   // Si se pulsa un edificio 3D, se elige su parcela (no el suelo que queda detrás).
