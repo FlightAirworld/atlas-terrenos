@@ -80,7 +80,6 @@
     .rocket { z-index: 3; }
     /* Salida desde la Tierra: el mapa y todo lo demás compiten con la pantalla del viaje y el cohete tardaba segundos en verse. Mientras se sube, lo de detrás no se pinta. */
     body.viaje-pausa > *:not(#viaje) { visibility: hidden !important; }
-    body.viaje-pausa #viaje, body.viaje-pausa #viaje .rocket, body.viaje-pausa #viaje .wk { visibility: visible; }
     #viaje.ligero .rocket svg, #viaje.ligero .wk svg { filter: none; }
     ${SURF_CSS}
     #viaje .tripsub { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 72px); z-index: 4; transform: translate(-50%, -8px); opacity: 0; white-space: nowrap; color: #fff; background: rgba(0,0,0,.4); border-radius: 99px; padding: 7px 14px; font: 700 16px/1 system-ui, sans-serif; text-shadow: 0 1px 4px #000; transition: opacity .6s, transform .6s; }
@@ -160,15 +159,10 @@
   async function boardRocket(ov, rocket, suit, drop) {
     if (!Element.prototype.animate) return;
     const f = 1;   // el mismo ritmo en todos los mundos
-    void rocket.offsetWidth;   // fuerza el cálculo de la maquetación antes de medir (en la Tierra la página está cargada y a veces aún no estaba lista)
-    let rr = rocket.getBoundingClientRect();
-    if (!(rr.width > 20 && rr.height > 50)) {   // sin medidas válidas: se calculan igual que las pone el CSS (cohete centrado, apoyado en el suelo al 24 %)
-      const Hh = innerHeight; rr = { left: innerWidth / 2 - 48, top: Hh * 0.76 + 1 - 230, width: 96, height: 230 };
-    }
-    const k = rr.width / 100;
+    const rr = rocket.getBoundingClientRect(), k = rr.width / 100;
     const P = (u, v) => ({ x: rr.left + u * k, y: rr.top + v * k });
     const gnd = P(17, 228), door = P(46, 195), step = { x: gnd.x - 18, y: gnd.y + drop }, start = { x: Math.max(-30, gnd.x - 150), y: gnd.y + drop };
-    const w = makeWalker(suit, '¡Allá voy!'); w.style.visibility = 'visible'; w.style.opacity = '1'; ov.appendChild(w);
+    const w = makeWalker(suit, '¡Allá voy!'); ov.appendChild(w);
     try {
       w.style.transform = trf(start); w.classList.add('walking');
       rocket.classList.add('open'); sfx('beep');
@@ -366,17 +360,28 @@
     });
   }
 
-  let launching = false;
+  let launching = false, launchId = 0;
   window.rocketLaunch = function (from, to) {
     from = CHAIN.includes(from) ? from : 'tierra';
     to = CHAIN.includes(to) && to !== from ? to : (from === 'tierra' ? 'luna' : 'tierra');
     // La promesa trae .takeoff: se cumple al despegar. Quien prepara el mapa de destino lo hace entonces, no mientras el jugador sube y se hace la cuenta atrás
     // (construir un mapa a media animación dejaba la subida y la cuenta atrás cortadas, sobre todo al salir de la Tierra).
-    if (launching || !Element.prototype.animate || reduced()) { const q = Promise.resolve(); q.takeoff = Promise.resolve(); return q; }
+    // (antes también se saltaba el despegue con «reducir animaciones» activado en el móvil: así no había ni cuenta atrás ni cohete en ningún planeta.
+    //  Ahora el despegue se hace siempre; solo se omite si el navegador no sabe animar o ya hay un despegue en marcha.)
+    if (launching || !Element.prototype.animate) { const q = Promise.resolve(); q.takeoff = Promise.resolve(); return q; }
     launching = true;
     try { if (window.playerWalker) window.playerWalker.hide(); } catch (e) {}   // el muñeco que estaba en el mapa se va al cohete
     document.body.classList.add('viajando');
     const trip = route(from, to);
+    // Seguro: si algo falla a mitad del despegue, la pantalla del viaje se retira y se puede volver a despegar (antes `launching` se quedaba activo y no despegaba nunca más)
+    const myLaunch = ++launchId;
+    setTimeout(() => {
+      if (launching && launchId === myLaunch) {
+        launching = false; document.body.classList.remove('viaje-pausa', 'viajando');
+        const o = document.getElementById('viaje'); if (o) o.remove();
+        try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {}
+      }
+    }, 5600 + trip.total + 9000);
     let takeoffNow = () => {};
     const takeoff = new Promise(r => { takeoffNow = r; });
     const prom = new Promise(resolve => {
@@ -395,7 +400,20 @@
       const count = ov.querySelector('.count'), banner = ov.querySelector('.trip'), sub = ov.querySelector('.tripsub');
       const dist = Math.abs(AU[from] - AU[to]);
       banner.textContent = TRIP[to]; sub.textContent = farMsg(dist);
-      const say = (txt, snd) => { count.textContent = txt; count.classList.toggle('word', txt.length > 2); count.classList.remove('pop'); void count.offsetWidth; count.classList.add('pop'); sfx(snd); };
+      // Cuenta atrás: número grande en pantalla, pitido y voz («tres, dos, uno, ¡despegue!») en todos los mundos
+      const VOZ = { '3': 'tres', '2': 'dos', '1': 'uno' };
+      const say = (txt, snd) => {
+        count.textContent = txt; count.classList.toggle('word', txt.length > 2); count.classList.remove('pop'); void count.offsetWidth; count.classList.add('pop'); sfx(snd);
+        try {
+          const ss = window.speechSynthesis;
+          if (ss && window.SpeechSynthesisUtterance && !(window.atlasVoice && window.atlasVoice.muted) && (!window.soundOn || window.soundOn('efectos'))) {
+            const u = new SpeechSynthesisUtterance(VOZ[txt] || '¡Despegue!');
+            u.lang = 'es-ES'; u.rate = 1.15; u.pitch = 0.9; u.volume = 1;
+            const voice = (ss.getVoices() || []).find(x => /^es/i.test(x.lang)); if (voice) u.voice = voice;
+            ss.cancel(); ss.speak(u);
+          }
+        } catch (e) {}
+      };
       const go = () => {   // se sube al cohete y después empieza la cuenta atrás
       say('3', 'beep');
       wait(800).then(() => say('2', 'beep'));
@@ -430,7 +448,7 @@
       });
       };
       // En la Tierra se espera solo 1 segundo (el cohete ya está pintado porque el resto de la Tierra se oculta, ver `viaje-pausa`) y se sube.
-      painted().then(() => boardRocket(ov, rocket, from !== 'tierra', 14)).catch(e => { console.error('[viaje] subida al cohete desde ' + from, e); rocket.classList.add('occ'); rocket.classList.remove('open'); }).then(go);
+      painted().then(() => boardRocket(ov, rocket, from !== 'tierra', 14)).catch(() => {}).then(go);
     });
     prom.takeoff = takeoff;
     return prom;

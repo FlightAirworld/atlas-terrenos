@@ -115,9 +115,9 @@
     chapoteo: t => { const src = ctx.createBufferSource(); src.buffer = noiseBuf(1); const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7; const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.8, t + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7); src.connect(bp); bp.connect(g); g.connect(sfxBus); src.start(t); src.stop(t + 0.8); },
     adios:  t => { [79, 76, 72].forEach((n, i) => tone(sfxBus, 'triangle', hz(n), t + i * 0.16, 0.4, 0.4)); },
     // Cuenta atrás del cohete
-    beep:   t => tone(sfxBus, 'sine', 880, t, 0.14, 0.5),
+    beep:   t => { tone(sfxBus, 'sine', 880, t, 0.22, 0.8); tone(sfxBus, 'triangle', 1760, t, 0.12, 0.25); },   // pitido de la cuenta atrás (más alto y claro que antes)
     ufo: t => { tone(sfxBus, 'sine', 640, t, 0.55, 0.3, { slideTo: 330 }); tone(sfxBus, 'sine', 330, t + 0.5, 0.55, 0.3, { slideTo: 700 }); tone(sfxBus, 'triangle', 1280, t, 1.05, 0.06); },
-    beepgo: t => tone(sfxBus, 'sine', 1320, t, 0.5, 0.55),
+    beepgo: t => { tone(sfxBus, 'sine', 1320, t, 0.6, 0.85); tone(sfxBus, 'triangle', 2640, t, 0.3, 0.25); },
     // Despegue: rugido de ruido que se abre y retumbo grave
     cohete: t => {
       const src = ctx.createBufferSource(); src.buffer = noiseBuf(3); src.loop = true;
