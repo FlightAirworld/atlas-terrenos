@@ -34,6 +34,7 @@
     #viaje.go .pad { transform: translateY(300%); opacity: 0; transition: transform 3.6s ease-in, opacity 1.2s ease-in 1.2s; }
     #viaje .count { position: absolute; left: 0; right: 0; top: 18%; text-align: center; font: 900 96px/1 system-ui, sans-serif; color: #fff; text-shadow: 0 4px 18px rgba(0,0,0,.55); pointer-events: none; z-index: 5; }
     #viaje .count.pop { animation: viajePop .6s ease-out; }
+    #viaje.tierra .count, #viaje.venus .count, #viaje.saturno .count { text-shadow: 0 0 4px rgba(0,30,110,.9), 0 3px 10px rgba(0,30,110,.75), 0 4px 18px rgba(0,0,0,.55); }
     #viaje .count.word { font-size: min(15vw, 64px); }   /* «¡Despegue!» cabe en pantallas estrechas */
     @keyframes viajePop { from { transform: scale(1.6); opacity: .2; } to { transform: scale(1); opacity: 1; } }
     .rocket { position: fixed; left: 50%; width: 96px; height: 230px; margin-left: -48px; pointer-events: none; will-change: transform; }
@@ -79,7 +80,6 @@
     .rocket { z-index: 3; }
     /* Salida desde la Tierra: el mapa y todo lo demás compiten con la pantalla del viaje y el cohete tardaba segundos en verse. Mientras se sube, lo de detrás no se pinta. */
     body.viaje-pausa > *:not(#viaje) { visibility: hidden !important; }
-    #viaje.ligero .rocket, #viaje.ligero .wk { will-change: auto; }
     #viaje.ligero .rocket svg, #viaje.ligero .wk svg { filter: none; }
     ${SURF_CSS}
     #viaje .tripsub { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 72px); z-index: 4; transform: translate(-50%, -8px); opacity: 0; white-space: nowrap; color: #fff; background: rgba(0,0,0,.4); border-radius: 99px; padding: 7px 14px; font: 700 16px/1 system-ui, sans-serif; text-shadow: 0 1px 4px #000; transition: opacity .6s, transform .6s; }
@@ -156,22 +156,22 @@
   const trf = p => `translate(${p.x - 17}px, ${p.y - 58}px)`;   // los pies del muñeco en el punto p
   const moveTo = (el, a, b, ms) => el.animate([{ transform: trf(a) }, { transform: trf(b) }], { duration: ms, easing: 'linear', fill: 'forwards' }).finished.catch(() => {});
   // El astronauta camina hasta el cohete, sube por la rampa y entra; la puerta se cierra. `drop` = lo que baja el suelo respecto a la base del cohete.
-  async function boardRocket(ov, rocket, suit, drop, slow) {
+  async function boardRocket(ov, rocket, suit, drop) {
     if (!Element.prototype.animate) return;
-    const f = slow ? 1.3 : 1;   // en la Tierra la subida va más despacio para que se vea bien
+    const f = 1;   // el mismo ritmo en todos los mundos
     const rr = rocket.getBoundingClientRect(), k = rr.width / 100;
     const P = (u, v) => ({ x: rr.left + u * k, y: rr.top + v * k });
     const gnd = P(17, 228), door = P(46, 195), step = { x: gnd.x - 18, y: gnd.y + drop }, start = { x: Math.max(-30, gnd.x - 150), y: gnd.y + drop };
-    const w = makeWalker(suit, slow ? '¡Allá voy!' : ''); ov.appendChild(w);
+    const w = makeWalker(suit, '¡Allá voy!'); ov.appendChild(w);
     try {
       w.style.transform = trf(start); w.classList.add('walking');
       rocket.classList.add('open'); sfx('beep');
-      if (slow) await wait(700);   // primero se ve la puerta abierta y la rampa
+      await wait(450);   // primero se ve la puerta abierta y la rampa
       await moveTo(w, start, step, 1000 * f);
       await moveTo(w, step, gnd, 250 * f);
       await moveTo(w, gnd, door, 520 * f);
       w.classList.remove('walking');
-      if (slow) { w.classList.add('say'); await wait(900); w.classList.remove('say'); }   // en la puerta dice «¡Allá voy!» antes de entrar
+      w.classList.add('say'); await wait(700); w.classList.remove('say');   // en la puerta dice «¡Allá voy!» antes de entrar
       await w.animate([{ opacity: 1, transform: trf(door) }, { opacity: 0, transform: trf(door) + ' scale(.5)' }], { duration: 300, fill: 'forwards' }).finished.catch(() => {});
     } finally {
       w.remove(); rocket.classList.add('occ');   // pase lo que pase, el jugador queda dentro (se le ve la cabeza por la ventanilla)
@@ -181,6 +181,8 @@
   }
   const sfx = n => { try { if (window.sfx) window.sfx(n); } catch (e) {} };
   const wait = ms => new Promise(r => setTimeout(r, ms));
+  // Espera a que el navegador haya pintado la pantalla del viaje (dos fotogramas) antes de que el muñeco empiece a subir; así se ve entero en todos los mundos, también en la Tierra
+  const painted = () => new Promise(r => { let done = false; const fin = () => { if (!done) { done = true; setTimeout(r, 120); } }; try { requestAnimationFrame(() => requestAnimationFrame(fin)); } catch (e) {} setTimeout(fin, 600); });
   const reduced = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const SPR = {};   // mundo -> ruta de su dibujo real (images/planetas/<mundo>.webp), si existe
@@ -422,7 +424,7 @@
       });
       };
       // En la Tierra se espera solo 1 segundo (el cohete ya está pintado porque el resto de la Tierra se oculta, ver `viaje-pausa`) y se sube.
-      wait(from === 'tierra' ? 1000 : 250).then(() => boardRocket(ov, rocket, from !== 'tierra', 14, from === 'tierra')).catch(() => {}).then(go);
+      painted().then(() => boardRocket(ov, rocket, from !== 'tierra', 14)).catch(() => {}).then(go);
     });
     prom.takeoff = takeoff;
     return prom;
