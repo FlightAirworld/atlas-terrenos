@@ -80,6 +80,7 @@
     .rocket { z-index: 3; }
     /* Salida desde la Tierra: el mapa y todo lo demás compiten con la pantalla del viaje y el cohete tardaba segundos en verse. Mientras se sube, lo de detrás no se pinta. */
     body.viaje-pausa > *:not(#viaje) { visibility: hidden !important; }
+    body.viaje-pausa #viaje, body.viaje-pausa #viaje .rocket, body.viaje-pausa #viaje .wk { visibility: visible; }
     #viaje.ligero .rocket svg, #viaje.ligero .wk svg { filter: none; }
     ${SURF_CSS}
     #viaje .tripsub { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 72px); z-index: 4; transform: translate(-50%, -8px); opacity: 0; white-space: nowrap; color: #fff; background: rgba(0,0,0,.4); border-radius: 99px; padding: 7px 14px; font: 700 16px/1 system-ui, sans-serif; text-shadow: 0 1px 4px #000; transition: opacity .6s, transform .6s; }
@@ -159,10 +160,15 @@
   async function boardRocket(ov, rocket, suit, drop) {
     if (!Element.prototype.animate) return;
     const f = 1;   // el mismo ritmo en todos los mundos
-    const rr = rocket.getBoundingClientRect(), k = rr.width / 100;
+    void rocket.offsetWidth;   // fuerza el cálculo de la maquetación antes de medir (en la Tierra la página está cargada y a veces aún no estaba lista)
+    let rr = rocket.getBoundingClientRect();
+    if (!(rr.width > 20 && rr.height > 50)) {   // sin medidas válidas: se calculan igual que las pone el CSS (cohete centrado, apoyado en el suelo al 24 %)
+      const Hh = innerHeight; rr = { left: innerWidth / 2 - 48, top: Hh * 0.76 + 1 - 230, width: 96, height: 230 };
+    }
+    const k = rr.width / 100;
     const P = (u, v) => ({ x: rr.left + u * k, y: rr.top + v * k });
     const gnd = P(17, 228), door = P(46, 195), step = { x: gnd.x - 18, y: gnd.y + drop }, start = { x: Math.max(-30, gnd.x - 150), y: gnd.y + drop };
-    const w = makeWalker(suit, '¡Allá voy!'); ov.appendChild(w);
+    const w = makeWalker(suit, '¡Allá voy!'); w.style.visibility = 'visible'; w.style.opacity = '1'; ov.appendChild(w);
     try {
       w.style.transform = trf(start); w.classList.add('walking');
       rocket.classList.add('open'); sfx('beep');
@@ -424,7 +430,7 @@
       });
       };
       // En la Tierra se espera solo 1 segundo (el cohete ya está pintado porque el resto de la Tierra se oculta, ver `viaje-pausa`) y se sube.
-      painted().then(() => boardRocket(ov, rocket, from !== 'tierra', 14)).catch(() => {}).then(go);
+      painted().then(() => boardRocket(ov, rocket, from !== 'tierra', 14)).catch(e => { console.error('[viaje] subida al cohete desde ' + from, e); rocket.classList.add('occ'); rocket.classList.remove('open'); }).then(go);
     });
     prom.takeoff = takeoff;
     return prom;
