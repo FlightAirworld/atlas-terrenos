@@ -634,7 +634,10 @@
     // Debajo de la pantalla del cohete se cambia de mundo
     if (boxes[from]) boxes[from].classList.add('hidden');
     let map = null;
-    if (to !== 'tierra') {
+    // El mapa del mundo de destino se prepara cuando el cohete ya ha despegado (launch.takeoff), no mientras el jugador sube y se hace la cuenta atrás:
+    // construir un mapa a mitad de esa animación la dejaba cortada, sobre todo al salir de la Tierra.
+    const prep = ((launch && launch.takeoff) || Promise.resolve()).then(() => {
+      if (to === 'tierra') return;
       boxes[to].classList.remove('hidden');
       try {
         if (!maps[to]) { maps[to] = build(to); try { window.dispatchEvent(new CustomEvent('mundo:map', { detail: { id: to, map: maps[to] } })); } catch (e) {} } else maps[to].resize();
@@ -642,12 +645,12 @@
         map.jumpTo({ center: [10, 10], zoom: 0.8 });
         loadWorldStats(to);
       } catch (e) { console.error('[mundos] no se pudo preparar el mapa de ' + to, e); }   // aunque el mapa falle, el viaje termina y se puede volver
-    }
+    });
     current = to;
     document.body.classList.toggle('en-mundo', to !== 'tierra');
     const goto = pendingGoto && pendingGoto.world === to ? pendingGoto : null; pendingGoto = null;   // «Mis terrenos»: se aterriza ya junto a la parcela
     const cap = (p, ms) => Promise.race([p, new Promise(r => setTimeout(r, ms))]);   // si algo no termina, el viaje sigue igualmente
-    cap(launch, 60000).then(() => {
+    cap(launch, 60000).then(() => prep).then(() => {
       if (to === 'tierra') earthMute(false);
       // Se aterriza a nivel de calle (zoom 16): desde el primer momento se pueden comprar parcelas
       if (map) land(map, goto ? [goto.lng, goto.lat] : WORLDS[to].land);

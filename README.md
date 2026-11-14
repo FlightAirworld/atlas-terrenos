@@ -443,3 +443,11 @@ Al tocar el contador «en línea» se abre un panel con los jugadores conectados
 ## Juego gratuito (FREE_MODE)
 
 Pon `FREE_MODE=1` en Render (Environment) y guarda: se ocultan todos los botones de compra y el servidor rechaza cualquier pedido de pago (también el modo demo). Para volver a cobrar, borra la variable o ponla en `0`.
+
+## Muñeco del jugador, cohete y paracaídas ✈️🚀 (`jugador.js`, `viaje.js`, `skydive.js`)
+
+- **Cada jugador tiene su muñeco** (`jugador.js`): piel, pelo, peinado (corto, largo, gorra, moño, rizos), camiseta y pantalón salen de su apodo, así que siempre es el mismo para la misma persona y distinto del de los demás. Sin sesión se usa un código al azar guardado en el navegador (`playerSeed`). Lleva **pegada en el pecho la bandera de su país** (la del selector de país; si no hay, la del idioma del navegador). Fuera de la Tierra lleva traje de astronauta con pecera transparente y la misma bandera.
+- **Cohete:** por la ventanilla se ve la cabeza del jugador (su pelo o su gorra) en cuanto sube; el muñeco sube y baja por la rampa con su aspecto y la bandera.
+- **Paracaídas:** una avioneta cruza la pantalla, el jugador salta de ella, cae un momento, se abre el paracaídas (del color de su camiseta) y baja hasta el centro del mapa (`skydive.js`; con `startY`, desde un cohete, no sale avioneta; `plane: false` también la quita).
+- **Al tocar suelo** (paracaídas o cohete) el muñeco se queda en el centro del mapa y **camina según se mueve el mapa** (`window.playerWalker.show(idMapa, { suit })` / `.hide()`): mira hacia donde se desplaza el centro, mueve las piernas mientras el mapa se mueve y se para cuando se para. Se esconde con el mapa muy alejado y al despegar en cohete.
+- **Salida desde la Tierra:** la capa del viaje va por encima de los avisos flotantes de la Tierra (`#where-banner`, `#ayto-banner`, `#lugar`, que además se ocultan durante el viaje) y el mapa del mundo de destino se prepara cuando el cohete ya ha despegado (`rocketLaunch(...).takeoff`), no mientras se sube al cohete y se hace la cuenta atrás.
