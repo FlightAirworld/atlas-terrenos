@@ -77,6 +77,10 @@
       transition: opacity .6s, transform .6s; }
     #viaje .trip.show { opacity: 1; transform: translate(-50%, 0); }
     .rocket { z-index: 3; }
+    /* Salida desde la Tierra: el mapa y todo lo demás compiten con la pantalla del viaje y el cohete tardaba segundos en verse. Mientras se sube, lo de detrás no se pinta. */
+    body.viaje-pausa > *:not(#viaje) { visibility: hidden !important; }
+    #viaje.ligero .rocket, #viaje.ligero .wk { will-change: auto; }
+    #viaje.ligero .rocket svg, #viaje.ligero .wk svg { filter: none; }
     ${SURF_CSS}
     #viaje .tripsub { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 72px); z-index: 4; transform: translate(-50%, -8px); opacity: 0; white-space: nowrap; color: #fff; background: rgba(0,0,0,.4); border-radius: 99px; padding: 7px 14px; font: 700 16px/1 system-ui, sans-serif; text-shadow: 0 1px 4px #000; transition: opacity .6s, transform .6s; }
     #viaje .tripsub.show { opacity: 1; transform: translate(-50%, 0); }
@@ -154,7 +158,7 @@
   // El astronauta camina hasta el cohete, sube por la rampa y entra; la puerta se cierra. `drop` = lo que baja el suelo respecto a la base del cohete.
   async function boardRocket(ov, rocket, suit, drop, slow) {
     if (!Element.prototype.animate) return;
-    const f = slow ? 1.6 : 1;   // en la Tierra la subida va más despacio para que se vea bien
+    const f = slow ? 1.3 : 1;   // en la Tierra la subida va más despacio para que se vea bien
     const rr = rocket.getBoundingClientRect(), k = rr.width / 100;
     const P = (u, v) => ({ x: rr.left + u * k, y: rr.top + v * k });
     const gnd = P(17, 228), door = P(46, 195), step = { x: gnd.x - 18, y: gnd.y + drop }, start = { x: Math.max(-30, gnd.x - 150), y: gnd.y + drop };
@@ -175,14 +179,6 @@
     await wait(250); rocket.classList.remove('open'); sfx('beep');
     await wait(450);
   }
-  // Resuelve cuando el navegador lleva `need` fotogramas seguidos sin tirones (o a los `maxMs`, por si la pestaña no pinta)
-  const stableFrames = (need, maxMs) => new Promise(res => {
-    let last = performance.now(), ok = 0, done = false;
-    const fin = () => { if (!done) { done = true; res(); } };
-    setTimeout(fin, maxMs);
-    const tick = now => { if (done) return; ok = now - last < 100 ? ok + 1 : 0; last = now; if (ok >= need) fin(); else requestAnimationFrame(tick); };
-    requestAnimationFrame(tick);
-  });
   const sfx = n => { try { if (window.sfx) window.sfx(n); } catch (e) {} };
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const reduced = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -377,7 +373,8 @@
     const takeoff = new Promise(r => { takeoffNow = r; });
     const prom = new Promise(resolve => {
       const ov = document.createElement('div');
-      ov.id = 'viaje'; ov.className = from;
+      ov.id = 'viaje'; ov.className = from + (from === 'tierra' ? ' ligero' : '');
+      if (from === 'tierra') document.body.classList.add('viaje-pausa');
       let stars = '';
       for (let i = 0; i < 90; i++) stars += `<i style="left:${Math.random() * 100}%;top:${Math.random() * 100}%;opacity:${(0.4 + Math.random() * 0.6).toFixed(2)}"></i>`;
       ov.innerHTML = `<div class="sky"></div><div class="stars">${stars}</div><div class="ground"></div><div class="pad"></div>
@@ -396,7 +393,7 @@
       wait(800).then(() => say('2', 'beep'));
       wait(1600).then(() => say('1', 'beep'));
       wait(2400).then(() => {
-        say('¡Despegue!', 'beepgo'); takeoffNow();
+        say('¡Despegue!', 'beepgo'); document.body.classList.remove('viaje-pausa'); ov.classList.remove('ligero'); takeoffNow();
         try { if (window.rocketEngine) window.rocketEngine.start(); else sfx('cohete'); } catch (e) {}   // el motor sigue sonando hasta que el astronauta aterriza (rocketDrop)
         rocket.classList.add('on'); ov.querySelectorAll('.puff').forEach(p => p.classList.add('on'));
         wait(500).then(() => rocket.classList.remove('legs-out'));   // las patas se pliegan al despegar
@@ -420,15 +417,12 @@
         rocket.animate([{ transform: `translateY(${RISE}px)` }, { transform: `translateY(${-(H + 320)}px)` }], { duration: 800, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'forwards' });
       });
       wait(5600 + trip.total + 1100).then(() => {
-        ov.classList.add('fade'); takeoffNow(); resolve();
+        document.body.classList.remove('viaje-pausa'); ov.classList.add('fade'); takeoffNow(); resolve();
         setTimeout(() => { ov.remove(); launching = false; document.body.classList.remove('viajando'); try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {} }, 900);
       });
       };
-      // Se sube al cohete solo cuando la pantalla del viaje ya se ha pintado: en la Tierra (con el mapa y todo lo que corre detrás) el primer pintado tarda,
-      // y la subida empezaba antes de que se viera. Si el navegador no pinta (pestaña oculta), a los 1,5 s se sube igualmente.
-      // En la Tierra la pantalla se queda en azul un par de segundos antes de verse el cohete, así que se espera ese tiempo y a que los fotogramas vayan fluidos.
-      const minWait = from === 'tierra' ? 2300 : 250;
-      Promise.all([wait(minWait), stableFrames(6, 4500)]).then(() => boardRocket(ov, rocket, from !== 'tierra', 14, from === 'tierra')).catch(() => {}).then(go);
+      // En la Tierra se espera solo 1 segundo (el cohete ya está pintado porque el resto de la Tierra se oculta, ver `viaje-pausa`) y se sube.
+      wait(from === 'tierra' ? 1000 : 250).then(() => boardRocket(ov, rocket, from !== 'tierra', 14, from === 'tierra')).catch(() => {}).then(go);
     });
     prom.takeoff = takeoff;
     return prom;
