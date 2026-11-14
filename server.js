@@ -1652,6 +1652,41 @@ function onlineStream(req, res, url) {
   res.on('error', leave);
 }
 
+// ---------- Jugadores en el mapa (muñecos de los demás jugadores conectados) ----------
+// Cada jugador conectado avisa cada pocos segundos de por dónde mueve el mapa de la Tierra (POST /api/online/pos). Es la posición DEL JUEGO
+// (el centro del mapa donde está su muñeco), no su ubicación real. El servidor la guarda solo en memoria ~25 s y devuelve a quien pregunta los
+// demás jugadores REALES que están dentro de su pantalla, con apodo (si tienen cuenta) y país. El identificador que se devuelve no es el interno.
+const livePos = new Map();   // cid -> { lng, lat, nick, cc, t }
+const LIVE_TTL = 25_000, LIVE_MAX = 40;
+const liveId = cid => crypto.createHash('sha256').update('pos:' + cid + DAILY_SALT).digest('hex').slice(0, 10);
+async function onlinePos(req, body) {
+  const cid = String((body && body.cid) || '');
+  if (!/^[\w-]{8,40}$/.test(cid)) throw new HttpError(400, 'Falta el identificador');
+  if (rateHit('pos:' + cid, 10_000) > 6) throw new HttpError(429, 'Más despacio');
+  if (body.hide) { livePos.delete(cid); return { players: [] }; }
+  const lng = Number(body.lng), lat = Number(body.lat);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lng) > 180 || Math.abs(lat) > 90) throw new HttpError(400, 'Posición no válida');
+  const now = Date.now(), prev = livePos.get(cid);
+  let nick = prev ? prev.nick : null, nickAt = prev ? prev.nickAt || 0 : 0;
+  if (now - nickAt > 120_000 || (!nick && now - nickAt > 20_000)) {   // el apodo se vuelve a mirar de vez en cuando (por si acaba de iniciar sesión)
+    const user = await userFrom(req); nickAt = now; nick = null;
+    if (user) { const p = await getProfile(user.id).catch(() => null); nick = p && p.nickname ? String(p.nickname).slice(0, 30) : null; }
+  }
+  livePos.set(cid, { lng, lat, nick, nickAt, cc: onlineCountryByCid.get(cid) || null, t: now });
+  const b = body.bbox || {};
+  let w = Number(b.w), s = Number(b.s), e = Number(b.e), n = Number(b.n);
+  if (![w, s, e, n].every(Number.isFinite) || e - w > 1 || n - s > 1) { w = lng - 0.02; e = lng + 0.02; s = lat - 0.02; n = lat + 0.02; }
+  const players = [];
+  for (const [k, p] of livePos) {
+    if (k === cid || now - p.t > LIVE_TTL || !onlineClients.has(k)) continue;
+    if (p.lat < s || p.lat > n || p.lng < w || p.lng > e) continue;
+    players.push({ id: liveId(k), lng: p.lng, lat: p.lat, nick: p.nick, cc: p.cc });
+    if (players.length >= LIVE_MAX) break;
+  }
+  return { players };
+}
+setInterval(() => { const now = Date.now(); for (const [k, p] of livePos) if (now - p.t > LIVE_TTL * 2 || !onlineClients.has(k)) livePos.delete(k); }, 30_000).unref();
+
 // ---------- Chat por zona (radio de CHAT_RADIUS_KM) ----------
 // Cada mensaje guarda el punto del mapa (redondeado a ~1 km) desde el que se envió, y se ve a CHAT_RADIUS_KM a la redonda
 // (10 km por defecto). Leer es libre; escribir exige cuenta con apodo. Los mensajes se guardan 7 días.
@@ -2740,6 +2775,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/health') return { ok: true };   // la pantalla de carga del sitio estático pregunta aquí si ya despertó
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineShown() };
   if (req.method === 'GET' && pn === '/api/online/countries') return onlineCountriesGet();
+  if (req.method === 'POST' && pn === '/api/online/pos') return onlinePos(req, await readJson(req));   // muñecos de los demás jugadores en el mapa (jugadores.js)
   if (req.method === 'GET' && pn === '/api/where') return placeGet(req, url);   // pueblo, región y país de un punto del mapa (etiqueta de lugar)
   if (req.method === 'POST' && pn === '/api/admin/indexnow') { requireAdmin(req); return await indexNowPing(true); }   // avisar ya a los buscadores (sin cuerpo: manda todo el sitemap)
   if (req.method === 'GET' && pn === '/api/admin/online-real') { requireAdmin(req); return onlineRealGet(); }

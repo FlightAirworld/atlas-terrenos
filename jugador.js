@@ -38,6 +38,13 @@
     return cache;
   };
 
+  // Aspecto de otro jugador a partir de su apodo (o de un código): siempre el mismo para la misma persona
+  window.playerLookFor = function (text) {
+    const r = rng(fnv('n:' + String(text || '').trim().toLowerCase())), pick = a => a[Math.floor(r() * a.length)];
+    return { skin: pick(SKIN), hair: pick(HAIR), hs: Math.floor(r() * 5), shirt: pick(SHIRT), pants: pick(PANTS) };
+  };
+  window.flagOf = cc => /^[A-Za-z]{2}$/.test(cc || '') ? String.fromCodePoint(...[...cc.toUpperCase()].map(ch => 127397 + ch.charCodeAt(0))) : '';
+
   // Bandera del país del jugador (la que eligió o detectó el juego); sin país no se pone ninguna
   window.playerFlag = function () {
     let c = ''; try { c = localStorage.getItem('country') || ''; } catch (e) {}
@@ -63,7 +70,7 @@
   // Cuerpo completo (40 × 68): piernas, torso, brazos, cabeza y, en el pecho, un parche con la bandera del jugador
   window.playerBody = function (o) {
     o = o || {};
-    const L = window.playerLook(), flag = window.playerFlag(), suit = !!o.suit;
+    const L = o.look || window.playerLook(), flag = o.flag != null ? o.flag : window.playerFlag(), suit = !!o.suit;   // o.look / o.flag: dibujo de OTRO jugador (jugadores.js)
     const legs = (c, shoe) => `<g class="lg l1"><rect x="13" y="42" width="6" height="22" rx="3" fill="${c}"/><rect x="11.5" y="61" width="9" height="5" rx="2.5" fill="${shoe}"/></g><g class="lg l2"><rect x="21" y="42" width="6" height="22" rx="3" fill="${c}"/><rect x="19.5" y="61" width="9" height="5" rx="2.5" fill="${shoe}"/></g>`;
     const patch = `<g class="flagp"><rect x="13" y="25" width="14" height="10.4" rx="1.8" fill="#fff" stroke="rgba(0,0,0,.28)" stroke-width=".6"/>${flag ? `<text x="20" y="33.3" text-anchor="middle" font-size="9.6" font-family="${EMOJI}">${flag}</text>` : ''}</g>`;
     if (suit) {
@@ -155,5 +162,5 @@
     }
     live = { el, off };
   }
-  window.playerWalker = { show, hide };
+  window.playerWalker = { show, hide, el: () => (live ? live.el : null) };   // el(): el muñeco propio en el mapa (jugadores.js le pone los globos de charla)
 })();
