@@ -40,7 +40,8 @@
     ['{b}, ¡qué casa más chula tienes cerca!', 'Gracias, {a}. La elegí con mucho cariño 🏡', 'Se nota. ¡Enhorabuena!', '¡Igualmente! Hasta pronto.'],
     ['Hola {b}. ¿Me recomiendas algún sitio para comprar?', 'Cerca del parque, {a}. Se está llenando.', 'Buena idea, voy para allá.', '¡Suerte! Y guárdame un hueco al lado 😄']
   ];
-  const pick = a => a[Math.floor(Math.random() * a.length)];
+  const INVITA_PASEO = ['¡Hola {b}! ¿Damos una vuelta por el barrio? 🚶', '¡Claro, {a}! Me apetece mucho.', 'Podemos ver alguna casa, tomar algo en el bar y pasarnos por la discoteca 💃', '¡Perfecto! ¡Vamos! 🎉'];
+    const pick = a => a[Math.floor(Math.random() * a.length)];
   const wait = ms => new Promise(r => setTimeout(r, ms));
 
   // ---------- Muñecos de los demás ----------
@@ -122,7 +123,11 @@
       if (Date.now() - last < COOLDOWN) continue;
       lastTalk.set(key, Date.now());
       if (lastTalk.size > 200) lastTalk.clear();
-      talk(a, b, TALKS[hash(key + ':' + Math.floor(Date.now() / COOLDOWN)) % TALKS.length]);   // misma semilla = misma charla en los dos móviles
+      const bucket = Math.floor(Date.now() / COOLDOWN), seed = key + ':' + bucket;
+      const mine = a.o.mine || b.o.mine, other = a.o.mine ? b.o : a.o;
+      if (mine && window.paseo && window.paseo.canStart() && hash(seed + ':paseo') % 2 === 0) {   // la mitad de los encuentros acaban en invitación a pasear (la misma decisión en los dos móviles)
+        talk(a, b, INVITA_PASEO).then(() => { try { window.paseo.start({ seed, with: other.name }); } catch (e) { /* sin paseo */ } });
+      } else talk(a, b, TALKS[hash(seed) % TALKS.length]);   // misma semilla = misma charla en los dos móviles
     }
     frame = requestAnimationFrame(tick);
   }
