@@ -204,3 +204,8 @@ ALTER TABLE online_peaks ENABLE ROW LEVEL SECURITY;
 -- Última versión desplegada de la que se avisó a los buscadores (IndexNow). El servidor también la crea solo si falta.
 CREATE TABLE IF NOT EXISTS indexnow_state (id INT PRIMARY KEY, build TEXT NOT NULL, at BIGINT NOT NULL);
 ALTER TABLE indexnow_state ENABLE ROW LEVEL SECURITY;
+
+-- Jugadores reales conectados por día, con país, región y ciudad (pantalla de administrador). El servidor también la crea sola si falta.
+CREATE TABLE IF NOT EXISTS online_players (user_id TEXT NOT NULL, day TEXT NOT NULL, cc TEXT NOT NULL, region TEXT, city TEXT, first_at BIGINT NOT NULL, last_at BIGINT NOT NULL, pings INT NOT NULL DEFAULT 1, PRIMARY KEY (user_id, day));
+CREATE INDEX IF NOT EXISTS online_players_cc ON online_players (cc, user_id);
+ALTER TABLE online_players ENABLE ROW LEVEL SECURITY;
