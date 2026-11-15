@@ -1292,8 +1292,9 @@ function saveCode(c) {
   packCode = c;
   try { if (c) localStorage.setItem('packCode', c); else localStorage.removeItem('packCode'); } catch {}
 }
+const parcelCost = () => Math.max(1, Number(cfg && cfg.parcelCost) || 1);   // créditos que cuesta un terreno (lo manda el servidor)
 function updateCreditUi() {
-  const has = !!packCode && credits > 0;
+  const has = !!packCode && credits >= parcelCost();
   $('credit-box').classList.toggle('hidden', !has);
   $('buy-box').classList.toggle('hidden', has);
   const fn = $('free-note'); if (fn) fn.classList.toggle('hidden', !(cfg && cfg.free) || has);   // juego gratuito: sin créditos se explica cómo conseguir más
@@ -1334,11 +1335,11 @@ $('recover-btn').onclick = async () => {
   } catch (e) { setMsg(e.message, 'err'); }
 };
 $('buy-parcel-btn').onclick = async () => {
-  if (!(!!packCode && credits > 0) && !authToken && loginRequired() && cfg.guestCredits > 0 && (window.firstGuide ? window.firstGuide.isGuest() : false)) {   // usó sus parcelas de prueba: ahora toca crear cuenta
+  if (!(!!packCode && credits >= parcelCost()) && !authToken && loginRequired() && cfg.guestCredits > 0 && (window.firstGuide ? window.firstGuide.isGuest() : false)) {   // usó sus parcelas de prueba: ahora toca crear cuenta
     openLogin('Crea tu cuenta para guardar tus parcelas y seguir jugando 🎁'); return;
   }
-  if (cfg.free && !(!!packCode && credits > 0)) { const m = 'Te faltan créditos. Consíguelos con el regalo diario, la ruleta, invitando amigos o con la producción de tus terrenos.'; setMsg(m); flashToast(m); return; }
-  if (!(!!packCode && credits > 0)) { $('buy-box').scrollIntoView({ behavior: 'smooth', block: 'center' }); setMsg('Elige un pack de créditos para reclamar este terreno.'); flashToast('Elige un pack de créditos para reclamar este terreno.'); return; }
+  if (cfg.free && !(!!packCode && credits >= parcelCost())) { const m = 'Te faltan créditos. Consíguelos con el regalo diario, la ruleta, invitando amigos o con la producción de tus terrenos.'; setMsg(m); flashToast(m); return; }
+  if (!(!!packCode && credits >= parcelCost())) { $('buy-box').scrollIntoView({ behavior: 'smooth', block: 'center' }); setMsg('Elige un pack de créditos para reclamar este terreno.'); flashToast('Elige un pack de créditos para reclamar este terreno.'); return; }
   if (!selected || selected.owner) return;
   if (window.barrio && !isOtherWorld(selected) && window.barrio.radius()) {   // Tu barrio 🔴: solo dentro del círculo rojo
     if (!window.barrio.pos()) await window.barrio.ask();
@@ -2193,7 +2194,7 @@ if ('serviceWorker' in navigator) {
       lsSet(KEY, '1'); return;
     }
     const welcome = document.getElementById('welcome');
-    if (credits < 1 || ssGet('coachHide') === '1' || (welcome && !welcome.classList.contains('hidden'))) { box.classList.add('hidden'); return; }
+    if (credits < parcelCost() || ssGet('coachHide') === '1' || (welcome && !welcome.classList.contains('hidden'))) { box.classList.add('hidden'); return; }
     const panelOpen = !document.getElementById('panel').classList.contains('hidden');
     if (panelOpen && typeof selected !== 'undefined' && selected && !selected.owner) {
       set('claim', 'Paso 2 de 2', 'Elige tu casa (o deja el dado, que la elige por ti) y pulsa «Reclamar terreno». El nombre es opcional.', '⬇ Ir al botón');

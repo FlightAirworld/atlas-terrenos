@@ -1,7 +1,7 @@
 'use strict';
 // Guía de las PRIMERAS PARCELAS GRATIS para el jugador anónimo (sin cuenta).
 // Cuando acaba el tutorial (o se salta, o ya lo había visto), el juego:
-//   1) le crea un pack de prueba con 2 parcelas gratis (POST /api/guest/start; el número lo fija GUEST_CREDITS en el servidor),
+//   1) le crea un pack de prueba con GUEST_CREDITS créditos gratis (20 = 2 parcelas; POST /api/guest/start; el número lo fija GUEST_CREDITS en el servidor),
 //   2) le lleva a un terreno libre — a su ubicación por GPS si da permiso, y si no a uno libre del mapa — y le dice «Crea tu primera parcela»,
 //   3) le guía paso a paso: elegir casa y «Reclamar terreno», y después la segunda parcela cerca de la primera,
 //   4) al gastar las parcelas gratis le lleva a crear su cuenta (Google o email) para guardarlas y seguir jugando.
@@ -44,7 +44,8 @@
     document.body.appendChild(box);
     box.querySelector('.fg-x').onclick = () => { ssSet('fgHide', '1'); box.classList.add('hidden'); };
   }
-  function total() { return (typeof cfg !== 'undefined' && cfg && cfg.guestCredits) || 2; }
+  function cost() { return (typeof parcelCost === 'function') ? parcelCost() : 1; }   // créditos que cuesta un terreno
+  function total() { return Math.max(1, Math.floor(((typeof cfg !== 'undefined' && cfg && cfg.guestCredits) || 20) / cost())); }   // terrenos de prueba = créditos de prueba / coste
   function paintDots() {
     if (!box) return;
     const d = box.querySelector('.fg-dots'), n = total(), c = Math.min(claims(), n);
@@ -118,7 +119,8 @@
     if (stage !== 'first' && stage !== 'next') return;
     const n = total(), done = claims();
     const title = stage === 'first' ? '✨ ' + T('Crea tu primera parcela') : '✨ ' + `${T('Ahora tu parcela')} ${Math.min(done + 1, n)} ${T('de')} ${n}`;
-    const badge = '🎁 ' + `${credits} ${plural(credits, T('parcela gratis'), T('parcelas gratis'))}`;
+    const left = Math.floor(credits / cost());
+    const badge = '🎁 ' + `${left} ${plural(left, T('parcela gratis'), T('parcelas gratis'))}`;
     if (busy) return render({ badge, title, text: '✈️ ' + T('Te llevo a un terreno libre…'), go: T('Volando…'), disabled: true });
     let panelOpen = false, free = false;
     try { panelOpen = !document.getElementById('panel').classList.contains('hidden'); free = panelOpen && selected && !selected.owner; } catch (e) {}
@@ -130,7 +132,7 @@
   function stageFirst() { stage = 'first'; shownKey = ''; paintStage(); goToLot(null); }
   function stageNext() {
     if (logged()) return;
-    if (credits < 1) return stageLogin();
+    if (credits < cost()) return stageLogin();
     stage = 'next'; shownKey = ''; paintStage();
     toast('🎉 ' + T('¡Primera parcela tuya! Vamos a por la siguiente.'));
     goToLot(lastClaim || null);
@@ -182,7 +184,7 @@
     try { if (packCode) await refreshCredits(); } catch (e) {}                // si el pack de prueba ya no existe, se olvida
     if (logged()) return;
     if (ours()) {                                                             // vuelve a entrar: se retoma donde lo dejó
-      if (credits < 1) return stageLogin();
+      if (credits < cost()) return stageLogin();
       return claims() > 0 ? stageNext() : stageFirst();
     }
     render({ badge: '🎁 ' + T('Parcelas gratis'), title: '✨ ' + T('Preparando tus parcelas…'), text: T('Un momento, te regalo tus primeras parcelas.'), go: '', disabled: true });
@@ -190,7 +192,7 @@
       const j = await guestCall();
       if (!j.guest) { hideBox(); return; }                                    // ya tenía un pack que no es de prueba: no se toca
       saveCode(j.code); lsSet(CODE, j.code); credits = j.credits; updateCreditUi();
-      if (credits < 1) return stageLogin();
+      if (credits < cost()) return stageLogin();
       stageFirst();
     } catch (e) { stageNoGuest(e.message); }
   }
@@ -201,7 +203,7 @@
     lsSet(CLAIMS, String(claims() + 1));
     paintDots();
     // Un respiro para que se vea la celebración (confeti y cámara a la casa) antes del siguiente paso
-    if (e.detail.credits > 0) setTimeout(stageNext, 4000); else setTimeout(stageLogin, 5000);
+    if (e.detail.credits >= cost()) setTimeout(stageNext, 4000); else setTimeout(stageLogin, 5000);
   });
   document.addEventListener('account:linked', e => {
     // Cuenta creada o iniciada: si venía de las parcelas de prueba (también tras volver de Google por redirección), se felicita y se sigue guiando
@@ -216,7 +218,7 @@
     if (modal || document.body.classList.contains('tut-on') || (w && !w.classList.contains('hidden'))) { box.style.visibility = 'hidden'; return; }
     box.style.visibility = '';
     if (stage === 'first' || stage === 'next') {
-      if (typeof credits !== 'undefined' && credits < 1 && claims() > 0) return;   // el paso siguiente lo decide el evento de reclamar
+      if (typeof credits !== 'undefined' && credits < cost() && claims() > 0) return;   // el paso siguiente lo decide el evento de reclamar
       paintStage();
     }
   }, 700);

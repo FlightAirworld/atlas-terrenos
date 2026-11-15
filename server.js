@@ -54,6 +54,7 @@ const PACKS = (() => {
 })();
 const MAX_PARCELS_PER_ACCOUNT = process.env.MAX_PARCELS_PER_ACCOUNT ? Math.max(1, Number(process.env.MAX_PARCELS_PER_ACCOUNT)) : Infinity;   // tope de terrenos por cuenta: ilimitado salvo que se ponga la variable de entorno
 const MAX_CLAIMS_PER_DAY = Math.max(1, Math.floor(Number(process.env.MAX_CLAIMS_PER_DAY ?? 10)));   // tope de terrenos que un jugador puede crear al día (por cuenta; sin cuenta, por pack). El día cambia a medianoche de DAILY_TZ
+const PARCEL_COST = Math.max(1, Math.floor(Number(process.env.PARCEL_COST ?? 10)));   // créditos que cuesta reclamar un terreno (PARCEL_COST en el entorno lo cambia)
 const DATABASE_URL = process.env.DATABASE_URL || '';      // cadena de conexión de Supabase
 if (!DATABASE_URL) {
   console.error('Falta la variable DATABASE_URL (cadena de conexión de Supabase). Mira el README.');
@@ -454,10 +455,10 @@ async function adminVip(req, { nickname, country, credits }) {
   return { ok: true, created: true, nickname: nick, credits: cr, country: ctry, code, link: '/?vip=' + code };
 }
 
-// ---------- Parcelas de prueba: un jugador anónimo recibe GUEST_CREDITS parcelas gratis (0 lo desactiva) ----------
+// ---------- Parcelas de prueba: un jugador anónimo recibe GUEST_CREDITS créditos gratis (0 lo desactiva) ----------
 // Cuando las usa se le lleva a crear cuenta; al iniciar sesión su pack y sus parcelas pasan a la cuenta (ver linkAccount).
 // Antiabuso: como mucho GUEST_PER_IP packs de prueba al día por conexión, y un pack de prueba no cobra el regalo diario sin cuenta.
-const GUEST_CREDITS = Math.max(0, Math.min(10, Math.floor(Number(process.env.GUEST_CREDITS ?? 2))));
+const GUEST_CREDITS = Math.max(0, Math.min(100, Math.floor(Number(process.env.GUEST_CREDITS ?? 20))));   // créditos de prueba (20 = 2 terrenos a 10 créditos)
 const GUEST_PER_IP = Math.max(1, Math.floor(Number(process.env.GUEST_PER_IP ?? 5)));
 async function guestStart(req) {
   if (GUEST_CREDITS < 1) throw new HttpError(403, 'Las parcelas de prueba están desactivadas');
@@ -981,10 +982,10 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
     // El dueño del juego (OWNER_USER_ID / OWNER_EMAIL) reclama sin gastar créditos: terrenos ilimitados
     const r = isOwner(user)
       ? await client.query('UPDATE packs SET credits = credits WHERE code = $1 RETURNING credits', [code])
-      : await client.query('UPDATE packs SET credits = credits - 1 WHERE code = $1 AND credits > 0 RETURNING credits', [code]);
+      : await client.query('UPDATE packs SET credits = credits - $2 WHERE code = $1 AND credits >= $2 RETURNING credits', [code, PARCEL_COST]);
     if (!r.rows[0]) {
       const exists = code && await one('SELECT 1 AS ok FROM packs WHERE code = $1', [code]);
-      throw new HttpError(exists ? 402 : 403, exists ? 'No te quedan terrenos en tu pack' : 'Código no válido');
+      throw new HttpError(exists ? 402 : 403, exists ? `Necesitas ${PARCEL_COST} créditos para reclamar un terreno` : 'Código no válido');
     }
     if (user) {   // la fila del pack ya está bloqueada: dos reclamaciones a la vez no pueden pasarse del tope
       const owned = Number((await client.query('SELECT COUNT(*) AS n FROM parcels WHERE user_id = $1', [user.id])).rows[0].n);
@@ -2766,7 +2767,7 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
     return { coffee: COFFEE_URL || null, push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, free: FREE_MODE, demo: DEMO, stripe: !FREE_MODE && !DEMO && HAS_STRIPE, paypal: !FREE_MODE && !DEMO && HAS_PAYPAL, clientId: (FREE_MODE || DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, worlds: WORLDS, barrioM: BARRIO_M, packSize: PACKS[0].credits, packs: PACKS,
-      maxParcels: Number.isFinite(MAX_PARCELS_PER_ACCOUNT) ? MAX_PARCELS_PER_ACCOUNT : null, maxClaimsPerDay: MAX_CLAIMS_PER_DAY, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, guestCredits: GUEST_CREDITS, welcomeCredits: WELCOME_CREDITS, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null, googleClientId: AUTH_ENABLED ? GOOGLE_CLIENT_ID : null } };
+      maxParcels: Number.isFinite(MAX_PARCELS_PER_ACCOUNT) ? MAX_PARCELS_PER_ACCOUNT : null, maxClaimsPerDay: MAX_CLAIMS_PER_DAY, parcelCost: PARCEL_COST, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, guestCredits: GUEST_CREDITS, welcomeCredits: WELCOME_CREDITS, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null, googleClientId: AUTH_ENABLED ? GOOGLE_CLIENT_ID : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')), cleanWorld(sp.get('world')));
