@@ -528,6 +528,35 @@
     }
     src.setData({ type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: lines } });
   }
+  // Vista lejana: /api/parcels/overview?world=… devuelve TODAS las parcelas del mundo en formato compacto { s, o: [dueños], p: [x, y, dueño, …] }.
+  // Con el mapa alejado no se piden teselas de casas: se pintan puntos de color. Se refresca como mucho cada 2 minutos.
+  function farAdd(st, x, y, owner, col) {
+    const s = cellSize();
+    st.far.set(x + ',' + y, { type: 'Feature', properties: { color: col || colorOf(String(owner || '')) }, geometry: { type: 'Point', coordinates: [x * s - 180 + s / 2, y * s - 90 + s / 2] } });
+  }
+  function farFlush(id) {
+    const st = pw[id]; if (!st || !st.ready || st.farQueued) return;
+    st.farQueued = true;
+    requestAnimationFrame(() => {
+      st.farQueued = false;
+      const src = st.map.getSource('far');
+      if (src) src.setData({ type: 'FeatureCollection', features: Array.from(st.far.values()) });
+    });
+  }
+  async function loadOverview(id, force) {
+    const st = pw[id]; if (!st || !st.ready || st.farBusy) return;
+    if (!force && Date.now() - st.farAt < 120000) return;
+    st.farBusy = true;
+    try {
+      const d = await api('/api/parcels/overview?world=' + encodeURIComponent(id), { method: 'GET' });
+      const cols = d.o.map(colorOf);
+      st.far.clear();
+      for (let i = 0; i + 2 < d.p.length; i += 3) farAdd(st, d.p[i], d.p[i + 1], null, cols[d.p[i + 2]]);
+      st.owned.forEach(p => farAdd(st, p.x, p.y, p.owner));   // las recién compradas que el servidor aún no devolvió
+      st.farAt = Date.now();
+      farFlush(id);
+    } catch (e) {} finally { st.farBusy = false; }
+  }
   async function loadTiles(id) {
     const st = pw[id]; if (!st || !st.ready) return;
     const m = st.map; if (m.getZoom() < SHOW_Z) return;
@@ -569,26 +598,37 @@
     if (window.selectWorldParcel) window.selectWorldParcel(p);
   }
   function parcelLayer(id, m) {
-    const st = pw[id] = { owned: new Map(), tiles: new Map(), map: m, ready: false };
+    const st = pw[id] = { owned: new Map(), tiles: new Map(), map: m, ready: false, far: new Map(), farAt: 0, farBusy: false, farQueued: false };
     m.on('load', () => {
       m.addSource('grid', { type: 'geojson', data: EMPTY });
       m.addSource('parcelas', { type: 'geojson', data: EMPTY });
       m.addSource('sel', { type: 'geojson', data: EMPTY });
+      m.addSource('far', { type: 'geojson', data: EMPTY });
       m.addLayer({ id: 'grid', type: 'line', source: 'grid', paint: { 'line-color': '#ffffff', 'line-opacity': 0.3, 'line-width': 1 } });
       m.addLayer({ id: 'p-fill', type: 'fill', source: 'parcelas', minzoom: SHOW_Z, paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.4 } });
       m.addLayer({ id: 'p-line', type: 'line', source: 'parcelas', minzoom: SHOW_Z, paint: { 'line-color': ['get', 'color'], 'line-width': 2 } });
       m.addLayer({ id: 'p-house', type: 'symbol', source: 'parcelas', minzoom: SHOW_Z,
         layout: { 'icon-image': ['get', 'img'], 'icon-size': ICON, 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-pitch-alignment': 'map', 'icon-rotation-alignment': 'map' } });
+      // Vista lejana (igual que en la Tierra): un punto del color del dueño por cada parcela comprada del mundo. Se funde al acercarse, cuando salen las casas.
+      m.addLayer({ id: 'owned-far', type: 'circle', source: 'far', maxzoom: SHOW_Z + 0.1,
+        paint: {
+          'circle-color': ['get', 'color'],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 0, 2, 5, 3.5, 9, 5, 13, 4.5],
+          'circle-opacity': ['interpolate', ['linear'], ['zoom'], SHOW_Z - 1, 0.95, SHOW_Z, 0],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 0, 0.6, 10, 1.2],
+          'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], SHOW_Z - 1, 0.9, SHOW_Z, 0]
+        } }, 'p-fill');
       m.addLayer({ id: 'sel-fill', type: 'fill', source: 'sel', paint: { 'fill-color': '#ffd23f', 'fill-opacity': 0.28 } });
       m.addLayer({ id: 'sel-line', type: 'line', source: 'sel', paint: { 'line-color': '#ffd23f', 'line-width': 3 } });
-      st.ready = true; flush(id); grid(id); loadTiles(id);
+      st.ready = true; flush(id); grid(id); loadTiles(id); loadOverview(id, true);
     });
     const loading = new Set();
     m.on('styleimagemissing', e => { if (!loading.has(e.id)) { loading.add(e.id); loadHouse(m, e.id); } });   // la foto de cada casa se carga una vez, cuando hace falta
     // Cada paso va en su try: si uno falla, los demás (y el movimiento del mapa) siguen. La cuadrícula también se redibuja mientras te mueves
     // (antes solo al terminar el movimiento, y por eso quedaba un rectángulo fijo que no cubría toda la pantalla).
     const step = f => { try { f(id); } catch (e) { console.error('[mundos] ' + id, e); } };
-    const refresh = () => { step(grid); step(loadTiles); step(labels); };
+    const refresh = () => { step(grid); step(loadTiles); step(labels); if (m.getZoom() < SHOW_Z + 1) step(loadOverview); };
     let moveT = 0;
     const refreshLive = () => { if (moveT) return; moveT = setTimeout(() => { moveT = 0; step(grid); }, 120); };
     // El globo 3D solo se usa de lejos. Cerca del suelo (parcelas, cuadrícula, texturas enormes) se pasa a mapa plano: se ve igual y no se bloquea al moverte.
@@ -608,6 +648,7 @@
     const st = pw[p.world]; if (!st) return;
     st.owned.set(p.id, Object.assign({}, st.owned.get(p.id) || {}, p));
     st.tiles.clear();   // las teselas se vuelven a pedir con calma (así se ve lo que compraron otros)
+    farAdd(st, p.x, p.y, p.owner); farFlush(p.world);   // el punto de la vista lejana sale al momento
     flush(p.world);
   };
   window.worldLand = id => (WORLDS[id] && WORLDS[id].land) || null;   // aliens.js: dónde se aterriza en cada mundo
