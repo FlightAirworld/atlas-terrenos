@@ -14,9 +14,9 @@ module.exports = function (d) {
   const SEASON = String(process.env.CARDS_SEASON || 'T1');          // la misma temporada que las cartas
   const PAIRS = 6, CELLS = PAIRS * 2;
   const GAMES_PER_DAY = numEnv('PAREJAS_GAMES_PER_DAY', 2);          // partidas al día por jugador
-  const DAILY_MAX = numEnv('PAREJAS_DAILY_MAX_CREDITS', 3);          // tope de créditos al día en este juego
+  const DAILY_MAX = numEnv('PAREJAS_DAILY_MAX_CREDITS', 6);          // tope de créditos al día en este juego
   // Premio según los intentos (con memoria perfecta salen 6; al azar, bastantes más): [máx. intentos, créditos]
-  const REWARDS = [[8, 3], [11, 2], [14, 1]];
+  const REWARDS = [[8, 6], [11, 4], [14, 2]];
 
   async function init() {
     if (!ON) return;

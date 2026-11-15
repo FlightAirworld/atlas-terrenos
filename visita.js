@@ -7,7 +7,7 @@
 //   · El anfitrión te ofrece un refresco, va a la nevera, te lo trae y brindáis. Luego os sentáis en el sofá y charláis.
 //   · Todo al azar en cada visita: la decoración, la vista de la ventana, el aspecto de las personas, quién hay, los temas y las frases.
 //   · TODO HABLADO con la voz del navegador (cada persona con su tono y su voz); si no hay voz (o está apagada en 🔊 «Gente y voces») se lee en pantalla.
-//   · Al irte te dicen «HASTA LA PRÓXIMA» y te regalan 1 crédito (lo decide el servidor: /api/visit/start y /api/visit/finish en server.js).
+//   · Al irte te dicen «HASTA LA PRÓXIMA» y te regalan 2 créditos (lo decide el servidor: /api/visit/start y /api/visit/finish en server.js).
 //   · Se puede entrar como mucho 3 veces al día (VISIT_ENTRIES_MAX en server.js; sin cuenta se cuenta en el navegador).
 // Usa globals de app.js: api(), authToken, refreshCredits(), flashToast(), sfx(). Y de sounds.js: houseMute().
 (function () {
@@ -589,12 +589,12 @@
 
         // regalo: el servidor solo paga si de verdad ha pasado el tiempo de la visita
         let msg = '', ok = false;
-        if (!info || info.error) msg = 'Crea tu cuenta o inicia sesión para recibir 1 crédito en tus próximas visitas.';
+        if (!info || info.error) msg = 'Crea tu cuenta o inicia sesión para recibir 2 créditos en tus próximas visitas.';
         else {
           let r = null;
           try { r = await api('/api/visit/finish', { method: 'POST', body: { id: p.id } }); } catch (e) { r = null; }
           if (r && r.rewarded) { ok = true; msg = `¡Te regalan ${r.reward} ${r.reward === 1 ? 'crédito' : 'créditos'}!`; }
-          else if (r && r.reason === 'already') msg = 'Hoy ya te regalaron un crédito en esta casa. ¡Vuelve mañana!';
+          else if (r && r.reason === 'already') msg = 'Hoy ya te regalaron créditos en esta casa. ¡Vuelve mañana!';
           else if (r && r.reason === 'limit') msg = 'Hoy ya has recibido el máximo de créditos por visitas.';
           else msg = '¡Gracias por la visita!';
         }

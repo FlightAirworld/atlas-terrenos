@@ -3238,10 +3238,10 @@ async function likePost(req, body) {
 }
 
 // ---------- Visitar una casa (visita.js) ----------
-// El visitante entra en la casa de otro jugador, hay una animación automática de ~40 s y, al despedirse, recibe VISIT_CREDITS crédito.
+// El visitante entra en la casa de otro jugador, hay una animación automática de ~40 s y, al despedirse, recibe VISIT_CREDITS créditos (2 por defecto).
 // /api/visit/start apunta la hora de entrada; /api/visit/finish solo paga si pasó el tiempo mínimo de la animación.
 // Límites: como mucho VISIT_ENTRIES_MAX (3) entradas en casas al día por visitante; una recompensa por visitante, casa y día, y como mucho VISIT_DAILY_MAX recompensas al día.
-const VISIT_CREDITS = Math.max(0, Math.floor(Number(process.env.VISIT_CREDITS ?? 1)));
+const VISIT_CREDITS = Math.max(0, Math.floor(Number(process.env.VISIT_CREDITS ?? 2)));
 const VISIT_DAILY_MAX = Math.max(1, Math.floor(Number(process.env.VISIT_DAILY_MAX ?? 10)));
 const VISIT_ENTRIES_MAX = Math.max(1, Math.floor(Number(process.env.VISIT_ENTRIES_MAX ?? 3)));   // veces al día que un jugador puede ENTRAR en casas (cuenten o no como regalo)
 const VISIT_MIN_MS = 25_000, VISIT_MAX_MS = 15 * 60_000;

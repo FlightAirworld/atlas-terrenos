@@ -151,7 +151,7 @@
     }
     if (!s.q || !Array.isArray(s.q.opts)) return adivina();   // respuesta incompleta: se pide el estado real al servidor
     show('📍 Adivina el lugar',
-      `<p class="mj-small" style="margin:0">Pregunta ${s.i + 1} de 5 · 3 créditos si aciertas todas</p>
+      `<p class="mj-small" style="margin:0">Pregunta ${s.i + 1} de 5 · 6 créditos si aciertas todas</p>
        <p class="mj-big" style="margin-top:8px">${esc(s.q.clue)}</p>
        <div class="mj-opts">${s.q.opts.map((o, i) => `<button type="button" data-a="${i}">${esc(o)}</button>`).join('')}</div>`);
     const opts = () => body.querySelectorAll('[data-a]');
@@ -182,7 +182,7 @@
   function mmScreen(s, last) {
     if (!s.started) {
       return show('⚖️ ¿Más o menos?',
-        `<p class="mj-info">Te enseño dos ciudades. ¿La segunda tiene <b>más</b> o <b>menos</b> habitantes que la primera? Sigues mientras aciertes. Una partida al día: cada 3 aciertos ganas 1 crédito (hasta 3), y con 8 seguidos también un sobre de cartas.</p>
+        `<p class="mj-info">Te enseño dos ciudades. ¿La segunda tiene <b>más</b> o <b>menos</b> habitantes que la primera? Sigues mientras aciertes. Una partida al día: cada 3 aciertos ganas 2 créditos (hasta 6), y con 8 seguidos también un sobre de cartas.</p>
          <div class="mj-act"><button type="button" id="mj-start">Empezar</button></div>`);
     }
     if (s.over) {
@@ -238,7 +238,7 @@
     const free = s.chests.filter(c => !c.taken), mine = s.chests.filter(c => c.mine).length;
     drawChests(s.chests);
     show('🗝️ Cofres del mapa',
-      `<p class="mj-info">Cada día se esconden <b>6 cofres</b> en ciudades de todo el mundo, los mismos para todos. El primero que toca un cofre en el mapa se queda con los créditos (de 1 a 5). Puedes abrir hasta ${s.max} al día.</p>
+      `<p class="mj-info">Cada día se esconden <b>6 cofres</b> en ciudades de todo el mundo, los mismos para todos. El primero que toca un cofre en el mapa se queda con los créditos (de 2 a 10). Puedes abrir hasta ${s.max} al día.</p>
        <p class="mj-big">${free.length ? '🗝️ ' + free.length + ' sin abrir' : 'Hoy ya no queda ninguno'}</p>
        <p class="mj-small" style="text-align:center">Los has abierto tú: ${mine} de ${s.max}</p>
        <div class="mj-act">${free.length ? '<button type="button" id="mj-go">Buscar un cofre</button>' : ''}</div>`);
