@@ -15,6 +15,8 @@
   const PANTS = ['#2b3a67', '#1d3557', '#3d405b', '#5c4033', '#264653', '#444b55'];
   const EMOJI = "'Apple Color Emoji','Noto Color Emoji','Segoe UI Emoji',sans-serif";
 
+  // Cuentas que cambiaron de apodo y conservan su aspecto de siempre (el aspecto sale del apodo): apodo nuevo → apodo con el que se generó
+  const LOOK_ALIAS = {};   // (pendiente: cuando el administrador pase a llamarse Lodam → { lodam: 'redecora63' })
   const fnv = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
   const rng = seed => { let s = seed >>> 0; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; };
 
@@ -23,6 +25,7 @@
     let n = '';
     try { n = (window.atlasPlayerName ? window.atlasPlayerName() : '') || (typeof nickOf === 'function' ? nickOf() : '') || (document.getElementById('name') || {}).value || ''; } catch (e) {}
     n = String(n).replace(/\s+/g, ' ').trim().toLowerCase();
+    n = LOOK_ALIAS[n] || n;
     if (n) return 'n:' + n;
     let s = '';
     try { s = localStorage.getItem('playerSeed') || ''; if (!s) { s = Math.random().toString(36).slice(2, 10); localStorage.setItem('playerSeed', s); } } catch (e) { s = 'x'; }
@@ -40,7 +43,7 @@
 
   // Aspecto de otro jugador a partir de su apodo (o de un código): siempre el mismo para la misma persona
   window.playerLookFor = function (text) {
-    const r = rng(fnv('n:' + String(text || '').trim().toLowerCase())), pick = a => a[Math.floor(r() * a.length)];
+    const nn = String(text || '').trim().toLowerCase(), r = rng(fnv('n:' + (LOOK_ALIAS[nn] || nn))), pick = a => a[Math.floor(r() * a.length)];
     return { skin: pick(SKIN), hair: pick(HAIR), hs: Math.floor(r() * 5), shirt: pick(SHIRT), pants: pick(PANTS) };
   };
   window.flagOf = cc => /^[A-Za-z]{2}$/.test(cc || '') ? String.fromCodePoint(...[...cc.toUpperCase()].map(ch => 127397 + ch.charCodeAt(0))) : '';

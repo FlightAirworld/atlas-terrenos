@@ -737,4 +737,6 @@
   });
   window.mundoMaps = maps;   // consola: mundoMaps.marte.getZoom(), .isMoving()…
   window.travelTo = travel;   // por si se quiere probar desde la consola: travelTo('marte')
+  window.worldIds = () => Object.keys(WORLDS);   // explorador.js: todos los mundos (los nuevos entran solos)
+  window.worldNow = () => current; window.worldBusy = () => traveling;   // explorador.js: en qué mundo está y si hay un viaje en marcha
 })();
