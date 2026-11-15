@@ -41,11 +41,11 @@
   function check(p) {
     const r = radius();
     if (!r || !p || (p.world && p.world !== 'tierra')) return { ok: true };
-    if (!pos) return { ok: false, msg: denied ? 'Para reclamar terrenos tienes que permitir tu ubicación 📍 (revisa los permisos del navegador).' : 'Buscando tu ubicación… 📍 Para reclamar terrenos hay que estar en tu barrio.' };
+    if (!pos) return { ok: false, msg: denied ? '📍 Permite tu ubicación para reclamar' : '📍 Buscando tu ubicación…' };
     const size = (typeof cfg !== 'undefined' && cfg && cfg.size) || 0.0005;
     const lat = Number.isFinite(p.south) ? p.south + size / 2 : pos.lat, lng = Number.isFinite(p.west) ? p.west + size / 2 : pos.lng;
     const d = distM(pos.lat, pos.lng, lat, lng);
-    if (d > r) return { ok: false, msg: `Este terreno está a ${Math.round(d)} m: fuera de tu barrio 🔴 Solo puedes reclamar dentro del círculo rojo (${r} m). ¡Camina hasta allí!`, dist: d };
+    if (d > r) return { ok: false, msg: `🔴 A ${Math.round(d)} m: fuera de tu barrio`, dist: d };
     return { ok: true, dist: d };
   }
   // Pide (o vuelve a pedir) la ubicación; la usa el botón de reclamar si todavía no hay
@@ -112,7 +112,8 @@
   const wait = setInterval(() => { if (typeof cfg === 'undefined' || !cfg) return; clearInterval(wait); if (radius()) start(); }, 400);
 
   const st = document.createElement('style');
-  st.textContent = '#buy-parcel-btn.barrio-off { background: #8d2b2b !important; border-color: #8d2b2b !important; opacity: .9; }' +
+  st.textContent = '#toast.toast-s { width: auto; max-width: 86vw; padding: 6px 14px; border-radius: 99px; font-size: 13px; line-height: 1.25; text-align: center; white-space: nowrap; }' +
+    '#buy-parcel-btn.barrio-off { background: #8d2b2b !important; border-color: #8d2b2b !important; opacity: .9; }' +
     '#barrio-go { display: block; width: auto; padding: 6px 14px; font-size: 14px; font-weight: 700; border-radius: 10px; margin: 0; cursor: pointer; color: #fff; background: #1faa4b; border: 1px solid #148a3a; animation: barrioGo 1s infinite ease-in-out; }' +
     '#barrio-go.hidden { display: none !important; }' +
     '@keyframes barrioGo { 0%, 100% { background: #1faa4b; box-shadow: 0 0 0 0 rgba(31,170,75,.6); } 50% { background: #5be07f; box-shadow: 0 0 0 6px rgba(31,170,75,0); } }' +

@@ -165,11 +165,11 @@ function setMsg(text, kind = '') {
   for (const id of ['msg', 'buy-msg']) { const m = $(id); if (m) { m.textContent = text; m.className = 'msg ' + kind; } }   // 'buy-msg': ventana de comprar créditos
 }
 // Aviso arriba de la pantalla (el #msg del panel queda al final y en el móvil no se ve sin bajar)
-function flashToast(text) {
+function flashToast(text, small) {   // small: aviso pequeño de una línea (Tu barrio)
   let t = document.getElementById('toast');
   if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
-  t.textContent = text; t.classList.add('show');
-  clearTimeout(flashToast.t); flashToast.t = setTimeout(() => t.classList.remove('show'), 6000);
+  t.textContent = text; t.classList.add('show'); t.classList.toggle('toast-s', !!small);
+  clearTimeout(flashToast.t); flashToast.t = setTimeout(() => t.classList.remove('show'), small ? 2800 : 6000);
 }
 async function api(url, opts = {}) {
   // Siempre manda el token de sesión (antes, en los GET sin opciones no se enviaba y el servidor respondía "Inicia sesión")
@@ -1343,7 +1343,7 @@ $('buy-parcel-btn').onclick = async () => {
   if (window.barrio && !isOtherWorld(selected) && window.barrio.radius()) {   // Tu barrio 🔴: solo dentro del círculo rojo
     if (!window.barrio.pos()) await window.barrio.ask();
     const bar = window.barrio.check(selected);
-    if (!bar.ok) { setMsg(bar.msg, 'err'); flashToast(bar.msg); updateBuyParcelBtn(selected); return; }
+    if (!bar.ok) { setMsg(bar.msg, 'err'); flashToast(bar.msg, true); updateBuyParcelBtn(selected); return; }
   }
   let owner;
   try { owner = nameOrThrow(true); } catch (e) { return; }   // sin nombre se pone uno por defecto
