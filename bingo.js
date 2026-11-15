@@ -33,6 +33,11 @@
     #bingo .bn-timer { background: #000; color: #fff; border-radius: 999px; padding: 7px 18px; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .3px; }
     #bingo .bn-timer.blink { animation: bnblink 1s ease-in-out infinite; }
     @keyframes bnblink { 0%, 100% { opacity: 1; } 50% { opacity: .2; } }
+    #bn-banner { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 100000; max-width: 92vw; min-width: 230px; box-sizing: border-box; padding: 18px 24px; border-radius: 18px; text-align: center; background: #d6001c; color: #ffe600; box-shadow: 0 10px 40px rgba(0,0,0,.6); pointer-events: none; }
+    #bn-banner .b1 { font-size: 46px; font-weight: 900; letter-spacing: 2px; line-height: 1.1; }
+    #bn-banner .b2 { font-size: 22px; font-weight: 800; margin-top: 8px; word-break: break-word; }
+    #bn-banner .b3 { font-size: 15px; font-weight: 700; margin-top: 6px; }
+    #bn-banner.show { animation: bnpop .5s; }
     #bingo .bn-h3 { font-size: 14px; margin: 6px 0 6px; }
     #bingo .bn-stage { position: relative; height: 188px; display: flex; justify-content: center; }
     #bingo .bn-drum { position: absolute; top: 0; width: 132px; height: 132px; border-radius: 50%; border: 5px solid #c9a227; background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), rgba(180,200,255,.22) 60%, rgba(120,140,200,.35)); overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,.35), inset 0 0 18px rgba(255,255,255,.35); }
@@ -153,6 +158,24 @@
     return `El ${n}. ${d}`;
   };
 
+  // ---- Rótulo en medio de la pantalla: LÍNEA / BINGO y debajo quién la cantó (fondo rojo, letras amarillas, 5 s) ----
+  const banner = document.createElement('div'); banner.id = 'bn-banner'; document.body.appendChild(banner);
+  let bannerT = null;
+  function hideBanner() { clearTimeout(bannerT); bannerT = null; banner.style.display = 'none'; banner.classList.remove('show'); }
+  function showBanner(title, w, then) {
+    const list = w.winners && w.winners.length ? w.winners : [w];
+    const b1 = document.createElement('div'); b1.className = 'b1'; b1.textContent = title;
+    const b2 = document.createElement('div'); b2.className = 'b2';
+    list.forEach((x, i) => { if (i) b2.appendChild(document.createElement('br')); b2.appendChild(document.createTextNode((flag(x.country) || x.avatar || '🌍') + ' ' + x.nick)); });
+    const b3 = document.createElement('div'); b3.className = 'b3';
+    b3.textContent = list.length > 1 ? `Se reparten el premio: +${nf(w.prize)} ${word(w.prize)} cada uno` : `+${nf(w.prize)} ${word(w.prize)}`;
+    banner.replaceChildren(b1, b2, b3);
+    banner.classList.remove('show'); void banner.offsetWidth; banner.classList.add('show'); banner.style.display = 'block';
+    clearTimeout(bannerT);
+    bannerT = setTimeout(() => { hideBanner(); if (then) then(); }, 5000);
+  }
+  const names = w => ((w.winners && w.winners.length ? w.winners : [w]).map(x => x.nick)).join(' y ');
+
   // ---- Estado ----
   let earthWasMuted = null;   // null = no hemos tocado el sonido; false = lo silenciamos nosotros (y lo devolvemos al cerrar); true = ya estaba silenciado
   let state = null, timer = null, offset = 0, seen = 0, seenRound = 0, announced = { line: 0, bingo: 0 }, busy = false, want = 1, lastTick = 0;
@@ -222,9 +245,9 @@
     const idle = s.phase === 'idle' || !s.phase;
     const prize = (p, solo) => idle ? 'hasta ' + nf(solo || 0) : nf(p || 0) + ' ' + word(p || 0);
     elPBingo.textContent = prize(s.bingoPrize, s.soloBingo); elPLine.textContent = prize(s.linePrize, s.soloLine);
-    const who = w => w ? (flag(w.country) || w.avatar || '🌍') + ' ' + w.nick : '';
+    const who = w => w ? (flag(w.country) || w.avatar || '🌍') + ' ' + w.nick + (w.winners && w.winners.length > 1 ? ` +${w.winners.length - 1}` : '') : '';
     elWBingo.textContent = who(s.bingo); elWLine.textContent = who(s.line);
-    elWBingo.title = s.bingo ? s.bingo.nick : ''; elWLine.title = s.line ? s.line.nick : '';
+    elWBingo.title = s.bingo ? names(s.bingo) : ''; elWLine.title = s.line ? names(s.line) : '';
     const pl = s.players || 0;
     elPlayers.textContent = pl; elPlyL.textContent = pl === 1 ? 'jugador' : 'jugadores';
   }
@@ -278,20 +301,25 @@
       if (fresh.length <= 2) dropBall(fresh[fresh.length - 1]);   // si te has perdido varias bolas, no las cantamos todas de golpe
       else { elBall.textContent = fresh[fresh.length - 1]; elBall.style.opacity = '1'; }
     }
-    // Solo se canta UNA línea y UN bingo por partida (el servidor ya solo da uno de cada); si llegan a la vez, solo se canta el bingo
+    // Solo se canta UNA línea y UN bingo por partida (si coinciden varios jugadores se reparten el premio); si llegan a la vez, solo se canta el bingo.
+    // Tras la línea el servidor para el juego unos segundos: rótulo 5 s y una voz dice «Continuamos para bingo» al quitarse.
     const newLine = s.line && !announced.line, newBingo = s.bingo && !announced.bingo;
     if (newLine) {
       announced.line = 1;
-      if (!newBingo) { sndWin(false); speak(`¡Línea! ${s.line.nick}`, 1); }
       if (s.line.mine) say(`🎉 ¡Cantaste línea! Ganas ${s.line.prize} ${word(s.line.prize)}`);
+      if (!newBingo) {
+        sndWin(false); speak(`¡Línea! ${names(s.line)}`, 1);
+        showBanner('LÍNEA', s.line, () => { if (state && state.phase === 'drawing' && !state.bingo) speak('Continuamos para bingo', 1); });
+      }
     }
     if (newBingo) {
       announced.bingo = 1; sndWin(true);
-      speak(`¡Bingo! ${s.bingo.nick}`, 1);
+      speak(`¡Bingo! ${names(s.bingo)}`, 1);
+      showBanner('BINGO', s.bingo);
       if (s.bingo.mine) say(`🏆 ¡BINGO! Ganas ${s.bingo.prize} ${word(s.bingo.prize)}`);
-      else say(`🏆 Bingo de ${s.bingo.nick}. ¡Suerte en la próxima!`);
+      else say(`🏆 Bingo de ${names(s.bingo)}. ¡Suerte en la próxima!`);
     }
-        paintWins(); paintTube(); paintCards(); paintBuy(); paintTimer(); paintCaption();
+    paintWins(); paintTube(); paintCards(); paintBuy(); paintTimer(); paintCaption();
   }
 
   async function load() {
@@ -323,7 +351,7 @@
     load(); clearInterval(timer); timer = setInterval(tick, 500);
   }
   function close() {
-    modal.classList.add('hidden'); clearInterval(timer); timer = null; try { speechSynthesis.cancel(); } catch (e) { /* nada */ }
+    hideBanner(); modal.classList.add('hidden'); clearInterval(timer); timer = null; try { speechSynthesis.cancel(); } catch (e) { /* nada */ }
     if (earthWasMuted === false && window.fightMute) window.fightMute(false);   // vuelve el sonido de la Tierra
     earthWasMuted = null;
   }

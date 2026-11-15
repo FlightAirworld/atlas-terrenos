@@ -3,7 +3,8 @@
 //  · Cada cartón cuesta BINGO_PRICE créditos (1) y cada jugador puede comprar como mucho BINGO_MAX_CARDS (24) por ronda.
 //  · La primera compra abre la ronda: hay BINGO_BUY_SECONDS (60, un minuto) para comprar y después cae una bola cada BINGO_BALL_SECONDS (4).
 //  · Bingo de 90 bolas: cartón de 3 filas × 9 columnas con 15 números. Línea = una fila completa; bingo = el cartón entero.
-//  · Solo hay UNA línea y UN bingo por ronda (el primero que se completa; si dos cartones se completan con la misma bola, se sortea).
+//  · Solo hay UNA línea y UN bingo por ronda (el primero que se completa). Si dos o más jugadores lo completan con la misma bola, se reparten el premio a partes iguales (hacia abajo).
+//  · Al cantarse la línea el juego se para LINE_PAUSE (8 s): el navegador enseña el rótulo 5 s, dice «Continuamos para bingo» y siguen las bolas.
 //  · Premios (el bote son los cartones vendidos × precio):
 //      – con otros jugadores en la sala: línea 20 % del bote y bingo 80 %;
 //      – jugando solo: línea 5 y bingo 20 créditos (BINGO_SOLO_LINE / BINGO_SOLO_BINGO), pero nunca más que el porcentaje del bote.
@@ -23,6 +24,7 @@ module.exports = function (d) {
   const BALL_MS = Math.max(1, numEnv('BINGO_BALL_SECONDS', 4)) * 1000;
   const SOLO_LINE = Math.floor(numEnv('BINGO_SOLO_LINE', 5)), SOLO_BINGO = Math.floor(numEnv('BINGO_SOLO_BINGO', 20));
   const LINE_PCT = 0.2, BINGO_PCT = 0.8;
+  const LINE_PAUSE_MS = Math.max(0, numEnv('BINGO_LINE_PAUSE_SECONDS', 8)) * 1000;   // pausa tras cantar la línea
   const RESULT_MS = 15_000;       // tras el bingo se enseña el resultado este tiempo; luego la sala queda libre para otra ronda
   const LOCK_ID = 7_771_001;      // cerrojo de Postgres para que dos compras a la vez no abran dos rondas
 
@@ -34,6 +36,8 @@ module.exports = function (d) {
     await run('CREATE TABLE IF NOT EXISTS bingo_rounds (id BIGSERIAL PRIMARY KEY, status TEXT NOT NULL, ord TEXT NOT NULL, created_at BIGINT NOT NULL, buy_until BIGINT NOT NULL, draw_start BIGINT, evaluated INT NOT NULL DEFAULT 0, finished_at BIGINT, line_user TEXT, line_nick TEXT, line_country TEXT, line_avatar TEXT, line_ball INT, line_prize INT, bingo_user TEXT, bingo_nick TEXT, bingo_country TEXT, bingo_avatar TEXT, bingo_ball INT, bingo_prize INT)');
     await run('CREATE TABLE IF NOT EXISTS bingo_cards (id BIGSERIAL PRIMARY KEY, round_id BIGINT NOT NULL, user_id TEXT NOT NULL, pack_code TEXT NOT NULL, nick TEXT NOT NULL, country TEXT, avatar TEXT, grid TEXT NOT NULL, created_at BIGINT NOT NULL)');
     await run('CREATE INDEX IF NOT EXISTS bingo_cards_round ON bingo_cards (round_id, user_id)');
+    await run('ALTER TABLE bingo_rounds ADD COLUMN IF NOT EXISTS line_all TEXT').catch(() => {});    // todos los ganadores (si se reparten)
+    await run('ALTER TABLE bingo_rounds ADD COLUMN IF NOT EXISTS bingo_all TEXT').catch(() => {});
     await run('ALTER TABLE public.bingo_rounds ENABLE ROW LEVEL SECURITY').catch(() => {});   // solo el servidor accede
     await run('ALTER TABLE public.bingo_cards ENABLE ROW LEVEL SECURITY').catch(() => {});
     const old = Date.now() - 2 * 24 * 3600 * 1000;   // solo hacen falta las rondas recientes
@@ -98,25 +102,34 @@ module.exports = function (d) {
         const prizes = prizesFor(new Set(cards.map(c => c.user_id)).size, cards.length);
         const drawn = new Set(order.slice(0, evaluated));
         let lineDone = r.line_user !== null;
+        // Jugadores distintos con cartón ganador (un jugador con dos cartones cuenta una vez), en orden aleatorio
+        const uniq = list => { const m = new Map(); shuffle(list.slice()).forEach(c => { if (!m.has(c.user_id)) m.set(c.user_id, c); }); return [...m.values()]; };
+        const pay = async (ws, prize, p) => {
+          const share = Math.floor(prize / ws.length);
+          const w = ws[0];
+          Object.assign(upd, { [p + '_user']: w.user_id, [p + '_nick']: w.nick, [p + '_country']: w.country, [p + '_avatar']: w.avatar, [p + '_prize']: share,
+            [p + '_all']: JSON.stringify(ws.map(x => ({ user: x.user_id, nick: x.nick, country: x.country, avatar: x.avatar }))) });
+          if (share > 0) for (const x of ws) await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2', [share, x.pack_code]);
+        };
         for (let k = evaluated + 1; k <= total; k++) {
           drawn.add(order[k - 1]);
           evaluated = k;
+          let lineNow = false;
           if (!lineDone) {
             const cands = cards.filter(c => c.rows.some(row => row.every(n => drawn.has(n))));
             if (cands.length) {
-              const w = cands[crypto.randomInt(cands.length)];
-              lineDone = true;
-              Object.assign(upd, { line_user: w.user_id, line_nick: w.nick, line_country: w.country, line_avatar: w.avatar, line_ball: k, line_prize: prizes.line });
-              if (prizes.line > 0) await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2', [prizes.line, w.pack_code]);
+              lineDone = true; lineNow = true;
+              await pay(uniq(cands), prizes.line, 'line');
+              upd.line_ball = k;
             }
           }
           const full = cards.filter(c => c.rows.every(row => row.every(n => drawn.has(n))));
           if (full.length) {
-            const w = full[crypto.randomInt(full.length)];
-            Object.assign(upd, { bingo_user: w.user_id, bingo_nick: w.nick, bingo_country: w.country, bingo_avatar: w.avatar, bingo_ball: k, bingo_prize: prizes.bingo, status: 'done', finished_at: now });
-            if (prizes.bingo > 0) await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2', [prizes.bingo, w.pack_code]);
+            await pay(uniq(full), prizes.bingo, 'bingo');
+            Object.assign(upd, { bingo_ball: k, status: 'done', finished_at: now });
             break;
           }
+          if (lineNow && LINE_PAUSE_MS > 0) { drawStart += LINE_PAUSE_MS; upd.draw_start = drawStart; break; }   // el juego se para para cantar la línea
         }
       }
       upd.evaluated = evaluated;
@@ -128,8 +141,13 @@ module.exports = function (d) {
   }
 
   // ---------- Estado que ve el jugador ----------
-  const winner = (r, p) => r[p + '_user'] === null || r[p + '_user'] === undefined ? null
-    : { nick: r[p + '_nick'], country: r[p + '_country'], avatar: r[p + '_avatar'], ball: Number(r[p + '_ball']), prize: Number(r[p + '_prize']), mine: false };
+  const winner = (r, p, uid) => {
+    if (r[p + '_user'] === null || r[p + '_user'] === undefined) return null;
+    let all = []; try { all = JSON.parse(r[p + '_all'] || '[]'); } catch (e) { all = []; }
+    if (!all.length) all = [{ user: r[p + '_user'], nick: r[p + '_nick'], country: r[p + '_country'], avatar: r[p + '_avatar'] }];
+    return { nick: r[p + '_nick'], country: r[p + '_country'], avatar: r[p + '_avatar'], ball: Number(r[p + '_ball']), prize: Number(r[p + '_prize']),
+      mine: all.some(x => x.user === uid), winners: all.map(x => ({ nick: x.nick, country: x.country, avatar: x.avatar, mine: x.user === uid })) };
+  };
 
   async function view(user) {
     await advance();
@@ -149,9 +167,7 @@ module.exports = function (d) {
     const players = new Set(cards.map(c => c.user_id)).size;
     const p = prizesFor(players, cards.length);
     const drawn = phase === 'buying' ? [] : JSON.parse(r.ord).slice(0, r.evaluated);
-    const line = winner(r, 'line'), bingo = winner(r, 'bingo');
-    if (line) line.mine = r.line_user === uid;
-    if (bingo) bingo.mine = r.bingo_user === uid;
+    const line = winner(r, 'line', uid), bingo = winner(r, 'bingo', uid);
     return {
       ...base, phase, round: Number(r.id), buyUntil: Number(r.buy_until), drawStart: r.draw_start === null ? null : Number(r.draw_start),
       finishedAt: r.finished_at === null ? null : Number(r.finished_at), drawn, line, bingo,
