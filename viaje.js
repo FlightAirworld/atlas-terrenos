@@ -58,7 +58,6 @@
     .wk { position: fixed; left: 0; top: 0; width: 34px; height: 58px; pointer-events: none; will-change: transform; }
     .wk svg { width: 100%; height: 100%; overflow: visible; display: block; filter: drop-shadow(0 3px 3px rgba(0,0,0,.35)); }
     .wk .face { transform-box: view-box; transform-origin: 20px 34px; }
-    .wk.left .face { transform: scaleX(-1); }
     .wk .lg { transform-box: fill-box; transform-origin: 50% 0; }
     .wk.walking .l1 { animation: wkA .32s infinite alternate ease-in-out; }
     .wk.walking .l2 { animation: wkB .32s infinite alternate ease-in-out; }

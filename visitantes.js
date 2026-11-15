@@ -107,6 +107,8 @@
       <ellipse cx="18" cy="57" rx="11" ry="3" fill="rgba(0,0,0,.28)"/>
       ${hairBack}${legs}
       <rect x="10" y="21" width="16" height="${f ? 13 : 17}" rx="5" fill="${d.top}"/>
+      <path d="M15.2 21 Q18 26 20.8 21 Q18 22.4 15.2 21Z" fill="${sk}"/>
+      ${d.flag ? `<g><rect x="12" y="25" width="12" height="8.6" rx="1.6" fill="#fff" stroke="rgba(0,0,0,.3)" stroke-width=".5"/><text x="18" y="32" text-anchor="middle" font-size="8.2" font-family="'Apple Color Emoji','Noto Color Emoji','Segoe UI Emoji',sans-serif">${d.flag}</text></g>` : ''}
       <g class="vz-la"><rect x="5.2" y="22.6" width="4.6" height="15" rx="2.3" fill="${d.top}"/><circle cx="7.5" cy="38.2" r="2.4" fill="${sk}"/></g>
       <g class="vz-ra"><rect x="26.2" y="22.6" width="4.6" height="15" rx="2.3" fill="${d.top}"/><circle cx="28.5" cy="38.2" r="2.4" fill="${sk}"/></g>
       <rect x="16" y="18" width="4" height="5" fill="${sk}"/>
@@ -205,7 +207,7 @@
     FP = map.sizes ? map.sizes().fp : 1;
     const icon = L.divIcon({
       className: 'vz', iconSize: [44, 90], iconAnchor: [22, 87],
-      html: `<div class="vz-body" title="${v.c.flag} ${v.name}"><div class="vz-bub"></div><div class="vz-tag">${v.c.flag} ${v.name}</div>${dollSVG({ ...v.d, g: v.g })}</div>`
+      html: `<div class="vz-body" title="${v.c.flag} ${v.name}"><div class="vz-bub"></div><div class="vz-tag">${v.c.flag} ${v.name}</div>${dollSVG({ ...v.d, g: v.g, flag: v.c.flag })}</div>`
     });
     v.mk = L.marker(map.unproject(L.point(v.x, v.y), REF_Z), { icon, pane: 'visitors', keyboard: false }).addTo(map);
     v.el = v.mk.getElement().firstChild; v.bub = v.el.firstChild;

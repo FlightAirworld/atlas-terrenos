@@ -15,7 +15,6 @@
     .pw { background: transparent !important; border: 0 !important; pointer-events: none !important; }
     .pw-in { width: 20px; height: 30px; transform-origin: 10px 28px; animation: pwbob .36s ease-in-out infinite alternate; transition: opacity .3s; }
     .pw-in svg { overflow: visible; }
-    .pw-in.flip svg { transform: scaleX(-1); }
     .pw-in .umb { display: none; }
     .pw-in.rain .umb { display: inline; }
     @keyframes pwbob { from { transform: translateY(0); } to { transform: translateY(-1.6px); } }
@@ -38,16 +37,24 @@
     const v = rev ? `${a} ${cx} ${cy};${-a} ${cx} ${cy};${a} ${cx} ${cy}` : `${-a} ${cx} ${cy};${a} ${cx} ${cy};${-a} ${cx} ${cy}`;
     return `<animateTransform attributeName="transform" type="rotate" values="${v}" dur="${dur}s" repeatCount="indefinite"/>`;
   }
+  const HAIRS = ['#2b1b10', '#4a2f1b', '#8b5a2b', '#d8b25a', '#151515', '#9aa0a6', '#b5392b'];
+  // Persona VISTA DE FRENTE (nunca de perfil): cara con ojos y sonrisa, pelo, cuello en V, mangas, manos y zapatos; brazos y piernas se balancean al andar.
   function personSVG(shirt, skin, pants, umb) {
-    const d = rnd(0.62, 0.78).toFixed(2);
-    const limb = (x1, y1, y2, col, w, a, cy, rev) =>
-      `<line x1="${x1}" y1="${y1}" x2="${x1}" y2="${y2}" stroke="${col}" stroke-width="${w}" stroke-linecap="round">${swing(a, x1, cy, d, rev)}</line>`;
+    const d = rnd(0.62, 0.78).toFixed(2), hair = pick(HAIRS);
+    const limb = (x1, y1, y2, col, w, a, cy, rev, tip, tipW, tipY) =>
+      `<g>${swing(a, x1, cy, d, rev)}<line x1="${x1}" y1="${y1}" x2="${x1}" y2="${y2}" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/>${tip ? `<line x1="${x1}" y1="${tipY}" x2="${x1}" y2="${y2}" stroke="${tip}" stroke-width="${tipW}" stroke-linecap="round"/>` : ''}</g>`;
     return `<svg width="20" height="30" viewBox="-2 -9 20 36" aria-hidden="true">
       <ellipse cx="8" cy="26" rx="5" ry="1.5" fill="rgba(0,0,0,.25)"/>
-      ${limb(7, 16, 25, pants, 3, 28, 16, false)}${limb(9, 16, 25, pants, 3, 28, 16, true)}
+      ${limb(6.6, 16, 25, pants, 3, 28, 16, false, '#222', 3.5, 23.6)}${limb(9.4, 16, 25, pants, 3, 28, 16, true, '#222', 3.5, 23.6)}
       <rect x="4.5" y="7.5" width="7" height="9.5" rx="3" fill="${shirt}"/>
-      ${limb(8, 9, 16, skin, 2.2, 24, 9, true)}${limb(8, 9, 16, skin, 2.2, 24, 9, false)}
-      <circle cx="8" cy="4" r="3.3" fill="${skin}"/>
+      <rect x="4.9" y="8.5" width="1.6" height="7" rx=".8" fill="rgba(255,255,255,.18)"/>
+      <path d="M6.6 7.6 Q8 10.4 9.4 7.6Z" fill="${skin}"/>
+      ${limb(4.1, 9, 14.6, shirt, 2.4, 24, 9, true, skin, 2.1, 14.4)}${limb(11.9, 9, 14.6, shirt, 2.4, 24, 9, false, skin, 2.1, 14.4)}
+      <rect x="7" y="5.6" width="2" height="2.4" fill="${skin}"/>
+      <circle cx="8" cy="3.6" r="3.5" fill="${skin}"/>
+      <path d="M4.5 3.4 Q4.4 -0.4 8 -0.5 Q11.6 -0.4 11.5 3.4 Q9.6 1.4 8 1.6 Q6.4 1.4 4.5 3.4Z" fill="${hair}"/>
+      <circle cx="6.7" cy="4.1" r=".5" fill="#222"/><circle cx="9.3" cy="4.1" r=".5" fill="#222"/>
+      <path d="M6.9 5.6 Q8 6.5 9.1 5.6" stroke="#8a3b3b" stroke-width=".5" fill="none" stroke-linecap="round"/>
       <g class="umb"${umb ? ' style="display:inline"' : ''}><path d="M-3 1.5Q8 -11 19 1.5Z" fill="${pick(['#e63946', '#1d3557', '#2a9d8f', '#6a4c93', '#f4a261', '#ffb703'])}"/><line x1="8" y1="1.5" x2="8" y2="9" stroke="#444" stroke-width=".8"/></g>
     </svg>`;
   }
