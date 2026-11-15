@@ -28,13 +28,21 @@
     mirrors(m => { const b = m.querySelector('b'); if (b) b.textContent = fmt(n); m.title = txt; m.setAttribute('aria-label', txt); m.classList.remove('off'); });
   }
 
+  // País del jugador para el panel de administrador: el que eligió en el juego y, si no ha elegido ninguno, la región del idioma del navegador (es-ES → ES),
+  // que es la misma que usa su bandera (jugador.js). El servidor da prioridad a la cabecera del proxy/CDN si la hay.
+  const myCountry = () => {
+    let c = ''; try { c = localStorage.getItem('country') || ''; } catch (e) {}
+    if (!/^[A-Za-z]{2}$/.test(c)) { const m = /[-_]([A-Za-z]{2})$/.exec((navigator.languages && navigator.languages[0]) || navigator.language || ''); c = m ? m[1] : ''; }
+    return /^[A-Za-z]{2}$/.test(c) ? c.toUpperCase() : '';
+  };
+
   let es = null, closeTimer = null, retryTimer = null;
   function open() {
     clearTimeout(retryTimer);
     if (es) return;
     if (window.apiState && !window.apiState.ready) return;      // servidor dormido: se abre cuando despierte
-    let mine = ''; try { mine = localStorage.getItem('country') || ''; } catch (e) {}
-    es = new EventSource('/api/online?cid=' + encodeURIComponent(cid) + (/^[A-Za-z]{2}$/.test(mine) ? '&country=' + mine.toUpperCase() : ''));
+    const mine = myCountry();
+    es = new EventSource('/api/online?cid=' + encodeURIComponent(cid) + (mine ? '&country=' + mine : ''));
     es.onopen = () => { btn.classList.remove('off'); mirrors(m => m.classList.remove('off')); };
     es.addEventListener('santa', e => { try { window.dispatchEvent(new CustomEvent('santa-msg', { detail: JSON.parse(e.data) })); } catch (x) {} });   // Papá Noel (santa.js)
     es.onmessage = e => { const n = parseInt(e.data, 10); if (Number.isFinite(n) && n >= 0) show(n); };
@@ -60,8 +68,8 @@
     if (document.hidden || typeof authToken === 'undefined' || !authToken || typeof api !== 'function') return;
     if (!force && authToken === seenToken && Date.now() - seenAt < 10 * 60e3) return;
     seenToken = authToken; seenAt = Date.now();
-    let mine = ''; try { mine = localStorage.getItem('country') || ''; } catch (e) {}
-    api('/api/online/seen', { method: 'POST', body: /^[A-Za-z]{2}$/.test(mine) ? { country: mine.toUpperCase() } : {} }).catch(() => {});
+    const mine = myCountry();
+    api('/api/online/seen', { method: 'POST', body: mine ? { country: mine } : {} }).catch(() => {});
   }
   setInterval(seen, 30000);                                                    // entrar en la cuenta / cada ~10 min abierto
   document.addEventListener('visibilitychange', () => { if (!document.hidden) seen(); });

@@ -1530,11 +1530,13 @@ function onlineFill(extra) {   // reparte `extra` jugadores entre los países se
 // Récord de jugadores reales conectados a la vez, por país. Se guarda en la base de datos (tabla online_peaks) para que no se pierda al reiniciar.
 const onlinePeaks = new Map();   // cc -> { n, at }
 let onlinePeaksLoaded = false, onlinePeaksAt = 0;
+const onlineDayPeak = { day: '', n: 0, at: 0 };   // máximo de jugadores reales a la vez HOY (en memoria: se reinicia con el servidor)
 function onlinePeaksCheck(real, force) {   // compara el recuento actual con los récords; como mucho una vez por segundo
   const now = Date.now();
   if (!onlinePeaksLoaded || (!force && now - onlinePeaksAt < 1000)) return;
   onlinePeaksAt = now;
   const r = real || onlineStats.tally(onlineClients.keys(), onlineCountryByCid);
+  { const dk = dayKey(); if (onlineDayPeak.day !== dk) { onlineDayPeak.day = dk; onlineDayPeak.n = 0; } if (r.total > onlineDayPeak.n) { onlineDayPeak.n = r.total; onlineDayPeak.at = now; } }
   for (const c of onlineStats.updatePeaks(onlinePeaks, r.countries, now)) {
     run('INSERT INTO online_peaks (cc, n, at) VALUES ($1,$2,$3) ON CONFLICT (cc) DO UPDATE SET n = GREATEST(online_peaks.n, EXCLUDED.n), at = CASE WHEN EXCLUDED.n > online_peaks.n THEN EXCLUDED.at ELSE online_peaks.at END', [c.cc, c.n, c.at]).catch(() => {});
   }
@@ -1588,6 +1590,36 @@ async function onlinePlayersGet(url) {
       region: r.region || null, city: (towns.get(r.user_id) || {}).city || r.conn_city || null, cityFrom: towns.has(r.user_id) ? 'terrenos' : (r.conn_city ? 'conexion' : null)
     }))
   };
+}
+// GET /api/admin/online-summary: datos generales para la pantalla de administrador (visitas, cuentas, terrenos, actividad). Se guarda 30 s en memoria.
+let onlineSummaryCache = { at: 0, body: null };
+async function onlineSummaryGet() {
+  const now = Date.now();
+  if (onlineSummaryCache.body && now - onlineSummaryCache.at < 30_000) return onlineSummaryCache.body;
+  const d1 = now - 24 * 3600e3, d7 = now - 7 * 24 * 3600e3, today = dayKey();
+  const dayAgo = n => new Date(now - n * 864e5).toLocaleDateString('en-CA', { timeZone: DAILY_TZ });
+  const q = async f => { try { return await f(); } catch { return null; } };   // si falla una consulta, el resto sigue
+  const num = v => (v == null ? null : Number(v));
+  const [acc, par, act, guests, visits, byCountry] = await Promise.all([
+    q(() => one('SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE created_at > $1) AS d1, COUNT(*) FILTER (WHERE created_at > $2) AS d7 FROM profiles', [d1, d7])),
+    q(() => one("SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE created_at > $1) AS d1, COUNT(*) FILTER (WHERE created_at > $2) AS d7, COUNT(*) FILTER (WHERE world <> 'tierra') AS otros FROM parcels", [d1, d7])),
+    q(() => one('SELECT COUNT(DISTINCT user_id) FILTER (WHERE day = $1) AS today, COUNT(DISTINCT user_id) AS week FROM online_players WHERE day >= $2', [today, dayAgo(6)])),
+    q(() => one('SELECT COUNT(*) AS n FROM packs WHERE is_guest')),
+    q(() => all('SELECT day, COUNT(*) AS n FROM visits GROUP BY day ORDER BY day DESC LIMIT 7')),
+    q(() => all('SELECT country, COUNT(*) AS n FROM parcels WHERE country IS NOT NULL AND country <> \'\' GROUP BY country ORDER BY n DESC LIMIT 8'))
+  ]);
+  let tabs = 0; for (const set of onlineClients.values()) tabs += set.size;
+  const body = {
+    at: now, tabs, dayPeak: onlineDayPeak.day === today ? { n: onlineDayPeak.n, at: onlineDayPeak.at } : { n: 0, at: 0 },
+    accounts: acc && { total: num(acc.total), d1: num(acc.d1), d7: num(acc.d7) },
+    parcels: par && { total: num(par.total), d1: num(par.d1), d7: num(par.d7), otros: num(par.otros) },
+    active: act && { today: num(act.today), week: num(act.week) },
+    guests: guests && num(guests.n),
+    visits: (visits || []).map(r => ({ day: r.day, n: Number(r.n) })),
+    byCountry: (byCountry || []).map(r => ({ cc: String(r.country).toUpperCase(), n: Number(r.n) }))
+  };
+  onlineSummaryCache = { at: now, body };
+  return body;
 }
 setInterval(() => { try { onlinePeaksCheck(); const r = onlineRealGet(); console.log(`[en línea] reales: ${r.total} | contador mostrado: ${r.shown}`); } catch {} }, 60_000).unref();   // una línea al minuto en el log
 function onlineCountriesGet() {   // GET /api/online/countries: reales conectados + (si ONLINE_FIXED) el reparto del resto hasta cuadrar con el contador
@@ -2804,6 +2836,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/where') return placeGet(req, url);   // pueblo, región y país de un punto del mapa (etiqueta de lugar)
   if (req.method === 'POST' && pn === '/api/admin/indexnow') { requireAdmin(req); return await indexNowPing(true); }   // avisar ya a los buscadores (sin cuerpo: manda todo el sitemap)
   if (req.method === 'GET' && pn === '/api/admin/online-real') { requireAdmin(req); return onlineRealGet(); }
+  if (req.method === 'GET' && pn === '/api/admin/online-summary') { requireAdmin(req); return onlineSummaryGet(); }   // visitas, cuentas, terrenos y actividad
   if (req.method === 'GET' && pn === '/api/admin/online-players') { requireAdmin(req); return onlinePlayersGet(url); }   // jugadores que más se conectan en un país (?cc=ES)
   if (req.method === 'POST' && pn === '/api/online/seen') return onlineSeen(req, await readJson(req));   // el jugador con cuenta avisa de que está conectado   // reales conectados (solo administrador: cabecera Authorization: Bearer ADMIN_TOKEN)
   if (req.method === 'GET' && pn === '/api/ref') return refGet(req);

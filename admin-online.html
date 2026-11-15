@@ -28,6 +28,11 @@
     .tap { cursor:pointer; -webkit-tap-highlight-color:transparent; }
     .tap .chev { color:var(--muted); font-size:.8rem; margin-left:6px; }
     .det { margin:2px 0 8px; padding:6px 10px; border-left:3px solid var(--accent); background:var(--bg); border-radius:0 8px 8px 0; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+    .stat { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+    .stat b { display:block; font-size:1.35rem; line-height:1.2; }
+    .stat span { color:var(--muted); font-size:.78rem; }
+    .bar { height:6px; border-radius:3px; background:var(--accent); margin-top:4px; }
     .pl { display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
     .pl:last-child { border-bottom:0; }
     .pl .nm { font-weight:700; }
@@ -53,6 +58,22 @@
       <div class="sub"><span class="dot" id="dot"></span>jugadores reales conectados ahora</div>
       <div class="sub">Contador que ven los jugadores: <b id="shown">–</b></div>
       <div class="sub" id="upd"></div>
+      <div class="sub" id="extra"></div>
+    </div>
+    <div class="card">
+      <b>Resumen</b>
+      <div class="sub">Datos de la base de datos (se actualizan cada minuto).</div>
+      <div class="grid" id="stats"><div class="sub">Cargando…</div></div>
+    </div>
+    <div class="card">
+      <b>Visitantes únicos por día</b>
+      <div class="sub">Una visita por conexión de red y día (los que no tienen cuenta también cuentan).</div>
+      <div id="visits"></div>
+    </div>
+    <div class="card">
+      <b>Terrenos por país</b>
+      <div class="sub">Los 8 países con más terrenos.</div>
+      <div id="bycountry"></div>
     </div>
     <div class="card">
       <b>Por país</b>
@@ -72,7 +93,7 @@
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var base = (window.API_BASE || '').replace(/\/+$/, '');
-  var token = '', timer = null;
+  var token = '', timer = null, sumTimer = null;
   var openCc = null, det = {}, detTimer = null;   // país abierto, datos de sus jugadores y su refresco
   var names = new Intl.DisplayNames(['es'], { type: 'region' });
 
@@ -145,6 +166,36 @@
     $('peaks').innerHTML = rows.length ? rows.join('') : '<div class="sub">Aún no hay récords.</div>';
   }
 
+  // ---------- Resumen general ----------
+  var fmt = function (n) { return n == null ? '–' : Number(n).toLocaleString('es'); };
+  function stat(label, value) { return '<div class="stat"><b>' + value + '</b><span>' + esc(label) + '</span></div>'; }
+  function bars(rows) {
+    var max = rows.reduce(function (m, r) { return Math.max(m, r.n); }, 1);
+    return rows.map(function (r) { return '<div class="row"><div style="flex:1"><span>' + r.label + '</span><div class="bar" style="width:' + Math.max(3, Math.round(r.n / max * 100)) + '%"></div></div><b>' + fmt(r.n) + '</b></div>'; }).join('');
+  }
+  function renderSummary(s) {
+    var a = s.accounts || {}, p = s.parcels || {}, c = s.active || {};
+    $('stats').innerHTML = [
+      stat('Cuentas en total', fmt(a.total)), stat('Cuentas nuevas (24 h)', fmt(a.d1)),
+      stat('Cuentas nuevas (7 días)', fmt(a.d7)), stat('Jugadores de prueba (sin cuenta)', fmt(s.guests)),
+      stat('Terrenos en total', fmt(p.total)), stat('Terrenos nuevos (24 h)', fmt(p.d1)),
+      stat('Terrenos nuevos (7 días)', fmt(p.d7)), stat('Terrenos fuera de la Tierra', fmt(p.otros)),
+      stat('Con cuenta, conectados hoy', fmt(c.today)), stat('Con cuenta, conectados 7 días', fmt(c.week))
+    ].join('');
+    var v = (s.visits || []).slice().reverse();
+    $('visits').innerHTML = v.length ? bars(v.map(function (r) { return { label: esc(r.day), n: r.n }; })) : '<div class="sub">Aún no hay datos.</div>';
+    var bc = s.byCountry || [];
+    $('bycountry').innerHTML = bc.length ? bars(bc.map(function (r) { return { label: flag(r.cc) + ' ' + esc(nameOf(r.cc)), n: r.n }; })) : '<div class="sub">Aún no hay datos.</div>';
+    var dp = s.dayPeak || {};
+    $('extra').textContent = 'Pestañas abiertas: ' + fmt(s.tabs) + (dp.n ? ' · Máximo de hoy a la vez: ' + dp.n + ' (a las ' + new Date(dp.at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) + ')' : '');
+  }
+  function loadSummary() {
+    fetch(base + '/api/admin/online-summary', { headers: { Authorization: 'Bearer ' + token }, cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(renderSummary)
+      .catch(function () { $('stats').innerHTML = '<div class="sub">No se pudo cargar el resumen.</div>'; });
+  }
+
   function onTap(e) {
     var r = e.target.closest ? e.target.closest('.tap') : null;
     if (r && r.getAttribute('data-cc')) toggle(r.getAttribute('data-cc'));
@@ -162,7 +213,7 @@
       .then(function (j) {
         $('login').classList.add('hide'); $('data').classList.remove('hide');
         render(j); renderPeaks(j);
-        if (!timer) timer = setInterval(load, 5000);
+        if (!timer) { timer = setInterval(load, 5000); loadSummary(); sumTimer = setInterval(loadSummary, 60000); }
       })
       .catch(function (e) {
         $('dot').classList.remove('on');
@@ -177,7 +228,7 @@
     if (token) load();
   };
   $('tok').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('go').click(); });
-  $('out').onclick = function () { clearInterval(timer); clearInterval(detTimer); timer = null; detTimer = null; openCc = null; det = {}; last = null; token = ''; $('tok').value = ''; $('data').classList.add('hide'); $('login').classList.remove('hide'); };
+  $('out').onclick = function () { clearInterval(timer); clearInterval(sumTimer); sumTimer = null; clearInterval(detTimer); timer = null; detTimer = null; openCc = null; det = {}; last = null; token = ''; $('tok').value = ''; $('data').classList.add('hide'); $('login').classList.remove('hide'); };
 })();
 </script>
 </body>
