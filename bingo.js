@@ -8,6 +8,7 @@
   const btn = document.getElementById('bingo-btn');
   if (!btn) return;
   const nf = n => Number(n).toLocaleString('es-ES');
+  const dots = n => String(Math.max(0, Math.floor(Number(n) || 0))).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   const word = n => (n === 1 ? 'crédito' : 'créditos');
   const flag = c => { try { return (typeof flagOf === 'function' && flagOf(c)) || ''; } catch (e) { return ''; } };
 
@@ -26,6 +27,9 @@
     #bingo .bn-prz.bingo .p { color: #e03131; }
     #bingo .bn-prz.line .p { color: #2f9e44; }
     #bingo .bn-prz .w { font-size: 11px; font-weight: 700; min-height: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: bnpop .5s; }
+    #bingo .bn-prz.jp { background: #1b1b1b; color: #fff; }
+    #bingo .bn-prz.jp .p { color: #ffd43b; font-size: 19px; }
+    #bingo .bn-prz.jp small { display: block; font-size: 10px; line-height: 1.15; opacity: .85; }
     #bingo .bn-ply { background: var(--card, rgba(127,127,127,.12)); border-radius: 10px; padding: 5px 4px; text-align: center; font-size: 12px; }
     #bingo .bn-ply b { font-size: 16px; }
     @keyframes bnpop { 0% { transform: scale(.5); opacity: 0; } 70% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
@@ -36,6 +40,7 @@
     #bn-banner { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 100000; max-width: 92vw; min-width: 230px; box-sizing: border-box; padding: 18px 24px; border-radius: 18px; text-align: center; background: #d6001c; color: #ffe600; box-shadow: 0 10px 40px rgba(0,0,0,.6); pointer-events: none; }
     #bn-banner .b1 { font-size: 46px; font-weight: 900; letter-spacing: 2px; line-height: 1.1; }
     #bn-banner .b2 { font-size: 22px; font-weight: 800; margin-top: 8px; word-break: break-word; }
+    #bn-banner .b4 { display: inline-block; font-size: 19px; font-weight: 900; margin-top: 10px; padding: 5px 12px; border-radius: 10px; background: #000; color: #ffe600; }
     #bn-banner .b3 { font-size: 15px; font-weight: 700; margin-top: 6px; }
     #bn-banner.show { animation: bnpop .5s; }
     #bingo .bn-h3 { font-size: 14px; margin: 6px 0 6px; }
@@ -59,7 +64,9 @@
     #bingo .bn-buy button.go:disabled { animation: none; opacity: .6; }
     @keyframes bnblink2 { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
     #bingo .bn-big { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; padding: 6px 2px 8px; }
-    #bingo .bn-big span { min-width: 68px; height: 68px; padding: 0 8px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 16px; border: 4px solid #f08c00; background: #fff5c2; color: #222; font-size: 42px; font-weight: 900; }
+    #bingo .bn-big span { min-width: 68px; height: 68px; padding: 0 8px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 16px; border: 3px solid #555; background: #000; color: #fff; font-size: 42px; font-weight: 900; }   /* quedan 3 o menos: negro con letras blancas */
+    #bingo .bn-hint { flex-basis: 100%; font-size: 11px; opacity: .8; }
+    #bingo .bn-buy button.go.ok { background: #2f9e44; animation: none; }
     #bingo .bn-buy .n { min-width: 26px; text-align: center; font-weight: 800; }
     #bingo .bn-cards { display: flex; flex-direction: column; gap: 8px; }
     #bingo .bn-card { border: 2px solid var(--line, #888); border-radius: 10px; padding: 4px; background: #fffdf0; color: #222; transition: border-color .3s; }
@@ -96,7 +103,8 @@
         '<div class="bn-right">' +
           '<div class="bn-prz bingo"><div class="t">🏆 Bingo</div><div class="p" id="bn-p-bingo">—</div><div class="w" id="bn-w-bingo"></div></div>' +
           '<div class="bn-prz line"><div class="t">🎯 Línea</div><div class="p" id="bn-p-line">—</div><div class="w" id="bn-w-line"></div></div>' +
-          '<div class="bn-ply">👥 <b id="bn-players">0</b><br><span id="bn-ply-l">jugadores</span></div>' +
+          '<div class="bn-prz jp"><div class="t">💰 Bote acumulado</div><div class="p" id="bn-p-jp">1.000</div><small id="bn-jp-s"></small></div>' +
+          '<div class="bn-ply">👥 <b id="bn-players">0</b> <span id="bn-ply-l">jugadores</span></div>' +
         '</div>' +
       '</div>' +
       '<div class="bn-timerrow"><span id="bn-timer" class="bn-timer"></span></div>' +
@@ -109,7 +117,7 @@
   const $ = id => modal.querySelector('#' + id);
   const elCredits = $('bn-credits'), elBall = $('bn-ball'), elCap = $('bn-cap'), elTube = $('bn-tube'), elTimer = $('bn-timer'),
     elBuy = $('bn-buy'), elCards = $('bn-cards'), elCardsH = $('bn-cards-h'), msg = $('bingo-msg'), elSpin = $('bn-spin'),
-    elPBingo = $('bn-p-bingo'), elPLine = $('bn-p-line'), elWBingo = $('bn-w-bingo'), elWLine = $('bn-w-line'), elPlayers = $('bn-players'), elPlyL = $('bn-ply-l');
+    elPBingo = $('bn-p-bingo'), elPLine = $('bn-p-line'), elWBingo = $('bn-w-bingo'), elWLine = $('bn-w-line'), elPlayers = $('bn-players'), elPlyL = $('bn-ply-l'), elJP = $('bn-p-jp'), elJPs = $('bn-jp-s');
   const say = (t, err) => { msg.textContent = t || ''; msg.className = 'bn-msg' + (err ? ' err' : ''); };
 
   // ---- Bombo: bolas de colores girando dentro ----
@@ -189,7 +197,7 @@
   const BANNER_MS = 7000;   // lo que dura el rótulo de LÍNEA / BINGO
   let bannerT = null;
   function hideBanner() { clearTimeout(bannerT); bannerT = null; banner.style.display = 'none'; banner.classList.remove('show'); }
-  function showBanner(title, w, then) {
+  function showBanner(title, w, then, extra, ms) {
     const list = w.winners && w.winners.length ? w.winners : [w];
     const b1 = document.createElement('div'); b1.className = 'b1'; b1.textContent = title;
     const b2 = document.createElement('div'); b2.className = 'b2';
@@ -197,9 +205,10 @@
     const b3 = document.createElement('div'); b3.className = 'b3';
     b3.textContent = list.length > 1 ? `Se reparten el premio: +${nf(w.prize)} ${word(w.prize)} cada uno` : `+${nf(w.prize)} ${word(w.prize)}`;
     banner.replaceChildren(b1, b2, b3);
+    if (extra) { const b4 = document.createElement('div'); b4.className = 'b4'; b4.textContent = extra; banner.appendChild(b4); }
     banner.classList.remove('show'); void banner.offsetWidth; banner.classList.add('show'); banner.style.display = 'block';
     clearTimeout(bannerT);
-    bannerT = setTimeout(() => { hideBanner(); if (then) then(); }, BANNER_MS);
+    bannerT = setTimeout(() => { hideBanner(); if (then) then(); }, ms || BANNER_MS);
   }
   // ---- Confeti: dos cañones desde abajo y lluvia desde arriba ----
   let confettiStop = null;
@@ -253,7 +262,7 @@
   function paintCards() {
     if (!state || !state.mine) return;
     const set = new Set(state.drawn || []);
-    elCardsH.textContent = `🎴 Cartones (${state.mine.length})`;
+    elCardsH.textContent = `🎴 Cartones (${state.mine.length})`; elCardsH.style.display = state.mine.length ? '' : 'none';
     const list = state.mine.map(c => ({ c, v: cardView(c, set) }));
     list.sort((a, b) => a.v.missing - b.v.missing || a.c.id - b.c.id);   // los que más cerca están suben arriba
     const frag = document.createDocumentFragment();
@@ -319,6 +328,10 @@
     const who = w => w ? (flag(w.country) || w.avatar || '🌍') + ' ' + w.nick + (w.winners && w.winners.length > 1 ? ` +${w.winners.length - 1}` : '') : '';
     elWBingo.textContent = who(s.bingo); elWLine.textContent = who(s.line);
     elWBingo.title = s.bingo ? names(s.bingo) : ''; elWLine.title = s.line ? names(s.line) : '';
+    const JB = s.jackpotBalls || 44, nb = (s.drawn || []).length, passed = s.phase === 'drawing' && nb > JB && !s.jackpotPrize;
+    elJP.textContent = dots(s.jackpot);
+    elJPs.textContent = passed ? `ya pasó de ${JB} bolas` : `bingo en ${JB} bolas o menos`;
+    elJPs.style.opacity = passed ? '.45' : '';
     const pl = Math.max(s.connected || 0, s.players || 0);   // jugadores reales con la sala abierta
     elPlayers.textContent = pl; elPlyL.textContent = pl === 1 ? 'jugador' : 'jugadores';
   }
@@ -326,16 +339,23 @@
   function paintBuy() {
     const s = state; if (!s) return;
     const owned = s.mine ? s.mine.length : 0;
-    const canBuy = s.phase === 'idle' || s.phase === 'done' || (s.phase === 'buying');
-    const left = s.maxCards - (s.phase === 'idle' || s.phase === 'done' ? 0 : owned);
+    const nextOnly = s.phase === 'drawing' || s.phase === 'done';   // con la partida ya empezada solo se puede reservar para la próxima
+    const canBuy = s.phase === 'idle' || s.phase === 'buying' || nextOnly;
+    const left = s.maxCards - (s.phase === 'buying' ? owned : 0);
     if (want > left) want = Math.max(1, left);
     const frag = document.createDocumentFragment();
     if (canBuy && left > 0) {
       const mk = (t, f) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.onclick = f; return b; };
+      const setWant = v => { want = v; if (reserved) reserved = want; paintBuy(); };
       const n = document.createElement('span'); n.className = 'n'; n.textContent = want;
-      const buy = mk(`Comprar ${want} ${want === 1 ? 'cartón' : 'cartones'} · ${nf(want * s.price)} ${word(want * s.price)}`, buyCards);
-      buy.className = 'go'; buy.disabled = busy;
-      frag.append(mk('−', () => { want = Math.max(1, want - 1); paintBuy(); }), n, mk('+', () => { want = Math.min(left, want + 1); paintBuy(); }), mk('Máx', () => { want = left; paintBuy(); }), buy);
+      const cost = `${want} ${want === 1 ? 'cartón' : 'cartones'} · ${nf(want * s.price)} ${word(want * s.price)}`;
+      let buy;
+      if (nextOnly) {
+        buy = mk(reserved ? `✅ ${reserved} ${reserved === 1 ? 'cartón reservado' : 'cartones reservados'} · toca para cancelar` : `COMPRAR PARA LA PRÓXIMA PARTIDA · ${cost}`, () => { reserved = reserved ? 0 : want; paintBuy(); });
+        buy.className = 'go' + (reserved ? ' ok' : '');
+      } else { buy = mk(`Comprar ${cost}`, () => buyCards()); buy.className = 'go'; buy.disabled = busy; }
+      frag.append(mk('−', () => setWant(Math.max(1, want - 1))), n, mk('+', () => setWant(Math.min(left, want + 1))), mk('Máx', () => setWant(left)), buy);
+      if (nextOnly) { const h = document.createElement('div'); h.className = 'bn-hint'; h.textContent = 'Se compran solos cuando se abra la próxima partida (deja el bingo abierto).'; frag.append(h); }
     }
     elBuy.replaceChildren(frag);
   }
@@ -343,8 +363,12 @@
   function paintTimer() {
     const s = state; if (!s) return;
     let t = '', blink = false;
-    if (s.phase === 'buying') { t = '⏳ Próxima partida en ' + fmtLeft(s.buyUntil - (Date.now() + offset)); blink = true; }
-    else if (s.phase === 'drawing') t = '🎱 Partida en juego';
+    if (s.phase === 'buying') {
+      const left = s.buyUntil - (Date.now() + offset);
+      t = '⏳ Próxima partida en ' + fmtLeft(left); blink = true;
+      if (left <= 4500 && left > 800 && startSpoken !== s.round) { startSpoken = s.round; speak('Comenzamos para bingo, suerte a todos.', 1); }   // justo antes de empezar
+    }
+    else if (s.phase === 'drawing') t = s.mine && s.mine.length ? '🎱 Partida en juego' : '👀 En juego · compra para la próxima';
     else if (s.phase === 'done') t = '🏁 Partida terminada';
     else t = '⏳ Próxima partida en ' + fmtLeft(s.buyMs || 60000);
     elTimer.textContent = t; elTimer.classList.toggle('blink', blink);
@@ -385,15 +409,18 @@
     }
     if (newBingo) {
       announced.bingo = 1;
-      celebrate(true, `¡Bingo! ${names(s.bingo)}`);
-      showBanner('BINGO', s.bingo);
-      if (s.bingo.mine) say(`🏆 ¡BINGO! Ganas ${s.bingo.prize} ${word(s.bingo.prize)}`);
+      const jp = s.jackpotPrize || 0, many = s.bingo.winners && s.bingo.winners.length > 1;
+      celebrate(true, `¡Bingo! ${names(s.bingo)}${jp ? '. ¡Y se lleva el bote acumulado!' : ''}`);
+      showBanner('BINGO', s.bingo, null, jp ? `💰 ¡BOTE ACUMULADO! +${dots(jp)} ${word(jp)}${many ? ' cada uno' : ''}` : '', jp ? 10000 : 0);
+      if (jp) confetti(10000);
+      if (s.bingo.mine) say(`🏆 ¡BINGO! Ganas ${s.bingo.prize} ${word(s.bingo.prize)}${jp ? ` y el BOTE: ${dots(jp)}` : ''}`);
       else say(`🏆 Bingo de ${names(s.bingo)}. ¡Suerte en la próxima!`);
     }
     paintWins(); paintTube(); paintCards(); paintBuy(); paintTimer(); paintCaption();
+    if (reserved > 0 && s.phase === 'buying' && !busy && (!s.mine || !s.mine.length)) { want = Math.min(reserved, s.maxCards); reserved = 0; buyCards(); }   // la reserva se compra sola al abrirse la próxima partida
   }
 
-  let loadErr = false;
+  let loadErr = false, reserved = 0, startSpoken = 0;   // reserved: cartones que se compran solos al abrirse la próxima partida
   async function load() {
     try { apply(await api('/api/bingo')); if (loadErr) { loadErr = false; say(''); } }
     catch (e) { loadErr = true; const m = String((e && e.message) || ''); say(/failed to fetch|network/i.test(m) ? 'Sin conexión, reintentando…' : (m || 'No se pudo cargar el bingo'), true); }
@@ -423,7 +450,7 @@
     load(); clearInterval(timer); timer = setInterval(tick, 500);
   }
   function close() {
-    hideBanner(); stopConfetti(); clearTimeout(voiceT); modal.classList.add('hidden'); clearInterval(timer); timer = null; try { speechSynthesis.cancel(); } catch (e) { /* nada */ }
+    reserved = 0; hideBanner(); stopConfetti(); clearTimeout(voiceT); modal.classList.add('hidden'); clearInterval(timer); timer = null; try { speechSynthesis.cancel(); } catch (e) { /* nada */ }
     if (earthWasMuted === false && window.fightMute) window.fightMute(false);   // vuelve el sonido de la Tierra
     earthWasMuted = null;
   }

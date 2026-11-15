@@ -5,6 +5,9 @@
 //  · Bingo de 90 bolas: cartón de 3 filas × 9 columnas con 15 números. Línea = una fila completa; bingo = el cartón entero.
 //  · La partida empieza SOLA: la cuenta atrás de 1 minuto arranca en cuanto se acaba la anterior (no hace falta que nadie compre).
 //    Si al acabar la cuenta atrás no hay cartones, salen unas pocas bolas de muestra (BINGO_EMPTY_BALLS) y vuelve a empezar la cuenta atrás.
+//  · BOTE ACUMULADO: empieza en BINGO_JACKPOT_BASE (1000) créditos y sube BINGO_JACKPOT_STEP (1) con cada partida que termina. Se lo lleva (a partes iguales si hay varios)
+//    quien canta bingo en BINGO_JACKPOT_BALLS (44) bolas o menos, además del premio del bingo; entonces vuelve a empezar en 1000.
+//  · Con varios jugadores: línea 20 % y bingo 80 % de los créditos gastados entre todos en esa partida (prizesFor).
 //  · Solo hay UNA línea y UN bingo por ronda (el primero que se completa). Si dos o más jugadores lo completan con la misma bola, se reparten el premio a partes iguales (hacia abajo).
 //  · Al cantarse la línea el juego se para LINE_PAUSE (8 s): el navegador enseña el rótulo 5 s, dice «Continuamos para bingo» y siguen las bolas.
 //  · Premios (el bote son los cartones vendidos × precio):
@@ -26,6 +29,8 @@ module.exports = function (d) {
   const BALL_MS = Math.max(1, numEnv('BINGO_BALL_SECONDS', 4)) * 1000;
   const SOLO_LINE = Math.floor(numEnv('BINGO_SOLO_LINE', 5)), SOLO_BINGO = Math.floor(numEnv('BINGO_SOLO_BINGO', 20));
   const LINE_PCT = 0.2, BINGO_PCT = 0.8;
+  const JACKPOT_BASE = Math.max(0, Math.floor(numEnv('BINGO_JACKPOT_BASE', 1000))), JACKPOT_STEP = Math.max(0, Math.floor(numEnv('BINGO_JACKPOT_STEP', 1)));
+  const JACKPOT_BALLS = Math.max(1, Math.min(90, Math.floor(numEnv('BINGO_JACKPOT_BALLS', 44))));
   const AUTO = String(process.env.BINGO_AUTO || 'on').toLowerCase() !== 'off';   // las partidas empiezan solas
   const EMPTY_BALLS = Math.max(1, Math.floor(numEnv('BINGO_EMPTY_BALLS', 12)));   // bolas de muestra si nadie compró
   const LINE_PAUSE_MS = Math.max(0, numEnv('BINGO_LINE_PAUSE_SECONDS', 8)) * 1000;   // pausa tras cantar la línea
@@ -45,6 +50,10 @@ module.exports = function (d) {
     await run('CREATE TABLE IF NOT EXISTS bingo_rounds (id BIGSERIAL PRIMARY KEY, status TEXT NOT NULL, ord TEXT NOT NULL, created_at BIGINT NOT NULL, buy_until BIGINT NOT NULL, draw_start BIGINT, evaluated INT NOT NULL DEFAULT 0, finished_at BIGINT, line_user TEXT, line_nick TEXT, line_country TEXT, line_avatar TEXT, line_ball INT, line_prize INT, bingo_user TEXT, bingo_nick TEXT, bingo_country TEXT, bingo_avatar TEXT, bingo_ball INT, bingo_prize INT)');
     await run('CREATE TABLE IF NOT EXISTS bingo_cards (id BIGSERIAL PRIMARY KEY, round_id BIGINT NOT NULL, user_id TEXT NOT NULL, pack_code TEXT NOT NULL, nick TEXT NOT NULL, country TEXT, avatar TEXT, grid TEXT NOT NULL, created_at BIGINT NOT NULL)');
     await run('CREATE INDEX IF NOT EXISTS bingo_cards_round ON bingo_cards (round_id, user_id)');
+    await run('CREATE TABLE IF NOT EXISTS bingo_jackpot (id INT PRIMARY KEY, amount BIGINT NOT NULL)');
+    await run('INSERT INTO bingo_jackpot (id, amount) VALUES (1, $1) ON CONFLICT (id) DO NOTHING', [JACKPOT_BASE]);
+    await run('ALTER TABLE public.bingo_jackpot ENABLE ROW LEVEL SECURITY').catch(() => {});
+    await run('ALTER TABLE bingo_rounds ADD COLUMN IF NOT EXISTS jackpot_prize INT').catch(() => {});
     await run('ALTER TABLE bingo_rounds ADD COLUMN IF NOT EXISTS line_all TEXT').catch(() => {});    // todos los ganadores (si se reparten)
     await run('ALTER TABLE bingo_rounds ADD COLUMN IF NOT EXISTS bingo_all TEXT').catch(() => {});
     await run('ALTER TABLE public.bingo_rounds ENABLE ROW LEVEL SECURITY').catch(() => {});   // solo el servidor accede
@@ -124,6 +133,7 @@ module.exports = function (d) {
       const cards = (await client.query('SELECT id, user_id, pack_code, nick, country, avatar, grid FROM bingo_cards WHERE round_id = $1', [r.id])).rows
         .map(c => ({ ...c, rows: rowsOf(JSON.parse(c.grid)) }));
       const upd = { status, draw_start: drawStart };
+      let jackpotWon = false;
       if (!cards.length) {   // nadie compró: salen unas bolas de muestra y se acaba, para que empiece la cuenta atrás de la siguiente
         evaluated = Math.min(total, EMPTY_BALLS);
         if (total >= EMPTY_BALLS) { upd.status = 'done'; upd.finished_at = now; }
@@ -154,13 +164,22 @@ module.exports = function (d) {
           }
           const full = cards.filter(c => c.rows.every(row => row.every(n => drawn.has(n))));
           if (full.length) {
-            await pay(uniq(full), prizes.bingo, 'bingo');
+            const ws = uniq(full);
+            await pay(ws, prizes.bingo, 'bingo');
             Object.assign(upd, { bingo_ball: k, status: 'done', finished_at: now });
+            if (k <= JACKPOT_BALLS) {   // bingo en 44 bolas o menos: se llevan el bote acumulado y vuelve a empezar
+              const jp = Number(((await client.query('SELECT amount FROM bingo_jackpot WHERE id = 1 FOR UPDATE')).rows[0] || { amount: JACKPOT_BASE }).amount);
+              const share = Math.floor(jp / ws.length);
+              if (share > 0) for (const x of ws) await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2', [share, x.pack_code]);
+              upd.jackpot_prize = share; jackpotWon = true;
+              await client.query('UPDATE bingo_jackpot SET amount = $1 WHERE id = 1', [JACKPOT_BASE]);
+            }
             break;
           }
           if (lineNow && LINE_PAUSE_MS > 0) { drawStart += LINE_PAUSE_MS; upd.draw_start = drawStart; break; }   // el juego se para para cantar la línea
         }
       }
+      if (upd.status === 'done' && !jackpotWon) await client.query('UPDATE bingo_jackpot SET amount = amount + $1 WHERE id = 1', [JACKPOT_STEP]);   // cada partida que termina suma al bote
       upd.evaluated = evaluated;
       const keys = Object.keys(upd);
       await client.query(`UPDATE bingo_rounds SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')} WHERE id = $1`, [r.id, ...keys.map(k => upd[k])]);
@@ -183,7 +202,8 @@ module.exports = function (d) {
     const uid = String(user.id);
     const pack = await ensureUserPack(user);
     const now = Date.now();
-    const base = { ok: true, on: true, now, connected: connected(), price: PRICE, maxCards: MAX_CARDS, ballMs: BALL_MS, credits: Number(pack.credits), soloLine: SOLO_LINE, soloBingo: SOLO_BINGO };
+    const jpRow = (await all('SELECT amount FROM bingo_jackpot WHERE id = 1'))[0];
+    const base = { jackpot: jpRow ? Number(jpRow.amount) : JACKPOT_BASE, jackpotBalls: JACKPOT_BALLS, ok: true, on: true, now, connected: connected(), price: PRICE, maxCards: MAX_CARDS, ballMs: BALL_MS, credits: Number(pack.credits), soloLine: SOLO_LINE, soloBingo: SOLO_BINGO };
     const r = (await all('SELECT * FROM bingo_rounds ORDER BY id DESC LIMIT 1'))[0];
     let phase = 'idle';
     if (r) {
@@ -200,6 +220,7 @@ module.exports = function (d) {
     return {
       ...base, phase, round: Number(r.id), buyUntil: Number(r.buy_until), drawStart: r.draw_start === null ? null : Number(r.draw_start),
       finishedAt: r.finished_at === null ? null : Number(r.finished_at), drawn, line, bingo,
+      jackpotPrize: Number(r.jackpot_prize) || 0,
       players, cardsTotal: cards.length, pot: p.pot, linePrize: p.line, bingoPrize: p.bingo,
       mine: cards.filter(c => c.user_id === uid).map(c => ({ id: Number(c.id), grid: JSON.parse(c.grid) }))
     };
