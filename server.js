@@ -95,8 +95,8 @@ const q = {
   parcelById: id => one('SELECT * FROM parcels WHERE id = $1', [id]),
   parcelsOverview: (world = 'tierra') => all('SELECT x, y, owner FROM parcels WHERE world = $1 LIMIT 400000', [world]),
   parcelsInBox: (x0, x1, y0, y1, world = 'tierra') => all('SELECT id, x, y, owner, avatar, country, house, level FROM parcels WHERE world = $5 AND x BETWEEN $1 AND $2 AND y BETWEEN $3 AND $4 LIMIT 3000', [x0, x1, y0, y1, world]),
-  insertParcel: (id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house) =>
-    run('INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, house) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)', [id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house]),
+  insertParcel: (id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house, world = 'tierra', city = null) =>   // world y city: los jugadores automáticos de otros mundos (bots.js)
+    run('INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, house, world, city) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)', [id, x, y, owner, orderId, paid, currency, createdAt, avatar, country, house, world, city]),
   activeOrderForParcel: (id, now) => one("SELECT order_id FROM orders WHERE parcel_id = $1 AND status = 'CREATED' AND expires_at > $2", [id, now]),
   insertOrder: (orderId, parcelId, owner, status, expiresAt, createdAt, avatar) =>
     run('INSERT INTO orders (order_id, parcel_id, owner, status, expires_at, created_at, avatar) VALUES ($1,$2,$3,$4,$5,$6,$7)', [orderId, parcelId, owner, status, expiresAt, createdAt, avatar]),
@@ -104,7 +104,7 @@ const q = {
   setOrderStatus: (status, id) => run('UPDATE orders SET status = $1 WHERE order_id = $2', [status, id]),
   purgeOrders: now => run("DELETE FROM orders WHERE status = 'CREATED' AND expires_at <= $1", [now]),
   count: () => one('SELECT COUNT(*) AS n FROM parcels'),
-  topCountries: () => all('SELECT country, COUNT(*) AS n FROM parcels WHERE country IS NOT NULL GROUP BY country ORDER BY n DESC LIMIT 10'),
+  topCountries: () => all("SELECT country, COUNT(*) AS n FROM parcels WHERE country IS NOT NULL AND world = 'tierra' GROUP BY country ORDER BY n DESC LIMIT 10"),
   top: () => all('SELECT owner, COUNT(*) AS n, (ARRAY_AGG(country ORDER BY created_at DESC) FILTER (WHERE country IS NOT NULL))[1] AS country FROM parcels GROUP BY owner ORDER BY n DESC, MIN(created_at) ASC LIMIT 10'),
 };
 // ---------- Avatares ----------
@@ -2172,7 +2172,7 @@ async function rankCities(url) {
   const country = cleanCountry(url.searchParams.get('country'));
   if (!country) throw new HttpError(400, 'País no válido');
   const rows = await all('SELECT city, owner, COUNT(*) AS n FROM parcels WHERE country = $1 AND city IS NOT NULL AND city <> $2 GROUP BY city, owner', [country, CITY_NONE]);
-  const other = Number((await one('SELECT COUNT(*) AS n FROM parcels WHERE country = $1 AND (city IS NULL OR city = $2)', [country, CITY_NONE])).n);
+  const other = Number((await one("SELECT COUNT(*) AS n FROM parcels WHERE country = $1 AND world = 'tierra' AND (city IS NULL OR city = $2)", [country, CITY_NONE])).n);
   return { country, cities: groupCities(rows), other };
 }
 
@@ -2966,7 +2966,8 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
   .then(() => rascaMod().init()).catch(e => console.error('No se pudieron crear las tablas del rasca y gana:', e.message))
   .then(() => mjMod().init()).catch(e => console.error('No se pudieron crear las tablas de los juegos nuevos:', e.message))
   .then(() => parejasMod().init()).catch(e => console.error('No se pudieron crear las tablas de las parejas:', e.message))
-  .then(() => bots.start({ run, q, parcelFromLatLng, isUniqueViolation }))
+  .then(() => bots.start({ run, q, parcelFromLatLng, isUniqueViolation, cityNone: CITY_NONE,
+    parcelOk: (world, x, y) => world !== 'prehistoria' || PREHISTORIA.parcelOk(x, y, SIZE) }))   // en Prehistoria los jugadores automáticos no reclaman bajo el agua
   .then(async () => {   // tablas de "Invita y gana" (no hacen nada si ya existen)
     await run('CREATE TABLE IF NOT EXISTS ref_codes (code TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, created_at BIGINT NOT NULL, last_ip TEXT)');
     await run('CREATE TABLE IF NOT EXISTS referrals (invitee_id TEXT PRIMARY KEY, inviter_id TEXT NOT NULL, created_at BIGINT NOT NULL, ip_hash TEXT, rewarded_at BIGINT, inviter_credits INT NOT NULL DEFAULT 0)');
@@ -3818,11 +3819,11 @@ async function worldStats(url, req) {
   const owners = Number((await one('SELECT COUNT(DISTINCT COALESCE(user_id::text, owner)) AS n FROM parcels WHERE world = $1', [world])).n);
   const pres = await worldPresident(world);
   // Ranking: un puesto por jugador (por cuenta si la tiene, si no por nombre). x,y = su primera parcela, para que al tocarlo el mapa vuele hasta allí
-  const rows = await all(`SELECT (ARRAY_AGG(owner ORDER BY created_at DESC))[1] AS owner, COUNT(*) AS n, MIN(created_at) AS first,
+  const rows = await all(`SELECT (ARRAY_AGG(owner ORDER BY created_at DESC))[1] AS owner, (ARRAY_AGG(country ORDER BY created_at DESC) FILTER (WHERE country IS NOT NULL))[1] AS country, COUNT(*) AS n, MIN(created_at) AS first,
       (ARRAY_AGG(x ORDER BY created_at ASC))[1] AS x, (ARRAY_AGG(y ORDER BY created_at ASC))[1] AS y,
       MAX(user_id::text) AS uid
     FROM parcels WHERE world = $1 GROUP BY COALESCE(user_id::text, 'o:' || owner) ORDER BY n DESC, first ASC LIMIT 10`, [world]);
-  const top = rows.map(r => ({ owner: r.owner, n: Number(r.n), president: !!(pres && r.uid && String(r.uid) === pres.user_id), me: !!(uid && r.uid && String(r.uid) === uid), ...worldCenter(Number(r.x), Number(r.y), world) }));
+  const top = rows.map(r => ({ owner: r.owner, country: r.country || null, n: Number(r.n), president: !!(pres && r.uid && String(r.uid) === pres.user_id), me: !!(uid && r.uid && String(r.uid) === uid), ...worldCenter(Number(r.x), Number(r.y), world) }));
   const recent = (await all('SELECT owner, created_at FROM parcels WHERE world = $1 ORDER BY created_at DESC LIMIT 5', [world])).map(r => ({ owner: r.owner, at: Number(r.created_at) }));
   let mine = null, claim = { prize: PRESIDENT_CREDITS, month: dayKey().slice(0, 7), isPresident: false, canClaim: false, claimed: false };
   if (user) {

@@ -1,5 +1,5 @@
 'use strict';
-// Jugadores automáticos 🌍: uno por país, en TODOS los países del mundo (197: los 193 de la ONU + Vaticano, Palestina, Kosovo y
+// Jugadores automáticos 🌍🚀: uno por país, en TODOS los países del mundo (197: los 193 de la ONU + Vaticano, Palestina, Kosovo y
 // Taiwán), cada uno con su bandera y un apodo típico de su país. Los datos están en bots-data.js (16 países a mano) y en
 // bots-data-mundo.js + bots-mundo-<región>.js (el resto). Cada uno reclama UNA parcela al día, al azar, siempre dentro de su país.
 //   · Sin cuenta (user_id NULL): no cobran, no reciben ni gastan créditos y no pueden ser presidentes de pueblo.
@@ -15,22 +15,32 @@
 //   BOTS_OFF=DE,RU        apaga solo los de esos países (códigos de 2 letras)
 //   BOT_NAME_DE=Hans      cambia el nombre del de Alemania (BOT_NAME_<PAÍS>); también vale FRANCOIS_NAME para Francia
 //   FRANCOIS=off          apaga solo a Francóis (compatibilidad)
-// Para quitar las parcelas de un bot:  DELETE FROM parcels WHERE currency = 'BOT' AND country = 'DE';
+//   BOTS_MUNDOS=off       apaga solo los de los otros mundos (Luna, Marte...); BOTS_OFF=luna,marte apaga solo los de esos mundos
+//   BOT_NAME_LUNA=Neil    cambia el nombre del de un mundo (BOT_NAME_<MUNDO>)
+// Para quitar las parcelas de un bot:  DELETE FROM parcels WHERE currency = 'BOT' AND country = 'DE' AND world = 'tierra';
+//
+// 🚀 Jugadores de los OTROS MUNDOS (bots-mundos.js): uno por mundo (Luna, Marte, Mercurio, Venus, Júpiter, Saturno, Urano, Neptuno,
+// Plutón y Prehistoria), cada uno con su apodo y su bandera (distintos entre sí). También reclaman una parcela al día, cerca del
+// punto de aterrizaje o de los lugares con nombre de su mundo; en Prehistoria nunca bajo el agua. Quitar las de un mundo:
+//   DELETE FROM parcels WHERE currency = 'BOT' AND world = 'luna';
 const DATA = require('./bots-data').concat(require('./bots-data-mundo'));   // 16 países a mano + el resto del mundo (bots-data-mundo.js)
+const WORLD_DATA = require('./bots-mundos');                                  // uno por mundo: Luna, Marte, ... Prehistoria (bots-mundos.js)
 
 const ALL_ON = String(process.env.BOTS || '').toLowerCase() !== 'off';
+const WORLDS_ON = String(process.env.BOTS_MUNDOS || '').toLowerCase() !== 'off';
 const OFF = new Set(String(process.env.BOTS_OFF || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean));
 if (String(process.env.FRANCOIS || '').toLowerCase() === 'off') OFF.add('FR');
 const FROM_MIN = 8 * 60, TO_MIN = 22 * 60;     // franja del día en que reclaman (minutos desde medianoche, hora del país)
 const TRIES = 60;                              // intentos de encontrar una parcela libre cada día
 
 const nameOf = b => {
-  const env = (b.cc === 'FR' && process.env.FRANCOIS_NAME) || process.env['BOT_NAME_' + b.cc] || '';
+  const env = (b.cc === 'FR' && !b.world && process.env.FRANCOIS_NAME) || process.env['BOT_NAME_' + (b.world ? b.world.toUpperCase() : b.cc)] || '';
   const n = env.normalize('NFC').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 30);
   return n.length >= 2 ? n : b.name;
 };
-const BOTS = DATA.map(b => ({ ...b, name: nameOf(b) }));
-const activeBots = () => (ALL_ON ? BOTS.filter(b => !OFF.has(b.cc)) : []);
+const BOTS = DATA.map(b => ({ ...b, name: nameOf(b) }));                       // los de la Tierra: uno por país
+const WORLD_BOTS = WORLD_DATA.map(b => ({ ...b, name: nameOf(b) }));          // los de los otros mundos: uno por mundo
+const activeBots = () => (ALL_ON ? BOTS.filter(b => !OFF.has(b.cc)).concat(WORLDS_ON ? WORLD_BOTS.filter(b => !OFF.has(b.world.toUpperCase())) : []) : []);
 
 const insideBox = (b, lat, lng) => lat >= b.box.latMin && lat <= b.box.latMax && lng >= b.box.lngMin && lng <= b.box.lngMax;
 
@@ -43,6 +53,15 @@ function pickSpot(b, rand = Math.random) {
   return { town, lat, lng };
 }
 
+// Un punto al azar a como mucho `spread` grados de uno de los centros de un mundo (aterrizaje y lugares con nombre).
+function pickWorldSpot(b, rand = Math.random) {
+  const [town, lng0, lat0] = b.centers[Math.floor(rand() * b.centers.length)];
+  const r = b.spread * Math.sqrt(rand()), a = rand() * Math.PI * 2;
+  const lat = Math.max(-80, Math.min(80, lat0 + r * Math.sin(a)));
+  const lng = Math.max(-179.9, Math.min(179.9, lng0 + r * Math.cos(a)));
+  return { town, lat, lng };
+}
+
 // Minuto del día (entre FROM_MIN y TO_MIN) en el que reclama ese bot ese día; sale del propio día y del bot, así que no cambia si se reinicia el servidor.
 function plannedMinute(botId, day) {
   let h = 2166136261;
@@ -51,11 +70,13 @@ function plannedMinute(botId, day) {
   return FROM_MIN + (h % (TO_MIN - FROM_MIN));
 }
 
-// deps: { run, q, parcelFromLatLng, isUniqueViolation }  (todo viene de server.js; `now` y `manual` solo los usan las pruebas)
+// deps: { run, q, parcelFromLatLng, isUniqueViolation, parcelOk, cityNone }  (todo viene de server.js; `now` y `manual` solo los usan las pruebas)
+//   parcelOk(world, x, y): false si esa parcela no se puede reclamar (en Prehistoria, bajo el agua); cityNone: el «pueblo» de las parcelas de otros mundos.
 function start(deps) {
   const bots = activeBots();
   if (!bots.length) return;
   const { run, q, parcelFromLatLng, isUniqueViolation } = deps, now = deps.now || Date.now;
+  const parcelOk = deps.parcelOk || (() => true), cityNone = deps.cityNone || null;
   const clocks = new Map(bots.map(b => [b.id, new Intl.DateTimeFormat('en-GB', { timeZone: b.tz, hour: 'numeric', minute: 'numeric', hourCycle: 'h23' })]));
   const dayOf = b => new Date(now()).toLocaleDateString('en-CA', { timeZone: b.tz });   // AAAA-MM-DD en la zona del país
   const minuteOf = b => {
@@ -66,14 +87,16 @@ function start(deps) {
 
   async function claimOne(b) {
     for (let i = 0; i < TRIES; i++) {
-      const s = pickSpot(b);
-      if (!insideBox(b, s.lat, s.lng)) continue;
-      const p = parcelFromLatLng(s.lat, s.lng);
+      const s = b.world ? pickWorldSpot(b) : pickSpot(b);
+      if (!b.world && !insideBox(b, s.lat, s.lng)) continue;
+      const p = parcelFromLatLng(s.lat, s.lng, b.world || 'tierra');
       if (!p) continue;
+      if (b.world && !parcelOk(b.world, p.x, p.y)) continue;                              // bajo el agua (Prehistoria): prueba otra
       const t = now();
       if (await q.parcelById(p.id) || await q.activeOrderForParcel(p.id, t)) continue;   // ocupada: prueba otra
       try {
-        await q.insertParcel(p.id, p.x, p.y, b.name, null, '0.00', 'BOT', t, b.avatar, b.cc, null);   // casa null = al azar
+        // casa null = al azar; en otros mundos, con su mundo y sin pueblo (como las que se compran allí)
+        await q.insertParcel(p.id, p.x, p.y, b.name, null, '0.00', 'BOT', t, b.avatar, b.cc, null, b.world || 'tierra', b.world ? cityNone : null);
       } catch (e) { if (isUniqueViolation(e)) continue; throw e; }
       return { id: p.id, town: s.town };
     }
@@ -87,7 +110,7 @@ function start(deps) {
     if (!ins.rowCount) return;                                                             // hoy ya reclamó
     let got = null;
     try { got = await claimOne(b); } catch (e) { console.error(`Bot ${b.name} (${b.cc}):`, e.message); }
-    if (got) console.log(`Bot ${b.name} (${b.cc}) ha reclamado ${got.id} en ${got.town}`);
+    if (got) console.log(`Bot ${b.name} (${b.world || b.cc}) ha reclamado ${got.id} en ${got.town}`);
     else await run('DELETE FROM bot_runs WHERE bot = $1 AND day = $2', [b.id, day]).catch(() => {});   // sin hueco o con error: reintenta en 10 min
   }
 
@@ -104,4 +127,4 @@ function start(deps) {
     .catch(e => console.error('Bots: no se pudo crear bot_runs:', e.message));
 }
 
-module.exports = { BOTS, activeBots, insideBox, pickSpot, plannedMinute, FROM_MIN, TO_MIN, start };
+module.exports = { BOTS, WORLD_BOTS, activeBots, insideBox, pickSpot, pickWorldSpot, plannedMinute, FROM_MIN, TO_MIN, start };

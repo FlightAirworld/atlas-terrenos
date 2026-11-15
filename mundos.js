@@ -318,7 +318,7 @@
       j.top.forEach((t, i) => {
         const li = add('li', 'click' + (t.president ? ' first' : ''), null, ol);
         li.tabIndex = 0; li.setAttribute('role', 'button'); li.title = 'Ir a su terreno';
-        add('span', '', `${t.president ? '👑 ' : (i + 1) + '. '}${t.owner}${t.me ? ' (tú)' : ''}`, li); add('span', '', fmt(t.n), li);
+        add('span', '', `${t.president ? '👑 ' : (i + 1) + '. '}${t.country && typeof flagOf === 'function' ? flagOf(t.country) + ' ' : ''}${t.owner}${t.me ? ' (tú)' : ''}`, li); add('span', '', fmt(t.n), li);
         const go = () => { box.querySelector('.mundo-sheet').classList.add('hidden'); flyToOwner(id, t); };
         li.addEventListener('click', go); li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
       });
@@ -497,7 +497,8 @@
       if (lng < b.getWest() || lng > b.getEast() || lat < b.getSouth() || lat > b.getNorth()) return;
       const el = document.createElement('div'); el.className = 'mundo-owner';
       const lvl = typeof levelOf === 'function' ? levelOf(p) : 1;
-      el.textContent = (p.owner || '') + (lvl > 1 && typeof starsOf === 'function' ? ' ' + starsOf(lvl) : '');
+      const fl = typeof flagOf === 'function' ? flagOf(p.country) : '';   // bandera del jugador (los jugadores automáticos de cada mundo la llevan)
+      el.textContent = (fl ? fl + ' ' : '') + (p.owner || '') + (lvl > 1 && typeof starsOf === 'function' ? ' ' + starsOf(lvl) : '');
       el.style.borderColor = colorOf(p.owner || '');
       st.labels.push(new maplibregl.Marker({ element: el, anchor: 'bottom' }).setLngLat([lng, lat]).addTo(m)); n++;
     });

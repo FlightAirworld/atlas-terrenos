@@ -78,20 +78,87 @@ test('Bots: cada bot reclama una sola parcela al día, en su país, y otra al d�
     q: {
       parcelById: async id => parcels.find(x => x.id === id),
       activeOrderForParcel: async () => null,
-      insertParcel: async (id, x, y, owner, o, paid, cur, at, avatar, country, house) => { parcels.push({ id, owner, cur, country, house, at }); },
+      insertParcel: async (id, x, y, owner, o, paid, cur, at, avatar, country, house, world = 'tierra') => { parcels.push({ id, owner, cur, country, house, at, world }); },
     },
     parcelFromLatLng: (lat, lng) => { const x = Math.floor((lng + 180) / 0.0005), y = Math.floor((lat + 90) / 0.0005); return { id: x + ':' + y, x, y }; },
     isUniqueViolation: () => false,
   };
   const tick = bots.start(deps);
   await tick(); await tick(); await tick();            // varios ticks el mismo día: no duplican
-  const byCountry = c => parcels.filter(p => p.country === c).length;
+  const byCountry = c => parcels.filter(p => p.country === c && p.world === 'tierra').length;   // solo los de la Tierra: los de los otros mundos llevan banderas de países también
   for (const p of parcels) { assert.strictEqual(p.cur, 'BOT'); assert.strictEqual(p.house, null); }
   for (const b of bots.BOTS) assert.ok(byCountry(b.cc) <= 1, b.cc + ' reclamó más de una el mismo día');
-  assert.ok(parcels.length >= 100, 'a esa hora la mayoría ya debería haber reclamado');
+  assert.ok(parcels.filter(p => p.world === 'tierra').length >= 100, 'a esa hora la mayoría ya debería haber reclamado');
   const first = parcels.length;
   clock += 24 * 3600e3; await tick(); await tick();    // día siguiente
   assert.ok(parcels.length > first, 'al día siguiente reclaman otra');
   clock += 24 * 3600e3; await tick();
   for (const b of bots.BOTS) assert.ok(byCountry(b.cc) <= 3, b.cc + ' reclamó más de una por día');
+});
+
+// ---------- Jugadores de los otros mundos (bots-mundos.js) ----------
+const PT = require('./prehistoria-terreno.js');
+const MUNDOS = ['luna', 'marte', 'mercurio', 'venus', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton', 'prehistoria'];   // los de WORLDS de server.js menos la Tierra
+test('Bots de los mundos: hay uno en cada mundo, con apodo y bandera propios y distintos de los demás', () => {
+  assert.deepStrictEqual(bots.WORLD_BOTS.map(b => b.world).sort(), [...MUNDOS].sort());
+  assert.strictEqual(new Set(bots.WORLD_BOTS.map(b => b.name)).size, MUNDOS.length, 'apodos repetidos entre mundos');
+  assert.strictEqual(new Set(bots.WORLD_BOTS.map(b => b.cc)).size, MUNDOS.length, 'banderas repetidas entre mundos');
+  assert.strictEqual(new Set(bots.WORLD_BOTS.map(b => b.id)).size, MUNDOS.length, 'ids repetidos');
+  const earth = new Set([...bots.BOTS.map(b => b.name.toLowerCase()), ...bots.BOTS.map(b => b.id)]);
+  const AVATARS = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀','👑','⚽','🌟'];
+  for (const b of bots.WORLD_BOTS) {
+    assert.ok(!earth.has(b.name.toLowerCase()) && !earth.has(b.id), b.world + ': choca con un jugador de la Tierra');
+    assert.match(b.cc, /^[A-Z]{2}$/);
+    assert.ok(b.name.length >= 2 && b.name.length <= 30);
+    assert.ok(AVATARS.includes(b.avatar), b.world + ': avatar no permitido');
+    new Intl.DateTimeFormat('en-GB', { timeZone: b.tz });
+    assert.ok(b.centers.length >= 1 && b.spread > 0 && b.spread <= 0.05);
+  }
+  assert.ok(!bots.BOTS.some(b => b.world), 'los de los mundos no van en la lista de países');
+});
+test('Bots de los mundos: 10.000 puntos por mundo caen cerca de uno de sus centros y dentro del mapa', () => {
+  for (const b of bots.WORLD_BOTS) for (let i = 0; i < 10000; i++) {
+    const s = bots.pickWorldSpot(b);
+    assert.ok(s.lat >= -80 && s.lat <= 80 && s.lng >= -179.9 && s.lng <= 179.9, `${b.world}: fuera del mapa`);
+    const c = b.centers.find(x => x[0] === s.town);
+    assert.ok(Math.hypot(s.lat - c[2], s.lng - c[1]) <= b.spread + 1e-9 || Math.abs(Math.abs(c[2]) - 80) < b.spread, `${b.world}: demasiado lejos de ${s.town}`);
+  }
+});
+test('Bots de los mundos: reclaman una parcela al día en SU mundo (con bandera, sin pueblo y en Prehistoria nunca bajo el agua)', async () => {
+  const parcels = [], runs = new Set();
+  let clock = Date.parse('2026-06-10T21:30:00Z');   // las 23:30 en Madrid: ya pasó la hora de hoy de todos
+  const SIZE = 0.0005;
+  const deps = {
+    now: () => clock, manual: true, cityNone: 'Sin ciudad',
+    parcelOk: (world, x, y) => world !== 'prehistoria' || PT.parcelOk(x, y, SIZE),
+    run: async (sql, p) => {
+      if (/INSERT INTO bot_runs/.test(sql)) { const k = p[0] + '|' + p[1]; if (runs.has(k)) return { rowCount: 0 }; runs.add(k); return { rowCount: 1 }; }
+      if (/DELETE FROM bot_runs/.test(sql)) { runs.delete(p[0] + '|' + p[1]); return { rowCount: 1 }; }
+      return { rowCount: 0 };
+    },
+    q: {
+      parcelById: async id => parcels.find(x => x.id === id),
+      activeOrderForParcel: async () => null,
+      insertParcel: async (id, x, y, owner, o, paid, cur, at, avatar, country, house, world, city) => { parcels.push({ id, x, y, owner, cur, country, house, world, city }); },
+    },
+    parcelFromLatLng: (lat, lng, world = 'tierra') => { const x = Math.floor((lng + 180) / SIZE), y = Math.floor((lat + 90) / SIZE); return { id: world === 'tierra' ? x + ':' + y : world + ':' + x + ':' + y, x, y }; },
+    isUniqueViolation: () => false,
+  };
+  const tick = bots.start(deps);
+  await tick(); await tick(); await tick();            // varios ticks el mismo día: no duplican
+  for (const b of bots.WORLD_BOTS) {
+    const mine = parcels.filter(p => p.world === b.world);
+    assert.strictEqual(mine.length, 1, b.world + ': debería reclamar exactamente una el primer día');
+    const p = mine[0];
+    assert.strictEqual(p.owner, b.name); assert.strictEqual(p.country, b.cc); assert.strictEqual(p.cur, 'BOT');
+    assert.strictEqual(p.house, null); assert.strictEqual(p.city, 'Sin ciudad'); assert.ok(p.id.startsWith(b.world + ':'));
+  }
+  for (let d = 0; d < 30; d++) { clock += 24 * 3600e3; await tick(); await tick(); }   // un mes más
+  for (const b of bots.WORLD_BOTS) {
+    const mine = parcels.filter(p => p.world === b.world);
+    assert.strictEqual(mine.length, 31, b.world + ': una parcela por día durante 31 días');
+    assert.strictEqual(new Set(mine.map(p => p.id)).size, 31, b.world + ': parcelas repetidas');
+  }
+  for (const p of parcels.filter(p => p.world === 'prehistoria')) assert.ok(PT.parcelOk(p.x, p.y, SIZE), 'Prehistoria: parcela bajo el agua ' + p.id);
+  for (const p of parcels.filter(p => p.world === 'tierra')) assert.strictEqual(p.city, null);   // los de la Tierra siguen igual
 });

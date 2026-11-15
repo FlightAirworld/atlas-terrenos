@@ -432,6 +432,31 @@ El motor (`window.rocketEngine` en `sounds.js`) suena sin cortarse desde el desp
 - Quitar las parcelas de uno: `DELETE FROM parcels WHERE currency = 'BOT' AND country = 'DE';` (todos: sin el filtro de país).
 - Para añadir o cambiar un país, edita su línea en `bots-mundo-<región>.js` (formato en la cabecera de `bots-data-mundo.js`); `node --test bots.test.js` comprueba que todos los puntos caen dentro de su caja.
 
+## Jugadores automáticos en los otros mundos 🚀 (uno por mundo)
+
+Además de los 197 de la Tierra, **cada mundo tiene su propio jugador ficticio**, con apodo y bandera propios (distintos entre sí y distintos de los de la Tierra). Reclaman **una parcela al día cada uno**, a una hora distinta cada día (08:00-22:00, zona `DAILY_TZ`). Datos en `bots-mundos.js`; la lógica es la de `bots.js`.
+
+| Mundo | Jugador | Bandera |
+|---|---|---|
+| Luna | Moonboy | 🇺🇸 |
+| Marte | Xiao Hong | 🇨🇳 |
+| Mercurio | Ermes | 🇮🇹 |
+| Venus | Cupidon | 🇫🇷 |
+| Júpiter | Zeus | 🇬🇷 |
+| Saturno | Huygens | 🇳🇱 |
+| Urano | Herschel | 🇩🇪 |
+| Neptuno | Triton | 🇳🇴 |
+| Plutón | Plutoncito | 🇲🇽 |
+| Prehistoria | Dino | 🇦🇷 |
+
+- Sin cuenta, como los de la Tierra: no cobran, no gastan créditos y no pueden ser presidentes del mundo. Salen en el mapa del mundo con su bandera y su apodo, en el panel del terreno y en el ranking del mundo.
+- No reclaman en cualquier sitio: eligen al azar entre el punto de aterrizaje del cohete y los lugares con nombre de ese mundo (los mismos que dibuja `mundos.js`) y se desplazan como mucho 0,02° (0,025° en Prehistoria), para que los jugadores los vean al llegar. En Prehistoria nunca reclaman bajo el agua (`PREHISTORIA.parcelOk`).
+- La parcela se guarda con su `world`, la bandera en `country`, `currency = 'BOT'` y la casa al azar de ese mundo. No cuentan en los rankings de países ni de ciudades de la Tierra (`topCountries` y `rankCities` solo miran `world = 'tierra'`).
+- La tabla `bot_runs` (clave `bot`, `day`) impide reclamar dos veces el mismo día, con ids `mundo-luna`, `mundo-marte`… **Al desplegar por primera vez**, los que ya hayan pasado su hora de hoy reclaman de golpe en el primer minuto.
+- Variables: `BOTS=off` los apaga todos (también los de la Tierra); `BOTS_MUNDOS=off` apaga solo los de los mundos; `BOTS_OFF=luna,marte` apaga solo los de esos mundos (junto a los códigos de país); `BOT_NAME_LUNA=Neil` cambia un apodo (`BOT_NAME_<MUNDO>`).
+- Quitar las parcelas de uno: `DELETE FROM parcels WHERE currency = 'BOT' AND world = 'luna';` (todos los de los mundos: `world <> 'tierra'`).
+- Para cambiar apodo, bandera o lugares, edita su bloque en `bots-mundos.js`; `node --test bots.test.js` lo comprueba.
+
 ## Jugadores en línea por país
 
 Al tocar el contador «en línea» se abre un panel con los jugadores conectados ahora mismo **por país**, con bandera y nombre (España 56, Portugal 44, Alemania 12…). Se actualiza solo cada 4 s mientras está abierto (`online.js` → `GET /api/online/countries`; la lógica está en `online-stats.js`).
