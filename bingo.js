@@ -1,7 +1,8 @@
 'use strict';
 // BINGO (botón 🎱 en Juegos). Sala compartida: el servidor baraja las bolas, evalúa y paga (ver bingo-server.js: /api/bingo y /api/bingo/buy).
 // Aquí solo se dibuja: el bombo girando, la bola que cae, los cartones (se marcan solos y suben en la lista según los números que les faltan),
-// tus créditos a la izquierda y, a la derecha, la bandera y el apodo de quien canta línea o bingo. Con sonido y voz.
+// el tubo blanco de arriba a la izquierda con las bolas rojas que van corriendo según salen, y a la derecha Bingo y Línea (con su premio y quien lo canta) y los jugadores.
+// Cápsula negra con la cuenta atrás parpadeando hasta la próxima partida. Con sonido y voz; mientras está abierto se silencia la Tierra para oír las bolas cantadas.
 // Usa globals de app.js: authToken, credits, updateCreditUi(), openLogin(), api(), flagOf(), country, avatar.
 (function () {
   const btn = document.getElementById('bingo-btn');
@@ -14,15 +15,25 @@
   st.textContent = `
     #bingo .modal-card { max-height: min(96vh, 820px); overflow-y: auto; padding-left: 10px; padding-right: 10px; }
     #bingo h2 { margin: 0 0 6px; font-size: 18px; }
-    #bingo .bn-top { display: grid; grid-template-columns: 76px 1fr 92px; gap: 6px; align-items: start; }
-    #bingo .bn-side { background: var(--card, rgba(127,127,127,.12)); border-radius: 12px; padding: 6px 4px; text-align: center; font-size: 11px; min-height: 64px; }
-    #bingo .bn-side b { display: block; font-size: 17px; line-height: 1.2; word-break: break-word; }
-    #bingo .bn-side small { display: block; opacity: .75; font-size: 10px; line-height: 1.2; }
-    #bingo .bn-win { margin-top: 6px; padding: 4px 2px; border-radius: 8px; background: rgba(255,200,0,.18); animation: bnpop .5s; }
-    #bingo .bn-win.bingo { background: rgba(255,90,90,.2); }
-    #bingo .bn-win .fl { font-size: 24px; display: block; line-height: 1.1; }
-    #bingo .bn-win .nk { font-size: 11px; font-weight: 800; word-break: break-word; display: block; }
+    #bingo .bn-credit { font-size: 12px; margin: 0 0 6px; opacity: .85; }
+    #bingo .bn-top { display: grid; grid-template-columns: 48px 1fr 108px; gap: 6px; align-items: start; }
+    #bingo .bn-tube { position: relative; width: 46px; height: 188px; box-sizing: border-box; border-radius: 23px; border: 2px solid #d5d9e0; background: linear-gradient(90deg, #dfe3ea 0%, #fff 30%, #fff 62%, #cfd5de 100%); overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,.3), inset 0 0 8px rgba(0,0,0,.18); }
+    #bingo .bn-tube b { position: absolute; left: 4px; top: 4px; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 900; color: #fff; background: radial-gradient(circle at 35% 30%, #ff9b9b, #e03131 55%, #a61e1e); box-shadow: 0 2px 4px rgba(0,0,0,.4), inset -2px -2px 4px rgba(0,0,0,.25); transition: transform .8s cubic-bezier(.3,.8,.4,1), opacity .6s; will-change: transform; }
+    #bingo .bn-right { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+    #bingo .bn-prz { background: var(--card, rgba(127,127,127,.12)); border-radius: 10px; padding: 5px 4px; text-align: center; min-width: 0; }
+    #bingo .bn-prz .t { font-size: 12px; font-weight: 800; }
+    #bingo .bn-prz .p { font-size: 15px; font-weight: 900; line-height: 1.25; }
+    #bingo .bn-prz.bingo .p { color: #e03131; }
+    #bingo .bn-prz.line .p { color: #2f9e44; }
+    #bingo .bn-prz .w { font-size: 11px; font-weight: 700; min-height: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; animation: bnpop .5s; }
+    #bingo .bn-ply { background: var(--card, rgba(127,127,127,.12)); border-radius: 10px; padding: 5px 4px; text-align: center; font-size: 12px; }
+    #bingo .bn-ply b { font-size: 16px; }
     @keyframes bnpop { 0% { transform: scale(.5); opacity: 0; } 70% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+    #bingo .bn-timerrow { display: flex; justify-content: center; margin: 4px 0 8px; }
+    #bingo .bn-timer { background: #000; color: #fff; border-radius: 999px; padding: 7px 18px; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .3px; }
+    #bingo .bn-timer.blink { animation: bnblink 1s ease-in-out infinite; }
+    @keyframes bnblink { 0%, 100% { opacity: 1; } 50% { opacity: .2; } }
+    #bingo .bn-h3 { font-size: 14px; margin: 6px 0 6px; }
     #bingo .bn-stage { position: relative; height: 188px; display: flex; justify-content: center; }
     #bingo .bn-drum { position: absolute; top: 0; width: 132px; height: 132px; border-radius: 50%; border: 5px solid #c9a227; background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), rgba(180,200,255,.22) 60%, rgba(120,140,200,.35)); overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,.35), inset 0 0 18px rgba(255,255,255,.35); }
     #bingo .bn-spin { position: absolute; inset: 0; animation: bnspin 9s linear infinite; }
@@ -33,20 +44,13 @@
     #bingo.rolling .bn-crank { animation-duration: 1.6s; }
     @keyframes bncrank { to { transform: rotate(360deg); } }
     #bingo .bn-chute { position: absolute; top: 120px; width: 34px; height: 18px; background: #8a6d12; border-radius: 0 0 10px 10px; }
-    #bingo .bn-ball { position: absolute; top: 118px; width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 25px; font-weight: 900; color: #222; background: radial-gradient(circle at 35% 30%, #fff, #ffd43b 55%, #f08c00); box-shadow: 0 6px 10px rgba(0,0,0,.4), inset -3px -3px 6px rgba(0,0,0,.25); }
+    #bingo .bn-ball { position: absolute; top: 118px; width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 25px; font-weight: 900; color: #fff; background: radial-gradient(circle at 35% 30%, #ff9b9b, #e03131 55%, #a61e1e); box-shadow: 0 6px 10px rgba(0,0,0,.4), inset -3px -3px 6px rgba(0,0,0,.25); }
     #bingo .bn-ball.drop { animation: bndrop 1.1s cubic-bezier(.3,.7,.4,1); }
     @keyframes bndrop { 0% { transform: translateY(-84px) scale(.35); opacity: 0; } 25% { opacity: 1; } 70% { transform: translateY(8px) scale(1); } 85% { transform: translateY(-9px); } 100% { transform: translateY(0); } }
     #bingo .bn-cap { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 12px; font-weight: 700; }
-    #bingo .bn-last { display: flex; gap: 5px; justify-content: center; margin: 2px 0 6px; min-height: 26px; }
-    #bingo .bn-last i { width: 26px; height: 26px; border-radius: 50%; font-style: normal; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; color: #222; background: #ffe066; opacity: .85; }
-    #bingo .bn-last i:first-child { opacity: 1; outline: 2px solid #f08c00; }
-    #bingo .bn-board { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; margin: 0 0 8px; }
-    #bingo .bn-board i { font-style: normal; font-size: 9px; text-align: center; padding: 2px 0; border-radius: 4px; background: rgba(127,127,127,.15); opacity: .65; }
-    #bingo .bn-board i.on { background: #f08c00; color: #fff; opacity: 1; font-weight: 800; }
     #bingo .bn-buy { display: flex; gap: 6px; align-items: center; margin: 0 0 8px; flex-wrap: wrap; }
     #bingo .bn-buy button { padding: 8px 10px; font-weight: 800; }
     #bingo .bn-buy .n { min-width: 26px; text-align: center; font-weight: 800; }
-    #bingo .bn-info { font-size: 12px; margin: 0 0 6px; line-height: 1.45; }
     #bingo .bn-cards { display: flex; flex-direction: column; gap: 8px; }
     #bingo .bn-card { border: 2px solid var(--line, #888); border-radius: 10px; padding: 4px; background: #fffdf0; color: #222; transition: border-color .3s; }
     #bingo .bn-card.near { border-color: #f08c00; }
@@ -57,7 +61,7 @@
     #bingo .bn-g span.e { background: #e9e4c9; opacity: .55; }
     #bingo .bn-g span.hit { background: #e03131; color: #fff; }
     #bingo .bn-g span.lin { box-shadow: 0 0 0 2px #2f9e44 inset; }
-    #bingo .bn-msg { font-size: 13px; min-height: 18px; margin: 8px 0 0; }
+    #bingo .bn-msg { font-size: 13px; min-height: 18px; margin: 0 0 4px; }
     #bingo .bn-msg.err { color: #e03131; }
     #bingo .bn-mute { position: absolute; top: 10px; right: 46px; background: none; border: 0; font-size: 20px; cursor: pointer; }
   `;
@@ -71,26 +75,31 @@
       '<button id="bingo-close" class="close" type="button" aria-label="Cerrar">×</button>' +
       '<button id="bingo-mute" class="bn-mute" type="button" aria-label="Sonido y voz">🔊</button>' +
       '<h2 id="bingo-title">🎱 Bingo</h2>' +
+      '<div class="bn-credit">🎟️ Tus créditos: <b id="bn-credits">0</b></div>' +
       '<div class="bn-top">' +
-        '<div class="bn-side" id="bn-left"><small>Tus créditos</small><b id="bn-credits">0</b><small>🎟️</small></div>' +
+        '<div class="bn-tube" id="bn-tube" aria-label="Bolas que han salido"></div>' +
         '<div class="bn-stage">' +
           '<div class="bn-drum"><div class="bn-spin" id="bn-spin"></div></div><div class="bn-crank"></div>' +
           '<div class="bn-chute"></div><div class="bn-ball" id="bn-ball" style="opacity:0">?</div>' +
           '<div class="bn-cap" id="bn-cap"></div>' +
         '</div>' +
-        '<div class="bn-side" id="bn-right"><small>Premios</small><div id="bn-wins"></div></div>' +
+        '<div class="bn-right">' +
+          '<div class="bn-prz bingo"><div class="t">🏆 Bingo</div><div class="p" id="bn-p-bingo">—</div><div class="w" id="bn-w-bingo"></div></div>' +
+          '<div class="bn-prz line"><div class="t">🎯 Línea</div><div class="p" id="bn-p-line">—</div><div class="w" id="bn-w-line"></div></div>' +
+          '<div class="bn-ply">👥 <b id="bn-players">0</b><br><span id="bn-ply-l">jugadores</span></div>' +
+        '</div>' +
       '</div>' +
-      '<div class="bn-last" id="bn-last"></div>' +
-      '<div class="bn-board" id="bn-board"></div>' +
+      '<div class="bn-timerrow"><span id="bn-timer" class="bn-timer"></span></div>' +
       '<div id="bn-buy" class="bn-buy"></div>' +
-      '<p id="bn-info" class="bn-info"></p>' +
-      '<div id="bn-cards" class="bn-cards"></div>' +
       '<p id="bingo-msg" class="bn-msg" role="status"></p>' +
+      '<h3 class="bn-h3" id="bn-cards-h">🎴 Cartones</h3>' +
+      '<div id="bn-cards" class="bn-cards"></div>' +
     '</div>';
   document.body.appendChild(modal);
   const $ = id => modal.querySelector('#' + id);
-  const elCredits = $('bn-credits'), elWins = $('bn-wins'), elBall = $('bn-ball'), elCap = $('bn-cap'), elLast = $('bn-last'),
-    elBoard = $('bn-board'), elBuy = $('bn-buy'), elInfo = $('bn-info'), elCards = $('bn-cards'), msg = $('bingo-msg'), elSpin = $('bn-spin');
+  const elCredits = $('bn-credits'), elBall = $('bn-ball'), elCap = $('bn-cap'), elTube = $('bn-tube'), elTimer = $('bn-timer'),
+    elBuy = $('bn-buy'), elCards = $('bn-cards'), elCardsH = $('bn-cards-h'), msg = $('bingo-msg'), elSpin = $('bn-spin'),
+    elPBingo = $('bn-p-bingo'), elPLine = $('bn-p-line'), elWBingo = $('bn-w-bingo'), elWLine = $('bn-w-line'), elPlayers = $('bn-players'), elPlyL = $('bn-ply-l');
   const say = (t, err) => { msg.textContent = t || ''; msg.className = 'bn-msg' + (err ? ' err' : ''); };
 
   // ---- Bombo: bolas de colores girando dentro ----
@@ -102,8 +111,6 @@
     b.style.background = COLORS[i % COLORS.length]; b.textContent = String(1 + ((i * 7) % 90));
     elSpin.appendChild(b);
   }
-  for (let n = 1; n <= 90; n++) { const i = document.createElement('i'); i.textContent = n; i.dataset.n = n; elBoard.appendChild(i); }
-  const boardCells = [...elBoard.children];
 
   // ---- Sonido y voz ----
   let muted = false, actx = null, voice = null;
@@ -147,6 +154,7 @@
   };
 
   // ---- Estado ----
+  let earthWasMuted = null;   // null = no hemos tocado el sonido; false = lo silenciamos nosotros (y lo devolvemos al cerrar); true = ya estaba silenciado
   let state = null, timer = null, offset = 0, seen = 0, seenRound = 0, announced = { line: 0, bingo: 0 }, busy = false, want = 1, lastTick = 0;
 
   const rowDone = (row, set) => row.every(n => set.has(n));
@@ -159,6 +167,7 @@
   function paintCards() {
     if (!state || !state.mine) return;
     const set = new Set(state.drawn || []);
+    elCardsH.textContent = `🎴 Cartones (${state.mine.length})`;
     const list = state.mine.map(c => ({ c, v: cardView(c, set) }));
     list.sort((a, b) => a.v.missing - b.v.missing || a.c.id - b.c.id);   // los que más cerca están suben arriba
     const frag = document.createDocumentFragment();
@@ -183,27 +192,43 @@
     });
     elCards.replaceChildren(frag);
   }
-  function paintBoard() {
-    const set = new Set((state && state.drawn) || []);
-    boardCells.forEach(i => i.classList.toggle('on', set.has(Number(i.dataset.n))));
-    const last = ((state && state.drawn) || []).slice(-5).reverse();
-    elLast.replaceChildren(...last.map(n => { const i = document.createElement('i'); i.textContent = n; return i; }));
+  // ---- Tubo blanco: las bolas rojas entran por arriba y van rodando hacia abajo según salen (se ven las últimas 5) ----
+  const TUBE_N = 5, STEP = 36, tubeBalls = new Map();
+  let tubeSeen = -1;
+  const tubePos = (idx) => `translateY(${idx * STEP}px) rotate(${idx * 360}deg)`;
+  function paintTube() {
+    const drawn = (state && state.drawn) || [];
+    if (drawn.length < tubeSeen) { tubeBalls.forEach(el => el.remove()); tubeBalls.clear(); tubeSeen = 0; }   // partida nueva
+    const anim = tubeSeen >= 0 && drawn.length - tubeSeen <= 2;   // si te has perdido varias, se colocan sin animar
+    tubeSeen = drawn.length;
+    const last = drawn.slice(-TUBE_N).reverse();   // la más reciente arriba
+    tubeBalls.forEach((el, n) => {
+      if (last.includes(n)) return;
+      el.style.transform = tubePos(TUBE_N); el.style.opacity = '0';   // la más antigua sale rodando por el final del tubo
+      tubeBalls.delete(n); setTimeout(() => el.remove(), 800);
+    });
+    last.forEach((n, idx) => {
+      let el = tubeBalls.get(n);
+      if (!el) {
+        el = document.createElement('b'); el.textContent = n; tubeBalls.set(n, el);
+        el.style.transition = 'none'; el.style.transform = tubePos(anim ? -1 : idx);
+        elTube.appendChild(el); void el.offsetWidth; el.style.transition = '';
+      }
+      el.style.transform = tubePos(idx);
+    });
   }
   function paintWins() {
-    const parts = [];
-    const add = (w, label, cls) => {
-      if (!w) return;
-      const d = document.createElement('div'); d.className = 'bn-win ' + cls;
-      const f = document.createElement('span'); f.className = 'fl'; f.textContent = flag(w.country) || w.avatar || '🌍';
-      const n = document.createElement('span'); n.className = 'nk'; n.textContent = (w.avatar && flag(w.country) ? w.avatar + ' ' : '') + w.nick;
-      const l = document.createElement('small'); l.textContent = `${label} · +${w.prize}`;
-      d.append(f, n, l); parts.push(d);
-    };
-    add(state && state.line, '🎯 Línea', 'line'); add(state && state.bingo, '🏆 Bingo', 'bingo');
-    if (!parts.length) { const s = document.createElement('small'); s.textContent = 'Aún nadie'; parts.push(s); }
-    elWins.replaceChildren(...parts);
+    const s = state || {};
+    const idle = s.phase === 'idle' || !s.phase;
+    const prize = (p, solo) => idle ? 'hasta ' + nf(solo || 0) : nf(p || 0) + ' ' + word(p || 0);
+    elPBingo.textContent = prize(s.bingoPrize, s.soloBingo); elPLine.textContent = prize(s.linePrize, s.soloLine);
+    const who = w => w ? (flag(w.country) || w.avatar || '🌍') + ' ' + w.nick : '';
+    elWBingo.textContent = who(s.bingo); elWLine.textContent = who(s.line);
+    elWBingo.title = s.bingo ? s.bingo.nick : ''; elWLine.title = s.line ? s.line.nick : '';
+    const pl = s.players || 0;
+    elPlayers.textContent = pl; elPlyL.textContent = pl === 1 ? 'jugador' : 'jugadores';
   }
-  function fmtLeft(ms) { const s = Math.max(0, Math.ceil(ms / 1000)); return s + ' s'; }
+  function fmtLeft(ms) { const s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
   function paintBuy() {
     const s = state; if (!s) return;
     const owned = s.mine ? s.mine.length : 0;
@@ -220,20 +245,19 @@
     }
     elBuy.replaceChildren(frag);
   }
-  function paintInfo() {
+  // Cápsula negra con letras blancas: cuenta atrás (parpadeando) hasta que empieza la partida
+  function paintTimer() {
     const s = state; if (!s) return;
-    const prize = `🎯 Línea ${nf(s.linePrize)} · 🏆 Bingo ${nf(s.bingoPrize)}`;
-    const players = s.players || 0, pot = s.cardsTotal || 0;
-    let t;
-    if (s.phase === 'idle') t = `Sala libre. Compra tus cartones (${nf(s.price)} ${word(s.price)} cada uno, hasta ${s.maxCards}) y empieza la partida. Jugando solo, la línea paga hasta ${s.soloLine} y el bingo hasta ${s.soloBingo}; con más jugadores, 20 % y 80 % del bote.`;
-    else if (s.phase === 'buying') t = `⏳ Empieza en ${fmtLeft(s.buyUntil - (Date.now() + offset))} · ${players} ${players === 1 ? 'jugador' : 'jugadores'}, ${pot} ${pot === 1 ? 'cartón' : 'cartones'} · ${prize}`;
-    else if (s.phase === 'drawing') t = `🎱 Bola ${(s.drawn || []).length} de 90 · ${players} ${players === 1 ? 'jugador' : 'jugadores'}, ${pot} cartones · ${prize} · Cuando acabe podrás comprar para la siguiente.`;
-    else t = `🏁 Partida terminada · ${prize}`;
-    elInfo.textContent = t;
+    let t = '', blink = false;
+    if (s.phase === 'buying') { t = '⏳ Próxima partida en ' + fmtLeft(s.buyUntil - (Date.now() + offset)); blink = true; }
+    else if (s.phase === 'drawing') t = '🎱 Partida en juego';
+    else if (s.phase === 'done') t = '🏁 Partida terminada';
+    else t = '⏳ La partida empieza ' + fmtLeft(s.buyMs || 60000) + ' después de comprar';
+    elTimer.textContent = t; elTimer.classList.toggle('blink', blink);
   }
   function paintCaption() {
     const s = state; if (!s) return;
-    elCap.textContent = s.phase === 'idle' ? 'Sala libre' : s.phase === 'buying' ? 'Comprando cartones…' : s.phase === 'done' ? '¡Fin de la partida!' : '';
+    elCap.textContent = s.phase === 'idle' ? 'Sala libre' : s.phase === 'buying' ? 'Comprando cartones…' : s.phase === 'done' ? '¡Fin de la partida!' : `Bola ${(s.drawn || []).length} de 90`;
     modal.classList.toggle('rolling', s.phase === 'drawing' || s.phase === 'buying');
   }
 
@@ -254,18 +278,20 @@
       if (fresh.length <= 2) dropBall(fresh[fresh.length - 1]);   // si te has perdido varias bolas, no las cantamos todas de golpe
       else { elBall.textContent = fresh[fresh.length - 1]; elBall.style.opacity = '1'; }
     }
-    if (s.line && !announced.line) {
-      announced.line = 1; sndWin(false);
-      speak(`¡Línea! ${s.line.nick}`, 1);
+    // Solo se canta UNA línea y UN bingo por partida (el servidor ya solo da uno de cada); si llegan a la vez, solo se canta el bingo
+    const newLine = s.line && !announced.line, newBingo = s.bingo && !announced.bingo;
+    if (newLine) {
+      announced.line = 1;
+      if (!newBingo) { sndWin(false); speak(`¡Línea! ${s.line.nick}`, 1); }
       if (s.line.mine) say(`🎉 ¡Cantaste línea! Ganas ${s.line.prize} ${word(s.line.prize)}`);
     }
-    if (s.bingo && !announced.bingo) {
+    if (newBingo) {
       announced.bingo = 1; sndWin(true);
       speak(`¡Bingo! ${s.bingo.nick}`, 1);
       if (s.bingo.mine) say(`🏆 ¡BINGO! Ganas ${s.bingo.prize} ${word(s.bingo.prize)}`);
       else say(`🏆 Bingo de ${s.bingo.nick}. ¡Suerte en la próxima!`);
     }
-    paintWins(); paintBoard(); paintCards(); paintBuy(); paintInfo(); paintCaption();
+        paintWins(); paintTube(); paintCards(); paintBuy(); paintTimer(); paintCaption();
   }
 
   async function load() {
@@ -285,17 +311,22 @@
   function tick() {
     if (modal.classList.contains('hidden')) return;
     const now = Date.now();
-    if (state && state.phase === 'buying') paintInfo();
+    if (state && state.phase === 'buying') paintTimer();
     if (now - lastTick >= 1000) { lastTick = now; load(); }
   }
   function open() {
     if (!authToken) return openLogin('Entra con tu cuenta para jugar al bingo 🎱');
-    modal.classList.remove('hidden'); say(''); seenRound = -1; lastTick = 0;
+    modal.classList.remove('hidden'); say(''); seenRound = -1; lastTick = 0; tubeSeen = -1;
+    if (earthWasMuted === null) { earthWasMuted = !!window.fightMuted; if (!earthWasMuted && window.fightMute) window.fightMute(true); }   // se calla la Tierra (música, ciudad, lluvia...) para oír las bolas cantadas
     try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === 'suspended') actx.resume(); } catch (e) { /* nada */ }
     try { if (!muted) speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch (e) { /* desbloquea la voz en móviles */ }
     load(); clearInterval(timer); timer = setInterval(tick, 500);
   }
-  function close() { modal.classList.add('hidden'); clearInterval(timer); timer = null; try { speechSynthesis.cancel(); } catch (e) { /* nada */ } }
+  function close() {
+    modal.classList.add('hidden'); clearInterval(timer); timer = null; try { speechSynthesis.cancel(); } catch (e) { /* nada */ }
+    if (earthWasMuted === false && window.fightMute) window.fightMute(false);   // vuelve el sonido de la Tierra
+    earthWasMuted = null;
+  }
   $('bingo-close').onclick = close;
   modal.addEventListener('pointerdown', e => { if (e.target === modal) close(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) close(); });

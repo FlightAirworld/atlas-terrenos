@@ -1,7 +1,7 @@
 'use strict';
 // BINGO (servidor). Una sala compartida por todos los jugadores, con rondas seguidas.
 //  · Cada cartón cuesta BINGO_PRICE créditos (1) y cada jugador puede comprar como mucho BINGO_MAX_CARDS (24) por ronda.
-//  · La primera compra abre la ronda: hay BINGO_BUY_SECONDS (45) para comprar y después cae una bola cada BINGO_BALL_SECONDS (4).
+//  · La primera compra abre la ronda: hay BINGO_BUY_SECONDS (60, un minuto) para comprar y después cae una bola cada BINGO_BALL_SECONDS (4).
 //  · Bingo de 90 bolas: cartón de 3 filas × 9 columnas con 15 números. Línea = una fila completa; bingo = el cartón entero.
 //  · Solo hay UNA línea y UN bingo por ronda (el primero que se completa; si dos cartones se completan con la misma bola, se sortea).
 //  · Premios (el bote son los cartones vendidos × precio):
@@ -19,7 +19,7 @@ module.exports = function (d) {
   const ON = String(process.env.BINGO || 'on').toLowerCase() !== 'off';
   const PRICE = Math.max(1, Math.floor(numEnv('BINGO_PRICE', 1)));
   const MAX_CARDS = Math.max(1, Math.floor(numEnv('BINGO_MAX_CARDS', 24)));
-  const BUY_MS = Math.max(5, numEnv('BINGO_BUY_SECONDS', 45)) * 1000;
+  const BUY_MS = Math.max(5, numEnv('BINGO_BUY_SECONDS', 60)) * 1000;
   const BALL_MS = Math.max(1, numEnv('BINGO_BALL_SECONDS', 4)) * 1000;
   const SOLO_LINE = Math.floor(numEnv('BINGO_SOLO_LINE', 5)), SOLO_BINGO = Math.floor(numEnv('BINGO_SOLO_BINGO', 20));
   const LINE_PCT = 0.2, BINGO_PCT = 0.8;
