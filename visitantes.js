@@ -141,19 +141,15 @@
     @keyframes vzwave { from { transform: rotate(-150deg); } to { transform: rotate(-178deg); } }
     @keyframes vzmouth { from { transform: scaleY(.5); } to { transform: scaleY(1.8); } }
     @media (prefers-reduced-motion: reduce) { .vz-body .vz-svg, .vz-body .vz-l, .vz-body .vz-r, .vz-body .vz-la, .vz-body .vz-ra, .vz-body .vz-mouth { animation: none !important; } }
-    .vz-chat { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(94vw, 460px); z-index: 1300; box-sizing: border-box; background: var(--card, #fffffff2); color: var(--fg, #14213d); border: 1px solid var(--line, #d8dee9); border-radius: 16px; padding: 10px 12px; box-shadow: 0 8px 28px rgba(0,0,0,.35); backdrop-filter: blur(8px); }
+    .vz-chat { position: fixed; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(92vw, 400px); z-index: 1300; box-sizing: border-box; background: var(--card, #fffffff2); color: var(--fg, #14213d); border: 1px solid var(--line, #d8dee9); border-radius: 14px; padding: 6px 10px 8px; box-shadow: 0 6px 20px rgba(0,0,0,.3); backdrop-filter: blur(8px); }
     .vz-chat.hidden { display: none; }
-    .vz-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 800; margin-bottom: 6px; }
-    .vz-head button { padding: 2px 9px; font-size: 18px; line-height: 1.2; }
-    .vz-log { max-height: 30vh; overflow-y: auto; font-size: 14px; display: flex; flex-direction: column; gap: 5px; }
-    .vz-line { padding: 6px 10px; border-radius: 12px; max-width: 88%; }
-    .vz-line.v { background: rgba(120,140,170,.18); align-self: flex-start; }
-    .vz-line.me { background: var(--accent, #0b6e4f); color: #fff; align-self: flex-end; }
-    .vz-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 6px; }
-    .vz-chips button { border-radius: 999px; padding: 6px 12px; font-weight: 700; }
-    .vz-form { display: flex; gap: 6px; }
-    .vz-form input { flex: 1; min-width: 0; font-size: 16px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line, #d8dee9); background: var(--bg, #fff); color: var(--fg, #14213d); }
-    .vz-never { margin-top: 8px; background: none; border: 0; color: var(--muted, #667); font-size: 12px; padding: 0; text-decoration: underline; }`;
+    .vz-head { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13px; margin-bottom: 3px; }
+    .vz-who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vz-head button { padding: 0 8px; font-size: 16px; line-height: 1.5; min-height: 0; width: auto; }
+    .vz-log { font-size: 14px; line-height: 1.3; min-height: 2.7em; display: flex; align-items: center; }
+    .vz-line { padding: 4px 10px; border-radius: 12px; background: rgba(120,140,170,.18); }
+    .vz-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 0; }
+    .vz-chips button { border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 700; min-height: 0; width: auto; }`;
   document.head.appendChild(st);
   map.createPane('visitors');
   const pane = map.getPane('visitors');
@@ -280,13 +276,13 @@
         const tg = v.phase === 'talk' ? { k: 'player' } : v.target;
         if (tg && v.phase !== 'look') {
           let tx, ty, stop;
-          if (tg.k === 'player') { tx = c.x + v.side * 64 * FP / scale; ty = c.y + 22 * FP / scale; stop = 5 / scale; }
+          if (tg.k === 'player') { tx = c.x + v.side * 64 * FP / scale; ty = c.y; stop = 4 / scale; }   // ty = c.y: pisa justo a la altura de los pies del jugador
           else if (tg.k === 'site') { const p = map.project({ lat: tg.lat, lng: tg.lng }, REF_Z); tx = p.x; ty = p.y + 30 * FP / scale; stop = 4 / scale; }
           else { tx = tg.x; ty = tg.y; stop = 4 / scale; }
           const dx = tx - v.x, dy = ty - v.y, d = Math.hypot(dx, dy);
           if (d <= stop) arrive(v, tg);
           else {
-            const sp = Math.min(d, v.spd * FP / scale * dt * (v.phase === 'talk' ? 2.2 : 1));
+            const sp = Math.min(d, v.spd * FP / scale * dt * (v.phase === 'talk' ? 3.2 : 1));
             v.x += dx / d * sp; v.y += dy / d * sp; moving = true;
             for (const u of vs) {   // no se pisan entre ellos
               if (u === v) continue;
@@ -344,28 +340,41 @@
     if (A() && !talker && Date.now() - lastRemark > 6000) { lastRemark = Date.now(); A().speak(text, v.voice, { lang: v.vlang }); }
   }
 
+  // ---------- Zoom al hablar ----------
+  // Al empezar a charlar el mapa se acerca solo (centrado en el jugador) para que los dos muñecos se vean grandes, uno al lado del otro y a la misma altura,
+  // por encima del panel; al terminar, vuelve al zoom de antes (si no lo has tocado tú).
+  const TALK_Z = 18;
+  let zoomBefore = null;
+  function focusTalk() {
+    try {
+      const z = map.getZoom(), max = map.getMaxZoom ? map.getMaxZoom() : TALK_Z, goal = Math.min(TALK_Z, max);
+      if (z < goal - 0.2 && map.flyTo) { zoomBefore = { z, goal }; map.flyTo(map.getCenter(), goal, { duration: 900 }); }
+    } catch (e) { zoomBefore = null; }
+  }
+  function unfocusTalk() {
+    const b = zoomBefore; zoomBefore = null;
+    try { if (b && map.flyTo && Math.abs(map.getZoom() - b.goal) < 0.4) map.flyTo(map.getCenter(), b.z, { duration: 900 }); } catch (e) { /* nada */ }
+  }
+
   // ---------- Panel de conversación ----------
   let P = null;
   function panel() {
     if (P) return P;
     const el = document.createElement('div');
     el.className = 'vz-chat hidden'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-live', 'polite');
-    el.innerHTML = '<div class="vz-head"><span class="vz-who"></span><button type="button" class="vz-x" aria-label="Cerrar">×</button></div><div class="vz-log"></div><div class="vz-chips"></div>' +
-      '<form class="vz-form" autocomplete="off"><input type="text" maxlength="80" placeholder="Escribe tu respuesta…" enterkeyhint="send"><button type="submit" class="primary" style="width:auto;padding:8px 14px">➤</button></form>' +
-      '<button type="button" class="vz-never">🚫 No quiero más visitantes</button>';
+    el.innerHTML = '<div class="vz-head"><span class="vz-who"></span><button type="button" class="vz-never" title="No quiero más visitantes" aria-label="No quiero más visitantes">🚫</button><button type="button" class="vz-x" aria-label="Cerrar">×</button></div><div class="vz-log"></div><div class="vz-chips"></div>';
     document.body.appendChild(el);
-    P = { el, who: el.querySelector('.vz-who'), log: el.querySelector('.vz-log'), chips: el.querySelector('.vz-chips'), input: el.querySelector('input'), pending: null };
+    P = { el, who: el.querySelector('.vz-who'), log: el.querySelector('.vz-log'), chips: el.querySelector('.vz-chips'), pending: null };
     el.querySelector('.vz-x').onclick = () => { const v = talker; endConv(); if (v) remark(v, '¡Adiós! 👋', 2500); };
     el.querySelector('.vz-never').onclick = () => { try { window.soundPrefs && window.soundPrefs.set('visitantes', false); } catch (e) {} clearAll(); try { flashToast('Visitantes desactivados. Puedes volver a activarlos en 🔊 Sonido → «Visitantes del mapa».'); } catch (e) {} };
-    el.querySelector('form').onsubmit = e => { e.preventDefault(); const t = P.input.value.trim(); if (t && P.pending) { P.input.value = ''; P.pending({ text: t, key: '' }); } };
     return P;
   }
+  // Una sola línea cada vez: la nueva sustituye a la anterior (el panel se queda pequeño y no tapa a los muñecos)
   function addLine(who, text) {
     const p = panel(), d = document.createElement('div');
     d.className = 'vz-line ' + who; d.textContent = text;
+    p.log.textContent = '';
     p.log.appendChild(d);
-    while (p.log.children.length > 6) p.log.removeChild(p.log.firstChild);
-    p.log.scrollTop = p.log.scrollHeight;
   }
   function setChips(list) {
     const p = panel(); p.chips.textContent = '';
@@ -389,6 +398,7 @@
     if (A()) A().stop();
     if (P) { P.el.classList.add('hidden'); P.pending = null; }
     const t = talker; talker = null;
+    unfocusTalk();
     if (t) release(t);
   }
 
@@ -400,35 +410,51 @@
       if (!spoke) { clearTimeout(t); setTimeout(res, ms); }
     });
   }
+  // Parte un mensaje en frases cortas (las muy cortas y los emojis sueltos se pegan a la frase de al lado)
+  function chunks(t) {
+    const out = [];
+    for (const s of String(t).split(/(?<=[.!?…])\s+/u)) {
+      if (!s) continue;
+      const last = out[out.length - 1];
+      if (last !== undefined && (last.length < 16 || /^\p{Extended_Pictographic}/u.test(s))) out[out.length - 1] = last + ' ' + s;
+      else out.push(s);
+    }
+    return out.length ? out : [String(t)];
+  }
   async function say(v, text, pre) {
     const my = convToken;
     if (my !== convToken || talker !== v) throw ABORT;
-    addLine('v', (pre ? pre + ' ' : '') + text);
     v.el.classList.add('talk');
     try {
       if (pre) {   // saludo en su idioma: solo se dice si hay voz de ese idioma (o si se puede leer con letras latinas)
+        addLine('v', pre);
         if (A() && A().hasLang(v.c.lang) && !v.c.es) await speakOne(v, pre, v.c.lang);
         else if (/^[\p{Script=Latin}\s!¡?¿'.,-]+$/u.test(pre)) await speakOne(v, pre, v.vlang);
+        else await wait(800);
       }
-      if (my === convToken) await speakOne(v, text, v.vlang);
+      for (const part of chunks(text)) {   // frase a frase: en pantalla solo se ve una línea cada vez
+        if (my !== convToken) break;
+        addLine('v', part);
+        await speakOne(v, part, v.vlang);
+      }
     } finally { if (v.el) v.el.classList.remove('talk'); }
     if (my !== convToken) throw ABORT;
   }
-  // Espera la respuesta del jugador (botón o texto). Cierra con ABORT si se cierra el panel.
+  // Espera a que el jugador pulse una opción (nunca escribe): cuatro opciones del tema + «Adiós». Cierra con ABORT si se cierra el panel.
   function ask(v, chips) {
     const p = panel(), my = convToken;
     if (my !== convToken || talker !== v) return Promise.reject(ABORT);
-    setChips(chips.concat([['Adiós 👋', 'bye']]));
+    setChips(chips.slice(0, 4).concat([['Adiós 👋', 'bye']]));
     return new Promise((res, rej) => {
       pendingReject = rej;
       const timer = setTimeout(() => { if (p.pending === done) { p.pending = null; pendingReject = null; setChips([]); rej(TIMEOUT); } }, 60000);
       const done = r => {
         clearTimeout(timer); p.pending = null; pendingReject = null; setChips([]);
-        r.intent = r.key || intentOf(r.text); v.turns++; addLine('me', r.text);
+        r.intent = r.key || intentOf(r.text); v.turns++;
+        if (r.intent === 'bye') return rej(END);
         res(r);
       };
       p.pending = done;
-      setTimeout(() => { try { if (!SMALL) p.input.focus({ preventScroll: true }); } catch (e) {} }, 50);
     });
   }
 
@@ -483,50 +509,60 @@
   }
 
   // ---------- Temas de conversación ----------
-  const YN = [['Sí 😀', 'yes'], ['No', 'no']];
-  const TOPICS = {
+    const TOPICS = {
     async tiktok(v, mem) {
-      if (mem.tiktok === 'yes') { await say(v, `Oye, ¿sigues subiendo cosas a TikTok? ¡Me acuerdo de que tenías cuenta!`); const r = await ask(v, YN); if (r.intent === 'yes') { v.mood += 0.1; await say(v, '¡Genial! Yo veo vídeos de gatos por horas. 🐱'); } else await side(v, r); return; }
-      const r = await askTopic(v, '¿Tienes cuenta en TikTok?', [['Sí 🎵', 'yes'], ['No', 'no'], ['Uso Instagram', 'ig']]);
+      if (mem.tiktok === 'yes') {
+        await say(v, 'Oye, ¿sigues subiendo cosas a TikTok? ¡Me acuerdo de que tenías cuenta!');
+        const r = await ask(v, [['Sí 😀', 'yes'], ['A veces', 'some'], ['Ya no', 'no'], ['Ahora casi no', 'later']]);
+        if (r.intent === 'yes' || r.key === 'some') { v.mood += 0.1; await say(v, '¡Genial! Yo veo vídeos de gatos por horas. 🐱'); }
+        else await say(v, '¡Cada uno a su ritmo! Lo importante es divertirse. 😄');
+        return;
+      }
+      const r = await askTopic(v, '¿Tienes cuenta en TikTok?', [['Sí 🎵', 'yes'], ['No', 'no'], ['Uso Instagram', 'ig'], ['Prefiero YouTube', 'yt']]);
       if (r.intent === 'yes') {
         mem.tiktok = 'yes'; v.mood += 0.1;
         await say(v, '¡Genial! ¿Qué tipo de vídeos subes? ¿Bailes, humor, viajes…?');
-        const h = await ask(v, [['Bailes 💃', 'bail'], ['Humor 😂', 'hum'], ['Solo miro', 'mir']]);
-        await say(v, h.key === 'bail' ? '¡Qué arte! Yo tengo dos pies izquierdos, ¡pero me encantaría aprender!' : h.key === 'hum' ? '¡Jajaja! Cuéntame un chiste cuando quieras.' : h.key === 'mir' ? 'Yo también soy de los de mirar. ¡Así no hay presión!' : '¡Qué interesante! Tendré que buscarte.');
+        const h = await ask(v, [['Bailes 💃', 'bail'], ['Humor 😂', 'hum'], ['Viajes ✈️', 'via'], ['Solo miro', 'mir']]);
+        await say(v, h.key === 'bail' ? '¡Qué arte! Yo tengo dos pies izquierdos, ¡pero me encantaría aprender!' : h.key === 'hum' ? '¡Jajaja! Cuéntame un chiste cuando quieras.' : h.key === 'via' ? '¡Qué envidia! Yo también subo mis viajes. ✈️' : '¡Yo también soy de los de mirar! Así no hay presión.');
       } else if (r.intent === 'no') { mem.tiktok = 'no'; await say(v, '¡Jajaja, qué sano! Yo paso horas viendo vídeos de gatos. 🐱'); }
       else if (r.key === 'ig') { mem.tiktok = 'no'; await say(v, '¡Buen gusto! Yo subo fotos de mis viajes. 📸'); }
-      else await say(v, '¡Ja, ja! Tú a lo tuyo, me gusta. 😄');
+      else { mem.tiktok = 'no'; await say(v, '¡Buena elección! En YouTube hay tutoriales de todo. 🎬'); }
     },
     async pais(v) {
-      const r = await askTopic(v, 'Y tú, ¿de qué país eres?', [['Prefiero no decirlo', 'no']]);
-      const c2 = r.key ? null : countryIn(r.text);
-      if (c2 && c2.cc === v.cc) { v.mood += 0.15; await say(v, `¡Somos paisanos! ¡Qué casualidad encontrarnos aquí! ${v.c.flag}`); }
-      else if (c2) { v.mood += 0.08; await say(v, `¡${c2.country} ${c2.flag}! ¡Qué bien! Allí se come ${c2.dish}, ¿verdad? ¡Qué hambre me da!`); }
+      const f = window.playerFlag ? window.playerFlag() : '', c2 = f && C.find(c => c.flag === f);
+      const q = c2 && c2.cc === v.cc ? `¡Llevas en la camiseta la bandera de mi país, ${v.c.country} ${v.c.flag}! ¿Es verdad que eres de allí?`
+        : c2 ? `Veo en tu camiseta la bandera de ${c2.country} ${c2.flag}. ¿Te gusta tu país?` : '¿Te gusta viajar por el mundo?';
+      const r = await askTopic(v, q, [['¡Me encanta! 😍', 'love'], ['Sí, claro', 'yes'], ['Está bien', 'ok'], ['Prefiero no decirlo', 'no']]);
+      if (c2 && c2.cc === v.cc && (r.key === 'love' || r.key === 'yes')) { v.mood += 0.15; await say(v, `¡Somos paisanos! ¡Qué casualidad encontrarnos aquí! ${v.c.flag}`); }
+      else if (r.key === 'love') { v.mood += 0.1; await say(v, c2 ? `¡Se nota! Allí se come ${c2.dish}, ¿verdad? ¡Qué hambre me da!` : '¡Yo también! Cada rincón del mundo tiene algo especial.'); }
+      else if (r.key === 'yes') { v.mood += 0.06; await say(v, '¡Genial! Entonces tenemos mucho de que hablar. 😄'); }
       else if (r.key === 'no') await say(v, '¡Ningún problema! Es un misterio, ¡me gusta!');
-      else await say(v, 'Mmm, ese sitio no lo conozco. ¡Algún día lo visitaré!');
+      else await say(v, '¡Bueno, lo importante es sentirse bien donde uno está!');
     },
     async comida(v) {
-      const r = await askTopic(v, `En ${v.c.country} lo mejor es ${v.c.dish}. ¿Y tú, cuál es tu comida favorita?`, [['Pizza 🍕', 'pizza'], ['Tacos 🌮', 'tacos'], ['Paella 🥘', 'paella']]);
-      const t = r.key ? r.text.replace(/ [^\w ]+$/u, '').trim() : r.text;
+      const r = await askTopic(v, `En ${v.c.country} lo mejor es ${v.c.dish}. ¿Y tú, cuál es tu comida favorita?`, [['Pizza 🍕', 'pizza'], ['Tacos 🌮', 'tacos'], ['Paella 🥘', 'paella'], ['Sushi 🍣', 'sushi']]);
+      const t = r.text.replace(/ [^\w ]+$/u, '').trim();
       if (norm(t).includes(norm(v.c.dish).replace(/^(el|la|los|las) /, '').split(' ')[0])) { v.mood += 0.15; await say(v, '¡No me lo creo! ¡Esa es mi favorita también!'); }
-      else if (t.length > 0 && t.length < 40) { v.mood += 0.05; await say(v, `¡${cap(t)}! Mmm, me has dado hambre. Apunto la receta.`); }
-      else await say(v, '¡Qué rico suena eso!');
+      else { v.mood += 0.05; await say(v, `¡${cap(t)}! Mmm, me has dado hambre. Apunto la receta.`); }
     },
     async casa(v) {
-      const r = await askTopic(v, '¿Cuál es tu sitio favorito de este mapa?', [['Mi casa 🏠', 'casa'], ['Los monumentos 🏛️', 'mon'], ['Aún no lo sé', 'idk']]);
-      await say(v, r.key === 'casa' ? '¡Qué suerte, tener casa propia! Yo solo soy un turista con mochila. 🎒' : r.key === 'mon' ? '¡Yo también! Hoy mismo voy a ver alguno. Siempre me hago fotos allí. 📸' : r.key === 'idk' ? 'Pues pasea y descubre, ¡eso hago yo! Cada rincón tiene su historia.' : '¡Buena elección! Apunto ese sitio en mi lista.');
+      const r = await askTopic(v, '¿Cuál es tu sitio favorito de este mapa?', [['Mi casa 🏠', 'casa'], ['Los monumentos 🏛️', 'mon'], ['Pasear sin rumbo 🚶', 'walk'], ['Aún no lo sé', 'idk']]);
+      await say(v, r.key === 'casa' ? '¡Qué suerte, tener casa propia! Yo solo soy un turista con mochila. 🎒' : r.key === 'mon' ? '¡Yo también! Hoy mismo voy a ver alguno. Siempre me hago fotos allí. 📸' : r.key === 'walk' ? '¡Pasear es lo mejor! Así se descubren los rincones secretos.' : 'Pues pasea y descubre, ¡eso hago yo! Cada rincón tiene su historia.');
     },
     async viaje(v) {
-      const r = await askTopic(v, `¿Has estado alguna vez en ${v.c.country}?`, YN);
-      if (r.intent === 'yes') { v.mood += 0.12; await say(v, '¡Qué bien! ¿Te gustó? Mi país es muy especial, ¿a que sí?'); await ask(v, [['¡Me encantó!', 'yes'], ['Un poco', 'no']]).then(x => say(v, x.intent === 'yes' ? '¡Lo sabía! Me haces muy feliz. 😊' : 'Bueno, ¡volverás y te gustará más!')); }
-      else { v.mood += 0.04; await say(v, `¡Pues tienes que ir! Te invito a probar ${v.c.dish}.`); }
+      const r = await askTopic(v, `¿Has estado alguna vez en ${v.c.country}?`, [['Sí, varias veces', 'yes'], ['Una vez', 'once'], ['Nunca', 'no'], ['Me gustaría ir', 'want']]);
+      if (r.key === 'yes' || r.key === 'once') {
+        v.mood += 0.12; await say(v, '¡Qué bien! ¿Te gustó? Mi país es muy especial, ¿a que sí?');
+        const x = await ask(v, [['¡Me encantó!', 'yes'], ['Un poco', 'no'], ['Es preciosa', 'yes'], ['Quiero volver', 'yes']]);
+        await say(v, x.intent === 'yes' ? '¡Lo sabía! Me haces muy feliz. 😊' : 'Bueno, ¡volverás y te gustará más!');
+      } else { v.mood += 0.04; await say(v, `¡Pues tienes que ir! Te invito a probar ${v.c.dish}.`); }
     },
     async musica(v) {
       const r = await askTopic(v, '¿Qué música te gusta?', [['Pop 🎤', 'pop'], ['Rock 🎸', 'rock'], ['Reguetón 🔥', 'reg'], ['Clásica 🎻', 'cla']]);
-      await say(v, r.key === 'pop' ? '¡Pop! Pues yo canto en la ducha, y fatal, pero con mucha pasión. 🎶' : r.key === 'rock' ? '¡Rock! ¡Eso es actitud! 🤘' : r.key === 'reg' ? '¡Dale! ¡Hay que bailar! 🔥' : r.key === 'cla' ? 'Clásica, qué elegante. Me relaja muchísimo.' : '¡Buen gusto! Tendrás que pasarme tu lista.');
+      await say(v, r.key === 'pop' ? '¡Pop! Pues yo canto en la ducha, y fatal, pero con mucha pasión. 🎶' : r.key === 'rock' ? '¡Rock! ¡Eso es actitud! 🤘' : r.key === 'reg' ? '¡Dale! ¡Hay que bailar! 🔥' : 'Clásica, qué elegante. Me relaja muchísimo.');
     },
     async terrenos(v) {
-      const r = await askTopic(v, '¿Ya tienes terrenos en el juego?', YN);
+      const r = await askTopic(v, '¿Ya tienes terrenos en el juego?', [['Sí, varios 🏡', 'yes'], ['Solo uno', 'yes'], ['Todavía no', 'no'], ['Estoy en ello', 'no']]);
       if (r.intent === 'yes') { v.mood += 0.1; await say(v, '¡Entonces eres un gran propietario! Seguro que tu casa es preciosa. 🏡'); }
       else await say(v, '¡Pues anímate! Hay parcelas por todo el mundo, hasta en mi país. 🌍');
     }
@@ -541,21 +577,17 @@
     if (known) v.mood += 0.15;
     const body = known
       ? `¡Pero si ya nos conocíamos${nick ? ', ' + nick : ''}! Soy ${v.name}, de ${v.c.country} ${v.c.flag}. ¡Qué alegría verte otra vez!`
-      : `${nick ? nick + ', s' : 'S'}oy ${v.name}, de ${v.c.country} ${v.c.flag}. ${part}${rain ? ', ¡menuda lluvia!' : ''}. ${nick ? '¿Qué tal el día?' : '¿Cómo te llamas?'}`;
+      : `${nick ? nick + ', s' : 'S'}oy ${v.name}, de ${v.c.country} ${v.c.flag}. ${part}${rain ? ', ¡menuda lluvia!' : ''}. ¿Qué tal el día?`;
     return body;
   }
   async function greet(v, mem) {
-    const nick = myNick();
     // el saludo en su idioma se dice aparte (si hay voz de ese idioma); si habla español, va dentro del texto
     await say(v, (v.c.es ? v.c.hello + ' ' : '') + greeting(v, mem), v.c.es ? '' : v.c.hello);
     const r = await ask(v, [['¡Hola! 😀', 'hello'], ['Muy bien', 'good'], ['Regular', 'meh'], ['¿Y tú de dónde eres?', 'from']]);
     if (r.intent === 'good') { v.mood += 0.1; await say(v, '¡Me alegro mucho! 😊'); }
     else if (r.intent === 'meh') { v.mood += 0.06; await say(v, '¡Ánimo! Ya verás como mejora. Un paseo por el mapa siempre ayuda.'); }
     else if (r.intent === 'hello') { v.mood += 0.05; await say(v, '¡Qué alegría verte! 😄'); }
-    else if (!(await side(v, r))) {
-      if (r.intent === 'other' && !nick && r.text.length < 25) { v.mood += 0.08; await say(v, `¡Encantado, ${cap(r.text)}! Qué nombre tan bonito.`); }
-      else await say(v, '¡Perfecto! Pues vamos a charlar un ratito.');
-    }
+    else if (!(await side(v, r))) await say(v, '¡Perfecto! Pues vamos a charlar un ratito.');
   }
   function pickTopics(v, mem) {
     const pool = Object.keys(TOPICS).filter(k => !mem.asked[k]);
@@ -573,7 +605,7 @@
     if (v.upset || v.mood < 0.6 || v.turns < 3 || !v.giver) return;
     if (!logged()) {
       await say(v, 'Me caes genial. Si creas tu cuenta, la próxima vez te regalo créditos. 🎁');
-      const r = await ask(v, [['Entrar / crear cuenta', 'login'], ['Luego', 'later']]);
+      const r = await ask(v, [['Entrar / crear cuenta', 'login'], ['Luego', 'later'], ['¡Qué amable! 😊', 'thanks'], ['Cuéntame más', 'more']]);
       if (r.key === 'login' && typeof openLogin === 'function') openLogin();
       return;
     }
@@ -581,7 +613,7 @@
     if (!(left >= 1)) return;
     const n = Math.random() < 0.5 ? 1 : 2;   // 1 o 2 créditos; el servidor no deja pasar de 2
     await say(v, `¡Me has caído genial! Toma, ${n} ${n === 1 ? 'crédito' : 'créditos'} de regalo. 🎁`);
-    const r = await ask(v, [['Aceptar 🎁', 'gift_yes'], ['No, gracias', 'gift_no']]);
+    const r = await ask(v, [['Aceptar 🎁', 'gift_yes'], ['¡Muchas gracias! 😍', 'gift_yes'], ['No, gracias', 'gift_no'], ['Otro día', 'gift_no']]);
     if (r.key !== 'gift_yes' && !(r.intent === 'yes' || r.intent === 'thanks')) { await say(v, '¡Como quieras! El ofrecimiento sigue en pie. 😊'); return; }
     try {
       const j = await api('/api/visitantes/regalo', { method: 'POST', body: { credits: n } });
@@ -611,11 +643,12 @@
     if (talker || !canShow()) return;
     talker = v; v.phase = 'talk'; v.hold = 0;
     const p = panel(); p.log.textContent = ''; p.chips.textContent = ''; p.who.textContent = `${v.c.flag} ${v.name} · ${v.c.country}`; p.el.classList.remove('hidden');
+    focusTalk();
     const my = ++convToken;
     try { await conversation(v); }
     catch (e) { if (e !== ABORT) console.error('Visitantes:', e); }
     if (my !== convToken) return;   // la conversación se cerró desde fuera (endConv ya lo limpió todo)
-    p.el.classList.add('hidden'); talker = null; release(v);
+    p.el.classList.add('hidden'); talker = null; unfocusTalk(); release(v);
   }
 
   // ---------- Reloj de aparición ----------
@@ -642,6 +675,7 @@
     on: val => { try { window.soundPrefs.set('visitantes', !!val); } catch (e) {} if (!val) clearAll(); },
     list: () => vs.map(v => ({ nombre: v.name, pais: v.c.country, plan: v.plan.map(s => s.k).join('>') })),
     countries: () => C.length,
+    talking: () => !!talker,   // jugador.js: mientras se habla no echa a andar solo
     talk: i => { const v = vs[i]; if (v) startTalk(v); return !!v; },   // empieza a hablar con el visitante nº i (pruebas)
     _intent: intentOf, _country: countryIn, _data: C   // para las pruebas (visitantes.test.js)
   };

@@ -67,23 +67,23 @@ function setup(over = {}) {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Responde a todo lo que pregunta el visitante hasta que se cierra el panel; devuelve lo dicho
-async function drive(ui, pickChip, typed) {
-  const panel = ui.body.children[0], log = panel.querySelector('.vz-log'), chips = panel.querySelector('.vz-chips'), input = panel.querySelector('input'), form = panel.querySelector('form');
-  const asked = new Set(), all = [];   // el panel solo guarda las últimas líneas: las vamos apuntando todas
+async function drive(ui, pickChip) {
+  const panel = ui.body.children[0], log = panel.querySelector('.vz-log'), chips = panel.querySelector('.vz-chips');
+  const asked = new Set(), all = [], counts = [], lines = [];   // el panel solo guarda las últimas líneas: las vamos apuntando todas
   for (let i = 0; i < 600; i++) {
     await sleep(15);
     log.children.forEach(c => { if (!all.includes(c.textContent)) all.push(c.textContent); });
+    if (log.children.length > 1) lines.push(log.children.length);
     if (panel.classList.contains('hidden') && i > 5) break;
     const btns = chips.children;
     if (btns.length && !asked.has(btns)) {
       asked.add(btns);
-      const t = typed && typed(btns.map(b => b.textContent));
-      if (t) { input.value = t; form.onsubmit({ preventDefault() {} }); }
-      else { const b = pickChip(btns); b.onclick(); }
+      counts.push(btns.length);
+      const b = pickChip(btns); b.onclick();
     }
   }
   log.children.forEach(c => { if (!all.includes(c.textContent)) all.push(c.textContent); });
-  return { said: all, hidden: panel.classList.contains('hidden') };
+  return { said: all, counts, lines, hidden: panel.classList.contains('hidden'), hasInput: !!panel._q.input || !!panel._q.form };
 }
 
 test('hay países de todos los continentes, con nombres de hombre y de mujer y sin duplicados raros', () => {
@@ -133,13 +133,25 @@ test('un visitante sale, te busca, te pregunta por TikTok y te regala 1-2 crédi
   } finally { Math.random = realRandom; }
 });
 
-test('si le pides créditos o lo insultas no regala', async () => {
+test('el chat no tiene caja de texto: siempre 5 opciones para pulsar y una sola línea cada vez', async () => {
   const realRandom = Math.random; Math.random = () => 0.1;
   try {
     const ui = setup(); ui.tick(); window.Visitantes.spawn(); window.Visitantes.talk(0);
-    const out = await drive(ui, btns => btns[0], names => 'eres tonto');
+    const out = await drive(ui, btns => btns.find(b => /Muy bien|Sí|Pop|Mi casa|Pizza|Aceptar/.test(b.textContent)) || btns[0]);
     assert.ok(out.hidden);
-    assert.ok(/mal|educaci|Adiós|marcho/i.test(out.said.join(' ')), 'se ofende y se va');
+    assert.ok(!out.hasInput, 'no hay caja de texto');
+    assert.ok(out.counts.length >= 3 && out.counts.every(n => n === 5), 'siempre 5 opciones: ' + out.counts);
+    assert.ok(out.lines.length === 0, 'nunca más de una línea a la vez');
+    assert.ok(window.Visitantes.talking() === false, 'al terminar ya no habla');
+  } finally { Math.random = realRandom; }
+});
+
+test('pulsar «Adiós» termina la charla sin regalo', async () => {
+  const realRandom = Math.random; Math.random = () => 0.1;
+  try {
+    const ui = setup(); ui.tick(); window.Visitantes.spawn(); window.Visitantes.talk(0);
+    const out = await drive(ui, btns => btns.find(b => /Adiós/.test(b.textContent)));
+    assert.ok(out.hidden);
     assert.ok(!apiCalls.some(c => c[0].includes('/regalo')), 'no regala nada');
   } finally { Math.random = realRandom; }
 });

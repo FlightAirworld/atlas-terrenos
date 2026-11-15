@@ -160,7 +160,60 @@
       m.on('move', onMove); m.on('zoom', zoomOk); zoomOk();
       off = () => { clearTimeout(t); try { m.off('move', onMove); m.off('zoom', zoomOk); } catch (e) {} };
     }
+    if (targetId === 'map' && m && m.easeTo) { const offAuto = autoWalk(m, el); const off0 = off; off = () => { offAuto(); off0(); }; }
     live = { el, off };
+  }
+
+  // ---------- Camina solo cuando estás quieto ----------
+  // Si el jugador no toca nada (ni mapa, ni teclas, ni botones) durante 5 s, su muñeco echa a andar solo en un paseíto sin rumbo, a velocidad constante,
+  // sin salirse del círculo rojo de su barrio. Cualquier toque lo para al instante. No anda mientras habla con un visitante, está en una escena
+  // (casa, edificio), hay un paseo o un viaje en marcha o el muñeco no se ve.
+  const IDLE_MS = 5000, SPEED = 32;   // píxeles de pantalla por segundo (parecido al de los visitantes)
+  function autoWalk(m, el) {
+    let lastAct = Date.now(), auto = false, dir = Math.random() * Math.PI * 2;
+    const metros = (a, b, c, e) => {
+      const R = 6371008.8, rad = Math.PI / 180, dLa = (c - a) * rad, dLo = (e - b) * rad;
+      const h = Math.sin(dLa / 2) ** 2 + Math.cos(a * rad) * Math.cos(c * rad) * Math.sin(dLo / 2) ** 2;
+      return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+    };
+    const canWalk = () => {
+      try {
+        const b = document.body.classList;
+        return !document.hidden && el.isConnected && el.style.opacity !== '0' && m.getZoom() >= 14
+          && !b.contains('en-mundo') && !b.contains('viajando')
+          && !window.houseInside && !window.earthMuted && !window.fightMuted
+          && !document.getElementById('visita') && !document.getElementById('edif')
+          && !(window.Visitantes && window.Visitantes.talking && window.Visitantes.talking())
+          && !(window.paseo && window.paseo.running && window.paseo.running());
+      } catch (e) { return false; }
+    };
+    const act = () => { lastAct = Date.now(); if (auto) { auto = false; try { m.stop(); } catch (e) {} } };
+    function leg() {
+      try {
+        const c = m.getCenter(), a = m.project(c), br = window.barrio, r = br && br.radius && br.radius(), pos = br && br.pos && br.pos();
+        dir += (Math.random() - 0.5) * 1.1;   // giros suaves
+        if (r && pos && metros(c.lat, c.lng, pos.lat, pos.lng) > r * 0.85) {   // cerca del borde del barrio: vuelve hacia dentro
+          const q = m.project([pos.lng, pos.lat]); dir = Math.atan2(q.y - a.y, q.x - a.x) + (Math.random() - 0.5) * 0.5;
+        }
+        const px = 70 + Math.random() * 90, to = m.unproject({ x: a.x + Math.cos(dir) * px, y: a.y + Math.sin(dir) * px });
+        auto = true;
+        m.once('moveend', () => {
+          if (!auto) return;   // lo han parado (act) o lo ha movido otra cosa
+          auto = false;
+          if (Date.now() - lastAct >= IDLE_MS && canWalk()) leg();   // sigue andando mientras no toques nada
+        });
+        m.easeTo({ center: [to.lng, to.lat], duration: px / SPEED * 1000, easing: x => x, essential: true });
+      } catch (e) { auto = false; }
+    }
+    const timer = setInterval(() => {
+      const now = Date.now();
+      if (auto) return;
+      if (!canWalk() || (m.isMoving && m.isMoving())) { lastAct = now; return; }   // si el mapa se mueve por otra causa (viaje, parcela tocada…), vuelve a contar los 5 s
+      if (now - lastAct >= IDLE_MS) leg();
+    }, 400);
+    const ev = ['pointerdown', 'keydown', 'wheel', 'touchstart'];
+    ev.forEach(n => document.addEventListener(n, act, { capture: true, passive: true }));
+    return () => { clearInterval(timer); ev.forEach(n => document.removeEventListener(n, act, { capture: true })); if (auto) { auto = false; try { m.stop(); } catch (e) {} } };
   }
   window.playerWalker = { show, hide, el: () => (live ? live.el : null) };   // el(): el muñeco propio en el mapa (jugadores.js le pone los globos de charla)
 })();
