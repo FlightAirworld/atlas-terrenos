@@ -97,7 +97,8 @@
     return null;
   }
   // near: punto de partida (p. ej. la parcela que acaba de reclamar). Sin near: GPS y, si no hay, el centro del mapa.
-  async function goToLot(near) {
+  // open = true solo cuando el jugador pulsa el botón «Llévame…»: el panel del terreno NO se abre solo; sale cuando tocas un terreno del mapa
+  async function goToLot(near, open) {
     if (busy) return;
     busy = true; paintStage();
     try {
@@ -109,7 +110,7 @@
       map.flyTo(ll, 18, { duration: ms });
       if (gps && window.skydive) window.skydive(ms, { target: 'map' });   // con GPS baja en paracaídas hasta el terreno
       await new Promise(done => { let d = false; const f = () => { if (!d) { d = true; done(); } }; map.once('moveend', f); setTimeout(f, ms + 4000); });
-      await selectAt(ll);
+      if (open) await selectAt(ll);
     } catch (e) { /* si falla, la tarjeta sigue ofreciendo el botón */ }
     finally { busy = false; paintStage(); }
   }
@@ -127,7 +128,7 @@
     if (free) render({ badge, title, text: T('Este terreno está libre y es tuyo gratis. Elige tu casa 🏠 (o deja el dado, que la elige por ti) y pulsa «Reclamar terreno».'),
       go: '⬇ ' + T('Ir al botón'), fn: () => { const b = document.getElementById('buy-parcel-btn'); if (b) b.scrollIntoView({ behavior: 'smooth', block: 'center' }); } });
     else render({ badge, title, text: T('Toca una parcela libre del mapa para hacerla tuya, o te llevo yo a una.'),
-      go: '📍 ' + T('Llévame a un terreno libre'), fn: () => goToLot(stage === 'next' ? lastClaim : null) });
+      go: '📍 ' + T('Llévame a un terreno libre'), fn: () => goToLot(stage === 'next' ? lastClaim : null, true) });
   }
   function stageFirst() { stage = 'first'; shownKey = ''; paintStage(); goToLot(null); }
   function stageNext() {
@@ -165,7 +166,7 @@
     render({
       badge: '✅ ' + T('Cuenta creada'), title: '🎉 ' + T('¡Todo guardado!'),
       text: (a > 0 ? (a === 1 ? T('Tu parcela ya es de tu cuenta.') : T('Tus parcelas ya son de tu cuenta.')) + ' ' : '') + (c > 0 ? `${T('Tienes')} ${c} ${plural(c, T('crédito'), T('créditos'))} 🎟️ ${T('para reclamar más terrenos.')}` : T('Sigue jugando y reclamando terrenos.')),
-      go: '📍 ' + T('Buscar otra parcela'), fn: () => { stage = ''; hideBox(); goToLot(lastClaim || null); }
+      go: '📍 ' + T('Buscar otra parcela'), fn: () => { stage = ''; hideBox(); goToLot(lastClaim || null, true); }
     });
     clearTimeout(stageWelcome.t); stageWelcome.t = setTimeout(() => { if (stage === 'welcome') { stage = ''; hideBox(); } }, 16000);
   }

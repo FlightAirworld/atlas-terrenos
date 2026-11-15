@@ -363,3 +363,17 @@ body.free-mode #panel-buy, body.free-mode #credit-buy, body.free-mode #mine-buy,
 .age-err { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: #fff1ef; color: #c0392b; font-weight: 700; font-size: 13.5px; line-height: 1.35; display: flex; align-items: center; gap: 8px; }
 .age-arrow { font-size: 22px; line-height: 1; animation: ageArrow .7s ease-in-out infinite alternate; }
 @keyframes ageArrow { from { transform: translateY(3px); } to { transform: translateY(-4px); } }
+
+/* Panel de terreno más pequeño en el móvil: deja ver el mapa y a los muñecos */
+@media (max-width: 600px) {
+  .panel { max-height: 32vh; padding: 6px 10px 8px; }
+  .panel h2 { font-size: 14px; }
+  .panel .muted { font-size: 11px; margin: 0 0 2px; }
+  #share-btn { padding: 3px 10px !important; font-size: 12px !important; margin: 2px 0 4px !important; }
+  #buy-row { margin: 0 0 4px !important; }
+  #buy-parcel-btn { padding: 4px 12px !important; font-size: 13px !important; }
+  #p-free p { margin: 2px 0; font-size: 13px; }
+  #p-free label { margin: 2px 0 0; font-size: 11px; }
+  .house-cats button { padding: 2px 8px !important; font-size: 12px !important; }
+  #house-pick-free, #house-pick-edit { grid-template-rows: repeat(2, 38px) !important; grid-auto-columns: 38px !important; gap: 4px !important; padding-bottom: 3px !important; }
+}
