@@ -55,11 +55,16 @@
     #bingo .bn-cap { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 12px; font-weight: 700; }
     #bingo .bn-buy { display: flex; gap: 6px; align-items: center; margin: 0 0 8px; flex-wrap: wrap; }
     #bingo .bn-buy button { padding: 8px 10px; font-weight: 800; }
+    #bingo .bn-buy button.go { background: #d6001c; color: #fff; border: 0; border-radius: 10px; animation: bnblink2 1s ease-in-out infinite; }
+    #bingo .bn-buy button.go:disabled { animation: none; opacity: .6; }
+    @keyframes bnblink2 { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+    #bingo .bn-big { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; padding: 6px 2px 8px; }
+    #bingo .bn-big span { min-width: 68px; height: 68px; padding: 0 8px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 16px; border: 4px solid #f08c00; background: #fff5c2; color: #222; font-size: 42px; font-weight: 900; }
     #bingo .bn-buy .n { min-width: 26px; text-align: center; font-weight: 800; }
     #bingo .bn-cards { display: flex; flex-direction: column; gap: 8px; }
     #bingo .bn-card { border: 2px solid var(--line, #888); border-radius: 10px; padding: 4px; background: #fffdf0; color: #222; transition: border-color .3s; }
     #bingo .bn-card.near { border-color: #f08c00; }
-    #bingo .bn-card.full { border-color: #e03131; background: #fff0f0; }
+    #bingo .bn-card.full { border-color: #e03131; background: #fff0f0; box-shadow: 0 0 14px 3px rgba(224,49,49,.7); }
     #bingo .bn-card .hd { display: flex; justify-content: space-between; font-size: 10px; font-weight: 700; padding: 0 2px 3px; color: #555; }
     #bingo .bn-g { display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px; }
     #bingo .bn-g span { aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; border-radius: 5px; background: #fff5c2; min-height: 24px; }
@@ -136,7 +141,28 @@
   }
   const sndBall = () => { if (muted) return; tone(660, 0, 0.1, 'triangle', 0.18); tone(440, 0.09, 0.14, 'triangle', 0.14); };
   const sndTick = () => { if (muted) return; tone(900, 0, 0.04, 'square', 0.04); };
-  const sndWin = big => { if (muted) return; const seq = big ? [523, 659, 784, 1047, 784, 1047, 1319] : [523, 659, 784, 1047]; seq.forEach((f, i) => tone(f, i * 0.13, 0.22, 'triangle', 0.2)); };
+  // Fanfarria de trompetas de fiesta (sierra desafinada + filtro, como un metal). big = bingo (unos 5 s); si no, línea (unos 3 s)
+  function brass(f, t, d, vol) {
+    const o1 = actx.createOscillator(), o2 = actx.createOscillator(), fl = actx.createBiquadFilter(), g = actx.createGain();
+    o1.type = o2.type = 'sawtooth'; o1.frequency.value = f; o2.frequency.value = f; o1.detune.value = -7; o2.detune.value = 7;
+    fl.type = 'lowpass'; fl.Q.value = 2; fl.frequency.setValueAtTime(900, t); fl.frequency.linearRampToValueAtTime(3200, t + 0.09);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.03);
+    g.gain.setValueAtTime(vol, t + Math.max(0.05, d - 0.1)); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o1.connect(fl); o2.connect(fl); fl.connect(g); g.connect(actx.destination);
+    o1.start(t); o2.start(t); o1.stop(t + d + 0.05); o2.stop(t + d + 0.05);
+  }
+  const sndWin = big => {
+    if (muted) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+      const t0 = actx.currentTime + 0.05;
+      const G4 = 392, C5 = 523.25, E5 = 659.25, G5 = 783.99, C6 = 1046.5;
+      const seq = [[G4, 0, .16], [G4, .2, .16], [G4, .4, .16], [C5, .6, .8], [E5, 1.5, .16], [E5, 1.7, .16], [E5, 1.9, .16], [G5, 2.1, .8]];
+      if (big) seq.push([G4, 3.1, .2], [C5, 3.35, .2], [E5, 3.6, .2], [G5, 3.85, .2], [C6, 4.1, .95]);
+      seq.forEach(([f, t, d]) => { brass(f, t0 + t, d, 0.11); brass(f * 1.5, t0 + t, d, 0.05); });   // la melodía y una quinta por encima
+    } catch (e) { /* sin audio */ }
+  };
   function pickVoice() {
     try {
       const vs = speechSynthesis.getVoices();
@@ -160,6 +186,7 @@
 
   // ---- Rótulo en medio de la pantalla: LÍNEA / BINGO y debajo quién la cantó (fondo rojo, letras amarillas, 5 s) ----
   const banner = document.createElement('div'); banner.id = 'bn-banner'; document.body.appendChild(banner);
+  const BANNER_MS = 7000;   // lo que dura el rótulo de LÍNEA / BINGO
   let bannerT = null;
   function hideBanner() { clearTimeout(bannerT); bannerT = null; banner.style.display = 'none'; banner.classList.remove('show'); }
   function showBanner(title, w, then) {
@@ -172,7 +199,43 @@
     banner.replaceChildren(b1, b2, b3);
     banner.classList.remove('show'); void banner.offsetWidth; banner.classList.add('show'); banner.style.display = 'block';
     clearTimeout(bannerT);
-    bannerT = setTimeout(() => { hideBanner(); if (then) then(); }, 5000);
+    bannerT = setTimeout(() => { hideBanner(); if (then) then(); }, BANNER_MS);
+  }
+  // ---- Confeti: dos cañones desde abajo y lluvia desde arriba ----
+  let confettiStop = null;
+  function stopConfetti() { if (confettiStop) { confettiStop(); confettiStop = null; } }
+  function confetti(ms) {
+    stopConfetti();
+    const cv = document.createElement('canvas'); cv.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:99999';
+    const W = cv.width = window.innerWidth, H = cv.height = window.innerHeight;
+    document.body.appendChild(cv);
+    const g = cv.getContext('2d'), cols = ['#ff3b3b', '#ffe600', '#3bd16f', '#3b9eff', '#d946ef', '#ff9f1c', '#ffffff'];
+    const ps = [];
+    const add = (x, y, vx, vy) => ps.push({ x, y, vx, vy, w: 6 + Math.random() * 7, h: 4 + Math.random() * 6, r: Math.random() * 6.28, vr: (Math.random() - .5) * .4, c: cols[Math.floor(Math.random() * cols.length)] });
+    for (let i = 0; i < 90; i++) { add(0, H, 4 + Math.random() * 9, -(12 + Math.random() * 14)); add(W, H, -(4 + Math.random() * 9), -(12 + Math.random() * 14)); }
+    const t0 = performance.now(); let raf = 0, dead = false;
+    const end = () => { dead = true; cancelAnimationFrame(raf); cv.remove(); };
+    confettiStop = end;
+    (function frame(now) {
+      if (dead) return;
+      const el = now - t0;
+      if (el < ms) for (let i = 0; i < 4; i++) add(Math.random() * W, -10, (Math.random() - .5) * 3, 2 + Math.random() * 3);
+      g.clearRect(0, 0, W, H);
+      for (let i = ps.length - 1; i >= 0; i--) {
+        const p = ps[i];
+        p.vy += .35; p.vx *= .99; p.vy *= .99; p.x += p.vx; p.y += p.vy; p.r += p.vr;
+        if (p.y > H + 20) { ps.splice(i, 1); continue; }
+        g.save(); g.translate(p.x, p.y); g.rotate(p.r); g.fillStyle = p.c; g.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); g.restore();
+      }
+      if (el > ms + 4000 || (el > ms && !ps.length)) { end(); confettiStop = null; return; }
+      raf = requestAnimationFrame(frame);
+    })(t0);
+  }
+  let voiceT = null;
+  // Celebración: trompetas + confeti + (un poco después, para no pisarse con la música) la voz que dice quién ha cantado
+  function celebrate(big, text) {
+    sndWin(big); confetti(big ? 6500 : 5000);
+    clearTimeout(voiceT); voiceT = setTimeout(() => speak(text, 1), 1600);
   }
   const names = w => ((w.winners && w.winners.length ? w.winners : [w]).map(x => x.nick)).join(' y ');
 
@@ -201,17 +264,25 @@
       const left = document.createElement('span'); left.textContent = `Cartón ${c.id % 100000}`;
       const right = document.createElement('span'); right.textContent = v.missing === 0 ? '¡BINGO!' : `Faltan ${v.missing}`;
       hd.append(left, right); box.appendChild(hd);
-      const g = document.createElement('div'); g.className = 'bn-g';
-      c.grid.forEach((row, ri) => {
-        const done = v.rowsDone[ri];
-        row.forEach(n => {
-          const s = document.createElement('span');
-          if (n === 0) s.className = 'e';
-          else { s.textContent = n; if (set.has(n)) s.className = 'hit' + (done ? ' lin' : ''); }
-          g.appendChild(s);
+      if (v.missing >= 1 && v.missing <= 3) {
+        // Faltan 3 o menos: el cartón desaparece y solo se ven, en grande, los números que faltan
+        const big = document.createElement('div'); big.className = 'bn-big';
+        c.grid.flat().filter(n => n > 0 && !set.has(n)).sort((a, b) => a - b).forEach(n => { const sp = document.createElement('span'); sp.textContent = n; big.appendChild(sp); });
+        box.appendChild(big);
+      } else {   // el cartón completo (también cuando se canta el bingo: vuelve a salir entero)
+        const g = document.createElement('div'); g.className = 'bn-g';
+        c.grid.forEach((row, ri) => {
+          const done = v.rowsDone[ri];
+          row.forEach(n => {
+            const sp = document.createElement('span');
+            if (n === 0) sp.className = 'e';
+            else { sp.textContent = n; if (set.has(n)) sp.className = 'hit' + (done ? ' lin' : ''); }
+            g.appendChild(sp);
+          });
         });
-      });
-      box.appendChild(g); frag.appendChild(box);
+        box.appendChild(g);
+      }
+      frag.appendChild(box);
     });
     elCards.replaceChildren(frag);
   }
@@ -242,13 +313,13 @@
   }
   function paintWins() {
     const s = state || {};
-    const idle = s.phase === 'idle' || !s.phase;
+    const idle = s.phase === 'idle' || !s.phase || (s.phase === 'buying' && !s.cardsTotal);   // sin cartones aún: se enseña el tope
     const prize = (p, solo) => idle ? 'hasta ' + nf(solo || 0) : nf(p || 0) + ' ' + word(p || 0);
     elPBingo.textContent = prize(s.bingoPrize, s.soloBingo); elPLine.textContent = prize(s.linePrize, s.soloLine);
     const who = w => w ? (flag(w.country) || w.avatar || '🌍') + ' ' + w.nick + (w.winners && w.winners.length > 1 ? ` +${w.winners.length - 1}` : '') : '';
     elWBingo.textContent = who(s.bingo); elWLine.textContent = who(s.line);
     elWBingo.title = s.bingo ? names(s.bingo) : ''; elWLine.title = s.line ? names(s.line) : '';
-    const pl = s.players || 0;
+    const pl = Math.max(s.connected || 0, s.players || 0);   // jugadores reales con la sala abierta
     elPlayers.textContent = pl; elPlyL.textContent = pl === 1 ? 'jugador' : 'jugadores';
   }
   function fmtLeft(ms) { const s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
@@ -263,7 +334,7 @@
       const mk = (t, f) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.onclick = f; return b; };
       const n = document.createElement('span'); n.className = 'n'; n.textContent = want;
       const buy = mk(`Comprar ${want} ${want === 1 ? 'cartón' : 'cartones'} · ${nf(want * s.price)} ${word(want * s.price)}`, buyCards);
-      buy.disabled = busy;
+      buy.className = 'go'; buy.disabled = busy;
       frag.append(mk('−', () => { want = Math.max(1, want - 1); paintBuy(); }), n, mk('+', () => { want = Math.min(left, want + 1); paintBuy(); }), mk('Máx', () => { want = left; paintBuy(); }), buy);
     }
     elBuy.replaceChildren(frag);
@@ -275,7 +346,7 @@
     if (s.phase === 'buying') { t = '⏳ Próxima partida en ' + fmtLeft(s.buyUntil - (Date.now() + offset)); blink = true; }
     else if (s.phase === 'drawing') t = '🎱 Partida en juego';
     else if (s.phase === 'done') t = '🏁 Partida terminada';
-    else t = '⏳ La partida empieza ' + fmtLeft(s.buyMs || 60000) + ' después de comprar';
+    else t = '⏳ Próxima partida en ' + fmtLeft(s.buyMs || 60000);
     elTimer.textContent = t; elTimer.classList.toggle('blink', blink);
   }
   function paintCaption() {
@@ -295,7 +366,7 @@
     offset = s.now - Date.now();
     if (typeof s.credits === 'number') { elCredits.textContent = nf(s.credits); try { if (credits !== s.credits) { credits = s.credits; updateCreditUi(); } } catch (e) { /* nada */ } }
     const drawn = s.drawn || [];
-    if (s.round !== seenRound) { seenRound = s.round || 0; seen = drawn.length; announced = { line: 0, bingo: 0 }; if (!drawn.length) { elBall.style.opacity = '0'; } else { elBall.textContent = drawn[drawn.length - 1]; elBall.style.opacity = '1'; } if (s.line) announced.line = 1; if (s.bingo) announced.bingo = 1; }
+    if (s.round !== seenRound) { seenRound = s.round || 0; say(''); seen = drawn.length; announced = { line: 0, bingo: 0 }; if (!drawn.length) { elBall.style.opacity = '0'; } else { elBall.textContent = drawn[drawn.length - 1]; elBall.style.opacity = '1'; } if (s.line) announced.line = 1; if (s.bingo) announced.bingo = 1; }
     else if (drawn.length > seen) {
       const fresh = drawn.slice(seen); seen = drawn.length;
       if (fresh.length <= 2) dropBall(fresh[fresh.length - 1]);   // si te has perdido varias bolas, no las cantamos todas de golpe
@@ -308,13 +379,13 @@
       announced.line = 1;
       if (s.line.mine) say(`🎉 ¡Cantaste línea! Ganas ${s.line.prize} ${word(s.line.prize)}`);
       if (!newBingo) {
-        sndWin(false); speak(`¡Línea! ${names(s.line)}`, 1);
+        celebrate(false, `¡Línea! ${names(s.line)}`);
         showBanner('LÍNEA', s.line, () => { if (state && state.phase === 'drawing' && !state.bingo) speak('Continuamos para bingo', 1); });
       }
     }
     if (newBingo) {
-      announced.bingo = 1; sndWin(true);
-      speak(`¡Bingo! ${names(s.bingo)}`, 1);
+      announced.bingo = 1;
+      celebrate(true, `¡Bingo! ${names(s.bingo)}`);
       showBanner('BINGO', s.bingo);
       if (s.bingo.mine) say(`🏆 ¡BINGO! Ganas ${s.bingo.prize} ${word(s.bingo.prize)}`);
       else say(`🏆 Bingo de ${names(s.bingo)}. ¡Suerte en la próxima!`);
@@ -322,9 +393,10 @@
     paintWins(); paintTube(); paintCards(); paintBuy(); paintTimer(); paintCaption();
   }
 
+  let loadErr = false;
   async function load() {
-    try { apply(await api('/api/bingo')); }
-    catch (e) { say(e.message || 'No se pudo cargar el bingo', true); }
+    try { apply(await api('/api/bingo')); if (loadErr) { loadErr = false; say(''); } }
+    catch (e) { loadErr = true; const m = String((e && e.message) || ''); say(/failed to fetch|network/i.test(m) ? 'Sin conexión, reintentando…' : (m || 'No se pudo cargar el bingo'), true); }
   }
   async function buyCards() {
     if (busy) return;
@@ -351,7 +423,7 @@
     load(); clearInterval(timer); timer = setInterval(tick, 500);
   }
   function close() {
-    hideBanner(); modal.classList.add('hidden'); clearInterval(timer); timer = null; try { speechSynthesis.cancel(); } catch (e) { /* nada */ }
+    hideBanner(); stopConfetti(); clearTimeout(voiceT); modal.classList.add('hidden'); clearInterval(timer); timer = null; try { speechSynthesis.cancel(); } catch (e) { /* nada */ }
     if (earthWasMuted === false && window.fightMute) window.fightMute(false);   // vuelve el sonido de la Tierra
     earthWasMuted = null;
   }

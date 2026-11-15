@@ -3,6 +3,8 @@
 //  · Cada cartón cuesta BINGO_PRICE créditos (1) y cada jugador puede comprar como mucho BINGO_MAX_CARDS (24) por ronda.
 //  · La primera compra abre la ronda: hay BINGO_BUY_SECONDS (60, un minuto) para comprar y después cae una bola cada BINGO_BALL_SECONDS (4).
 //  · Bingo de 90 bolas: cartón de 3 filas × 9 columnas con 15 números. Línea = una fila completa; bingo = el cartón entero.
+//  · La partida empieza SOLA: la cuenta atrás de 1 minuto arranca en cuanto se acaba la anterior (no hace falta que nadie compre).
+//    Si al acabar la cuenta atrás no hay cartones, salen unas pocas bolas de muestra (BINGO_EMPTY_BALLS) y vuelve a empezar la cuenta atrás.
 //  · Solo hay UNA línea y UN bingo por ronda (el primero que se completa). Si dos o más jugadores lo completan con la misma bola, se reparten el premio a partes iguales (hacia abajo).
 //  · Al cantarse la línea el juego se para LINE_PAUSE (8 s): el navegador enseña el rótulo 5 s, dice «Continuamos para bingo» y siguen las bolas.
 //  · Premios (el bote son los cartones vendidos × precio):
@@ -24,9 +26,16 @@ module.exports = function (d) {
   const BALL_MS = Math.max(1, numEnv('BINGO_BALL_SECONDS', 4)) * 1000;
   const SOLO_LINE = Math.floor(numEnv('BINGO_SOLO_LINE', 5)), SOLO_BINGO = Math.floor(numEnv('BINGO_SOLO_BINGO', 20));
   const LINE_PCT = 0.2, BINGO_PCT = 0.8;
+  const AUTO = String(process.env.BINGO_AUTO || 'on').toLowerCase() !== 'off';   // las partidas empiezan solas
+  const EMPTY_BALLS = Math.max(1, Math.floor(numEnv('BINGO_EMPTY_BALLS', 12)));   // bolas de muestra si nadie compró
   const LINE_PAUSE_MS = Math.max(0, numEnv('BINGO_LINE_PAUSE_SECONDS', 8)) * 1000;   // pausa tras cantar la línea
   const RESULT_MS = 15_000;       // tras el bingo se enseña el resultado este tiempo; luego la sala queda libre para otra ronda
   const LOCK_ID = 7_771_001;      // cerrojo de Postgres para que dos compras a la vez no abran dos rondas
+
+  // Jugadores conectados: los que tienen la sala abierta (el navegador pregunta cada segundo)
+  const seen = new Map();
+  const touch = uid => { const now = Date.now(); seen.set(uid, now); if (seen.size > 2000) for (const [k, v] of seen) if (now - v > 60_000) seen.delete(k); };
+  const connected = () => { const now = Date.now(); let n = 0; for (const v of seen.values()) if (now - v <= 6000) n++; return n; };
 
   const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
   const cleanAvatar = a => (typeof a === 'string' && a.length > 0 && a.length <= 8) ? a : null;
@@ -43,6 +52,12 @@ module.exports = function (d) {
     const old = Date.now() - 2 * 24 * 3600 * 1000;   // solo hacen falta las rondas recientes
     await run('DELETE FROM bingo_cards WHERE round_id IN (SELECT id FROM bingo_rounds WHERE created_at < $1)', [old]).catch(() => {});
     await run('DELETE FROM bingo_rounds WHERE created_at < $1', [old]).catch(() => {});
+    const clean = () => {
+      const old = Date.now() - 2 * 24 * 3600 * 1000;
+      run('DELETE FROM bingo_cards WHERE round_id IN (SELECT id FROM bingo_rounds WHERE created_at < $1)', [old]).catch(() => {});
+      run('DELETE FROM bingo_rounds WHERE created_at < $1', [old]).catch(() => {});
+    };
+    setInterval(clean, 3600_000).unref();   // con partidas automáticas salen muchas rondas: se limpian cada hora
     setInterval(() => { advance().catch(() => {}); }, 1000).unref();   // paga línea y bingo aunque nadie tenga la pantalla abierta
   }
 
@@ -82,7 +97,20 @@ module.exports = function (d) {
     try {
       await client.query('BEGIN');
       const r = (await client.query("SELECT * FROM bingo_rounds WHERE status <> 'done' ORDER BY id DESC LIMIT 1 FOR UPDATE")).rows[0];
-      if (!r) { await client.query('ROLLBACK'); return; }
+      if (!r) {   // sala libre: la siguiente partida arranca sola con su cuenta atrás de 1 minuto, cuando se ha enseñado el resultado
+        const nowA = Date.now();
+        if (AUTO) {
+          await client.query('SELECT pg_advisory_xact_lock($1)', [LOCK_ID]);
+          const active = (await client.query("SELECT id FROM bingo_rounds WHERE status <> 'done' LIMIT 1")).rows[0];
+          const last = (await client.query('SELECT finished_at FROM bingo_rounds ORDER BY id DESC LIMIT 1')).rows[0];
+          if (!active && (!last || last.finished_at === null || nowA - Number(last.finished_at) >= RESULT_MS)) {
+            await client.query("INSERT INTO bingo_rounds (status, ord, created_at, buy_until) VALUES ('buying', $1, $2, $3)",
+              [JSON.stringify(shuffle(Array.from({ length: 90 }, (_, i) => i + 1))), nowA, nowA + BUY_MS]);
+            await client.query('COMMIT'); return;
+          }
+        }
+        await client.query('ROLLBACK'); return;
+      }
       const now = Date.now();
       let status = r.status, drawStart = r.draw_start === null ? null : Number(r.draw_start);
       if (status === 'buying') {
@@ -96,8 +124,9 @@ module.exports = function (d) {
       const cards = (await client.query('SELECT id, user_id, pack_code, nick, country, avatar, grid FROM bingo_cards WHERE round_id = $1', [r.id])).rows
         .map(c => ({ ...c, rows: rowsOf(JSON.parse(c.grid)) }));
       const upd = { status, draw_start: drawStart };
-      if (!cards.length) {   // no debería pasar (la ronda nace con una compra), pero no se queda colgada
-        upd.status = 'done'; upd.finished_at = now;
+      if (!cards.length) {   // nadie compró: salen unas bolas de muestra y se acaba, para que empiece la cuenta atrás de la siguiente
+        evaluated = Math.min(total, EMPTY_BALLS);
+        if (total >= EMPTY_BALLS) { upd.status = 'done'; upd.finished_at = now; }
       } else {
         const prizes = prizesFor(new Set(cards.map(c => c.user_id)).size, cards.length);
         const drawn = new Set(order.slice(0, evaluated));
@@ -154,7 +183,7 @@ module.exports = function (d) {
     const uid = String(user.id);
     const pack = await ensureUserPack(user);
     const now = Date.now();
-    const base = { ok: true, on: true, now, price: PRICE, maxCards: MAX_CARDS, ballMs: BALL_MS, credits: Number(pack.credits), soloLine: SOLO_LINE, soloBingo: SOLO_BINGO };
+    const base = { ok: true, on: true, now, connected: connected(), price: PRICE, maxCards: MAX_CARDS, ballMs: BALL_MS, credits: Number(pack.credits), soloLine: SOLO_LINE, soloBingo: SOLO_BINGO };
     const r = (await all('SELECT * FROM bingo_rounds ORDER BY id DESC LIMIT 1'))[0];
     let phase = 'idle';
     if (r) {
@@ -180,6 +209,7 @@ module.exports = function (d) {
     if (!ON) return { ok: true, on: false };
     const user = await needUser(req);
     if (rateHit('bingo:' + user.id, 60_000) > 240) throw new HttpError(429, 'Vas muy rápido. Espera un momento');
+    touch(String(user.id));
     return view(user);
   }
 
@@ -187,6 +217,7 @@ module.exports = function (d) {
   async function buy(req, body) {
     if (!ON) throw new HttpError(404, 'El bingo está desactivado');
     const user = await needUser(req); const uid = String(user.id);
+    touch(uid);
     if (rateHit('bingo-buy:' + uid, 60_000) > 30) throw new HttpError(429, 'Vas muy rápido. Espera un minuto');
     const count = Math.floor(Number(body && body.count));
     if (!Number.isFinite(count) || count < 1 || count > MAX_CARDS) throw new HttpError(400, `Elige entre 1 y ${MAX_CARDS} cartones`);
