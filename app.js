@@ -1055,6 +1055,8 @@ function updateBuyParcelBtn(p) {
   const bar = window.barrio && cur && !cur.owner && !isOtherWorld(cur) ? window.barrio.check(cur) : { ok: true };
   b.textContent = bar.ok ? '🛒 Reclamar terreno' : '📍 Fuera de tu barrio';
   b.classList.toggle('barrio-off', !bar.ok);
+  const go = $('barrio-go');   // «IR A TU POSICIÓN»: a la derecha de «Fuera de tu barrio», en verde parpadeando
+  if (go) go.classList.toggle('hidden', bar.ok || b.classList.contains('hidden'));
   if (!bar.ok && open && cur === selected) setMsg(bar.msg);
 }
 $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; if (window.worldClearSel) window.worldClearSel(); };
