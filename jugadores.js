@@ -3,11 +3,12 @@
 // en el sitio del juego donde están. Cuando dos muñecos se encuentran (también el tuyo), se saludan y charlan solos con globos de texto.
 //   - Cada ~4 s se avisa al servidor de por dónde estás (POST /api/online/pos: solo el centro del mapa del juego, nunca la ubicación real) y se reciben
 //     los demás jugadores REALES conectados que caen dentro de tu pantalla.
-//   - Solo a nivel de calle (zoom ≥ 15) y en la Tierra. Al alejar el mapa, entrar en una casa o viajar, dejas de enviarte y de verlos.
+//   - Solo a nivel de barrio/calle (zoom ≥ 14) y en la Tierra. Al alejar el mapa, entrar en una casa o viajar, dejas de enviarte y de verlos.
 //   - Quien no ha iniciado sesión aparece como «Visitante» con la bandera de su país.
-//   - Las charlas las genera cada navegador (no se guardan ni se envían): son el «ambiente» del encuentro.
+//   - Las charlas no se envían: cada navegador las genera, pero con la misma semilla (los dos identificadores públicos + el minuto), así que los DOS jugadores que se encuentran
+//     ven la misma conversación a la vez, con el mismo que habla primero.
 (function () {
-  const POLL = 4000, MIN_ZOOM = 15, MEET_PX = 110, COOLDOWN = 60000, LINE_MS = 3000;
+  const POLL = 4000, MIN_ZOOM = 14, MEET_PX = 110, COOLDOWN = 60000, LINE_MS = 3000;
   const API = window.API_BASE || '';
   let cid = null;
   try { cid = localStorage.getItem('onlineCid'); } catch (e) {}
@@ -44,6 +45,8 @@
 
   // ---------- Muñecos de los demás ----------
   const others = new Map();   // id -> { el, from, to, t0, shown:{lng,lat}, name, busy }
+  let myId = '';
+  const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
   let polling = false, hiddenSent = false, lastTalk = new Map(), meetingTimer = 0, frame = 0;
 
   const myName = () => { let n = ''; try { n = (window.atlasPlayerName ? window.atlasPlayerName() : '') || ''; } catch (e) {} return String(n).trim() || 'amigo'; };
@@ -76,6 +79,7 @@
       const r = await fetch(API + '/api/online/pos', { method: 'POST', headers, body: JSON.stringify({ cid, lng: c.lng, lat: c.lat, bbox: { w: b.getWest(), s: b.getSouth(), e: b.getEast(), n: b.getNorth() } }) });
       if (!r.ok) return;
       const j = await r.json(), seen = new Set(), now = performance.now();
+      if (j.me) myId = j.me;
       (j.players || []).forEach(p => {
         seen.add(p.id);
         let o = others.get(p.id);
@@ -107,23 +111,25 @@
       pts.push({ id, x: p.x, y: p.y, o });
     });
     const me = window.playerWalker && window.playerWalker.el && window.playerWalker.el();
-    if (me && me.isConnected) pts.push({ id: 'me', x: W / 2, y: H / 2, o: { el: me, name: myName(), busy: !!me._busy, mine: true } });
+    if (me && me.isConnected) pts.push({ id: myId || 'me', x: W / 2, y: H / 2, o: { el: me, name: myName(), busy: !!me._busy, mine: true } });
     for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
-      const a = pts[i], b = pts[j];
+      let a = pts[i], b = pts[j];
+      if (a.id === 'me' || b.id === 'me') continue;   // aún no sé mi identificador público: espero a la siguiente respuesta
+      if (a.id > b.id) [a, b] = [b, a];                // el de identificador menor habla primero, igual en los dos navegadores
       if (a.o.busy || b.o.busy) continue;
       if (Math.hypot(a.x - b.x, a.y - b.y) > MEET_PX) continue;
       const key = [a.id, b.id].sort().join('|'), last = lastTalk.get(key) || 0;
       if (Date.now() - last < COOLDOWN) continue;
       lastTalk.set(key, Date.now());
       if (lastTalk.size > 200) lastTalk.clear();
-      talk(a, b);
+      talk(a, b, TALKS[hash(key + ':' + Math.floor(Date.now() / COOLDOWN)) % TALKS.length]);   // misma semilla = misma charla en los dos móviles
     }
     frame = requestAnimationFrame(tick);
   }
 
   // Dos muñecos se miran y se van contestando con globos de texto
-  async function talk(a, b) {
-    const A = a.o, B = b.o, script = pick(TALKS);
+  async function talk(a, b, script) {
+    const A = a.o, B = b.o;
     const set = (o, v) => { o.busy = v; if (o.mine) o.el._busy = v; };
     set(A, true); set(B, true);
     A.el.classList.remove('walking'); B.el.classList.remove('walking');

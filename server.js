@@ -1708,7 +1708,7 @@ async function onlinePos(req, body) {
     players.push({ id: liveId(k), lng: p.lng, lat: p.lat, nick: p.nick, cc: p.cc });
     if (players.length >= LIVE_MAX) break;
   }
-  return { players };
+  return { players, me: liveId(cid) };   // me: mi identificador público, para que los dos muñecos que se encuentran elijan la MISMA charla
 }
 setInterval(() => { const now = Date.now(); for (const [k, p] of livePos) if (now - p.t > LIVE_TTL * 2 || !onlineClients.has(k)) livePos.delete(k); }, 30_000).unref();
 
