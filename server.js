@@ -418,6 +418,8 @@ const cardsMod = () => cardsMod.m || (cardsMod.m = require('./cards-server')({ p
 const triviaMod = () => triviaMod.m || (triviaMod.m = require('./trivia-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, numEnv }));
 // Rasca y gana (rasca-server.js): mismo patrón
 const rascaMod = () => rascaMod.m || (rascaMod.m = require('./rasca-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, numEnv }));
+// Bingo (bingo-server.js): sala compartida con rondas, mismo patrón
+const bingoMod = () => bingoMod.m || (bingoMod.m = require('./bingo-server')({ pool, run, all, needUser, ensureUserPack, HttpError, rateHit, numEnv }));
 // Juegos nuevos (minijuegos-server.js): racha diaria, Adivina el lugar, ¿Más o menos?, cofres del mapa y duelos
 const mjMod = () => mjMod.m || (mjMod.m = require('./minijuegos-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, cardsMod, pushToUser: (...a) => pushToUser(...a) }));
 // Parejas con tus cartas (parejas-server.js): mismo patrón
@@ -2885,6 +2887,8 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/trivia') return triviaMod().get(req);
   if (req.method === 'POST' && pn === '/api/trivia/start') return triviaMod().start(req);
   if (req.method === 'POST' && pn === '/api/trivia/answer') return triviaMod().answer(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/bingo') return bingoMod().get(req);
+  if (req.method === 'POST' && pn === '/api/bingo/buy') return bingoMod().buy(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/rasca') return rascaMod().get(req);
   if (req.method === 'POST' && pn === '/api/rasca/play') return rascaMod().play(req);
   if (req.method === 'GET' && pn === '/api/mj/racha') return mjMod().rachaGet(req);
@@ -2982,6 +2986,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
   .then(() => cardsMod().init()).then(() => cardsMod().ON && cardsMod().init2()).catch(e => console.error('No se pudieron crear las tablas de cartas:', e.message))
   .then(() => triviaMod().init()).catch(e => console.error('No se pudieron crear las tablas de la trivia:', e.message))
   .then(() => rascaMod().init()).catch(e => console.error('No se pudieron crear las tablas del rasca y gana:', e.message))
+  .then(() => bingoMod().init()).catch(e => console.error('No se pudieron crear las tablas del bingo:', e.message))
   .then(() => mjMod().init()).catch(e => console.error('No se pudieron crear las tablas de los juegos nuevos:', e.message))
   .then(() => parejasMod().init()).catch(e => console.error('No se pudieron crear las tablas de las parejas:', e.message))
   .then(() => bots.start({ run, q, parcelFromLatLng, isUniqueViolation, cityNone: CITY_NONE,
@@ -3949,7 +3954,7 @@ const httpServer = http.createServer(async (req, res) => {
     if (req.method === 'GET' && /^\/(en|fr|de|it|pt|ja|zh)$/.test(url.pathname)) { res.writeHead(301, { Location: url.pathname + '/' + url.search }); return res.end(); }   // páginas por idioma: /en -> /en/
     let file = path.normalize(path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname + (url.pathname.endsWith('/') ? 'index.html' : '')));   // /mundos/ -> mundos/index.html
     const rel = path.relative(PUBLIC, file);
-    if (!file.startsWith(PUBLIC + path.sep) || /(^|[\\/])(\.|node_modules)/.test(rel) || /^(server\.js|build-static\.js|package(-lock)?\.json|(trivia|rasca|parejas|minijuegos)-server\.js|trivia-bank\.js)$/.test(rel) || !MIME[path.extname(file)] || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(404, 'No encontrado', 'text/plain');
+    if (!file.startsWith(PUBLIC + path.sep) || /(^|[\\/])(\.|node_modules)/.test(rel) || /^(server\.js|build-static\.js|package(-lock)?\.json|(trivia|rasca|parejas|minijuegos|bingo)-server\.js|trivia-bank\.js)$/.test(rel) || !MIME[path.extname(file)] || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(404, 'No encontrado', 'text/plain');
     return sendStatic(req, res, file);
   } catch (e) {
     const status = e.status || 500;
