@@ -16,6 +16,7 @@
   st.textContent = `
     #bingo .modal-card { max-height: min(96vh, 820px); overflow-y: auto; padding-left: 10px; padding-right: 10px; }
     #bingo h2 { margin: 0 0 6px; font-size: 18px; }
+    #bingo .bn-price { margin-top: 14px; padding: 10px; text-align: center; font-weight: 800; font-size: 14px; letter-spacing: .3px; border-top: 2px solid rgba(128,128,128,.3); }
     #bingo .bn-credit { font-size: 12px; margin: 0 0 6px; opacity: .85; }
     #bingo .bn-top { display: grid; grid-template-columns: 48px 1fr 108px; gap: 6px; align-items: start; }
     #bingo .bn-tube { position: relative; width: 46px; height: 188px; box-sizing: border-box; border-radius: 23px; border: 2px solid #d5d9e0; background: linear-gradient(90deg, #dfe3ea 0%, #fff 30%, #fff 62%, #cfd5de 100%); overflow: hidden; box-shadow: 0 3px 8px rgba(0,0,0,.3), inset 0 0 8px rgba(0,0,0,.18); }
@@ -112,6 +113,7 @@
       '<p id="bingo-msg" class="bn-msg" role="status"></p>' +
       '<h3 class="bn-h3" id="bn-cards-h">🎴 Cartones</h3>' +
       '<div id="bn-cards" class="bn-cards"></div>' +
+      '<div id="bn-price" class="bn-price">PRECIO DEL CARTÓN: 1 CRÉDITO</div>' +
     '</div>';
   document.body.appendChild(modal);
   const $ = id => modal.querySelector('#' + id);
@@ -388,6 +390,7 @@
   function apply(s) {
     state = s;
     offset = s.now - Date.now();
+    if (typeof s.price === 'number') { const pe = $('bn-price'); if (pe) pe.textContent = `PRECIO DEL CARTÓN: ${nf(s.price)} ${s.price === 1 ? 'CRÉDITO' : 'CRÉDITOS'}`; }
     if (typeof s.credits === 'number') { elCredits.textContent = nf(s.credits); try { if (credits !== s.credits) { credits = s.credits; updateCreditUi(); } } catch (e) { /* nada */ } }
     const drawn = s.drawn || [];
     if (s.round !== seenRound) { seenRound = s.round || 0; say(''); seen = drawn.length; announced = { line: 0, bingo: 0 }; if (!drawn.length) { elBall.style.opacity = '0'; } else { elBall.textContent = drawn[drawn.length - 1]; elBall.style.opacity = '1'; } if (s.line) announced.line = 1; if (s.bingo) announced.bingo = 1; }
