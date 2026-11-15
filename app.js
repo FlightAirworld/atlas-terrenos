@@ -855,6 +855,20 @@ async function selectAt(latlng, terrainHint) {
   setSelected(p);
   showPanel(p);
   sfx('select');
+  walkToParcel(p, latlng);
+}
+// El muñeco está fijo en el centro del mapa y camina cuando el mapa se mueve: para que «vaya» a la parcela tocada,
+// se desliza el mapa (a velocidad constante) hasta dejar esa parcela justo bajo sus pies.
+function walkToParcel(p, latlng) {
+  try {
+    if (!glReady || !(window.playerWalker && window.playerWalker.el && window.playerWalker.el())) return;
+    const lat = Number.isFinite(p.south) ? p.south + cfg.size / 2 : latlng.lat;
+    const lng = Number.isFinite(p.west) ? p.west + cfg.size / 2 : latlng.lng;
+    const a = gl.project(gl.getCenter()), b = gl.project([lng, lat]);
+    const px = Math.hypot(a.x - b.x, a.y - b.y);
+    if (px < 4) return;
+    gl.easeTo({ center: [lng, lat], duration: Math.max(450, Math.min(2200, px * 2.2)), easing: x => x, essential: true });
+  } catch (e) { /* si algo falla, el muñeco se queda donde está */ }
 }
 map.on('click', e => {
   // Si se pulsa un edificio 3D, se elige su parcela (no el suelo que queda detrás).
@@ -1104,7 +1118,7 @@ try { const s = localStorage.getItem('avatar'); if (AVATARS.includes(s)) avatar 
 let chosenHouse = null;   // casa elegida para el terreno que vas a reclamar (null = al azar)
 // Casas que el servidor acepta pero que no estaban en el selector, y casas de eventos activos (se rellenan solas desde /api/events).
 // OJO: HOUSES NO se toca (el reparto al azar de las parcelas sin casa elegida depende de su orden y tamaño).
-const EXTRA_HOUSES = ['images/cesped-2.webp', 'images/parque-picnic.webp', 'images/desierto-1.webp', 'images/desierto-2.webp', 'images/prado.webp', 'images/claro-bosque.webp', 'images/parque-futbol.webp', 'images/mar.webp', 'images/mar-peces.webp', 'images/casa-piscina.webp', 'images/casa-bungalow.webp', 'images/casa-moderna.webp', 'images/adosados.webp', 'images/edificio-pisos.webp', 'images/hotel.webp', 'images/supermercado-5.webp', 'images/informatica.webp', 'images/jugueteria.webp', 'images/estanco.webp', 'images/perfumeria.webp', 'images/pasteleria.webp', 'images/ferreteria.webp', 'images/ferreteria-2.webp', 'images/boutique.webp', 'images/restaurante-2.webp', 'images/gasolinera.webp', 'images/consulado-espana.webp', 'images/consulado-mexico.webp', 'images/consulado-alemania.webp', 'images/carcel.webp'];
+const EXTRA_HOUSES = ['images/cesped-2.webp', 'images/parque-picnic.webp', 'images/desierto-1.webp', 'images/desierto-2.webp', 'images/prado.webp', 'images/claro-bosque.webp', 'images/parque-futbol.webp', 'images/mar.webp', 'images/mar-peces.webp', 'images/casa-piscina.webp', 'images/casa-bungalow.webp', 'images/casa-moderna.webp', 'images/adosados.webp', 'images/edificio-pisos.webp', 'images/hotel.webp', 'images/supermercado-5.webp', 'images/informatica.webp', 'images/jugueteria.webp', 'images/estanco.webp', 'images/perfumeria.webp', 'images/pasteleria.webp', 'images/ferreteria.webp', 'images/ferreteria-2.webp', 'images/boutique.webp', 'images/restaurante-2.webp', 'images/gasolinera.webp', 'images/consulado-espana.webp', 'images/consulado-mexico.webp', 'images/consulado-alemania.webp', 'images/carcel.webp', 'images/discoteca.webp', 'images/sala-de-baile.webp'];
 // Casas del Pase Oro 👑 (mismas que GOLD_HOUSES de server.js). Sin pase salen con candado; window.atlasGold lo pone retos.js.
 const GOLD_HOUSES = ['images/casa-2.webp', 'images/casa-3.webp', 'images/rascacielos.webp', 'images/parque-atracciones.webp', 'images/puerto.webp', 'images/aeropuerto.webp', 'images/ayuntamiento.webp', 'images/banco.webp', 'images/hospital.webp', 'images/iglesia.webp', 'images/piscina.webp', 'images/estacion.webp'];
 let eventHouses = [];
@@ -1120,7 +1134,7 @@ const HOUSE_CATS = [
   { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica', 'edificio-pisos', 'hotel'] },
   { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'Farmacia', 'supermercado-5', 'informatica', 'jugueteria', 'estanco', 'perfumeria', 'pasteleria', 'ferreteria', 'ferreteria-2', 'boutique'] },
   { icon: '🍽️', name: 'Restaurantes', files: ['Restaurante', 'restaurante-2'] },
-  { icon: '🎬', name: 'Cines', files: ['cine', 'teatro'] },
+  { icon: '🎬', name: 'Cines', files: ['cine', 'teatro', 'discoteca', 'sala-de-baile'] },
   { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros', 'parque-futbol'] },
   { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
   { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto', 'consulado-espana', 'consulado-mexico', 'consulado-alemania', 'carcel'] },

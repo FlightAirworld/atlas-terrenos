@@ -376,6 +376,9 @@
         ['E', 'Aquí tiene. ¡Que aproveche y vuelva pronto!'], ['V', 'Seguro que sí. ¡Está todo buenísimo! Gracias.']]
     }
   };
+  // Escenas de otros archivos (discoteca.js): registrarEscena('discoteca', escena, /^discoteca/) las añade sin tocar este archivo.
+  const EXTRA_KINDS = [];
+  window.edificiosRegistrar = (kind, T, test) => { SCN[kind] = T; EXTRA_KINDS.push([kind, test]); };
   // Qué edificio es cada casa (por el nombre del archivo de la imagen)
   function kindOfBuilding(p) {
     let h = ''; try { h = typeof houseFor === 'function' ? houseFor(p.id, p.house) : (p.house || ''); } catch (e) { h = p.house || ''; }
@@ -391,13 +394,15 @@
     if (/^(hospital|clinica)/.test(k)) return 'hospital';
     if (/^cine/.test(k)) return 'cine';
     if (/^(pasteleria|panaderia)/.test(k)) return 'pasteleria';
+    for (const [kind, test] of EXTRA_KINDS) if (test.test(k)) return kind;
     return null;
   }
 
   // ---------- Entrar ----------
   async function startVisit(p, kind) {
     if (running || !p || !p.owner || !SCN[kind]) return;
-    unlockSpeech(); running = {};
+    unlockSpeech(); try { if (window.clubMusic) clubMusic.unlock(); } catch (e) {}   // el móvil solo deja sonar tras un toque
+    running = {};
     let info = { free: true }, entradaN = 0;
     if (!p.mine && p.giftable) {   // con regalo: mismas reglas que las casas (límite de entradas al día y 1 crédito por edificio y día)
       if (typeof authToken !== 'undefined' && authToken) {
@@ -431,12 +436,13 @@
     const wrap = root.querySelector('.v-wrap'), room = root.querySelector('.v-room'), door = root.querySelector('.e-door');
     const bubble = root.querySelector('.v-bubble'), sub = root.querySelector('.v-sub'), gift = root.querySelector('.v-gift'), gt = root.querySelector('.v-gt');
     room.style.setProperty('--wall', T.wall); room.style.setProperty('--floor', T.floor); room.style.setProperty('--cnt', T.cnt); room.style.setProperty('--sc', T.sc);
-    const sg = room.querySelector('.e-sign'); sg.textContent = T.sign; sg.style.left = T.sx + 'px';
+    const sg = room.querySelector('.e-sign'); sg.textContent = T.sign; sg.style.left = T.sx + 'px'; if (T.signCls) sg.classList.add(T.signCls);
     const add = (cls, css, txt) => { const d = document.createElement('div'); d.className = cls; d.style.cssText = css; if (txt != null) d.textContent = txt; room.appendChild(d); return d; };
     T.dec.forEach(d => {
       if (d[0] === 'sh') { const s = add('e-shelf', `left:${d[1]}px;bottom:${d[2]}px;width:${d[3]}px`); d[4].forEach(e => { const i = document.createElement('span'); i.textContent = e; s.appendChild(i); }); }
       else if (d[0] === 'cn') add('e-counter', `left:${d[1]}px;width:${d[2]}px`);
       else if (d[0] === 'tb') add('e-table', `left:${d[1]}px;width:${d[2]}px`);
+      else if (d[0] === 'fn') d[1](room, add);   // decoración dibujada por la escena (pista de baile, bola de espejos, luces…)
       else add('e-it', `left:${d[2]}px;bottom:${d[3]}px;font-size:${d[4]}px;z-index:${d[5] || 3}`, d[1]);
     });
     let K = 1;
@@ -449,7 +455,7 @@
     const staff = (n, uni) => { const a = look(n[0], n[1] === 'f', 'adult', Math.random); if (uni) { a.top = uni; a.dress = false; a.sleeve = '100%'; } return a; };
     const me = mk(Object.assign(look('Tú', Math.random() < 0.5, 'adult', Math.random), window.playerCssLook ? window.playerCssLook() : {}, { pitch: 1, rate: 1.05 }), true);
     const A = { E: mk(Object.assign(staff(nm[0], T.uni), { name: nm[0][0] + ' · ' + (T.roles.E || '') })), D: mk(Object.assign(staff(nm[1], T.uniD || T.uni), { name: nm[1][0] + ' · ' + (T.roles.D || '') })), C: mk(Object.assign(look(nm[2][0], nm[2][1] === 'f', 'adult', Math.random), { name: nm[2][0] })), V: me };
-    v.D = nm[1][0];
+    v.D = nm[1][0]; v.C = nm[2][0]; v.cf = nm[2][1] === 'f';   // {D} y {C}: nombres del segundo empleado y del otro cliente; v.cf: el otro cliente es mujer
     Object.values(A).forEach(c => { c.el.style.opacity = '0'; });
     const SP = n => { const s = T.sp[n]; return { x: s[0], d: s[1] }; };
     const fill = t => String(t).replace(/\{(\w+)(?:\[(\d)\])?\}/g, (m, k, i) => { const x = v[k]; return x == null ? m : (i != null ? x[i] : x); });
@@ -472,6 +478,14 @@
     const setHold = (ch, e) => { ch.hold = e; ch.holdEl.textContent = e || ''; ch.el.classList.toggle('holding', !!e); };
     const gesto = (ch, cls, ms) => { ch.el.classList.add(cls); setTimeout(() => ch.el.classList.remove(cls), ms); };
     place(me, SP('door').x, 1, 0);   // detrás de la puerta, sin verse hasta que le abren
+    // Baile: .dance + d1 (brazos arriba) / d2 (balanceo) / d3 (paso a un lado y a otro); los estilos están en discoteca.js
+    const stopDance = ch => { ch.el.classList.remove('dance', 'd1', 'd2', 'd3'); };
+    const startDance = (ch, st) => { stopDance(ch); ch.el.classList.add('dance', st || pick(['d1', 'd2', 'd3'])); ch.el.style.setProperty('--dd', (-Math.random() * 0.5).toFixed(2) + 's'); };
+    const crowdList = [];
+    (T.crowd || []).forEach(c => {   // gente de fondo bailando (solo decoración, sin hablar)
+      const ch = mk(Object.assign(look('', !!c[2], 'adult', Math.random), { name: '' }));
+      place(ch, c[0], c[1], 0); face(ch, Math.random() < 0.5 ? 1 : -1); ch.el.style.opacity = '1'; crowdList.push(ch);
+    });
 
     // ----- Hablar: burbuja + voz -----
     let speaker = null, raf = 0, last = null;
@@ -504,12 +518,14 @@
       const to = o.to ? A[o.to] : (last && last !== who ? last : null);
       if (to) { face(who, to.x - who.x); face(to, who.x - to.x); }
       last = who;
-      try { await speakAloud(text, who); } finally { who.el.classList.remove('talk'); }
+      try { if (T.music && window.clubMusic) clubMusic.duck(true); await speakAloud(text, who); } finally { who.el.classList.remove('talk'); try { if (T.music && window.clubMusic) clubMusic.duck(false); } catch (e) {} }
       bubble.classList.remove('on'); await sleep(o.gap == null ? 260 : o.gap);
     }
 
+    let stopMusic = null;   // música del local (discos y salas de baile): suena desde que se abre la puerta hasta que sales
+    const stopM = () => { try { if (stopMusic) stopMusic(); stopMusic = null; } catch (e) {} };
     const cleanup = () => {
-      dead = true; cancelAnimationFrame(raf); root.remove(); if (running === token) running = null;
+      stopM(); dead = true; cancelAnimationFrame(raf); root.remove(); if (running === token) running = null;
       document.removeEventListener('keydown', onKey); window.removeEventListener('resize', fit);
       try { if (hasTTS) ss.cancel(); } catch (e) {}
       try { if (window.houseMute) window.houseMute(false); } catch (e) {}   // vuelve el sonido de fuera
@@ -526,14 +542,18 @@
       const k = s[0];
       if (A[k]) { await say(A[k], s[1], s[2]); return; }
       const ch = A[s[1]];
-      if (k === 'go') await walkTo(ch, SP(s[2]), s[3]);
-      else if (k === 'bg') { walkTo(ch, SP(s[2]), s[3]).then(() => { if (s[2] === 'door') ch.el.classList.add('e-gone'); }).catch(() => {}); }
+      if (k === 'go') { stopDance(ch); await walkTo(ch, SP(s[2]), s[3]); }
+      else if (k === 'bg') { stopDance(ch); walkTo(ch, SP(s[2]), s[3]).then(() => { if (s[2] === 'door') ch.el.classList.add('e-gone'); }).catch(() => {}); }
       else if (k === 'put') { ch.el.style.opacity = '1'; const q = SP(s[2]); place(ch, q.x, q.d, 0); face(ch, -1); }
       else if (k === 'hold') setHold(ch, s[2] == null ? null : fill(s[2]));
       else if (k === 'sit') { const q = SP(s[2]); await walkTo(ch, q, 85); ch.seated = true; ch.el.classList.add('sit'); sound('silla'); face(ch, s[3] || 1); place(ch, q.x, q.d, 0); await sleep(650); }
       else if (k === 'stand') { ch.seated = false; ch.el.classList.remove('sit'); sound('silla'); place(ch, ch.x, ch.d, 500); await sleep(550); }
       else if (k === 'eat') gesto(ch, 'sip', 1900);
       else if (k === 'cheer') gesto(ch, 'cheer', 1900);
+      else if (k === 'dance') startDance(ch, s[2]);                 // ['dance', 'V', 'd1'] (el estilo es opcional)
+      else if (k === 'nodance') stopDance(ch);
+      else if (k === 'look') face(ch, A[s[2]].x - ch.x);           // ['look', 'V', 'C']: se gira hacia otra persona
+      else if (k === 'pair') { const o = A[s[2]]; face(ch, o.x - ch.x); face(o, ch.x - o.x); const st = s[3] || pick(['d2', 'd3']); startDance(ch, st); startDance(o, st); }   // bailan juntos mirándose
     }
     const run = async list => { for (const s of list) { const k = s[0]; if (k === 'sfx') sound(s[1]); else if (k === 'sub') sub.textContent = s[1]; else if (k === 'wait') await sleep(s[1]); else await step(s); } };
 
@@ -546,21 +566,28 @@
         sub.textContent = nEntrada + 'Llegas a la puerta…'; await sleep(650);
         // Primero se toca el timbre y se espera respuesta; después se abre la puerta.
         const bell = document.createElement('div'); bell.className = 'e-doorbell'; bell.textContent = '🔔';
-        bell.style.cssText = 'position:absolute;left:92px;bottom:226px;font-size:18px;z-index:30;animation:v-pop .35s ease-out'; room.appendChild(bell);
-        const wave = document.createElement('div'); wave.className = 'e-wave'; wave.style.cssText = 'left:87px;bottom:221px;'; wave.hidden = true; room.appendChild(wave);
-        sub.textContent = nEntrada + 'Tocas el timbre…'; await sleep(450);
-        bell.classList.add('ring'); wave.hidden = false; sound('timbre'); await sleep(1500);   // ding-dong
-        bell.classList.remove('ring'); wave.remove();
-        sub.textContent = nEntrada + 'Esperas a que te abran…'; await sleep(700);
-        sub.textContent = nEntrada + 'Te abren la puerta…'; await sleep(350);
+        bell.style.cssText = 'position:absolute;left:92px;bottom:226px;font-size:18px;z-index:30;animation:v-pop .35s ease-out'; if (!T.club) room.appendChild(bell);
+        const wave = document.createElement('div'); wave.className = 'e-wave'; wave.style.cssText = 'left:87px;bottom:221px;'; wave.hidden = true; if (!T.club) room.appendChild(wave);
+        if (T.club) {   // discoteca / sala de baile: no se llama al timbre, el portero te deja pasar
+          sub.textContent = nEntrada + 'Haces cola en la puerta del local…'; await sleep(1100);
+          sub.textContent = nEntrada + 'El portero te deja pasar…'; await sleep(700);
+        } else {
+          sub.textContent = nEntrada + 'Tocas el timbre…'; await sleep(450);
+          bell.classList.add('ring'); wave.hidden = false; sound('timbre'); await sleep(1500);   // ding-dong
+          bell.classList.remove('ring'); wave.remove();
+          sub.textContent = nEntrada + 'Esperas a que te abran…'; await sleep(700);
+          sub.textContent = nEntrada + 'Te abren la puerta…'; await sleep(350);
+        }
         door.classList.add('open'); sound('puerta'); await sleep(800); bell.remove();
+        if (T.music && window.clubMusic) stopMusic = clubMusic.start(T.music);   // al abrirse la puerta empieza a sonar la música
+        crowdList.forEach(ch => startDance(ch));   // y la gente de la pista se pone a bailar
         me.el.style.opacity = '1';   // se abre la puerta y ya se le ve
         await walkTo(me, SP('in'), 85); door.classList.remove('open'); sound('puerta');
         await run(dlist.slice(n0).map(x => (x[0] === 'sub' ? ['sub', nEntrada + x[1]] : x)));
         // salida
         sub.textContent = nEntrada + 'Te despides…'; setHold(me, null);
         await walkTo(me, { x: 118, d: 0.45 }, 95); door.classList.add('open'); sound('puerta'); if (T.bell) sound('adios'); await sleep(850);
-        await walkTo(me, SP('door'), 90); me.el.style.opacity = '0'; await sleep(450); door.classList.remove('open'); sound('puerta'); await sleep(800);
+        await walkTo(me, SP('door'), 90); me.el.style.opacity = '0'; stopM(); await sleep(450); door.classList.remove('open'); sound('puerta'); await sleep(800);
         let msg = '', ok = false;
         if (info.free) msg = '¡Gracias por la visita!';
         else if (info.error) msg = 'Crea tu cuenta o inicia sesión para recibir 1 crédito en tus próximas visitas.';

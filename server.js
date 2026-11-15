@@ -172,7 +172,9 @@ const HOUSES = [
   'images/consulado-espana.webp',
   'images/consulado-mexico.webp',
   'images/consulado-alemania.webp',
-  'images/carcel.webp'
+  'images/carcel.webp',
+  'images/discoteca.webp',
+  'images/sala-de-baile.webp'
 ];
 // Reparto al azar de las parcelas sin casa elegida: es la lista HOUSES de app.js en el MISMO orden (el servidor la usa para el álbum). No la cambies de orden ni de tamaño.
 const CLIENT_RANDOM_POOL = [
@@ -3286,7 +3288,7 @@ const HOUSE_CATS = [
   { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica', 'edificio-pisos', 'hotel'] },
   { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'Farmacia', 'supermercado-5', 'informatica', 'jugueteria', 'estanco', 'perfumeria', 'pasteleria', 'ferreteria', 'ferreteria-2', 'boutique'] },
   { icon: '🍽️', name: 'Restaurantes', files: ['Restaurante', 'restaurante-2'] },
-  { icon: '🎬', name: 'Cines', files: ['cine', 'teatro'] },
+  { icon: '🎬', name: 'Cines', files: ['cine', 'teatro', 'discoteca', 'sala-de-baile'] },
   { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros', 'parque-futbol'] },
   { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
   { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto', 'consulado-espana', 'consulado-mexico', 'consulado-alemania', 'carcel'] },
