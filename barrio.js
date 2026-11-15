@@ -63,8 +63,7 @@
     if (typeof glReady === 'undefined' || !glReady || typeof gl === 'undefined' || !gl.getStyle) return false;
     try {
       if (!gl.getSource(SRC)) gl.addSource(SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      if (!gl.getLayer('barrio-fill')) gl.addLayer({ id: 'barrio-fill', type: 'fill', source: SRC, paint: { 'fill-color': '#ff1f1f', 'fill-opacity': 0.12 } });
-      if (!gl.getLayer('barrio-line')) gl.addLayer({ id: 'barrio-line', type: 'line', source: SRC, paint: { 'line-color': '#ff1f1f', 'line-width': 4, 'line-opacity': 1 } });
+      if (!gl.getLayer('barrio-line')) gl.addLayer({ id: 'barrio-line', type: 'line', source: SRC, paint: { 'line-color': '#ff1f1f', 'line-width': 5, 'line-opacity': 1 } });
       layersOk = true;
     } catch (e) { return false; }
     return true;
@@ -80,11 +79,10 @@
     try {
       const show = !!pos && !!radius() && gl.getZoom() >= 12 && !document.body.classList.contains('en-mundo');
       const v = show ? 'visible' : 'none';
-      if (gl.getLayoutProperty('barrio-line', 'visibility') !== v) { gl.setLayoutProperty('barrio-line', 'visibility', v); gl.setLayoutProperty('barrio-fill', 'visibility', v); }
+      if (gl.getLayoutProperty('barrio-line', 'visibility') !== v) { gl.setLayoutProperty('barrio-line', 'visibility', v); }
       if (!show) return;
       on = !on;
-      gl.setPaintProperty('barrio-line', 'line-opacity', still || on ? 1 : 0.2);
-      gl.setPaintProperty('barrio-fill', 'fill-opacity', still ? 0.12 : on ? 0.2 : 0.04);
+      gl.setPaintProperty('barrio-line', 'line-opacity', still || on ? 1 : 0.15);   // solo parpadea la franja exterior (sin relleno)
     } catch (e) {}
   }, 450);
 

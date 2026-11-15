@@ -1635,17 +1635,24 @@ $('rank-btn').onclick = () => { showRankMain(); loadStats(); $('rank').classList
 $('rank-close').onclick = () => $('rank').classList.add('hidden');
 $('locate').onclick = () => {
   if (!navigator.geolocation) return alert('Tu navegador no permite geolocalización');
+  const go = (lat, lng) => {
+    const ll = L.latLng(lat, lng);
+    // Estés donde estés en el mundo, al volver a tu ubicación el paracaidista siempre baja en paracaídas hasta ella
+    const FLIGHT_MS = 6500;
+    map.flyTo(ll, 18, { duration: FLIGHT_MS });
+    if (window.skydive) window.skydive(FLIGHT_MS, { target: 'map' });
+    map.once('moveend', () => selectAt(ll));
+  };
+  // Tu barrio (barrio.js) ya sigue tu ubicación: se usa esa (pedir otra a la vez que el seguimiento fallaba en el móvil al salir del círculo)
+  const known = window.barrio && window.barrio.pos && window.barrio.pos();
+  if (known) return go(known.lat, known.lng);
   navigator.geolocation.getCurrentPosition(
-    pos => {
-      const ll = L.latLng(pos.coords.latitude, pos.coords.longitude);
-      // Estés donde estés en el mundo, al volver a tu ubicación el paracaidista siempre baja en paracaídas hasta ella
-      const FLIGHT_MS = 6500;
-      map.flyTo(ll, 18, { duration: FLIGHT_MS });
-      if (window.skydive) window.skydive(FLIGHT_MS, { target: 'map' });
-      map.once('moveend', () => selectAt(ll));
-    },
-    () => alert('No se pudo obtener tu ubicación. Revisa los permisos del navegador.'),
-    { enableHighAccuracy: true, timeout: 10000 });
+    pos => go(pos.coords.latitude, pos.coords.longitude),
+    () => navigator.geolocation.getCurrentPosition(   // segundo intento, sin GPS fino (red / ubicación aproximada)
+      pos => go(pos.coords.latitude, pos.coords.longitude),
+      () => alert('No se pudo obtener tu ubicación. Revisa los permisos del navegador.'),
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }),
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
 };
 
 // ---------- Cuenta (Google o email con contraseña) ----------
