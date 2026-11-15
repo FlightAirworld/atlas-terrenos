@@ -53,6 +53,7 @@ const PACKS = (() => {
   return list.length ? list : [{ credits: 50, price: '1.00' }, { credits: 150, price: '2.00' }, { credits: 300, price: '3.00' }, { credits: 500, price: '4.00' }];
 })();
 const MAX_PARCELS_PER_ACCOUNT = process.env.MAX_PARCELS_PER_ACCOUNT ? Math.max(1, Number(process.env.MAX_PARCELS_PER_ACCOUNT)) : Infinity;   // tope de terrenos por cuenta: ilimitado salvo que se ponga la variable de entorno
+const MAX_CLAIMS_PER_DAY = Math.max(1, Math.floor(Number(process.env.MAX_CLAIMS_PER_DAY ?? 10)));   // tope de terrenos que un jugador puede crear al día (por cuenta; sin cuenta, por pack). El día cambia a medianoche de DAILY_TZ
 const DATABASE_URL = process.env.DATABASE_URL || '';      // cadena de conexión de Supabase
 if (!DATABASE_URL) {
   console.error('Falta la variable DATABASE_URL (cadena de conexión de Supabase). Mira el README.');
@@ -988,6 +989,12 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
     if (user) {   // la fila del pack ya está bloqueada: dos reclamaciones a la vez no pueden pasarse del tope
       const owned = Number((await client.query('SELECT COUNT(*) AS n FROM parcels WHERE user_id = $1', [user.id])).rows[0].n);
       if (owned >= MAX_PARCELS_PER_ACCOUNT) throw new HttpError(409, `Has alcanzado el máximo de ${MAX_PARCELS_PER_ACCOUNT} terrenos por cuenta`);
+    }
+    if (!isOwner(user)) {   // tope diario: se cuenta en la misma transacción, así que si algo falla después se deshace y no gasta el cupo
+      const who = user ? 'u:' + user.id : 'p:' + code;
+      const day = dayKey();
+      const lim = await client.query('INSERT INTO claim_daily (day, who, n) VALUES ($1,$2,1) ON CONFLICT (day, who) DO UPDATE SET n = claim_daily.n + 1 WHERE claim_daily.n < $3 RETURNING n', [day, who, MAX_CLAIMS_PER_DAY]);
+      if (!lim.rows[0]) throw new HttpError(429, `Has llegado al máximo de ${MAX_CLAIMS_PER_DAY} terrenos por día. Vuelve mañana 🌙`);
     }
     await client.query(
       'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id, house, world, city, pack_code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)',
@@ -2759,7 +2766,7 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
     return { coffee: COFFEE_URL || null, push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, free: FREE_MODE, demo: DEMO, stripe: !FREE_MODE && !DEMO && HAS_STRIPE, paypal: !FREE_MODE && !DEMO && HAS_PAYPAL, clientId: (FREE_MODE || DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, worlds: WORLDS, barrioM: BARRIO_M, packSize: PACKS[0].credits, packs: PACKS,
-      maxParcels: Number.isFinite(MAX_PARCELS_PER_ACCOUNT) ? MAX_PARCELS_PER_ACCOUNT : null, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, guestCredits: GUEST_CREDITS, welcomeCredits: WELCOME_CREDITS, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null, googleClientId: AUTH_ENABLED ? GOOGLE_CLIENT_ID : null } };
+      maxParcels: Number.isFinite(MAX_PARCELS_PER_ACCOUNT) ? MAX_PARCELS_PER_ACCOUNT : null, maxClaimsPerDay: MAX_CLAIMS_PER_DAY, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, guestCredits: GUEST_CREDITS, welcomeCredits: WELCOME_CREDITS, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null, googleClientId: AUTH_ENABLED ? GOOGLE_CLIENT_ID : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
     const p = parcelFromLatLng(Number(sp.get('lat')), Number(sp.get('lng')), cleanWorld(sp.get('world')));
@@ -3669,6 +3676,9 @@ ready.then(async () => {   // ruleta diaria: una fila por cuenta y día (la clav
   await run('CREATE INDEX IF NOT EXISTS parcels_pack_code ON parcels (pack_code) WHERE pack_code IS NOT NULL');
   await run('CREATE TABLE IF NOT EXISTS guest_ip (day TEXT NOT NULL, ip_hash TEXT NOT NULL, n INT NOT NULL DEFAULT 1, PRIMARY KEY (day, ip_hash))');
   await run('ALTER TABLE public.guest_ip ENABLE ROW LEVEL SECURITY').catch(() => {});   // solo el servidor accede (la clave pública no)
+  await run('CREATE TABLE IF NOT EXISTS claim_daily (day TEXT NOT NULL, who TEXT NOT NULL, n INT NOT NULL DEFAULT 0, PRIMARY KEY (day, who))');   // terrenos creados por jugador y día (tope MAX_CLAIMS_PER_DAY)
+  await run('ALTER TABLE public.claim_daily ENABLE ROW LEVEL SECURITY').catch(() => {});
+  await run('DELETE FROM claim_daily WHERE day < $1', [dayKey()]).catch(() => {});   // solo hace falta el día de hoy
   await run('CREATE UNIQUE INDEX IF NOT EXISTS packs_fixed_nick ON packs (lower(fixed_nick)) WHERE fixed_nick IS NOT NULL');
   await run('CREATE TABLE IF NOT EXISTS monthly_rewards (user_id TEXT NOT NULL, month TEXT NOT NULL, streak INT NOT NULL DEFAULT 0, last_day TEXT, PRIMARY KEY (user_id, month))');
   await run('CREATE TABLE IF NOT EXISTS president_grants (city TEXT NOT NULL, month TEXT NOT NULL, user_id TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (city, month))');

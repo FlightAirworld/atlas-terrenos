@@ -191,6 +191,10 @@ CREATE INDEX IF NOT EXISTS parcels_pack_code ON parcels (pack_code) WHERE pack_c
 CREATE TABLE IF NOT EXISTS guest_ip (day TEXT NOT NULL, ip_hash TEXT NOT NULL, n INT NOT NULL DEFAULT 1, PRIMARY KEY (day, ip_hash));
 ALTER TABLE guest_ip ENABLE ROW LEVEL SECURITY;
 
+-- Terrenos creados por jugador y día (tope MAX_CLAIMS_PER_DAY, 10 por defecto). who = 'u:<user_id>' (cuenta) o 'p:<código de pack>' (sin cuenta)
+CREATE TABLE IF NOT EXISTS claim_daily (day TEXT NOT NULL, who TEXT NOT NULL, n INT NOT NULL DEFAULT 0, PRIMARY KEY (day, who));
+ALTER TABLE claim_daily ENABLE ROW LEVEL SECURITY;
+
 -- Récord de jugadores reales conectados a la vez, por país (pantalla de administrador). El servidor también la crea solo si falta.
 CREATE TABLE IF NOT EXISTS online_peaks (cc TEXT PRIMARY KEY, n INT NOT NULL, at BIGINT NOT NULL);
 ALTER TABLE online_peaks ENABLE ROW LEVEL SECURITY;
