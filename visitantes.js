@@ -132,6 +132,9 @@
     .vz-body.walk .vz-r, .vz-body.walk .vz-la { animation: vzswB .42s ease-in-out infinite alternate; }
     .vz-body.wave .vz-ra, .vz-body.talk .vz-ra { animation: vzwave .5s ease-in-out infinite alternate; }
     .vz-body.talk .vz-mouth { animation: vzmouth .22s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: 50% 0; }
+    .vz-body.iw .vz-ra { animation: vzwave .55s ease-in-out infinite alternate; }
+    .vz-body.iw2 .vz-la { animation: vzwaveL .55s ease-in-out infinite alternate; }
+    @keyframes vzwaveL { from { transform: rotate(150deg); } to { transform: rotate(178deg); } }
     @keyframes vzbob { from { transform: translateY(0); } to { transform: translateY(-1.6px); } }
     @keyframes vzswA { from { transform: rotate(14deg); } to { transform: rotate(-14deg); } }
     @keyframes vzswB { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
@@ -253,6 +256,10 @@
       if (!s) { nextStep(v); return null; }
       return { k: 'site', ...s };
     }
+    if (step.k === 'stroll') {   // quieto mucho rato: da un paseíto por los alrededores
+      const a = rnd(0, Math.PI * 2), d = rnd(70, 150) * FP / scale;
+      return { k: 'stroll', x: v.x + Math.cos(a) * d, y: v.y + Math.sin(a) * d };
+    }
     // leave: se aleja del jugador hasta salir de la pantalla
     const dx = v.x - c.x, dy = v.y - c.y, d = Math.hypot(dx, dy) || 1, far = (Math.max(innerWidth, innerHeight) * 0.9) / scale;
     return { k: 'leave', x: c.x + dx / d * far, y: c.y + dy / d * far };
@@ -293,6 +300,12 @@
         const ll = map.unproject(L.point(v.x, v.y), REF_Z);
         if (v.age > 6 && !view.contains(ll) && v.phase !== 'talk') { removeV(v); continue; }
         v.mk.setLatLng(ll);
+        // Siempre de frente. Quieto: saluda levantando la mano; si lleva mucho rato quieto, saluda con las dos manos; y si no hay nadie que lo mueva, se pone a pasear solo.
+        v.still = moving ? 0 : (v.still || 0) + dt;
+        const iw = !moving && v.still > 2, iw2 = !moving && v.still > 10;
+        if (iw !== v.iw) { v.iw = iw; v.el.classList.toggle('iw', iw); }
+        if (iw2 !== v.iw2) { v.iw2 = iw2; v.el.classList.toggle('iw2', iw2); }
+        if (!moving && v.phase !== 'talk' && v.still > 14 && v.plan[0] && v.plan[0].k !== 'stroll') { v.plan.unshift({ k: 'stroll' }); v.target = null; v.phase = 'walk'; v.still = 0; }
         if (v.walking !== moving) { v.walking = moving; v.el.classList.toggle('walk', moving); }
         if (v.fpA !== FP) { v.el.style.scale = clamp(FP * 1.2, 0.8, 1.6).toFixed(3); v.fpA = FP; }
         v.el.style.opacity = Math.max(0, Math.min(1, v.age / 1.2, (v.life - v.age) / 2));
@@ -304,6 +317,7 @@
 
   function arrive(v, tg) {
     if (tg.k === 'leave') { removeV(v); return; }
+    if (tg.k === 'stroll') { nextStep(v); return; }
     if (tg.k === 'site') {
       v.phase = 'look'; v.hold = rnd(6, 10);
       const line = tg.kind === 'mon' ? pick(REM_MON)(tg.name) + (tg.place && Math.random() < 0.5 ? ` Y en ${tg.place}…` : '') : pick(REM_CASA);
