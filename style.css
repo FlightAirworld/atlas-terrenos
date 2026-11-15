@@ -354,12 +354,3 @@ body.age-pending #login-google-gsi { pointer-events: none !important; }
 @keyframes ageFlash { 0%, 100% { background: transparent; box-shadow: none; } 15%, 55% { background: #fff1ef; box-shadow: 0 0 0 2px #c0392b; } }
 /* Juego gratuito (FREE_MODE): fuera todos los botones de compra */
 body.free-mode #panel-buy, body.free-mode #credit-buy, body.free-mode #mine-buy, body.free-mode #buy-box, body.free-mode #buy, body.free-mode #demo-pay, body.free-mode #demo-pay-2 { display: none !important; }
-
-/* Sello 16+ y casilla de edad encima de «Entrar con Google» */
-.age-box { display: flex; align-items: center; gap: 12px; margin: 4px 0 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
-.age-badge { flex: none; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; font-size: 17px; color: #fff; background: #c0392b; border: 3px solid #fff; box-shadow: 0 0 0 2px #c0392b; letter-spacing: -.02em; }
-.age-check { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.4; cursor: pointer; margin: 0; }
-.age-check input { flex: none; margin-top: 1px; accent-color: #087f5b; }
-.age-err { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; background: #fff1ef; color: #c0392b; font-weight: 700; font-size: 13.5px; line-height: 1.35; display: flex; align-items: center; gap: 8px; }
-.age-arrow { font-size: 22px; line-height: 1; animation: ageArrow .7s ease-in-out infinite alternate; }
-@keyframes ageArrow { from { transform: translateY(3px); } to { transform: translateY(-4px); } }
