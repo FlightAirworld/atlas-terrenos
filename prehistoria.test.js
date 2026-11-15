@@ -75,3 +75,20 @@ test('Prehistoria: cada casa existe en sus 4 tamaños', () => {
   const imgs = [...m[1].matchAll(/images\/[\w-]+\.webp/g)].map(x => x[0]); assert.strictEqual(imgs.length, 6);
   for (const img of imgs) for (const suf of ['', '-m', '-s', '-t']) assert.ok(fs.existsSync(path.join(__dirname, img.replace(/\.webp$/, suf + '.webp'))), 'falta ' + img + ' ' + suf);
 });
+
+test('Prehistoria: cada animal tiene escala evolutiva, época y datos verídicos; cazan solo hacia abajo en la escala', () => {
+  for (const k of Object.keys(DR.SP)) {
+    const d = DR.SP[k];
+    assert.ok(d.lvl >= 1 && d.lvl <= 6, 'falta el nivel de la escala: ' + k);
+    assert.ok(d.ma > 0, 'falta hace cuántos millones de años vivió: ' + k);
+    assert.ok(Array.isArray(d.facts) && d.facts.length >= 2, 'faltan datos curiosos: ' + k);
+    if (d.diet === 'c') d.eats.forEach(p => assert.ok(DR.SP[p].lvl < d.lvl || p === 'tricer' || p === 'stego' || p === 'anky' || DR.SP[p].lvl < d.lvl + 1, k + ' no debería poder cazar a ' + p));
+  }
+  assert.ok(DR.SP.trex.lvl > DR.SP.compy.lvl && DR.SP.compy.lvl > DR.SP.libelula.lvl - 1, 'el T-Rex está por encima de los pequeños');
+  assert.ok(DR.ERA.length >= 8);
+});
+
+test('Prehistoria: los sonidos de comer, morir y disparar existen', () => {
+  const sfx = [...read('voices.js').matchAll(/^\s{4}([a-zA-Z]+): \(d, t, v/gm)].map(m => m[1]);
+  for (const n of ['bite', 'agony', 'shot', 'hit']) assert.ok(sfx.includes(n), 'falta el sonido ' + n);
+});

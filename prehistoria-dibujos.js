@@ -104,26 +104,66 @@
   // w: ancho en píxeles (al zoom de referencia); v: paso; run: huida/carrera; diet: c = carnívoro, h = herbívoro, i = insectívoro/pescador;
   // eats: a qué cazan; snd: sonido; say: lo que dicen; fact: dato curioso
   const SP = {
-    trex:     { name: 'T-Rex', vb: [140, 100], w: 118, v: 9, run: 24, diet: 'c', eats: ['allo', 'parasau', 'raptor', 'dilo', 'galli', 'compy', 'tricer'], snd: 'roar', f: 1, say: ['¡RRROOOAAAR!', '¡Hoy toca comer!', '¡Grrr!'], fact: 'Un mordisco de T-Rex pesaba más que un coche pequeño.' },
-    allo:     { name: 'Alosaurio', vb: [140, 100], w: 96, v: 10, run: 22, diet: 'c', eats: ['parasau', 'raptor', 'dilo', 'galli', 'compy'], snd: 'roar', f: 1.35, say: ['¡Grrroaar!', '¡Eso huele a cena!'], fact: 'El alosaurio vivió 50 millones de años antes que el T-Rex.' },
+    trex:     { name: 'T-Rex', vb: [140, 100], w: 118, v: 9, run: 24, diet: 'c', eats: ['allo', 'parasau', 'raptor', 'dilo', 'galli', 'compy', 'tricer'], snd: 'roar', f: 1, say: ['¡RRROOOAAAR!', '¡Hoy toca comer!', '¡Grrr!'], fact: 'Su mordisco era de los más potentes de la historia: más de 3 toneladas de fuerza.' },
+    allo:     { name: 'Alosaurio', vb: [140, 100], w: 96, v: 10, run: 22, diet: 'c', eats: ['parasau', 'raptor', 'dilo', 'galli', 'compy'], snd: 'roar', f: 1.35, say: ['¡Grrroaar!', '¡Eso huele a cena!'], fact: 'El alosaurio vivió hace unos 150 millones de años, unos 80 millones antes que el T-Rex.' },
     raptor:   { name: 'Velociraptor', vb: [140, 100], w: 70, v: 14, run: 34, diet: 'c', eats: ['galli', 'compy', 'dilo'], snd: 'raptor', say: ['¡Kri kri kri!', '¡A por ellos!'], fact: 'Los velocirraptores eran del tamaño de un pavo y tenían plumas.' },
     dilo:     { name: 'Dilofosaurio', vb: [140, 100], w: 74, v: 12, run: 26, diet: 'c', eats: ['compy', 'galli'], snd: 'spit', say: ['¡Pssst!', '¡Kraaa!'], fact: 'Se dice que escupía veneno, pero eso es solo cosa de las pelis.' },
     compy:    { name: 'Compsognathus', vb: [140, 100], w: 40, v: 15, run: 36, diet: 'i', eats: [], snd: 'squeak', say: ['¡Pip pip!', '¡Ñic ñic!', '¡Piii!'], fact: 'El compsognathus era del tamaño de un pollo.' },
     galli:    { name: 'Gallimimus', vb: [140, 100], w: 74, v: 17, run: 44, diet: 'h', eats: [], snd: 'archaeo', say: ['¡Corre que te corre!', '¡Piii!'], fact: 'El gallimimus corría como un avestruz, a unos 60 km/h.' },
     parasau:  { name: 'Parasaurolophus', vb: [140, 100], w: 100, v: 9, run: 21, diet: 'h', eats: [], snd: 'honk', say: ['¡TUUU-TUUU!', '¡Buuuuh!'], fact: 'Su cresta hueca funcionaba como una trompeta.' },
-    spino:    { name: 'Espinosaurio', vb: [140, 100], w: 120, v: 8, run: 20, diet: 'i', eats: [], snd: 'roar', f: 0.9, say: ['¡Grrrrr!', '¡Qué rico el pescado!'], fact: 'El espinosaurio era el mayor carnívoro y nadaba para pescar.' },
+    spino:    { name: 'Espinosaurio', vb: [140, 100], w: 120, v: 8, run: 20, diet: 'i', eats: [], snd: 'roar', f: 0.9, say: ['¡Grrrrr!', '¡Qué rico el pescado!'], fact: 'El espinosaurio medía unos 14 metros: es de los dinosaurios carnívoros más largos que se conocen, y cazaba peces.' },
     tricer:   { name: 'Triceratops', vb: [140, 100], w: 112, v: 6, run: 14, diet: 'h', eats: [], snd: 'moo', fight: true, say: ['¡MUUUU!', '¡Con mis cuernos no te metas!'], fact: 'Triceratops significa «cara de tres cuernos».' },
     stego:    { name: 'Estegosaurio', vb: [140, 100], w: 112, v: 5, run: 12, diet: 'h', eats: [], snd: 'grunt', fight: true, say: ['¡Gruuuh!', '¡Mis púas pinchan!'], fact: 'Su cerebro era del tamaño de una lima, pero sus placas, enormes.' },
     anky:     { name: 'Anquilosaurio', vb: [140, 100], w: 104, v: 4, run: 10, diet: 'h', eats: [], snd: 'grunt', fight: true, say: ['¡Gruuuh!', '¡Toc, toc! Soy una armadura.'], fact: 'Se defendía con la maza de su cola, capaz de romper huesos.' },
     brachio:  { name: 'Braquiosaurio', vb: [140, 100], w: 140, v: 4.5, run: 9, diet: 'h', eats: [], snd: 'trumpet', say: ['¡BUUUUUUUH!', '¡Qué ricas las hojas altas!'], fact: 'Comía hojas a 12 metros de altura: era como una jirafa gigante.' },
     ptero:    { name: 'Pteranodon', vb: [160, 100], w: 120, v: 22, diet: 'f', snd: 'screech', say: ['¡Kriiiii!', '¡Desde arriba lo veo todo!'], fact: 'El pteranodon no tenía dientes: era un reptil volador, no un dinosaurio.' },
-    quetzal:  { name: 'Quetzalcoatlus', vb: [160, 100], w: 190, v: 20, diet: 'f', snd: 'screech', say: ['¡KRIIIII!', '¡Soy el rey del cielo!'], fact: 'El Quetzalcoatlus es el mayor animal volador que ha existido: casi 11 m de envergadura.' },
+    quetzal:  { name: 'Quetzalcoatlus', vb: [160, 100], w: 190, v: 20, diet: 'f', snd: 'screech', say: ['¡KRIIIII!', '¡Soy el rey del cielo!'], fact: 'El Quetzalcoatlus es uno de los mayores animales voladores que han existido: unos 10 metros de envergadura.' },
     rhampho:  { name: 'Ramforrinco', vb: [160, 100], w: 80, v: 26, diet: 'f', snd: 'squeak', say: ['¡Pii pii!', '¡Kii!'], fact: 'El ramforrinco tenía una cola larga con forma de rombo para dirigirse.' },
     plesio:   { name: 'Plesiosaurio', vb: [160, 100], w: 150, v: 5, diet: 'f', snd: 'plesio', say: ['¡Uuuuuuh!', '¡Glub glub!'], fact: 'El plesiosaurio no era un dinosaurio: era un reptil marino con aletas.' },
     libelula: { name: 'Meganeura', vb: [100, 70], w: 62, v: 20, diet: 'b', snd: 'wings', say: ['¡Bzzzzz!', '¡Bzz!'], fact: 'La meganeura era una libélula gigante de 70 cm de envergadura.' },
     artropleura: { name: 'Arthropleura', vb: [175, 90], w: 96, v: 5, diet: 'b', snd: 'cricket', say: ['¡Cric cric!', '¡Tic tic tic!'], fact: 'Era un ciempiés gigante de más de 2 metros de largo.' },
-    escorpion: { name: 'Escorpión gigante', vb: [120, 90], w: 56, v: 6, diet: 'b', snd: 'cricket', say: ['¡Tsss!', '¡Clic clic!'], fact: 'Algunos escorpiones prehistóricos medían como una persona.' }
+    escorpion: { name: 'Escorpión gigante', vb: [120, 90], w: 56, v: 6, diet: 'b', snd: 'cricket', say: ['¡Tsss!', '¡Clic clic!'], fact: 'El Pulmonoscorpius medía unos 70 centímetros y vivió hace unos 330 millones de años.' }
   };
+
+  // ---------- Escala evolutiva y datos reales ----------
+  // lvl: escala de la cadena (1 bichos, 2 pequeños, 3 medianos, 4 grandes, 5 grandes cazadores, 6 T-Rex): solo se come a quien está por debajo.
+  // ma: hace cuántos millones de años vivió su especie. head: dónde está la boca en el dibujo (para la sangre). facts: datos verídicos (paleontología).
+  const EXTRA = {
+    trex: { lvl: 6, ma: 67, head: [0.86, 0.36], facts: ['Vivió hace unos 68 a 66 millones de años, justo antes de que un asteroide acabara con los dinosaurios.', 'Un T-Rex adulto medía unos 12 metros de largo y pesaba cerca de 8 toneladas.', 'Tenía brazos diminutos, de apenas un metro, pero muy fuertes.', 'De adolescente engordaba casi 2 kilos al día.'] },
+    allo: { lvl: 5, ma: 150, head: [0.82, 0.38], facts: ['Medía unos 9 metros y fue el gran cazador del Jurásico.', 'Tenía unos 70 dientes con el borde en forma de sierra.', 'El T-Rex vivió más cerca de nuestra época que del alosaurio.'] },
+    raptor: { lvl: 3, ma: 75, head: [0.77, 0.45], facts: ['Los velocirraptores vivieron hace unos 75 millones de años en lo que hoy es Mongolia.', 'Tenían una garra curva en cada pie, de unos 6 centímetros, para sujetar a sus presas.', 'Sus brazos tenían plumas: se han encontrado las marcas en sus huesos.'] },
+    dilo: { lvl: 3, ma: 190, head: [0.78, 0.43], facts: ['El dilofosaurio vivió hace unos 190 millones de años, en el Jurásico temprano.', 'Medía unos 7 metros y era uno de los mayores cazadores de su tiempo.', 'Las dos crestas de su cabeza eran finas: seguramente servían para exhibirse, no para pelear.'] },
+    compy: { lvl: 2, ma: 150, head: [0.68, 0.6], facts: ['El compsognathus vivió hace unos 150 millones de años, en lo que hoy es Europa.', 'Pesaba unos 3 kilos: como un pavo pequeño.', 'Se ha encontrado un fósil suyo con un lagarto dentro del estómago.'] },
+    galli: { lvl: 2, ma: 70, facts: ['Gallimimus significa «imitador de gallina».', 'No tenía dientes y comía un poco de todo: plantas, insectos y pequeños animales.', 'Vivió hace unos 70 millones de años en Mongolia.'] },
+    parasau: { lvl: 3, ma: 75, facts: ['Vivió hace unos 75 millones de años, en el Cretácico.', 'Su cresta medía hasta casi 2 metros y por dentro tenía tubos huecos.', 'Podía caminar a dos patas o a cuatro.'] },
+    spino: { lvl: 5, ma: 95, head: [0.83, 0.4], facts: ['El espinosaurio vivió hace unos 95 millones de años, en el norte de África.', 'Tenía el hocico largo como un cocodrilo y una gran vela en el lomo.', 'Su cola era plana, como un remo, y le ayudaba a nadar.'] },
+    tricer: { lvl: 4, ma: 67, facts: ['Vivió hace unos 68 millones de años, al final de la época de los dinosaurios.', 'Su cráneo medía hasta 2 metros: es de los más grandes de cualquier animal terrestre.', 'Tenía cientos de dientes para triturar plantas duras.'] },
+    stego: { lvl: 4, ma: 150, facts: ['Vivió hace unos 150 millones de años: más lejos del T-Rex que el T-Rex de nosotros.', 'Las placas de su espalda quizá servían para regular la temperatura o para exhibirse.', 'Tenía 4 púas en la cola, que los científicos llaman «thagomizer».'] },
+    anky: { lvl: 4, ma: 67, facts: ['Vivió hace unos 68 millones de años, al final del Cretácico.', 'Medía unos 6 metros y todo su lomo estaba cubierto de placas óseas.', 'Su cola terminaba en una maza de hueso.'] },
+    brachio: { lvl: 4, ma: 150, facts: ['Vivió hace unos 150 millones de años, en el Jurásico.', 'Pesaba decenas de toneladas.', 'Tenía las patas delanteras más largas que las traseras, como una jirafa.'] },
+    ptero: { lvl: 3, ma: 85, head: [0.75, 0.42], facts: ['Vivió hace unos 85 millones de años.', 'Con las alas abiertas medía unos 6 metros.', 'Su cresta quizá servía para exhibirse o para dirigir el vuelo.'] },
+    quetzal: { lvl: 4, ma: 67, head: [0.75, 0.42], facts: ['Vivió hace unos 68 millones de años.', 'Caminando por el suelo era tan alto como una jirafa.', 'Pesaba unos 200 kilos y aun así volaba.'] },
+    rhampho: { lvl: 2, ma: 150, facts: ['Vivió hace unos 150 millones de años, en el Jurásico.', 'Sus dientes largos y afilados le servían para atrapar peces.', 'Sus alas medían unos 1,8 metros.'] },
+    plesio: { lvl: 4, ma: 200, facts: ['Los plesiosaurios vivieron desde hace 200 hasta hace 66 millones de años.', 'Respiraban aire: tenían que subir a la superficie.', 'Algunos, los elasmosaurios, tenían más de 70 vértebras en el cuello.'] },
+    libelula: { lvl: 1, ma: 300, facts: ['La meganeura vivió hace unos 300 millones de años, antes que los dinosaurios.', 'Pudo ser tan grande porque el aire tenía más oxígeno que el de hoy.'] },
+    artropleura: { lvl: 1, ma: 300, facts: ['Vivió hace unos 300 millones de años, antes que los dinosaurios.', 'Es el mayor invertebrado terrestre que ha existido.', 'Probablemente comía plantas y hojas caídas.'] },
+    escorpion: { lvl: 1, ma: 330, facts: ['Los escorpiones existen desde hace más de 400 millones de años: son anteriores a los dinosaurios.', 'Los primeros escorpiones vivían en el mar.'] }
+  };
+  Object.keys(EXTRA).forEach(k => { if (SP[k]) Object.assign(SP[k], EXTRA[k]); });
+  // Datos de la época que cuentan todos (verídicos)
+  const ERA = [
+    'Los dinosaurios aparecieron hace unos 230 millones de años y dominaron la Tierra durante más de 160 millones.',
+    'Las aves de hoy son dinosaurios: descienden de los terópodos.',
+    'Hace 66 millones de años un asteroide de unos 10 kilómetros cayó en lo que hoy es México.',
+    'La era de los dinosaurios se llama Mesozoico y tiene tres periodos: Triásico, Jurásico y Cretácico.',
+    'Al principio, todos los continentes estaban unidos en uno solo: Pangea.',
+    'Los dinosaurios más grandes de todos eran herbívoros.',
+    'Los pterosaurios y los plesiosaurios no eran dinosaurios.',
+    'El T-Rex vivió más cerca de nuestra época que del Estegosaurio.',
+    'Ya había mamíferos, pero eran pequeños y vivían a la sombra de los dinosaurios.',
+    'Hace 300 millones de años, antes de los dinosaurios, había libélulas gigantes y ciempiés de dos metros.',
+    'Los primeros dinosaurios eran pequeños y corrían sobre dos patas.'
+  ];
   const FLY = ['ptero', 'quetzal', 'rhampho'], WATER = ['plesio'], BUGS = ['libelula', 'artropleura', 'escorpion'];
   // Colores alternativos (cada individuo es un poco distinto)
   const TINT = ['', 'hue-rotate(18deg) saturate(1.1)', 'hue-rotate(-20deg)', 'hue-rotate(40deg) brightness(1.05)', 'saturate(.85) brightness(1.08)'];
@@ -132,5 +172,5 @@
     const d = SP[kind], f = DRAW[kind]; if (!d || !f) return '';
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${d.vb[0]} ${d.vb[1]}" width="${d.w}" height="${Math.round(d.w * d.vb[1] / d.vb[0])}" aria-hidden="true">${f()}</svg>`;
   }
-  return { SP, FLY, WATER, BUGS, TINT, svg, DRAW };
+  return { SP, FLY, WATER, BUGS, TINT, ERA, svg, DRAW };
 });

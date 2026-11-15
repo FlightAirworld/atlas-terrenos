@@ -464,3 +464,12 @@ Todo se genera con código, sin imágenes de mapa ni descargas:
 - `voices.js`: sonidos nuevos (rugido, trompeta, graznido, chillido, crujido, choque…).
 - Casas: `images/prehistoria-*.webp` (6 casas, cada una en 4 tamaños).
 - Para añadir un animal: dibújalo en `DRAW`, ponlo en `SP` y en `WANT` (arriba de `prehistoria.js`). `node --test prehistoria.test.js` lo comprueba.
+
+
+## Prehistoria: animales que hablan, crecen, cazan y un muñeco armado 🦖 (`prehistoria.js`, `prehistoria-dibujos.js`)
+
+- **Hablan** (burbuja y voz del navegador, grave los grandes y aguda los pequeños) y cuentan **datos verídicos**: de su especie, de cuándo vivió («hace unos 67 millones de años») y de la era de los dinosaurios. Los datos están en `prehistoria-dibujos.js` (`facts`, `ma`, `ERA`).
+- **Escala evolutiva** (`lvl` de 1 a 6: bichos < pequeños < medianos < grandes < grandes cazadores < T-Rex): un cazador solo persigue a quien está por debajo y es más débil que él. Los herbívoros que plantan cara (triceratops, estegosaurio, anquilosaurio) pelean.
+- **Crecen y se hacen más fuertes**: cría → joven → adulto con el tiempo (unos 70 s) y, si comen, hasta «alfa». Más grandes, más rápidos y aguantan más disparos; las crías no cazan. Los herbívoros pastan y crecen.
+- **Comer con sangre y sonido**: mordisco + grito, salpicaduras, charco, el cuerpo tumbado que se va comiendo y la boca del cazador manchada (`bite`, `agony` en `voices.js`).
+- **El muñeco se defiende**: los cazadores se le acercan y, cuando un animal llega a menos de ~150 px (al zoom de referencia), el muñeco saca un arma y dispara (`shot`, `hit`): trazador, fogonazo, sangre y el animal herido huye o muere. Los bichos pequeños no se disparan.

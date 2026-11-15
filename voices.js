@@ -145,6 +145,11 @@
     stomp: (d, t, v) => { tone(d, 'sine', 70, 28, t, 0.38, 0.8 * v); noise(d, t, 0.2, 0.18 * v, 200); },
     cricket: (d, t, v) => { for (let i = 0; i < 7; i++) tone(d, 'sine', 4300, 4300, t + i * 0.085, 0.045, 0.1 * v); },
     frog: (d, t, v) => { tone(d, 'square', 160, 110, t, 0.12, 0.2 * v, { lp: 700 }); tone(d, 'square', 190, 130, t + 0.15, 0.12, 0.2 * v, { lp: 700 }); },
+    // Prehistoria: mordiscos, gritos y disparos
+    bite: (d, t, v) => { [0, 0.13, 0.27].forEach(o => { noise(d, t + o, 0.12, 0.55 * v, 1100); tone(d, 'sawtooth', 150, 55, t + o, 0.12, 0.28 * v, { lp: 520 }); }); noise(d, t + 0.05, 0.55, 0.18 * v, 600); tone(d, 'square', 900, 300, t + 0.14, 0.05, 0.1 * v, { lp: 2000 }); },
+    agony: (d, t, v) => { tone(d, 'sawtooth', 720, 210, t, 0.5, 0.3 * v, { vib: [22, 60], lp: 2300, hold: 0.15 }); tone(d, 'sawtooth', 520, 150, t + 0.38, 0.55, 0.26 * v, { vib: [18, 50], lp: 1900, hold: 0.2 }); },
+    shot: (d, t, v) => { noise(d, t, 0.14, 0.95 * v, 5200); tone(d, 'sawtooth', 900, 80, t, 0.14, 0.5 * v, { lp: 2600 }); tone(d, 'sine', 130, 38, t, 0.24, 0.8 * v); noise(d, t + 0.13, 0.35, 0.22 * v, 900); },
+    hit: (d, t, v) => { noise(d, t, 0.16, 0.5 * v, 800); tone(d, 'sine', 210, 70, t, 0.16, 0.55 * v); },
     archaeo: (d, t, v) => { [2600, 3000, 2300, 3200].forEach((f, i) => tone(d, 'triangle', f, f * 0.9, t + i * 0.11, 0.08, 0.14 * v)); }
   };
   const SFX_CAT = { chirp: 'marcianos', ufoIn: 'marcianos', ufoOut: 'marcianos', ufoFly: 'marcianos', thud: 'marcianos', bienvenida: 'marcianos', cash: 'marcianos', enfado: 'marcianos', radio: 'gente', rover: 'gente' };   // lo demás (bichos) = «animales»
