@@ -13,6 +13,7 @@
     ['animales', '🐕', 'Animales'],
     ['mar', '🌊', 'Mar: olas, barcos y ferry'],
     ['marcianos', '👽', 'Marcianos y platillos'],
+    ['visitantes', '👥', 'Visitantes del mapa (muñecos que hablan)'],
     ['lluvia', '⛈️', 'Lluvia y truenos'],
     ['campanas', '⛪', 'Campanas']
   ];

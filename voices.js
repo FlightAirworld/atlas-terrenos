@@ -15,18 +15,35 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
   // ---------- Voz (síntesis del navegador) ----------
-  let voices = [];
-  function loadVoices() { try { voices = (ss.getVoices() || []).filter(v => /^es/i.test(v.lang)); } catch (e) { voices = []; } }
+  let voices = [], allVoices = [];
+  function loadVoices() { try { allVoices = ss.getVoices() || []; voices = allVoices.filter(v => /^es/i.test(v.lang)); } catch (e) { voices = []; allVoices = []; } }
   if (hasTTS) { loadVoices(); try { ss.addEventListener('voiceschanged', loadVoices); } catch (e) { ss.onvoiceschanged = loadVoices; } }
   // Las voces «de red» (p. ej. Google) en Chrome ignoran el tono: si hay locales, se prefieren para que cada uno suene distinto
-  function pickVoice(p) {
-    if (!voices.length) return null;
-    const local = voices.filter(v => v.localService), pool = local.length ? local : voices;
+  // El navegador no dice si una voz es de hombre o de mujer: se adivina por el nombre (Helena, Laura, Pablo, Jorge…) para los visitantes (visitantes.js)
+  const FEM = /female|woman|mujer|helena|laura|luc[ií]a|m[oó]nica|paulina|sabina|elena|marisol|carmen|mar[ií]a|google espa|zira|samantha|karen|paloma|elvira|dalia|salome|camila|ximena|isabella|fernanda|catalina|valentina|sof[ií]a|amelie|am[eé]lie|anna|alice|lucy|susan|hazel|jenny|aria|sara|emma|kyoko|yuna|mei-?jia|ting-?ting|lekha|milena|ioana/i;
+  const MAS = /\bmale\b|hombre|jorge|diego|pablo|ra[uú]l|enrique|[aá]lvaro|juan|carlos|miguel|alberto|tom[aá]s|andr[eé]s|ricardo|david|mark|jos[eé]|antonio|sergio|daniel|thomas|alex|fred|guy|ryan|jorge|hans|yuri|hemant|kangkang/i;
+  function byGender(list, g) {
+    if (!g) return list;
+    const m = list.filter(v => (g === 'f' ? FEM : MAS).test(v.name) && !(g === 'm' && FEM.test(v.name)));
+    return m.length ? m : list;
+  }
+  function pickVoice(p, lang) {
+    let base = voices;
+    if (lang) {   // «es-MX», «fr-FR»…: primero el idioma completo, luego solo la lengua («fr»)
+      const l = String(lang).toLowerCase(), full = allVoices.filter(v => v.lang.toLowerCase().replace('_', '-') === l), part = allVoices.filter(v => v.lang.toLowerCase().startsWith(l.slice(0, 2)));
+      base = full.length ? full : part.length ? part : voices;
+    }
+    if (!base.length) return null;
+    const local = base.filter(v => v.localService), pool = byGender(local.length ? local : base, p.g);
     return pool[Math.floor(p.vi * pool.length) % pool.length];
   }
+  // ¿Hay alguna voz instalada en ese idioma? (visitantes.js solo dice su saludo en otro idioma si la hay)
+  function hasLang(lang) { const l = String(lang || '').toLowerCase().slice(0, 2); return !!l && allVoices.some(v => v.lang.toLowerCase().startsWith(l)); }
   // Cada personaje tiene su voz para siempre: tono, velocidad y qué voz del sistema usa
   function profile(kind) {
     if (kind === 'human') return { k: 'human', pitch: rnd(0.7, 1.45), rate: rnd(0.95, 1.12), vi: Math.random(), chirp: 0 };
+    if (kind === 'mujer') return { k: 'human', g: 'f', pitch: rnd(1.15, 1.5), rate: rnd(0.95, 1.1), vi: Math.random(), chirp: 0 };     // visitantes: voz aguda y, si hay, voz de mujer
+    if (kind === 'hombre') return { k: 'human', g: 'm', pitch: rnd(0.72, 1.0), rate: rnd(0.92, 1.08), vi: Math.random(), chirp: 0 };   // voz grave y, si hay, voz de hombre
     if (kind === 'astro') return { k: 'astro', pitch: rnd(0.55, 1.1), rate: rnd(0.86, 1.02), vi: Math.random(), chirp: 0 };   // astronautas de la Luna: voz de radio, algo grave y pausada
     const deep = Math.random() < 0.25;   // algún marciano de voz grave, de ultratumba
     return { k: 'alien', pitch: deep ? rnd(0.3, 0.6) : rnd(1.5, 2), rate: rnd(0.8, 1.18), vi: Math.random(), chirp: rnd(520, 1500) };
@@ -45,6 +62,7 @@
     o = o || {}; p = p || profile('human');
     if (off || window.fightMuted || !hasTTS || document.hidden || !catOn(p.k === 'alien' ? 'marcianos' : 'gente')) return false;
     const t = clean(text); if (!t || !/[\p{L}\p{N}]/u.test(t)) return false;
+    const fin = () => { if (o.onend) { const f = o.onend; o.onend = null; try { f(); } catch (e) {} } };   // o.onend: se llama al acabar de hablar (o si la frase se cancela)
     const busy = ss.speaking || ss.pending || pend > 0;
     if (busy && !o.force) return false;   // una sola voz a la vez: los pensamientos sueltos se saltan si alguien ya está hablando
     if (o.force) gen++;   // una frase forzada (conversación) pasa por delante de las que esperaban
@@ -56,14 +74,15 @@
     pend++;
     setTimeout(() => {
       pend--;
-      if (off || my !== gen) return;
+      if (off || my !== gen) { fin(); return; }
       try {
-        const u = new SpeechSynthesisUtterance(t), v = pickVoice(p);
-        u.lang = v ? v.lang : 'es-ES'; if (v) u.voice = v;
+        const u = new SpeechSynthesisUtterance(t), v = pickVoice(p, o.lang);
+        u.lang = v ? v.lang : (o.lang || 'es-ES'); if (v) u.voice = v;
+        if (o.onend) { u.onend = fin; u.onerror = fin; }
         u.pitch = clamp(p.pitch, 0.1, 2); u.rate = clamp(p.rate, 0.5, 1.6); u.volume = clamp(o.vol == null ? 1 : o.vol, 0.05, 1);
         if (ss.paused) ss.resume();
         ss.speak(u);
-      } catch (e) {}
+      } catch (e) { fin(); }
     }, wait);
     return true;
   }
@@ -169,7 +188,7 @@
   if (window.soundPrefs) window.soundPrefs.onChange((c, v) => { if (!v && (c === 'gente' || c === 'marcianos')) stop(); });   // al apagar las voces, se corta la que esté hablando
 
   window.atlasVoice = {
-    profile, speak, stop, sfx, critter,
+    profile, speak, stop, sfx, critter, hasLang,
     mute(v) { off = !!v; try { localStorage.setItem(KEY, off ? '1' : '0'); } catch (e) {} if (off) stop(); },
     get muted() { return off; }
   };

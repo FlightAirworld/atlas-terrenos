@@ -2814,6 +2814,8 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/retos/seen') return retosSeen(req);
   if (req.method === 'POST' && pn === '/api/visit/start') return visitStart(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/visit/finish') return visitFinish(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/visitantes/estado') return visitorGiftState(req);
+  if (req.method === 'POST' && pn === '/api/visitantes/regalo') return visitorGift(req, await readJson(req));
   if (req.method === 'POST' && pn === '/api/like') return likePost(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/likes/top') return likesTop();
   if (req.method === 'GET' && pn === '/api/events') return eventsPublic();
@@ -3024,6 +3026,8 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE TABLE IF NOT EXISTS retos_seen (user_id TEXT PRIMARY KEY, likes_seen BIGINT NOT NULL DEFAULT 0)');
     await run('CREATE TABLE IF NOT EXISTS house_visits (parcel_id TEXT NOT NULL, user_id TEXT NOT NULL, day TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (parcel_id, user_id, day))');
     await run('CREATE INDEX IF NOT EXISTS house_visits_user_day ON house_visits (user_id, day)');
+    await run('CREATE TABLE IF NOT EXISTS visitor_gifts (user_id TEXT NOT NULL, day TEXT NOT NULL, n INT NOT NULL DEFAULT 0, last_at BIGINT NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))');   // regalos de los visitantes ficticios por jugador y día
+    run('DELETE FROM visitor_gifts WHERE day < $1', [new Date(Date.now() - 3 * 86400_000).toLocaleDateString('en-CA', { timeZone: DAILY_TZ })]).catch(() => {});
     await run('CREATE TABLE IF NOT EXISTS house_entries (user_id TEXT NOT NULL, day TEXT NOT NULL, n INT NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))');   // entradas en casas por jugador y día (límite VISIT_ENTRIES_MAX)
     run('DELETE FROM house_entries WHERE day < $1', [new Date(Date.now() - 3 * 86400_000).toLocaleDateString('en-CA', { timeZone: DAILY_TZ })]).catch(() => {});
     await run('CREATE TABLE IF NOT EXISTS album_claims (user_id TEXT NOT NULL, key TEXT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, key))');
@@ -3034,7 +3038,7 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE INDEX IF NOT EXISTS parcels_user_idx ON parcels (user_id)');
     await run('CREATE TABLE IF NOT EXISTS passes (user_id TEXT PRIMARY KEY, until BIGINT NOT NULL, bought_at BIGINT NOT NULL, times INT NOT NULL DEFAULT 1)');
     await run('CREATE TABLE IF NOT EXISTS activity_seen (user_id TEXT PRIMARY KEY, seen_at BIGINT NOT NULL DEFAULT 0)');
-    for (const t of ['mission_progress', 'achievements', 'parcel_likes', 'retos_seen', 'house_visits', 'house_entries', 'album_claims', 'clans', 'clan_members', 'passes', 'activity_seen']) await run(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});   // solo el servidor accede (la clave pública no)
+    for (const t of ['mission_progress', 'achievements', 'parcel_likes', 'retos_seen', 'house_visits', 'house_entries', 'visitor_gifts', 'album_claims', 'clans', 'clan_members', 'passes', 'activity_seen']) await run(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY`).catch(() => {});   // solo el servidor accede (la clave pública no)
     const purgeMissions = () => run("DELETE FROM mission_progress WHERE period < $1 AND period NOT LIKE 'W%'", [new Date(Date.now() - 14 * 86400_000).toISOString().slice(0, 10)]).catch(() => {});
     purgeMissions(); setInterval(purgeMissions, 6 * 3600_000).unref();
   }).catch(e => console.error('No se pudieron crear las tablas de retos:', e.message))
@@ -3295,6 +3299,49 @@ async function visitFinish(req, body) {
   const up = await one('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING credits', [VISIT_CREDITS, pack.code]);
   track(user.id, 'visit_house');
   return { ok: true, rewarded: true, reward: VISIT_CREDITS, credits: up.credits };
+}
+// ---------- Visitantes ficticios (visitantes.js) ----------
+// Los muñecos que pasean por el mapa pueden regalar créditos al jugador con cuenta: como mucho VISITOR_GIFT_MAX (2) créditos por regalo
+// y VISITOR_GIFT_DAILY (3) regalos al día (día según DAILY_TZ), con VISITOR_GIFT_GAP_S (60) segundos como mínimo entre uno y otro.
+// El contador sube y se ingresa el regalo en UNA transacción: dos peticiones a la vez no pueden pasar del tope.
+const VZ_GIFT_MAX = Math.max(0, Math.floor(Number(process.env.VISITOR_GIFT_MAX ?? 2)));
+const VZ_GIFT_DAILY = Math.max(0, Math.floor(Number(process.env.VISITOR_GIFT_DAILY ?? 3)));
+const VZ_GIFT_GAP_MS = Math.max(0, Number(process.env.VISITOR_GIFT_GAP_S ?? 60)) * 1000;
+async function visitorGiftState(req) {
+  const user = await needUser(req);
+  const row = await one('SELECT n, last_at FROM visitor_gifts WHERE user_id = $1 AND day = $2', [String(user.id), dayKey()]);
+  const used = row ? Number(row.n) : 0;
+  const wait = row ? Math.max(0, Math.ceil((Number(row.last_at) + VZ_GIFT_GAP_MS - Date.now()) / 1000)) : 0;
+  return { ok: true, max: VZ_GIFT_MAX, daily: VZ_GIFT_DAILY, left: VZ_GIFT_MAX < 1 ? 0 : Math.max(0, VZ_GIFT_DAILY - used), wait };
+}
+async function visitorGift(req, body) {
+  const user = await needUser(req);
+  if (VZ_GIFT_MAX < 1 || VZ_GIFT_DAILY < 1) return { ok: true, rewarded: false, reason: 'off' };
+  if (rateHit('vzgift:' + user.id, 60_000) > 6) throw new HttpError(429, 'Vas muy rápido. Espera un minuto');
+  const amount = Math.floor(Number(body && body.credits));
+  if (!Number.isFinite(amount) || amount < 1 || amount > VZ_GIFT_MAX) throw new HttpError(400, `Un visitante regala entre 1 y ${VZ_GIFT_MAX} créditos`);
+  const pack = await ensureUserPack(user);
+  const day = dayKey(), now = Date.now(), client = await pool.connect();
+  let credits;
+  try {
+    await client.query('BEGIN');
+    const g = (await client.query(
+      `INSERT INTO visitor_gifts (user_id, day, n, last_at) VALUES ($1,$2,1,$3)
+       ON CONFLICT (user_id, day) DO UPDATE SET n = visitor_gifts.n + 1, last_at = $3 WHERE visitor_gifts.n < $4 AND visitor_gifts.last_at <= $5 RETURNING n`,
+      [String(user.id), day, now, VZ_GIFT_DAILY, now - VZ_GIFT_GAP_MS])).rows[0];
+    if (!g) {   // tope del día o demasiado pronto: no se toca nada
+      await client.query('ROLLBACK');
+      const st = await visitorGiftState(req);
+      return { ok: true, rewarded: false, reason: st.left < 1 ? 'limit' : 'wait', left: st.left, wait: st.wait };
+    }
+    credits = (await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2 RETURNING credits', [amount, pack.code])).rows[0].credits;
+    await client.query('COMMIT');
+    track(user.id, 'visitor_gift');
+    return { ok: true, rewarded: true, reward: amount, credits, left: VZ_GIFT_DAILY - Number(g.n) };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally { client.release(); }
 }
 let topLikesCache = { at: 0, list: [] };
 async function likesTop() {
