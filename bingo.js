@@ -103,7 +103,7 @@
         '<div class="bn-right">' +
           '<div class="bn-prz bingo"><div class="t">🏆 Bingo</div><div class="p" id="bn-p-bingo">—</div><div class="w" id="bn-w-bingo"></div></div>' +
           '<div class="bn-prz line"><div class="t">🎯 Línea</div><div class="p" id="bn-p-line">—</div><div class="w" id="bn-w-line"></div></div>' +
-          '<div class="bn-prz jp"><div class="t">💰 Bote acumulado</div><div class="p" id="bn-p-jp">1.000</div><small id="bn-jp-s"></small></div>' +
+          '<div class="bn-prz jp"><div class="t">💰 Bote</div><div class="p" id="bn-p-jp">1.000</div><small id="bn-jp-s"></small></div>' +
           '<div class="bn-ply">👥 <b id="bn-players">0</b> <span id="bn-ply-l">jugadores</span></div>' +
         '</div>' +
       '</div>' +
@@ -328,7 +328,7 @@
     const who = w => w ? (flag(w.country) || w.avatar || '🌍') + ' ' + w.nick + (w.winners && w.winners.length > 1 ? ` +${w.winners.length - 1}` : '') : '';
     elWBingo.textContent = who(s.bingo); elWLine.textContent = who(s.line);
     elWBingo.title = s.bingo ? names(s.bingo) : ''; elWLine.title = s.line ? names(s.line) : '';
-    const JB = s.jackpotBalls || 44, nb = (s.drawn || []).length, passed = s.phase === 'drawing' && nb > JB && !s.jackpotPrize;
+    const JB = s.jackpotBalls || 48, nb = (s.drawn || []).length, passed = s.phase === 'drawing' && nb > JB && !s.jackpotPrize;
     elJP.textContent = dots(s.jackpot);
     elJPs.textContent = passed ? `ya pasó de ${JB} bolas` : `bingo en ${JB} bolas o menos`;
     elJPs.style.opacity = passed ? '.45' : '';

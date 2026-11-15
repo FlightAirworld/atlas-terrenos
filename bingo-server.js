@@ -6,7 +6,7 @@
 //  · La partida empieza SOLA: la cuenta atrás de 1 minuto arranca en cuanto se acaba la anterior (no hace falta que nadie compre).
 //    Si al acabar la cuenta atrás no hay cartones, salen unas pocas bolas de muestra (BINGO_EMPTY_BALLS) y vuelve a empezar la cuenta atrás.
 //  · BOTE ACUMULADO: empieza en BINGO_JACKPOT_BASE (1000) créditos y sube BINGO_JACKPOT_STEP (1) con cada partida que termina. Se lo lleva (a partes iguales si hay varios)
-//    quien canta bingo en BINGO_JACKPOT_BALLS (44) bolas o menos, además del premio del bingo; entonces vuelve a empezar en 1000.
+//    quien canta bingo en BINGO_JACKPOT_BALLS (48) bolas o menos, además del premio del bingo; entonces vuelve a empezar en 1000.
 //  · Con varios jugadores: línea 20 % y bingo 80 % de los créditos gastados entre todos en esa partida (prizesFor).
 //  · Solo hay UNA línea y UN bingo por ronda (el primero que se completa). Si dos o más jugadores lo completan con la misma bola, se reparten el premio a partes iguales (hacia abajo).
 //  · Al cantarse la línea el juego se para LINE_PAUSE (8 s): el navegador enseña el rótulo 5 s, dice «Continuamos para bingo» y siguen las bolas.
@@ -30,7 +30,7 @@ module.exports = function (d) {
   const SOLO_LINE = Math.floor(numEnv('BINGO_SOLO_LINE', 5)), SOLO_BINGO = Math.floor(numEnv('BINGO_SOLO_BINGO', 20));
   const LINE_PCT = 0.2, BINGO_PCT = 0.8;
   const JACKPOT_BASE = Math.max(0, Math.floor(numEnv('BINGO_JACKPOT_BASE', 1000))), JACKPOT_STEP = Math.max(0, Math.floor(numEnv('BINGO_JACKPOT_STEP', 1)));
-  const JACKPOT_BALLS = Math.max(1, Math.min(90, Math.floor(numEnv('BINGO_JACKPOT_BALLS', 44))));
+  const JACKPOT_BALLS = Math.max(1, Math.min(90, Math.floor(numEnv('BINGO_JACKPOT_BALLS', 48))));
   const AUTO = String(process.env.BINGO_AUTO || 'on').toLowerCase() !== 'off';   // las partidas empiezan solas
   const EMPTY_BALLS = Math.max(1, Math.floor(numEnv('BINGO_EMPTY_BALLS', 12)));   // bolas de muestra si nadie compró
   const LINE_PAUSE_MS = Math.max(0, numEnv('BINGO_LINE_PAUSE_SECONDS', 8)) * 1000;   // pausa tras cantar la línea
@@ -167,7 +167,7 @@ module.exports = function (d) {
             const ws = uniq(full);
             await pay(ws, prizes.bingo, 'bingo');
             Object.assign(upd, { bingo_ball: k, status: 'done', finished_at: now });
-            if (k <= JACKPOT_BALLS) {   // bingo en 44 bolas o menos: se llevan el bote acumulado y vuelve a empezar
+            if (k <= JACKPOT_BALLS) {   // bingo en 48 bolas o menos: se llevan el bote acumulado y vuelve a empezar
               const jp = Number(((await client.query('SELECT amount FROM bingo_jackpot WHERE id = 1 FOR UPDATE')).rows[0] || { amount: JACKPOT_BASE }).amount);
               const share = Math.floor(jp / ws.length);
               if (share > 0) for (const x of ws) await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2', [share, x.pack_code]);
