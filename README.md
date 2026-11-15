@@ -49,6 +49,13 @@ Otras variables: `DATABASE_URL` (obligatoria), `ADMIN_TOKEN`, `PACKS` (packs a l
 - Variables opcionales: `CARDS_BLACK_MIN` (puja de salida, 100), `CARDS_BLACK_STEP` (subida mínima entre pujas, 1), `CARDS_PRICE_MAX` (máximo en una oferta de compra, 1.000.000).
 - Si prefieres crear las tablas a mano: `migration-cards.sql` (el servidor también las crea solo al arrancar).
 
+## Diamantes verdes 💚 (`diamantes.js`, `minijuegos-server.js`)
+
+- Cada día salen **pocos diamantes verdes** (`DIAMANTES_AL_DIA`, por defecto 8) repartidos al azar por ciudades de todos los continentes, los mismos para todos. El premio de cada uno se sortea cada día entre 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15 y 20 créditos (los grandes salen poco). El navegador no sabe cuánto vale hasta cogerlo. El sorteo es automático y cambia a medianoche (`DAILY_TZ`).
+- Cada diamante tiene un **círculo rojo** de 80 m. Solo se puede coger con el muñeco (el centro del mapa) dentro del círculo: si lo tocas desde fuera sale «🚶 Camina hacia el diamante». Si el muñeco pasa por encima, lo coge solo. Al cogerlo desaparece, suma los créditos y salen el cartel «🎉 ¡Enhorabuena! Has ganado N créditos» y un bocadillo sobre el muñeco.
+- El primero que llega se lo lleva; cada jugador puede coger hasta `DIAMANTES_MAX_DIA` (3) al día. El servidor comprueba la distancia con la posición que manda el navegador (`POST /api/mj/diamantes/claim`) y paga en una transacción. `DIAMANTES_SALT` (por defecto `ADMIN_TOKEN`) evita que se pueda adivinar el sorteo.
+- El botón 💚 de la carpeta 🎮 Juegos lleva al diamante más cercano. La tabla `mj_diamonds` se crea sola al arrancar.
+
 ## Visitar una casa 🚪 (`visita.js`)
 
 - El botón «ENTRA A LA CASA» abre una escena automática de ~1,5 min: llamas a la puerta, te abren, el anfitrión te ofrece un refresco (va a la nevera y te lo trae), brindáis, os sentáis en el sofá y charláis, y al irte todos dicen «HASTA LA PRÓXIMA».

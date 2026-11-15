@@ -2899,6 +2899,8 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/mj/mm/guess') return mjMod().mmGuess(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/mj/cofres') return mjMod().cofresGet(req);
   if (req.method === 'POST' && pn === '/api/mj/cofres/claim') return mjMod().cofresClaim(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/mj/diamantes') return mjMod().diamantesGet(req);
+  if (req.method === 'POST' && pn === '/api/mj/diamantes/claim') return mjMod().diamantesClaim(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/mj/gemas') return mjMod().gemasGet(req);
   if (req.method === 'POST' && pn === '/api/mj/gemas/start') return mjMod().gemasStart(req);
   if (req.method === 'POST' && pn === '/api/mj/gemas/finish') return mjMod().gemasFinish(req, await readJson(req, 200_000));   // una partida larga son muchos movimientos

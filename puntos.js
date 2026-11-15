@@ -34,6 +34,7 @@
       const free = (s.chests || []).some(c => !c.taken), mine = (s.chests || []).filter(c => c.mine).length;
       return free && mine < (s.max || 2);
     }],
+    ['diamantes-btn', '/api/mj/diamantes', s => (s.diamonds || []).some(d => !d.taken) && (s.mine || 0) < (s.max || 3)],
     ['duelos-btn', '/api/mj/duelos', s => (s.incoming || []).length > 0]
   ].map(([id, path, ok]) => ({ id, path, ok, dotId: id.replace(/-btn$/, '') + '-dot', busy: false }));
 

@@ -1,10 +1,10 @@
 'use strict';
-// JUEGOS NUEVOS (servidor): racha diaria, Adivina el lugar, ¿Más o menos?, Cofres del mapa y Duelos.
+// JUEGOS NUEVOS (servidor): racha diaria, Adivina el lugar, ¿Más o menos?, Cofres del mapa, Diamantes verdes y Duelos.
 // El servidor decide y paga todo (igual que rasca-server.js); el navegador (minijuegos.js) solo dibuja.
 // Se monta desde server.js:
 //   const mjMod = () => mjMod.m || (mjMod.m = require('./minijuegos-server')({ pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit, cardsMod, pushToUser }));
 // Rutas: GET /api/mj/racha, POST /api/mj/racha/claim, GET /api/mj/adivina, POST /api/mj/adivina/answer,
-//        GET /api/mj/mm, POST /api/mj/mm/guess, GET /api/mj/cofres, POST /api/mj/cofres/claim,
+//        GET /api/mj/mm, POST /api/mj/mm/guess, GET /api/mj/cofres, POST /api/mj/cofres/claim, GET /api/mj/diamantes, POST /api/mj/diamantes/claim,
 //        GET /api/mj/duelos, POST /api/mj/duelos/reto | aceptar | rechazar
 const crypto = require('node:crypto');
 
@@ -83,6 +83,7 @@ module.exports = function (d) {
     await run('CREATE TABLE IF NOT EXISTS mj_carry (user_id TEXT PRIMARY KEY, milli INT NOT NULL DEFAULT 0)');
     await run('CREATE TABLE IF NOT EXISTS mj_play (user_id TEXT NOT NULL, day TEXT NOT NULL, game TEXT NOT NULL, state TEXT NOT NULL, PRIMARY KEY (user_id, day, game))');
     await run('CREATE TABLE IF NOT EXISTS mj_chests (day TEXT NOT NULL, id INT NOT NULL, user_id TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (day, id))');
+    await run('CREATE TABLE IF NOT EXISTS mj_diamonds (day TEXT NOT NULL, id INT NOT NULL, user_id TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (day, id))');
     await run('CREATE TABLE IF NOT EXISTS mj_duels (id BIGSERIAL PRIMARY KEY, from_id TEXT NOT NULL, to_id TEXT NOT NULL, stake INT NOT NULL, status TEXT NOT NULL, from_roll INT, to_roll INT, created_at BIGINT NOT NULL, done_at BIGINT)');
   }
   const off = () => { if (!ON) throw new HttpError(404, 'Los juegos nuevos están desactivados'); };
@@ -199,6 +200,65 @@ module.exports = function (d) {
       const ins = await c.query('INSERT INTO mj_chests (day, id, user_id, credits, created_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING', [day, id, uid, chest.credits, Date.now()]);
       if (!ins.rowCount) throw new HttpError(409, 'Alguien se te adelantó: ese cofre ya está abierto');
       return { ok: true, prize: chest.credits, credits: await credit(c, pack.code, chest.credits) };
+    });
+  }
+
+  // ---------- 💚 Diamantes verdes (pocos al día, repartidos por el mundo; el primero que llega se queda con los créditos) ----------
+  // Cada día salen DIAMANTES_AL_DIA (por defecto 8) en sitios al azar de todos los continentes, los mismos para todos. El premio de cada uno
+  // (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15 o 20 créditos) también se sortea cada día; los grandes salen poco. El navegador no sabe cuánto vale hasta cogerlo.
+  // Solo se cobra con el muñeco dentro del círculo rojo (DIAMANTE_RADIO metros): el servidor lo comprueba con la posición que manda el navegador.
+  const DIAMANTES_N = Math.max(1, Math.min(20, Number(process.env.DIAMANTES_AL_DIA) || 8));
+  const DIAMANTES_MAX = Math.max(1, Number(process.env.DIAMANTES_MAX_DIA) || 3);   // cuántos puede coger cada jugador al día
+  const DIAMANTE_RADIO = 80;                                                          // metros (el círculo rojo del mapa)
+  const DIAMANTE_SAL = String(process.env.DIAMANTES_SALT || process.env.ADMIN_TOKEN || '');   // para que nadie pueda adivinar el sorteo de mañana
+  const DIAMANTE_PREMIOS = [[1, 30], [2, 22], [3, 16], [4, 12], [5, 9], [6, 6], [7, 5], [8, 4], [9, 3], [10, 3], [15, 2], [20, 1]];   // [créditos, peso]
+  const DIAMANTE_LUGARES = [   // [lat, lng]: ciudades de todo el mundo; a cada diamante se le suma un desvío de hasta ~4 km
+    [40.42, -3.70], [37.39, -5.99], [41.45, 2.15], [48.86, 2.35], [51.51, -0.12], [52.52, 13.40], [41.90, 12.50], [48.21, 16.37], [52.23, 21.01], [50.08, 14.43],
+    [47.50, 19.04], [44.43, 26.10], [37.98, 23.73], [41.01, 28.98], [55.75, 37.62], [50.45, 30.52], [59.33, 18.07], [59.91, 10.75], [53.35, -6.26], [38.72, -9.14],
+    [47.37, 8.54], [48.14, 11.58], [45.46, 9.19], [60.17, 24.94], [30.04, 31.24], [6.52, 3.38], [-1.29, 36.82], [-26.20, 28.05], [9.03, 38.74], [33.57, -7.59],
+    [-4.44, 15.27], [5.60, -0.19], [14.72, -17.47], [36.75, 3.06], [36.81, 10.18], [35.68, 139.69], [37.57, 126.98], [39.90, 116.40], [31.23, 121.47], [22.32, 114.17],
+    [13.76, 100.50], [28.61, 77.21], [19.08, 72.88], [23.81, 90.41], [24.86, 67.01], [35.69, 51.39], [24.71, 46.68], [25.20, 55.27], [-6.21, 106.85], [14.60, 120.98],
+    [1.35, 103.82], [21.03, 105.85], [27.72, 85.32], [41.30, 69.24], [47.89, 106.91], [33.31, 44.37], [32.08, 34.78], [55.03, 82.92], [40.71, -74.01], [34.05, -118.24],
+    [41.88, -87.63], [29.76, -95.37], [39.74, -104.99], [43.65, -79.38], [49.28, -123.12], [19.43, -99.13], [4.71, -74.07], [-12.05, -77.04], [-33.45, -70.67], [-34.60, -58.38],
+    [-23.55, -46.63], [-22.91, -43.17], [10.48, -66.90], [-0.18, -78.47], [-16.50, -68.15], [-34.90, -56.16], [23.11, -82.37], [8.98, -79.52], [25.76, -80.19], [61.22, -149.90],
+    [-33.87, 151.21], [-37.81, 144.96], [-31.95, 115.86], [-27.47, 153.03], [-36.85, 174.76], [-23.70, 133.88]
+  ];
+  const metros = (a, b, c, e) => {   // distancia en metros entre dos puntos (haversine)
+    const R = 6371008.8, rad = Math.PI / 180, dLa = (c - a) * rad, dLo = (e - b) * rad;
+    const h = Math.sin(dLa / 2) ** 2 + Math.cos(a * rad) * Math.cos(c * rad) * Math.sin(dLo / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+  };
+  const diamantesDeHoy = day => {
+    const sitios = pick(DIAMANTE_LUGARES, DIAMANTES_N, DIAMANTE_SAL + 'diamantes:' + day), r = seeded(DIAMANTE_SAL + 'diamantes-pos:' + day), rp = seeded(DIAMANTE_SAL + 'diamantes-premio:' + day);
+    const total = DIAMANTE_PREMIOS.reduce((a, x) => a + x[1], 0);
+    return sitios.map((si, id) => {
+      const [la, lo] = DIAMANTE_LUGARES[si], dist = Math.sqrt(r(10000) / 10000) * 4000, ang = (r(36000) / 36000) * 2 * Math.PI;
+      let w = rp(total), prize = DIAMANTE_PREMIOS[0][0];
+      for (const [p, pw] of DIAMANTE_PREMIOS) { if (w < pw) { prize = p; break; } w -= pw; }
+      return { id, lat: +(la + (dist * Math.cos(ang)) / 111320).toFixed(6), lng: +(lo + (dist * Math.sin(ang)) / (111320 * Math.cos(la * Math.PI / 180))).toFixed(6), credits: prize };
+    });
+  };
+  async function diamantesGet(req) {
+    off(); const user = await needUser(req), uid = String(user.id), day = dayKey();
+    const taken = await all('SELECT id, user_id FROM mj_diamonds WHERE day = $1', [day]);
+    return {
+      ok: true, day, radius: DIAMANTE_RADIO, max: DIAMANTES_MAX, mine: taken.filter(t => t.user_id === uid).length,
+      diamonds: diamantesDeHoy(day).map(c => { const t = taken.find(x => x.id === c.id); return { id: c.id, lat: c.lat, lng: c.lng, taken: !!t, mine: !!t && t.user_id === uid }; })
+    };
+  }
+  async function diamantesClaim(req, body) {
+    off(); const user = await needUser(req), uid = String(user.id), day = dayKey(); gate(uid, 'diamantes');
+    const id = Number(body && body.id), lat = Number(body && body.lat), lng = Number(body && body.lng), dm = diamantesDeHoy(day).find(c => c.id === id);
+    if (!dm) throw new HttpError(404, 'Ese diamante no existe');
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new HttpError(400, 'No sé dónde estás');
+    if (metros(lat, lng, dm.lat, dm.lng) > DIAMANTE_RADIO + 20) throw new HttpError(403, 'Camina hacia el diamante');
+    const pack = await ensureUserPack(user);
+    return tx(async c => {
+      const mine = Number((await c.query('SELECT count(*)::int AS n FROM mj_diamonds WHERE day = $1 AND user_id = $2', [day, uid])).rows[0].n);
+      if (mine >= DIAMANTES_MAX) throw new HttpError(409, 'Hoy ya has cogido ' + DIAMANTES_MAX + ' diamantes. ¡Mañana salen más!');
+      const ins = await c.query('INSERT INTO mj_diamonds (day, id, user_id, credits, created_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING', [day, id, uid, dm.credits, Date.now()]);
+      if (!ins.rowCount) throw new HttpError(409, 'Alguien se te adelantó: ese diamante ya no está');
+      return { ok: true, prize: dm.credits, credits: await credit(c, pack.code, dm.credits) };
     });
   }
 
@@ -430,5 +490,5 @@ module.exports = function (d) {
     });
   }
 
-  return { ON, init, gemasGet, gemasStart, gemasFinish, minasGet, minasStart, minasReveal, minasCash, ruleta: (r, b) => casinoPlay('ruleta', r, b), casinoGet, slots: (r, b) => casinoPlay('slots', r, b), plinko: (r, b) => casinoPlay('plinko', r, b), moneda: (r, b) => casinoPlay('moneda', r, b), rachaGet, rachaClaim, adivinaGet, adivinaAnswer, mmGet, mmGuess, cofresGet, cofresClaim, duelosGet, duelosReto, duelosAceptar, duelosRechazar };
+  return { ON, init, gemasGet, gemasStart, gemasFinish, minasGet, minasStart, minasReveal, minasCash, ruleta: (r, b) => casinoPlay('ruleta', r, b), casinoGet, slots: (r, b) => casinoPlay('slots', r, b), plinko: (r, b) => casinoPlay('plinko', r, b), moneda: (r, b) => casinoPlay('moneda', r, b), rachaGet, rachaClaim, adivinaGet, adivinaAnswer, mmGet, mmGuess, cofresGet, cofresClaim, diamantesGet, diamantesClaim, duelosGet, duelosReto, duelosAceptar, duelosRechazar };
 };
