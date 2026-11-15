@@ -2899,6 +2899,8 @@ async function route(req, res, url) {
   if (req.method === 'POST' && pn === '/api/mj/mm/guess') return mjMod().mmGuess(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/mj/cofres') return mjMod().cofresGet(req);
   if (req.method === 'POST' && pn === '/api/mj/cofres/claim') return mjMod().cofresClaim(req, await readJson(req));
+  if (req.method === 'GET' && pn === '/api/mj/diamantes') return mjMod().diamantesGet(req);
+  if (req.method === 'POST' && pn === '/api/mj/diamantes/claim') return mjMod().diamantesClaim(req, await readJson(req));
   if (req.method === 'GET' && pn === '/api/mj/gemas') return mjMod().gemasGet(req);
   if (req.method === 'POST' && pn === '/api/mj/gemas/start') return mjMod().gemasStart(req);
   if (req.method === 'POST' && pn === '/api/mj/gemas/finish') return mjMod().gemasFinish(req, await readJson(req, 200_000));   // una partida larga son muchos movimientos
@@ -3714,17 +3716,21 @@ function sendStatic(req, res, file) {
   if (!ent || ent.mtime !== st.mtimeMs) {
     let buf = fs.readFileSync(file);
     if (path.basename(file) === 'sw.js') buf = Buffer.from(buf.toString('utf8').replace(/__BUILD__/g, BUILD_ID));   // la caché del service worker cambia con cada despliegue
-    ent = { mtime: st.mtimeMs, buf, etag: '"' + require('node:crypto').createHash('md5').update(buf).digest('hex').slice(0, 20) + '"', gz: null };
+    ent = { mtime: st.mtimeMs, buf, etag: '"' + require('node:crypto').createHash('md5').update(buf).digest('hex').slice(0, 20) + '"', gz: null, br: null };
     if (staticCache.size > 300) staticCache.clear();
     staticCache.set(file, ent);
   }
   const isImg = (/^image\//.test(type) && !/svg/.test(type)) || /^audio\//.test(type);   // imágenes y audio: caché de 7 días
   const headers = { 'Content-Type': type, 'ETag': ent.etag, 'Vary': 'Accept-Encoding',
-    'Cache-Control': isImg ? 'public, max-age=604800' : 'no-cache',
+    'Cache-Control': isImg ? 'public, max-age=604800' : (/\.(js|css)$/.test(file) && path.basename(file) !== 'sw.js' ? 'public, max-age=120, stale-while-revalidate=600' : 'no-cache'),   // JS/CSS: 2 min sin preguntar (con conexión lenta ahorra decenas de consultas); sw.js y HTML siempre al día
     'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Strict-Transport-Security': 'max-age=15552000' };
   if (req.headers['if-none-match'] === ent.etag) { res.writeHead(304, headers); return res.end(); }
   let body = ent.buf;
-  if (COMPRESSIBLE.test(type) && /\bgzip\b/.test(String(req.headers['accept-encoding'] || '')) && body.length > 1024) {
+  const ae = String(req.headers['accept-encoding'] || '');
+  if (COMPRESSIBLE.test(type) && body.length > 1024 && /\bbr\b/.test(ae)) {   // Brotli: ~15-20 % más pequeño que gzip (se comprime una vez y queda guardado)
+    if (!ent.br) ent.br = zlib.brotliCompressSync(ent.buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: ent.buf.length } });
+    body = ent.br; headers['Content-Encoding'] = 'br';
+  } else if (COMPRESSIBLE.test(type) && /\bgzip\b/.test(ae) && body.length > 1024) {
     if (!ent.gz) ent.gz = zlib.gzipSync(ent.buf, { level: 9 });
     body = ent.gz; headers['Content-Encoding'] = 'gzip';
   }

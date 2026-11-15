@@ -14,29 +14,36 @@ self.addEventListener('activate', e => {
   })());
 });
 
+// Con conexión lenta no se espera a la red:
+//  · imágenes y fuentes: primero lo guardado (cambian muy poco) y solo van a la red si no están;
+//  · HTML, JS y CSS: red primero, pero si tarda más de 3 s se usa lo guardado (así el juego abre aunque la red vaya fatal);
+//  · /api y lo externo: siempre directo a la red.
+const SLOW_MS = 3000;
+const guardar = (req, res) => { if (res && res.status === 200 && res.type === 'basic') { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {}); } return res; };
+
+function redPrimero(req) {
+  const net = fetch(req).then(res => guardar(req, res));
+  const lenta = new Promise((_, no) => setTimeout(no, SLOW_MS));
+  return Promise.race([net, lenta]).catch(async () => {
+    const hit = await caches.match(req);
+    if (hit) { net.catch(() => {}); return hit; }                     // lo guardado ya; la descarga sigue y deja lo nuevo para la próxima
+    if (req.mode === 'navigate') { const home = await caches.match('/'); if (home) { net.catch(() => {}); return home; } }
+    return net;                                                        // no hay nada guardado: se espera a la red
+  });
+}
+async function guardadoPrimero(req) {
+  const hit = await caches.match(req);
+  if (hit) return hit;
+  return fetch(req).then(res => guardar(req, res));
+}
+
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || req.headers.has('range')) return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;                 // mapas, Supabase, API externa: directo a la red
   if (/^\/(api|auth|socket|ws|admin)/.test(url.pathname)) return;  // datos en vivo: nunca a caché
-
-  e.respondWith((async () => {
-    try {
-      const res = await fetch(req);
-      if (res && res.ok && res.type === 'basic') {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
-      }
-      return res;
-    } catch (err) {
-      const hit = await caches.match(req);
-      if (hit) return hit;
-      if (req.mode === 'navigate') {
-        const home = await caches.match('/');
-        if (home) return home;
-      }
-      throw err;
-    }
-  })());
+  if (url.pathname === '/sw.js') return;
+  const estatico = /\.(png|jpe?g|webp|gif|avif|ico|svg|woff2?|ttf)$/i.test(url.pathname);
+  e.respondWith(estatico ? guardadoPrimero(req) : redPrimero(req));
 });
