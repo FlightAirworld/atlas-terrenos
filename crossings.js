@@ -40,8 +40,7 @@
       const half = map.roadMetrics(b.cls).half, depth = Math.max(8 * fp, half * 0.75), t = Math.max(1.4, half / 4.5);
       b.half = half; b.xs = dz + depth / 2 + 3 * fp;
       const set = (el, l, tp, w, h) => { const s = el.style; s.left = l + 'px'; s.top = tp + 'px'; s.width = w + 'px'; s.height = h + 'px'; };
-      set(b.els.z, dz - depth / 2, -half, depth, 2 * half);                    // paso de cebra: franjas paralelas a la calle
-      b.els.z.style.background = `repeating-linear-gradient(to bottom,${ZEBRA} 0 ${t}px,transparent ${t}px ${2 * t}px)`;   // las calles son blancas: el paso va en gris oscuro para que se vea
+      b.els.z.style.display = 'none';                                           // SIN pasos de cebra en el mapa (se quitaron a petición del administrador); quedan semáforos y líneas de parada
       set(b.els.s, b.xs, -half, Math.max(1.6, half * 0.16), half);             // línea de parada en el carril de llegada
       b.els.s.style.background = ZEBRA;
       const ls = Math.max(5, 7 * fp);

@@ -16,7 +16,16 @@
   const EMOJI = "'Apple Color Emoji','Noto Color Emoji','Segoe UI Emoji',sans-serif";
 
   // Cuentas que cambiaron de apodo y conservan su aspecto de siempre (el aspecto sale del apodo): apodo nuevo → apodo con el que se generó
-  const LOOK_ALIAS = {};   // (pendiente: cuando el administrador pase a llamarse Lodam → { lodam: 'redecora63' })
+  // El administrador pasa a llamarse Lodam y conserva su aspecto de siempre (el de 'redecora63'); la otra cuenta que se llamaba Lodam ahora es Carcoma y conserva el suyo (el de 'lodam').
+  const LOOK_ALIAS = { lodam: 'redecora63', carcoma: 'lodam' };
+  const ADMIN_NICKS = ['lodam', 'redecora63'];                // apodos del administrador (el antiguo, por si la cuenta aún no se ha renombrado)
+  const ADMIN_SKIN = '#ffe6d6';                               // piel blanca del muñeco del administrador (antes le salía el tono más oscuro y las facciones no se veían)
+  const nickNow = () => { try { return String((window.atlasPlayerName ? window.atlasPlayerName() : '') || (typeof nickOf === 'function' ? nickOf() : '') || (document.getElementById('name') || {}).value || '').replace(/\s+/g, ' ').trim().toLowerCase(); } catch (e) { return ''; } };
+  // ¿Es el muñeco del administrador? (cuenta Lodam o dispositivo abierto con #admin)
+  window.isAdminDoll = function () {
+    try { if (localStorage.getItem('adminView') === '1' || location.hash === '#admin') return true; } catch (e) { /* nada */ }
+    return ADMIN_NICKS.includes(nickNow());
+  };
   const fnv = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
   const rng = seed => { let s = seed >>> 0; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; };
 
@@ -33,18 +42,21 @@
   }
   let cacheKey = '', cache = null;
   window.playerLook = function () {
-    const key = seedText();
+    const key = seedText() + (window.isAdminDoll() ? '|a' : '');
     if (cache && key === cacheKey) return cache;
-    const r = rng(fnv(key)), pick = a => a[Math.floor(r() * a.length)];
+    const r = rng(fnv(key.replace(/\|a$/, ''))), pick = a => a[Math.floor(r() * a.length)];
     cacheKey = key;
     cache = { skin: pick(SKIN), hair: pick(HAIR), hs: Math.floor(r() * 5), shirt: pick(SHIRT), pants: pick(PANTS) };
+    if (window.isAdminDoll()) cache.skin = ADMIN_SKIN;
     return cache;
   };
 
   // Aspecto de otro jugador a partir de su apodo (o de un código): siempre el mismo para la misma persona
   window.playerLookFor = function (text) {
     const nn = String(text || '').trim().toLowerCase(), r = rng(fnv('n:' + (LOOK_ALIAS[nn] || nn))), pick = a => a[Math.floor(r() * a.length)];
-    return { skin: pick(SKIN), hair: pick(HAIR), hs: Math.floor(r() * 5), shirt: pick(SHIRT), pants: pick(PANTS) };
+    const L = { skin: pick(SKIN), hair: pick(HAIR), hs: Math.floor(r() * 5), shirt: pick(SHIRT), pants: pick(PANTS) };
+    if (ADMIN_NICKS.includes(nn)) L.skin = ADMIN_SKIN;   // los demás también ven al administrador con la piel blanca
+    return L;
   };
   window.flagOf = cc => /^[A-Za-z]{2}$/.test(cc || '') ? String.fromCodePoint(...[...cc.toUpperCase()].map(ch => 127397 + ch.charCodeAt(0))) : '';
 
@@ -72,9 +84,9 @@
       : L.hs === 1 ? fringe + `<rect x="9.4" y="11" width="3.4" height="20" rx="1.7" fill="${h}"/><rect x="27.2" y="11" width="3.4" height="20" rx="1.7" fill="${h}"/>`
       : L.hs === 3 ? fringe + `<circle cx="20" cy="3.4" r="3.6" fill="${h}"/><rect x="18.4" y="5.6" width="3.2" height="1.4" rx=".7" fill="rgba(0,0,0,.3)"/>`
       : fringe;
-    const brows = L.hs === 2 ? '' : `<path d="M13.8 11.7 Q16.4 10.3 18.8 11.4 M21.2 11.4 Q23.6 10.3 26.2 11.7" stroke="${h}" stroke-width="1.05" fill="none" stroke-linecap="round" opacity=".9"/>`;
-    const eye = x => `<ellipse cx="${x}" cy="14.8" rx="1.9" ry="1.5" fill="#fff"/><circle cx="${x}" cy="14.9" r="1.05" fill="#3a2a1f"/><circle cx="${x}" cy="14.9" r=".5" fill="#111"/><circle cx="${x + .4}" cy="14.5" r=".32" fill="#fff"/>`;
-    const feat = `${eye(16.7)}${eye(23.3)}<path d="M20 15.8 Q18.9 18.2 20.9 18.3" stroke="rgba(0,0,0,.3)" fill="none" stroke-width=".8" stroke-linecap="round"/><path d="M17.3 19.9 Q20 22.3 22.7 19.9" stroke="#8a3b3b" fill="none" stroke-width="1.15" stroke-linecap="round"/>`;
+    const brows = L.hs === 2 ? '' : `<path d="M13.8 11.7 Q16.4 10.3 18.8 11.4 M21.2 11.4 Q23.6 10.3 26.2 11.7" stroke="${h}" stroke-width="1.35" fill="none" stroke-linecap="round"/>`;
+    const eye = x => `<ellipse cx="${x}" cy="14.8" rx="1.9" ry="1.5" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width=".35"/><circle cx="${x}" cy="14.9" r="1.05" fill="#3a2a1f"/><circle cx="${x}" cy="14.9" r=".5" fill="#111"/><circle cx="${x + .4}" cy="14.5" r=".32" fill="#fff"/>`;
+    const feat = `${eye(16.7)}${eye(23.3)}<path d="M20 15.8 Q18.8 18.3 21 18.4" stroke="rgba(120,60,40,.7)" fill="none" stroke-width="1" stroke-linecap="round"/><path d="M17.1 19.8 Q20 22.6 22.9 19.8" stroke="#b03a48" fill="none" stroke-width="1.35" stroke-linecap="round"/>`;
     if (part === 'back') return back;
     return (part === 'front' ? '' : back) + `${ears}${face}${front}${brows}${feat}`;
   }
@@ -303,6 +315,7 @@
     }
     function maybeEnter() {
       const now = Date.now();
+      if (window.isAdminDoll && window.isAdminDoll()) return false;   // el muñeco del administrador solo pasea y viaja en cohete: nunca entra en casas, bares ni discotecas
       if (!autoEnterOn() || now < noEnterUntil || now - lastEnter < ENTER_COOLDOWN) return false;
       const h = houseNear(); if (!h) return false;
       seen.set(h.p.id, now);                       // esta casa ya está decidida (entre o no) durante 10 min

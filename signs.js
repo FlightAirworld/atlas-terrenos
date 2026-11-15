@@ -112,7 +112,7 @@
     const live = new Set();
     if (X && X.list) X.list().forEach(J => {
       const key = 'x' + J.key; live.add(key);
-      if (!act.has(key)) build(key, 'x', J.C, J.br.map(b => ({ th: b.th, cls: b.cls, ne: !!b.ne, ped: true, type: null })));
+      if (!act.has(key)) build(key, 'x', J.C, J.br.map(b => ({ th: b.th, cls: b.cls, ne: !!b.ne, ped: false, type: null })));   // sin rombos de «paso de peatones»: ya no hay pasos de cebra
     });
     Array.from(act.entries()).forEach(([k, S]) => {
       if (S.src === 'x') { if (!live.has(k)) removeS(k); return; }

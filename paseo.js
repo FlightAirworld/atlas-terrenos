@@ -143,5 +143,5 @@
     } finally { running = null; lastEnd = Date.now(); }
   }
 
-  window.paseo = { start, canStart: () => !running && earthOk() && Date.now() - lastEnd >= COOLDOWN_MS && !sceneOpen(), running: () => !!running };
+  window.paseo = { start, canStart: () => !(window.isAdminDoll && window.isAdminDoll()) && !running && earthOk() && Date.now() - lastEnd >= COOLDOWN_MS && !sceneOpen(), running: () => !!running };
 })();

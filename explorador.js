@@ -1,29 +1,23 @@
 'use strict';
-// 🧭 EXPLORADOR (solo administrador): el muñeco recorre solo TODO el juego, uno tras otro y en bucle:
-//   1. Todos los botones de Extras, Juegos y los de la columna del mapa (Cartas, Regalo diario, Trivia, Rasca y gana, Parejas, Bingo, Ranking, Chat…): los abre, deja unos
-//      segundos la pantalla a la vista y la cierra. SOLO abre y mira: nunca pulsa comprar, jugar ni pagar dentro de los paneles.
-//   2. Los monumentos del mapa (Monumentos.list()): vuela a cada uno y, mientras está allí, el muñeco camina por las calles y entra en las casas (jugador.js).
-//   3. Todos los mundos (Luna, Marte, planetas, Prehistoria…): viaja en cohete a cada uno, se queda un rato y vuelve a la Tierra.
-// FUTURAS MEJORAS: no hay que tocar nada para que entren.
-//   · Un botón nuevo en Extras / Juegos / columna del mapa (con data-label) se descubre solo en cada vuelta. Para dejarlo fuera: data-explore="no".
-//   · Un mundo nuevo en mundos.js (window.worldIds()) y un monumento nuevo (Monumentos.list()) también entran solos.
-//   · Para cualquier otra cosa: Explorer.register({ id: 'mi-sitio', label: '🏗️ Mi sitio', go: async ctx => { abrirAlgo(); await ctx.wait(8000); cerrarAlgo(); } })
-//     (ctx.wait(ms) espera y corta el recorrido si el jugador toca algo; ctx.say(texto) avisa en pantalla).
-// Se activa solo en la cuenta de administrador (vista #admin del dispositivo o la cuenta Redecora63). Botón 🧭 abajo a la izquierda: activar / parar. Si tocas algo, se pausa y vuelve a los 45 s.
-// Consola: Explorer.start(), Explorer.stop(), Explorer.stops() (lista lo que visitaría ahora mismo).
+// 🧭 EXPLORADOR (solo el muñeco del administrador, cuenta Lodam): SOLO pasea y viaja en cohete. No abre paneles, no pulsa botones, no entra en casas, bares ni monumentos.
+//   1. Cuando el administrador lleva 5 s sin tocar nada, su muñeco echa a andar solo por las calles de la Tierra (jugador.js → autoWalk) y pasea un buen rato.
+//   2. Después viaja en cohete (el viaje de verdad, con rampa y despegue) al siguiente mundo de la lista (Luna, Marte, planetas, Prehistoria…), se queda un rato y vuelve a la Tierra.
+//   3. En la Tierra vuelve a pasear y luego va al mundo siguiente, y así en bucle. Un mundo nuevo en mundos.js (window.worldIds()) entra solo.
+// Botón 🧭 abajo a la izquierda: activar / parar. Si tocas algo, se pausa y vuelve a los 5 s de estar quieto.
+// Consola: Explorer.start(), Explorer.stop(), Explorer.stops() (mundos que visitará).
 (function () {
-  const KEY = 'explorerOn', START_IDLE = 15000, RESUME_IDLE = 45000, BTN_DWELL = 8000, MONU_DWELL = 12000, WORLD_DWELL = 14000;
+  const KEY = 'explorerOn', START_IDLE = 5000, RESUME_IDLE = 5000, WALK_DWELL = 60000, WORLD_DWELL = 14000;   // 5 s quieto → anda; 60 s paseando por la Tierra entre un viaje y otro
   const INTERRUPT = { interrupted: true };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  const custom = [];
   let on = false, running = null, lastUser = Date.now(), btn = null;
 
-  // Quién es el administrador: el que abrió el juego con #admin en este dispositivo, o la cuenta Lodam
+  // Quién es el administrador: la cuenta Lodam (antes Redecora63) o el dispositivo abierto con #admin
   function isAdmin() {
     try {
+      if (window.isAdminDoll) return window.isAdminDoll();
       if (localStorage.getItem('adminView') === '1' || location.hash === '#admin') return true;
       const n = String((window.atlasPlayerName && window.atlasPlayerName()) || '').trim().toLowerCase();
-      return n === 'redecora63' || n === 'redecora 63';   // (cuando cambie el apodo a Lodam, añadir aquí 'lodam')
+      return n === 'lodam' || n === 'redecora63';
     } catch (e) { return false; }
   }
   const toast = t => { try { if (typeof flashToast === 'function') flashToast(t); } catch (e) { /* nada */ } };
@@ -34,65 +28,34 @@
   // Lo que toca el jugador de verdad (no los clics que hace el explorador, que no son «de confianza»)
   ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(n => document.addEventListener(n, e => { if (e.isTrusted) lastUser = Date.now(); }, { capture: true, passive: true }));
 
-  // ---------- Qué visitar ----------
-  const DENY_ID = new Set(['menu-btn', 'extras-btn', 'games-btn', 'online-btn', 'mundos-btn', 'account-btn', 'install-btn', 'coffee-btn', 'share-app-btn', 'push-btn', 'presence-btn', 'sounds-btn', 'lite-btn', 'search-btn']);
-  const DENY_RE = /compr|pagar|paypal|caf[eé]|sesi[oó]n|borrar|elimin|salir|descargar|compartir|sonid|ligero|avis/i;
-  function buttonStops() {
-    const seen = new Set(), out = [];
-    document.querySelectorAll('#map-controls button[data-label], #extras-items button, #games-items button').forEach(b => {
-      const label = b.getAttribute('data-label') || b.getAttribute('title') || '';
-      if (!b.id && !label) return;
-      if (seen.has(b) || DENY_ID.has(b.id) || b.classList.contains('hidden') || b.disabled || b.getAttribute('data-explore') === 'no') return;
-      if (b.getAttribute('data-explore') !== 'si' && DENY_RE.test(label)) return;
-      seen.add(b);
-      const icon = (b.textContent || '').trim().split(/\s/)[0] || '▪️';
-      out.push({ id: 'btn:' + (b.id || label), label: icon + ' ' + (label || b.id), go: async ctx => { b.click(); await ctx.wait(BTN_DWELL); await closeAll(); } });
-    });
-    return out;
+  // ---------- Qué hace ----------
+  let nextWorld = 0;
+  const worldList = () => (window.worldIds ? window.worldIds() : []).filter(i => i !== 'tierra');
+  const onEarth = () => !window.worldNow || window.worldNow() === 'tierra';
+  async function arrive(ctx, id) {   // viaja en cohete y espera a que acabe el viaje
+    const t0 = Date.now();
+    while (window.worldBusy && window.worldBusy() && Date.now() - t0 < 180000) await ctx.wait(500);
+    window.travelTo(id);
+    await ctx.wait(1500);
+    while (Date.now() - t0 < 360000 && ((window.worldBusy && window.worldBusy()) || (window.worldNow && window.worldNow() !== id))) await ctx.wait(500);
   }
-  async function closeAll() {   // cierra los paneles que haya abiertos (.modal con su botón ×)
-    for (let i = 0; i < 4; i++) {
-      const open = [...document.querySelectorAll('.modal:not(.hidden) .close')];
-      if (!open.length) break;
-      open.forEach(c => { try { c.click(); } catch (e) { /* nada */ } });
-      await sleep(400);
-    }
-    try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch (e) { /* nada */ }
-    await sleep(300);
+  async function walkEarth(ctx) {   // en la Tierra el muñeco anda solo por las calles (jugador.js) mientras nadie toca nada
+    try { if (typeof gl !== 'undefined' && gl && gl.getZoom && gl.getZoom() < 15.5) gl.easeTo({ zoom: 16.5, duration: 1200 }); } catch (e) { /* nada */ }
+    ctx.say('🚶 Paseando por el mundo');
+    await ctx.wait(WALK_DWELL);
   }
-  async function monumentsStop(ctx) {
-    const list = (window.Monumentos && window.Monumentos.list && window.Monumentos.list()) || [];
-    for (const m of list) {
-      if (!earthReady()) break;
-      ctx.say('🏛️ ' + m.name + (m.place ? ' · ' + m.place : ''));
-      window.Monumentos.goto(m.id);
-      await ctx.wait(MONU_DWELL);
-      await ctx.whileScene();
-    }
+  async function trip(ctx) {         // un viaje en cohete: va al siguiente mundo, se queda un rato y vuelve
+    const ids = worldList();
+    if (!ids.length || !window.travelTo) return;
+    const id = ids[nextWorld++ % ids.length], name = (window.worldInfo && window.worldInfo(id).name) || id;
+    ctx.say('🚀 Viajando a ' + name);
+    await arrive(ctx, id);
+    await ctx.wait(WORLD_DWELL);
+    ctx.say('🌎 Volviendo a la Tierra');
+    await arrive(ctx, 'tierra');
+    await ctx.wait(3000);
   }
-  async function worldsStop(ctx) {
-    const ids = (window.worldIds ? window.worldIds() : []).filter(i => i !== 'tierra');
-    const arrive = async id => {   // espera a que acabe el viaje (cohete incluido)
-      const t0 = Date.now();
-      while (window.worldBusy && window.worldBusy() && Date.now() - t0 < 180000) await ctx.wait(500);
-      window.travelTo(id);
-      await ctx.wait(1500);
-      while (Date.now() - t0 < 360000 && ((window.worldBusy && window.worldBusy()) || (window.worldNow && window.worldNow() !== id))) await ctx.wait(500);
-    };
-    for (const id of ids) {
-      const name = (window.worldInfo && window.worldInfo(id).name) || id;
-      ctx.say('🚀 Viajando a ' + name);
-      await arrive(id);
-      await ctx.wait(WORLD_DWELL);
-    }
-    if (ids.length) { ctx.say('🌎 Volviendo a la Tierra'); await arrive('tierra'); await ctx.wait(3000); }
-  }
-  function buildStops() {   // se vuelve a calcular en cada vuelta: lo que se añada al juego entra solo
-    const out = [...custom, ...buttonStops()];
-    if (window.Monumentos && window.Monumentos.list) out.push({ id: 'monumentos', label: '🏛️ Monumentos del mapa', go: monumentsStop, earth: true });
-    if (window.worldIds && window.travelTo) out.push({ id: 'mundos', label: '🌌 Mundos', go: worldsStop });
-    return out;
-  }
+  function buildStops() { return worldList().map(id => ({ id: 'mundo:' + id, label: '🚀 ' + ((window.worldInfo && window.worldInfo(id).name) || id) })); }
 
   // ---------- El recorrido ----------
   function makeCtx(started) {
@@ -113,21 +76,17 @@
   }
   async function tour(token) {
     while (on && running === token) {
-      const stops = buildStops();
-      for (const s of stops) {
-        if (!on || running !== token) return;
-        try {
-          await waitReady();
-          if (s.earth && !earthReady()) continue;
-          const started = Date.now(), ctx = makeCtx(started);
-          if (s.label) toast('🧭 ' + s.label);
-          await s.go(ctx);
-        } catch (e) {
-          if (e === INTERRUPT) { token.paused = true; continue; }   // el jugador tocó algo: se pausa y sigue más tarde con la siguiente parada
-          console.warn('[explorador]', s && s.id, e);
-        }
+      try {
+        await waitReady();                                   // 5 s sin tocar nada
+        const ctx = makeCtx(Date.now());
+        if (!onEarth() && !(window.worldBusy && window.worldBusy())) await arrive(ctx, 'tierra');   // si lo dejó en otro mundo, vuelve primero
+        if (!earthReady()) { await sleep(1000); continue; }
+        await walkEarth(ctx);                                // pasea
+        await trip(ctx);                                     // y viaja en cohete a otro mundo
+      } catch (e) {
+        if (e === INTERRUPT) { token.paused = true; continue; }   // el jugador tocó algo: se pausa y sigue cuando lleve 5 s quieto
+        console.warn('[explorador]', e); await sleep(3000);
       }
-      try { await waitReady(); await sleep(15000); } catch (e) { /* parado */ }
     }
   }
   function start() {
@@ -161,7 +120,7 @@
   }
   window.Explorer = {
     start, stop, running: () => !!running,
-    register(s) { if (s && s.id && typeof s.go === 'function') { const i = custom.findIndex(c => c.id === s.id); if (i >= 0) custom[i] = s; else custom.push(s); } },
+    register() { /* el explorador ya no visita sitios: solo pasea y viaja en cohete */ },
     stops: () => buildStops().map(s => s.label || s.id)
   };
   if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount);

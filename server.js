@@ -3287,9 +3287,9 @@ const VISIT_CREDITS = Math.max(0, Math.floor(Number(process.env.VISIT_CREDITS ??
 const VISIT_DAILY_MAX = Math.max(1, Math.floor(Number(process.env.VISIT_DAILY_MAX ?? 10)));
 const VISIT_ENTRIES_MAX = Math.max(1, Math.floor(Number(process.env.VISIT_ENTRIES_MAX ?? 3)));   // veces al día que un jugador puede ENTRAR en casas (cuenten o no como regalo)
 const VISIT_MIN_MS = 25_000, VISIT_MAX_MS = 15 * 60_000;
-// Apodos que pueden entrar en casas y edificios SIN límite diario de entradas (lista separada por comas; por defecto Redecora63).
+// Apodos que pueden entrar en casas y edificios SIN límite diario de entradas (lista separada por comas; por defecto Lodam).
 // Solo quita el tope de entradas: los créditos de regalo siguen con sus límites (1 por casa y día, VISIT_DAILY_MAX al día).
-const VISIT_UNLIMITED = new Set(String(process.env.VISIT_UNLIMITED_NICKS ?? 'Redecora63').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
+const VISIT_UNLIMITED = new Set(String(process.env.VISIT_UNLIMITED_NICKS ?? 'Lodam').split(',').map(s => s.trim().toLowerCase()).filter(Boolean));
 const visitStarts = new Map();   // visitante|casa -> hora de entrada
 async function visitParcel(body, user) {
   const id = String(body && body.id || '');
