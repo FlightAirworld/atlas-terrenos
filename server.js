@@ -69,11 +69,12 @@ const REQUIRE_LOGIN = AUTH_ENABLED && process.env.REQUIRE_LOGIN !== '0';     // 
 
 // Rejilla del mundo: cada parcela es un cuadrado de 0.001° (~111 m de lado en latitud)
 const SIZE = 0.0005;
+const PREHISTORIA = require('./prehistoria-terreno.js');   // el terreno de Prehistoria (lagos y ríos): las parcelas bajo el agua no se pueden comprar
 const MAX_X = Math.round(360 / SIZE);   // 360000 columnas
 const MAX_Y = Math.round(180 / SIZE);   // 180000 filas
 // Mundos: cada planeta tiene su propia rejilla de parcelas, independiente de la Tierra (mismas reglas, mismo precio, mismos datos).
 // En la Tierra el id es "x:y" (como siempre); en los demás es "<mundo>:x:y", así que nunca chocan.
-const WORLDS = ['tierra', 'luna', 'marte', 'mercurio', 'venus', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton'];
+const WORLDS = ['tierra', 'luna', 'marte', 'mercurio', 'venus', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton', 'prehistoria'];
 const cleanWorld = w => (typeof w === 'string' && WORLDS.includes(w)) ? w : 'tierra';
 
 // ---------- Base de datos ----------
@@ -245,7 +246,8 @@ const WORLD_HOUSES = {
   saturno: ['images/saturno-plataforma-anillos.webp', 'images/saturno-ciudad-flotante.webp', 'images/saturno-globo-anillo.webp', 'images/saturno-laboratorio-gas.webp', 'images/saturno-refineria-saturno.webp', 'images/saturno-puerto-saturno.webp'],
   urano: ['images/urano-cristal-hielo.webp', 'images/urano-plataforma-azul.webp', 'images/urano-globo-hielo.webp', 'images/urano-estacion-eje.webp', 'images/urano-refineria-metano.webp', 'images/urano-puerto-urano.webp'],
   neptuno: ['images/neptuno-plataforma-tormenta.webp', 'images/neptuno-globo-azul.webp', 'images/neptuno-refineria-diamante.webp', 'images/neptuno-ciudad-neptuno.webp', 'images/neptuno-laboratorio-frio.webp', 'images/neptuno-puerto-neptuno.webp'],
-  pluton: ['images/pluton-cupula-hielo.webp', 'images/pluton-base-corazon.webp', 'images/pluton-criolaboratorio.webp', 'images/pluton-mina-nitrogeno.webp', 'images/pluton-sonda-horizontes.webp', 'images/pluton-refugio-polar.webp']
+  pluton: ['images/pluton-cupula-hielo.webp', 'images/pluton-base-corazon.webp', 'images/pluton-criolaboratorio.webp', 'images/pluton-mina-nitrogeno.webp', 'images/pluton-sonda-horizontes.webp', 'images/pluton-refugio-polar.webp'],
+  prehistoria: ['images/prehistoria-cueva.webp', 'images/prehistoria-choza-paja.webp', 'images/prehistoria-nido-gigante.webp', 'images/prehistoria-casa-arbol.webp', 'images/prehistoria-cabana-troncos.webp', 'images/prehistoria-fortaleza-huesos.webp']
 };
 const PLANET_HOUSES = Object.values(WORLD_HOUSES).flat();
 const worldOfId = id => { const m = /^([a-z]+):/.exec(String(id)); return m && WORLDS.includes(m[1]) ? m[1] : 'tierra'; };
@@ -944,6 +946,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
   world = cleanWorld(world);
   const p = parcelFromLatLng(Number(lat), Number(lng), world);
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
+  if (world === 'prehistoria' && !PREHISTORIA.parcelOk(p.x, p.y, SIZE)) throw new HttpError(400, 'Ese terreno está bajo el agua: elige uno de tierra firme');
   const user = await userFrom(req);
   const chosenHouse = await cleanHouseFor(house, user, world);   // lanza un aviso claro si es una casa del Pase Oro y no lo tiene
   const prof = user && await getProfile(user.id);

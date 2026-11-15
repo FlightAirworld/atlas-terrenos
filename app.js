@@ -225,7 +225,8 @@ const WORLD_HOUSES = {
   saturno: ['images/saturno-plataforma-anillos.webp', 'images/saturno-ciudad-flotante.webp', 'images/saturno-globo-anillo.webp', 'images/saturno-laboratorio-gas.webp', 'images/saturno-refineria-saturno.webp', 'images/saturno-puerto-saturno.webp'],
   urano: ['images/urano-cristal-hielo.webp', 'images/urano-plataforma-azul.webp', 'images/urano-globo-hielo.webp', 'images/urano-estacion-eje.webp', 'images/urano-refineria-metano.webp', 'images/urano-puerto-urano.webp'],
   neptuno: ['images/neptuno-plataforma-tormenta.webp', 'images/neptuno-globo-azul.webp', 'images/neptuno-refineria-diamante.webp', 'images/neptuno-ciudad-neptuno.webp', 'images/neptuno-laboratorio-frio.webp', 'images/neptuno-puerto-neptuno.webp'],
-  pluton: ['images/pluton-cupula-hielo.webp', 'images/pluton-base-corazon.webp', 'images/pluton-criolaboratorio.webp', 'images/pluton-mina-nitrogeno.webp', 'images/pluton-sonda-horizontes.webp', 'images/pluton-refugio-polar.webp']
+  pluton: ['images/pluton-cupula-hielo.webp', 'images/pluton-base-corazon.webp', 'images/pluton-criolaboratorio.webp', 'images/pluton-mina-nitrogeno.webp', 'images/pluton-sonda-horizontes.webp', 'images/pluton-refugio-polar.webp'],
+  prehistoria: ['images/prehistoria-cueva.webp', 'images/prehistoria-choza-paja.webp', 'images/prehistoria-nido-gigante.webp', 'images/prehistoria-casa-arbol.webp', 'images/prehistoria-cabana-troncos.webp', 'images/prehistoria-fortaleza-huesos.webp']
 };
 const worldOfId = id => { const m = /^([a-z]+):/.exec(String(id || '')); return m && WORLD_HOUSES[m[1]] ? m[1] : 'tierra'; };   // los ids de otros mundos son «<mundo>:x:y»
 
@@ -854,20 +855,6 @@ async function selectAt(latlng, terrainHint) {
   setSelected(p);
   showPanel(p);
   sfx('select');
-  walkToParcel(p, latlng);
-}
-// El muñeco está fijo en el centro del mapa y camina cuando el mapa se mueve: para que «vaya» a la parcela tocada,
-// se desliza el mapa (a velocidad constante) hasta dejar esa parcela justo bajo sus pies.
-function walkToParcel(p, latlng) {
-  try {
-    if (!glReady || !(window.playerWalker && window.playerWalker.el && window.playerWalker.el())) return;
-    const lat = Number.isFinite(p.south) ? p.south + cfg.size / 2 : latlng.lat;
-    const lng = Number.isFinite(p.west) ? p.west + cfg.size / 2 : latlng.lng;
-    const a = gl.project(gl.getCenter()), b = gl.project([lng, lat]);
-    const px = Math.hypot(a.x - b.x, a.y - b.y);
-    if (px < 4) return;
-    gl.easeTo({ center: [lng, lat], duration: Math.max(450, Math.min(2200, px * 2.2)), easing: x => x, essential: true });
-  } catch (e) { /* si algo falla, el muñeco se queda donde está */ }
 }
 map.on('click', e => {
   // Si se pulsa un edificio 3D, se elige su parcela (no el suelo que queda detrás).

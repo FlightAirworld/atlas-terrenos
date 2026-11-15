@@ -282,7 +282,7 @@ Si el juego va a trompicones, baja solo lo que se mueve para no colgarse en móv
 
 Desde el botón **Mundos** se viaja en cohete a cualquier planeta. En cada uno se pueden comprar parcelas con los mismos créditos, precio, casas, niveles y producción que en la Tierra, pero **cada mundo tiene sus propias parcelas** (la Luna no comparte nada con la Tierra ni con Marte).
 
-- La tabla `parcels` tiene la columna `world` (`tierra`, `luna`, `marte`, `mercurio`, `venus`, `jupiter`, `saturno`, `urano`, `neptuno`, `pluton`). El servidor la crea solo al arrancar (también está en `schema.sql`).
+- La tabla `parcels` tiene la columna `world` (`tierra`, `luna`, `marte`, `mercurio`, `venus`, `jupiter`, `saturno`, `urano`, `neptuno`, `pluton`, `prehistoria`). El servidor la crea solo al arrancar (también está en `schema.sql`).
 - En la Tierra el id sigue siendo `x:y`; en los demás mundos es `<mundo>:x:y`.
 - Las parcelas de otros mundos no tienen país ni ciudad: no entran en los rankings por país/ciudad, ni en presidentes de pueblo, Papá Noel, etc. (eso es solo de la Tierra). Sí cuentan para los créditos que producen y para el máximo de terrenos por cuenta.
 - API: `/api/parcel`, `/api/parcels` y `/api/parcels/tile` aceptan `?world=luna`; `POST /api/claim` acepta `world` en el cuerpo.
@@ -451,3 +451,16 @@ Pon `FREE_MODE=1` en Render (Environment) y guarda: se ocultan todos los botones
 - **Paracaídas:** una avioneta cruza la pantalla, el jugador salta de ella, cae un momento, se abre el paracaídas (del color de su camiseta) y baja hasta el centro del mapa (`skydive.js`; con `startY`, desde un cohete, no sale avioneta; `plane: false` también la quita).
 - **Al tocar suelo** (paracaídas o cohete) el muñeco se queda en el centro del mapa y **camina según se mueve el mapa** (`window.playerWalker.show(idMapa, { suit })` / `.hide()`): mira hacia donde se desplaza el centro, mueve las piernas mientras el mapa se mueve y se para cuando se para. Se esconde con el mapa muy alejado y al despegar en cohete.
 - **Salida desde la Tierra:** la capa del viaje va por encima de los avisos flotantes de la Tierra (`#where-banner`, `#ayto-banner`, `#lugar`, que además se ocultan durante el viaje) y el mapa del mundo de destino se prepara cuando el cohete ya ha despegado (`rocketLaunch(...).takeoff`), no mientras se sube al cohete y se hace la cuenta atrás.
+
+
+## Prehistoria (mundo de dinosaurios a 4.200 años luz)
+
+Mundo nuevo, el último de la ruta del cohete (después de Plutón). Tiene parcelas propias como los demás (`prehistoria:x:y`), con sus casas, niveles, ranking y presidente.
+Todo se genera con código, sin imágenes de mapa ni descargas:
+
+- `prehistoria-terreno.js`: el terreno (mares, lagos, ríos, pantanos, selva, colinas, montañas y un volcán) como función matemática determinista. Lo cargan a la vez el navegador y el servidor (`server.js` rechaza comprar parcelas bajo el agua). **No cambies `SEED` ni las constantes** cuando ya haya jugadores con terrenos: cambiaría el mapa.
+- `prehistoria-dibujos.js`: dibujos SVG y datos (tamaño, velocidad, dieta, sonido, frases, dato curioso) de cada animal.
+- `prehistoria.js`: pinta el mapa y los árboles, el volcán (humo y erupciones) y la fauna: los carnívoros cazan a los pequeños (que huyen), el triceratops, el estegosaurio y el anquilosaurio plantan cara, los reptavoladores sobrevuelan y se lanzan a por su presa, y hay plesiosaurio, libélulas y ciempiés gigantes. Los animales se apagan con el botón 🚶. En la consola: `prehistoriaRugido()`.
+- `voices.js`: sonidos nuevos (rugido, trompeta, graznido, chillido, crujido, choque…).
+- Casas: `images/prehistoria-*.webp` (6 casas, cada una en 4 tamaños).
+- Para añadir un animal: dibújalo en `DRAW`, ponlo en `SP` y en `WANT` (arriba de `prehistoria.js`). `node --test prehistoria.test.js` lo comprueba.

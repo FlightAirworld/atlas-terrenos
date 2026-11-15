@@ -127,7 +127,25 @@
     ufoIn: (d, t, v) => { tone(d, 'sine', 950, 300, t, 3.6, 0.14 * v, { vib: [7, 60], a: 0.4, hold: 1 }); tone(d, 'triangle', 1500, 500, t, 3.6, 0.04 * v, { a: 0.4, hold: 1 }); },
     ufoOut: (d, t, v) => { tone(d, 'sine', 300, 1100, t, 3.2, 0.14 * v, { vib: [7, 60], a: 0.3, hold: 1 }); tone(d, 'triangle', 500, 1700, t, 3.2, 0.04 * v, { a: 0.3, hold: 1 }); },
     ufoFly: (d, t, v, o) => { const du = o.dur || 9; tone(d, 'sine', 520, 720, t, du, 0.12 * v, { vib: [5, 45], a: du * 0.25, hold: du * 0.4 }); tone(d, 'triangle', 1040, 1440, t, du, 0.035 * v, { a: du * 0.25, hold: du * 0.4 }); },
-    thud: (d, t, v) => { tone(d, 'sine', 130, 40, t, 0.3, 0.7 * v); noise(d, t, 0.25, 0.25 * v, 300); }
+    thud: (d, t, v) => { tone(d, 'sine', 130, 40, t, 0.3, 0.7 * v); noise(d, t, 0.25, 0.25 * v, 300); },
+    // Prehistoria (dinosaurios y bichos; los usa prehistoria.js)
+    roar: (d, t, v, o) => { const f = o.f || 1; tone(d, 'sawtooth', 120 * f, 46 * f, t, 1.6, 0.5 * v, { vib: [24, 16], lp: 560, a: 0.07, hold: 0.55 }); tone(d, 'square', 190 * f, 66 * f, t + 0.04, 1.3, 0.2 * v, { vib: [33, 22], lp: 760, a: 0.06, hold: 0.45 }); noise(d, t, 1.3, 0.3 * v, 1100); },
+    trumpet: (d, t, v) => { tone(d, 'sawtooth', 96, 150, t, 1.3, 0.3 * v, { vib: [5, 7], lp: 640, a: 0.3, hold: 0.5 }); tone(d, 'sine', 48, 75, t, 1.3, 0.45 * v, { a: 0.3, hold: 0.5 }); tone(d, 'triangle', 192, 300, t + 0.1, 1.1, 0.12 * v, { a: 0.3, hold: 0.4, lp: 900 }); },
+    honk: (d, t, v) => { tone(d, 'square', 250, 340, t, 0.32, 0.2 * v, { lp: 900, hold: 0.08 }); tone(d, 'square', 340, 240, t + 0.36, 0.5, 0.2 * v, { lp: 900, hold: 0.18, vib: [9, 12] }); },
+    screech: (d, t, v) => { tone(d, 'sawtooth', 1500, 2500, t, 0.26, 0.17 * v, { vib: [30, 130], lp: 3600 }); tone(d, 'sawtooth', 2400, 1100, t + 0.27, 0.4, 0.17 * v, { vib: [26, 130], lp: 3600, hold: 0.15 }); },
+    raptor: (d, t, v) => { for (let i = 0; i < 6; i++) tone(d, 'square', 950 + i * 70, 600 + i * 30, t + i * 0.075, 0.055, 0.11 * v, { lp: 3000 }); noise(d, t, 0.45, 0.09 * v, 5200); },
+    squeak: (d, t, v) => { [1900, 2400, 2100].forEach((f, i) => tone(d, 'sine', f, f * 1.15, t + i * 0.09, 0.07, 0.22 * v)); },
+    moo: (d, t, v) => { tone(d, 'sawtooth', 130, 88, t, 0.85, 0.34 * v, { lp: 520, vib: [6, 8], a: 0.1, hold: 0.3 }); tone(d, 'sine', 65, 44, t, 0.85, 0.35 * v, { a: 0.1 }); },
+    grunt: (d, t, v) => { tone(d, 'sawtooth', 88, 58, t, 0.5, 0.4 * v, { lp: 330, hold: 0.15 }); noise(d, t, 0.3, 0.14 * v, 420); },
+    plesio: (d, t, v) => { tone(d, 'sine', 300, 520, t, 0.7, 0.3 * v, { vib: [5, 22], a: 0.12 }); tone(d, 'sine', 520, 230, t + 0.7, 0.9, 0.3 * v, { vib: [5, 22], hold: 0.4 }); },
+    wings: (d, t, v) => tone(d, 'sawtooth', 330, 290, t, 0.9, 0.09 * v, { vib: [58, 45], lp: 2400, a: 0.2, hold: 0.4 }),
+    crunch: (d, t, v) => { [0, 0.1, 0.21].forEach(o => { noise(d, t + o, 0.07, 0.4 * v, 1700); tone(d, 'square', 180, 90, t + o, 0.06, 0.12 * v, { lp: 600 }); }); },
+    clash: (d, t, v) => { noise(d, t, 0.2, 0.5 * v, 2200); tone(d, 'sine', 150, 45, t, 0.4, 0.7 * v); tone(d, 'square', 420, 180, t, 0.18, 0.15 * v, { lp: 1500 }); },
+    spit: (d, t, v) => { noise(d, t, 0.28, 0.3 * v, 6500); tone(d, 'sine', 900, 400, t, 0.2, 0.15 * v); },
+    stomp: (d, t, v) => { tone(d, 'sine', 70, 28, t, 0.38, 0.8 * v); noise(d, t, 0.2, 0.18 * v, 200); },
+    cricket: (d, t, v) => { for (let i = 0; i < 7; i++) tone(d, 'sine', 4300, 4300, t + i * 0.085, 0.045, 0.1 * v); },
+    frog: (d, t, v) => { tone(d, 'square', 160, 110, t, 0.12, 0.2 * v, { lp: 700 }); tone(d, 'square', 190, 130, t + 0.15, 0.12, 0.2 * v, { lp: 700 }); },
+    archaeo: (d, t, v) => { [2600, 3000, 2300, 3200].forEach((f, i) => tone(d, 'triangle', f, f * 0.9, t + i * 0.11, 0.08, 0.14 * v)); }
   };
   const SFX_CAT = { chirp: 'marcianos', ufoIn: 'marcianos', ufoOut: 'marcianos', ufoFly: 'marcianos', thud: 'marcianos', bienvenida: 'marcianos', cash: 'marcianos', enfado: 'marcianos', radio: 'gente', rover: 'gente' };   // lo demás (bichos) = «animales»
   const catOn = c => !window.soundOn || window.soundOn(c);

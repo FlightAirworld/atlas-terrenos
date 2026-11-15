@@ -8,8 +8,8 @@
 // Durante el viaje solo hablan los muñecos: los marcianos de los platillos (al menos uno por viaje) se dirigen al jugador por su nombre (su apodo; «terrícola» si no ha
 // iniciado sesión) con frases elocuentes, voz y sonidos (SAY_N). Los planetas no hablan.
 (function () {
-  const SURF = { mercurio: ['#b3a79b', '#6f665d'], venus: ['#e9b44c', '#a56a1e'], jupiter: ['#d9a066', '#8f5a30'], saturno: ['#e6cf94', '#a98748'], urano: ['#a8e6ea', '#5fb2bb'], neptuno: ['#5f86ff', '#2a3fb5'], pluton: ['#e6d3c0', '#a58f7e'] };
-  const SKY = { venus: ['#c98a2b', '#e9b44c', '#f6d98a'], jupiter: ['#a8683a', '#d9a066', '#f0d2a8'], saturno: ['#b4915a', '#e6cf94', '#f3e8c4'], urano: ['#5fb2bb', '#a8e6ea', '#d9f8f8'], neptuno: ['#1c2c8f', '#4a6fe8', '#9cb8ff'] };
+  const SURF = { mercurio: ['#b3a79b', '#6f665d'], venus: ['#e9b44c', '#a56a1e'], jupiter: ['#d9a066', '#8f5a30'], saturno: ['#e6cf94', '#a98748'], urano: ['#a8e6ea', '#5fb2bb'], neptuno: ['#5f86ff', '#2a3fb5'], pluton: ['#e6d3c0', '#a58f7e'], prehistoria: ['#4f9a3c', '#2c6a26'] };
+  const SKY = { venus: ['#c98a2b', '#e9b44c', '#f6d98a'], jupiter: ['#a8683a', '#d9a066', '#f0d2a8'], saturno: ['#b4915a', '#e6cf94', '#f3e8c4'], urano: ['#5fb2bb', '#a8e6ea', '#d9f8f8'], neptuno: ['#1c2c8f', '#4a6fe8', '#9cb8ff'], prehistoria: ['#e8944a', '#f2c37a', '#fff0c8'] };
   const SURF_CSS = Object.keys(SURF).map(k => `#viaje.${k} .ground { background: linear-gradient(${SURF[k][0]}, ${SURF[k][1]}); } #viaje.${k} .puff { background: ${SURF[k][0]}; }`).join('\n    ')
     + Object.keys(SKY).map(k => `\n    #viaje.${k} .sky { background: linear-gradient(${SKY[k][0]} 0%, ${SKY[k][1]} 65%, ${SKY[k][2]} 100%); }`).join('');
   const st = document.createElement('style');
@@ -195,7 +195,7 @@
   window.planetSVG = function (w) {
     if (SPR[w]) return `<svg viewBox="0 0 100 100" aria-hidden="true" data-planet="${w}"><image href="${SPR[w]}" x="0" y="0" width="100" height="100"/></svg>`;
     const n = ++pid, id = k => `pl${k}${n}`;
-    const C = { tierra: ['#7cc4ff', '#1f5fbf', '#0b2f6b'], luna: ['#e4e4e4', '#9a9a9a', '#5c5c5c'], marte: ['#f09a68', '#b4502a', '#6e2a12'], mercurio: ['#d5cdc3', '#8d8378', '#4d463f'], venus: ['#fff0b0', '#e6a93f', '#8a5217'], jupiter: ['#f0d2a8', '#c58a56', '#6e4426'], saturno: ['#f3e2b0', '#cfae6c', '#7a6234'], urano: ['#c9f4f4', '#7fd0d6', '#3a8a96'], neptuno: ['#7aa6ff', '#2f4fd0', '#14206b'], pluton: ['#f1e2d0', '#b89a82', '#5e4636'] }[w] || ['#ccc', '#888', '#444'];
+    const C = { tierra: ['#7cc4ff', '#1f5fbf', '#0b2f6b'], luna: ['#e4e4e4', '#9a9a9a', '#5c5c5c'], marte: ['#f09a68', '#b4502a', '#6e2a12'], mercurio: ['#d5cdc3', '#8d8378', '#4d463f'], venus: ['#fff0b0', '#e6a93f', '#8a5217'], jupiter: ['#f0d2a8', '#c58a56', '#6e4426'], saturno: ['#f3e2b0', '#cfae6c', '#7a6234'], urano: ['#c9f4f4', '#7fd0d6', '#3a8a96'], neptuno: ['#7aa6ff', '#2f4fd0', '#14206b'], pluton: ['#f1e2d0', '#b89a82', '#5e4636'], prehistoria: ['#b9e08a', '#3f9a46', '#1b4a2a'] }[w] || ['#ccc', '#888', '#444'];
     let detail = '';
     if (w === 'tierra') {
       detail = `<g fill="#4cae56" stroke="#2f7d3a" stroke-width=".8"><path d="M20 30 C28 20 40 22 44 31 C48 40 40 46 36 54 C32 63 23 58 19 48 C17 40 17 34 20 30Z"/><path d="M56 22 C67 18 80 27 82 38 C84 49 73 51 69 59 C65 67 58 61 56 50 C54 40 49 27 56 22Z"/><path d="M38 70 C50 65 63 70 67 79 C60 88 44 89 37 81Z"/></g>
@@ -219,6 +219,8 @@
       detail = `<g opacity=".35"><rect x="0" y="30" width="100" height="6" fill="#fff"/><rect x="0" y="52" width="100" height="10" fill="#4aa3ad"/></g>`;
     } else if (w === 'neptuno') {
       detail = `<g opacity=".5"><rect x="0" y="26" width="100" height="8" fill="#0f1a66"/><rect x="0" y="60" width="100" height="10" fill="#9cc0ff"/></g><ellipse cx="38" cy="44" rx="9" ry="5" fill="#0b1250" opacity=".7"/>`;
+    } else if (w === 'prehistoria') {
+      detail = `<g opacity=".8"><path d="M8 38 C20 26 36 34 46 28 C58 22 74 30 90 24 L92 52 C76 58 62 48 48 56 C34 62 20 56 8 60Z" fill="#2f7d3a"/><path d="M22 70 C34 62 48 74 62 68 C74 64 84 70 92 66 L90 84 C76 90 58 80 44 86 C32 90 24 84 22 70Z" fill="#8a6a3a"/><ellipse cx="62" cy="40" rx="9" ry="5" fill="#2a86a4"/><ellipse cx="30" cy="48" rx="6" ry="3.5" fill="#2a86a4"/></g><path d="M16 22 C30 14 44 18 58 12" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".45" fill="none"/>`;
     } else if (w === 'pluton') {
       detail = `<g opacity=".55"><path d="M10 40 C25 30 40 44 52 40 C64 36 80 44 92 38 L92 62 C74 70 60 58 44 66 C30 72 18 66 10 60Z" fill="#7a5a46"/></g><path d="M52 64 C34 52 34 36 44 34 C50 33 53 38 53 38 C53 38 57 31 64 34 C74 38 70 52 52 64Z" fill="#fbf4ea" opacity=".92"/>`;
     }
@@ -231,9 +233,9 @@
   };
 
   // ---------- Ruta: la Tierra, la Luna y Marte están en línea ----------
-  const CHAIN = ['mercurio', 'venus', 'tierra', 'luna', 'marte', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton'], HOP = [3500, 3500, 4500, 6500, 4200, 4200, 4200, 4200, 4200];   // ms de vuelo entre cada par vecino
-  const AU = { mercurio: 0.39, venus: 0.72, tierra: 1, luna: 1, marte: 1.52, jupiter: 5.2, saturno: 9.58, urano: 19.2, neptuno: 30.05, pluton: 39.5 };   // distancia al Sol (para el «qué lejos»)
-  const NAME = { mercurio: 'Mercurio', venus: 'Venus', tierra: 'la Tierra', luna: 'la Luna', marte: 'Marte', jupiter: 'Júpiter', saturno: 'Saturno', urano: 'Urano', neptuno: 'Neptuno', pluton: 'Plutón' };
+  const CHAIN = ['mercurio', 'venus', 'tierra', 'luna', 'marte', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton', 'prehistoria'], HOP = [3500, 3500, 4500, 6500, 4200, 4200, 4200, 4200, 4200, 7000];   // ms de vuelo entre cada par vecino
+  const AU = { mercurio: 0.39, venus: 0.72, tierra: 1, luna: 1, marte: 1.52, jupiter: 5.2, saturno: 9.58, urano: 19.2, neptuno: 30.05, pluton: 39.5, prehistoria: 4200 * 63241 };   // distancia al Sol (para el «qué lejos»)
+  const NAME = { mercurio: 'Mercurio', venus: 'Venus', tierra: 'la Tierra', luna: 'la Luna', marte: 'Marte', jupiter: 'Júpiter', saturno: 'Saturno', urano: 'Urano', neptuno: 'Neptuno', pluton: 'Plutón', prehistoria: 'Prehistoria' };
   const TRIP = {}; Object.keys(NAME).forEach(k => { TRIP[k] = 'Viajando a ' + NAME[k].replace(/^la /, 'La '); });
   // Dibujos reales opcionales: si existe images/planetas/<mundo>.webp (tierra, luna, marte, jupiter…) se usa en vez del dibujo vectorial
   let refreshT = 0;
@@ -245,6 +247,7 @@
 
   // Cuanto más lejos, más se queja el astronauta
   function farMsg(d) {
+    if (d > 1e5) return '¡¡UUUF… ' + Math.round(d / 63241).toLocaleString('es-ES') + ' AÑOS LUZ!! · ¡Agárrate, que hay dinosaurios!';
     const km = Math.round(d * 149.6).toLocaleString('es-ES') + ' millones de km';
     if (d < 0.3) return '';
     if (d < 1) return 'Un saltito… · ' + km;
@@ -525,7 +528,7 @@
       const rr = el.getBoundingClientRect(), k = rr.width / 100;
       const gnd = { x: rr.left + 17 * k, y: rr.top + 228 * k }, door = { x: rr.left + 46 * k, y: rr.top + 195 * k };
       const end = { x: Math.max(r.left + 36, gnd.x - 90), y: gnd.y + 4 };
-      const w = makeWalker(!!opts.suit, opts.suit ? '¡Yujuuu!' : '¡Ya estoy en casa!'); w.style.zIndex = 1962; w.classList.add('walking', 'left');
+      const w = makeWalker(!!opts.suit, opts.suit ? '¡Yujuuu!' : world === 'prehistoria' ? '¡Madre mía, dinosaurios!' : '¡Ya estoy en casa!'); w.style.zIndex = 1962; w.classList.add('walking', 'left');
       document.body.appendChild(w);
       w.style.transform = trf(door);
       w.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' });

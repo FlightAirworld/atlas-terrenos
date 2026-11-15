@@ -16,6 +16,7 @@
   const bands = list => list.map(b => [b[0], [[-179, b[1]], [179, b[1]], [179, b[2]], [-179, b[2]]]]);
   const G = (name, bg, land, note, sites, shapes) => ({ name, short: name, bg, attr: name + ': mapa ilustrado (sin imágenes reales)', land, note, sites, shapes });
   const GAS = ' Es un gigante gaseoso: no tiene suelo, lo que ves son nubes ilustradas. Solo se explora.';
+  const PT = window.PrehistoriaTerreno || null;   // el terreno de Prehistoria (prehistoria-terreno.js): lagos, ríos y montañas; el agua no se puede comprar
   const WORLDS = {
     tierra: { name: 'La Tierra', short: 'Tierra' },
     luna: {
@@ -48,6 +49,13 @@
         ['#5a3f33', [[60, -5], [80, -12], [110, -10], [125, -20], [100, -28], [70, -24]]]
       ]
     },
+    prehistoria: {
+      name: 'Prehistoria', short: 'Prehistoria', bg: '#1f6b2a',
+      attr: 'Prehistoria: mundo imaginario a 4.200 años luz de la Tierra (mapa generado)',
+      land: PT ? PT.LAND : [-80, 10],
+      note: '',
+      sites: PT ? PT.SITES : []
+    },
     mercurio: G('Mercurio', '#a39a8f', [162, 31], 'Mercurio: mapa ilustrado de cráteres. Solo se explora.',
       [['Caloris Planitia', 162, 31], ['Cráter Rembrandt', 88, -33]], craters('#8a8075', 40, 7, 3, 9).concat(craters('#d2c9bb', 14, 11, 1.5, 3.5))),
     venus: G('Venus', '#e3a93f', [-165.5, 0.5], 'Venus: mapa ilustrado bajo las nubes ácidas. Solo se explora.',
@@ -61,7 +69,7 @@
     neptuno: G('Neptuno', '#3f63e0', [-60, -22], 'Neptuno:' + GAS,
       [['Gran Mancha Oscura', -60, -22]], bands([['#2c46b8', -46, -34], ['#7fa3ff', 8, 16], ['#2c46b8', 34, 46]]).concat([['#10195e', circ(-60, -22, 8)]]))
   };
-  const R_KM = { tierra: 6371, luna: 1737.4, marte: 3389.5, mercurio: 2439.7, venus: 6051.8, jupiter: 69911, saturno: 58232, urano: 25362, neptuno: 24622, pluton: 1188.3 };   // para el tamaño real de una parcela en metros
+  const R_KM = { tierra: 6371, luna: 1737.4, marte: 3389.5, mercurio: 2439.7, venus: 6051.8, jupiter: 69911, saturno: 58232, urano: 25362, neptuno: 24622, pluton: 1188.3, prehistoria: 7200 };   // para el tamaño real de una parcela en metros
   window.worldInfo = w => ({ name: WORLDS[w] ? WORLDS[w].name : w, radiusKm: R_KM[w] || 6371 });
   const FLOAT = { jupiter: 1, saturno: 1, urano: 1, neptuno: 1 };   // gigantes gaseosos: sin suelo
   Object.keys(WORLDS).forEach(k => {
@@ -69,7 +77,8 @@
     w.note = '🏗️ ' + w.name + ': acércate con el zoom y toca un cuadrado para comprar tu parcela' + (FLOAT[k] ? ' (flotante, sobre las nubes)' : '') + '. Aquí las parcelas son solo de este mundo.';
     w.attr = (w.attr || '').replace(/ ?: mapa ilustrado \(sin imágenes reales\)/, ': mapa ilustrado');
   });
-  const ORDER = ['mercurio', 'venus', 'luna', 'marte', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton'];
+  WORLDS.prehistoria.note = '🦖 Prehistoria: acércate con el zoom, toca un cuadrado de tierra para comprar tu parcela (en el agua no se puede) y cuidado con los dinosaurios. Aquí las parcelas son solo de este mundo.';
+  const ORDER = ['mercurio', 'venus', 'luna', 'marte', 'jupiter', 'saturno', 'urano', 'neptuno', 'pluton', 'prehistoria'];
   const planet = w => (window.planetSVG ? window.planetSVG(w) : '');
 
   const st = document.createElement('style');
@@ -151,6 +160,7 @@
     saturno: ['Gigante gaseoso', 'Saturno es el segundo planeta más grande y es famoso por sus anillos de hielo y roca.', '116.460 km', '1.434 millones de km del Sol', '10,44 m/s² (1,1 veces la Tierra)', '10 h 33 min', 'unos 29 años terrestres', 'unos −140 °C en las nubes', 'Más de 140 conocidas, como Titán', 'Saturno es menos denso que el agua: flotaría en un océano gigante.'],
     urano: ['Gigante helado', 'Urano es un gigante helado que gira prácticamente tumbado sobre su órbita.', '50.724 km', '2.871 millones de km del Sol', '8,69 m/s² (89 % de la Tierra)', '17 h 14 min', '84 años terrestres', 'unos −195 °C', 'Más de 25 conocidas', 'Su eje está inclinado unos 98 grados.'],
     neptuno: ['Gigante helado', 'Neptuno es el planeta más lejano del Sol. La sonda Voyager 2 lo visitó en 1989 y vio su Gran Mancha Oscura.', '49.244 km', '4.495 millones de km del Sol', '11,15 m/s² (1,1 veces la Tierra)', '16 h 6 min', '165 años terrestres', 'unos −200 °C', 'Al menos 14 conocidas, como Tritón', 'Tiene los vientos más rápidos del Sistema Solar, de más de 2.000 km/h.'],
+    prehistoria: ['Mundo imaginario (exoplaneta)', 'Prehistoria es un mundo inventado a 4.200 años luz de la Tierra donde todavía viven los dinosaurios. Tiene lagos, ríos, selva, montañas y un volcán humeante, y está lleno de animales de la época: los grandes cazan a los pequeños, y los reptavoladores sobrevuelan el cielo.', 'unos 14.400 km', '4.200 años luz de la Tierra', '9,8 m/s² (como la Tierra)', '26 horas', '420 días de 26 horas', 'de 18 °C a 34 °C (clima de selva)', 'Dos lunas pequeñas, Pico y Pala', 'Aquí conviven animales de muchas épocas: desde libélulas gigantes hasta el T-Rex.'],
     pluton: ['Planeta enano', 'Plutón es un planeta enano desde 2006. La sonda New Horizons pasó junto a él en 2015 y descubrió su gran «corazón» de hielo.', '2.377 km', '5.906 millones de km del Sol (media)', '0,62 m/s² (6 % de la Tierra)', '6,4 días terrestres', '248 años terrestres', 'unos −230 °C', '5: Caronte, Estigia, Nix, Cerbero e Hidra', 'Su «corazón» está formado por Tombaugh Regio y Sputnik Planitia.']
   };
   ORDER.forEach(id => {
@@ -501,8 +511,21 @@
     const y0 = Math.floor((Math.max(-90, b.getSouth()) + 90) / s), y1 = Math.ceil((Math.min(90, b.getNorth()) + 90) / s);
     if (x1 - x0 > 90 || y1 - y0 > 90) { src.setData(EMPTY); return; }
     const w = x0 * s - 180, e = x1 * s - 180, so = y0 * s - 90, n = y1 * s - 90, lines = [];
-    for (let x = x0; x <= x1; x++) lines.push([[x * s - 180, so], [x * s - 180, n]]);
-    for (let y = y0; y <= y1; y++) lines.push([[w, y * s - 90], [e, y * s - 90]]);
+    if (id === 'prehistoria' && PT) {   // en Prehistoria la cuadrícula solo se dibuja sobre tierra firme (el agua no se puede comprar)
+      const nx = x1 - x0, ny = y1 - y0, ok = new Uint8Array(nx * ny);
+      for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) ok[j * nx + i] = PT.parcelOk(x0 + i, y0 + j, s) ? 1 : 0;
+      for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+        if (!ok[j * nx + i]) continue;
+        const lo = (x0 + i) * s - 180, la = (y0 + j) * s - 90;
+        if (j === 0 || !ok[(j - 1) * nx + i]) lines.push([[lo, la], [lo + s, la]]);
+        lines.push([[lo, la + s], [lo + s, la + s]]);
+        if (i === 0 || !ok[j * nx + i - 1]) lines.push([[lo, la], [lo, la + s]]);
+        lines.push([[lo + s, la], [lo + s, la + s]]);
+      }
+    } else {
+      for (let x = x0; x <= x1; x++) lines.push([[x * s - 180, so], [x * s - 180, n]]);
+      for (let y = y0; y <= y1; y++) lines.push([[w, y * s - 90], [e, y * s - 90]]);
+    }
     src.setData({ type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: lines } });
   }
   async function loadTiles(id) {
@@ -539,6 +562,7 @@
   async function selectAt(id, m, ll) {
     if (m.getZoom() < BUY_Z) { m.flyTo({ center: ll, zoom: BUY_Z + 1.2, essential: true }); return; }   // como en la Tierra: hay que acercarse para comprar
     const lng = ((ll.lng + 180) % 360 + 360) % 360 - 180;
+    if (id === 'prehistoria' && PT && !PT.isLand(lng, ll.lat)) { showNote(id, '💧 Ahí hay agua: no se puede construir. Elige un terreno de tierra firme.', 4500); return; }
     let p; try { p = await api('/api/parcel?world=' + encodeURIComponent(id) + '&lat=' + ll.lat + '&lng=' + lng, { method: 'GET' }); } catch (e) { return; }
     p.world = id;
     setSel(id, p);
@@ -654,7 +678,7 @@
       if (to === 'tierra') earthMute(false);
       // Se aterriza a nivel de calle (zoom 16): desde el primer momento se pueden comprar parcelas
       if (map) land(map, goto ? [goto.lng, goto.lat] : WORLDS[to].land);
-      return window.rocketDrop ? cap(window.rocketDrop({ target: to === 'tierra' ? 'map' : 'mundo-map-' + to, suit: to !== 'tierra', world: to }), 30000) : null;
+      return window.rocketDrop ? cap(window.rocketDrop({ target: to === 'tierra' ? 'map' : 'mundo-map-' + to, suit: to !== 'tierra' && to !== 'prehistoria', world: to }), 30000) : null;
     }).catch(e => console.error('[mundos] viaje', e)).then(() => {
       traveling = false;
       try { if (window.rocketEngine) window.rocketEngine.stop(); } catch (e) {}   // por si algo falló antes de aterrizar: el motor nunca se queda sonando
