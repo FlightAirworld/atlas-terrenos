@@ -855,7 +855,7 @@ async function selectAt(latlng, terrainHint) {
   setSelected(p);
   showPanel(p);
   sfx('select');
-  walkToParcel(p, latlng);
+  if (!window.barrio || window.barrio.check(p).ok) walkToParcel(p, latlng);   // fuera del círculo rojo el muñeco no sale de su barrio
 }
 // El muñeco está fijo en el centro del mapa y camina cuando el mapa se mueve: para que «vaya» a la parcela tocada,
 // se desliza el mapa (a velocidad constante) hasta dejar esa parcela justo bajo sus pies.
@@ -1051,6 +1051,11 @@ function updateBuyParcelBtn(p) {
   const cur = p || selected;
   const open = !$('panel').classList.contains('hidden');
   b.classList.toggle('hidden', !(open && cur && !cur.owner));
+  // Tu barrio 🔴 (barrio.js, solo en la Tierra): fuera del círculo rojo no se puede reclamar
+  const bar = window.barrio && cur && !cur.owner && !isOtherWorld(cur) ? window.barrio.check(cur) : { ok: true };
+  b.textContent = bar.ok ? '🛒 Reclamar terreno' : '📍 Fuera de tu barrio';
+  b.classList.toggle('barrio-off', !bar.ok);
+  if (!bar.ok && open && cur === selected) setMsg(bar.msg);
 }
 $('close').onclick = () => { $('panel').classList.add('hidden'); setSelected(null); selected = null; if (window.worldClearSel) window.worldClearSel(); };
 // Ganchos para mundos.js: abrir el mismo panel de compra con una parcela de otro planeta, y cerrarlo al viajar
@@ -1333,6 +1338,11 @@ $('buy-parcel-btn').onclick = async () => {
   if (cfg.free && !(!!packCode && credits > 0)) { const m = 'Te faltan créditos. Consíguelos con el regalo diario, la ruleta, invitando amigos o con la producción de tus terrenos.'; setMsg(m); flashToast(m); return; }
   if (!(!!packCode && credits > 0)) { $('buy-box').scrollIntoView({ behavior: 'smooth', block: 'center' }); setMsg('Elige un pack de créditos para reclamar este terreno.'); flashToast('Elige un pack de créditos para reclamar este terreno.'); return; }
   if (!selected || selected.owner) return;
+  if (window.barrio && !isOtherWorld(selected) && window.barrio.radius()) {   // Tu barrio 🔴: solo dentro del círculo rojo
+    if (!window.barrio.pos()) await window.barrio.ask();
+    const bar = window.barrio.check(selected);
+    if (!bar.ok) { setMsg(bar.msg, 'err'); flashToast(bar.msg); updateBuyParcelBtn(selected); return; }
+  }
   let owner;
   try { owner = nameOrThrow(true); } catch (e) { return; }   // sin nombre se pone uno por defecto
   const btn = $('buy-parcel-btn');
@@ -1341,7 +1351,8 @@ $('buy-parcel-btn').onclick = async () => {
     const r = await fetch('/api/claim', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + packCode, ...authHeaders() },
-      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar, country, house: chosenHouse, world: selected.world || 'tierra' })
+      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar, country, house: chosenHouse, world: selected.world || 'tierra',
+        pos: window.barrio && window.barrio.pos() ? { lat: window.barrio.pos().lat, lng: window.barrio.pos().lng } : undefined })   // posición del jugador: el servidor comprueba que el terreno esté en su barrio
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'No se pudo reclamar');

@@ -69,6 +69,10 @@ const REQUIRE_LOGIN = AUTH_ENABLED && process.env.REQUIRE_LOGIN !== '0';     // 
 
 // Rejilla del mundo: cada parcela es un cuadrado de 0.001° (~111 m de lado en latitud)
 const SIZE = 0.0005;
+// Tu barrio 🔴 (barrio.js): en la Tierra solo se reclama dentro de BARRIO_M metros de la posición del jugador (0 lo desactiva). BARRIO_SLACK_M: margen para la imprecisión del GPS.
+const BARRIO = require('./barrio.js');
+const BARRIO_M = Math.max(0, Number(process.env.BARRIO_M === undefined || process.env.BARRIO_M === '' ? 500 : process.env.BARRIO_M) || 0);
+const BARRIO_SLACK_M = Math.max(0, Number(process.env.BARRIO_SLACK_M === undefined || process.env.BARRIO_SLACK_M === '' ? 75 : process.env.BARRIO_SLACK_M) || 0);
 const PREHISTORIA = require('./prehistoria-terreno.js');   // el terreno de Prehistoria (lagos y ríos): las parcelas bajo el agua no se pueden comprar
 const MAX_X = Math.round(360 / SIZE);   // 360000 columnas
 const MAX_Y = Math.round(180 / SIZE);   // 180000 filas
@@ -943,13 +947,19 @@ async function paypalWebhook(req) {
   return { received: true };
 }
 
-async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, world }) {
+async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, world, pos }) {
   const code = packCodeFrom(req);
   world = cleanWorld(world);
   const p = parcelFromLatLng(Number(lat), Number(lng), world);
   if (!p) throw new HttpError(400, 'Coordenadas no válidas');
   if (world === 'prehistoria' && !PREHISTORIA.parcelOk(p.x, p.y, SIZE)) throw new HttpError(400, 'Ese terreno está bajo el agua: elige uno de tierra firme');
   const user = await userFrom(req);
+  if (world === 'tierra' && BARRIO_M > 0 && !isOwner(user)) {   // Tu barrio 🔴: el terreno tiene que estar dentro del círculo rojo del jugador
+    const plat = pos && Number(pos.lat), plng = pos && Number(pos.lng);
+    if (!Number.isFinite(plat) || !Number.isFinite(plng) || Math.abs(plat) > 90 || Math.abs(plng) > 180) throw new HttpError(400, 'Activa tu ubicación para reclamar terrenos en tu barrio 📍');
+    const d = BARRIO.distM(plat, plng, p.south + SIZE / 2, p.west + SIZE / 2);
+    if (d > BARRIO_M + BARRIO_SLACK_M) throw new HttpError(403, `Este terreno está a ${Math.round(d)} m: fuera de tu barrio 🔴 Solo puedes reclamar a menos de ${BARRIO_M} m de donde estás`);
+  }
   const chosenHouse = await cleanHouseFor(house, user, world);   // lanza un aviso claro si es una casa del Pase Oro y no lo tiene
   const prof = user && await getProfile(user.id);
   const vip = code && await one('SELECT fixed_nick, fixed_country FROM packs WHERE code = $1 AND fixed_nick IS NOT NULL', [code]);
@@ -2748,7 +2758,7 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/admin/stats') return adminStats(req);
   if (req.method === 'POST' && pn === '/api/visit') return registerVisit(req);
   if (req.method === 'GET' && pn === '/api/config')
-    return { coffee: COFFEE_URL || null, push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, free: FREE_MODE, demo: DEMO, stripe: !FREE_MODE && !DEMO && HAS_STRIPE, paypal: !FREE_MODE && !DEMO && HAS_PAYPAL, clientId: (FREE_MODE || DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, worlds: WORLDS, packSize: PACKS[0].credits, packs: PACKS,
+    return { coffee: COFFEE_URL || null, push: PUSH_ON ? { key: VAPID_PUBLIC } : null, chatKm: CHAT_RADIUS_KM, free: FREE_MODE, demo: DEMO, stripe: !FREE_MODE && !DEMO && HAS_STRIPE, paypal: !FREE_MODE && !DEMO && HAS_PAYPAL, clientId: (FREE_MODE || DEMO || !HAS_PAYPAL) ? null : PAYPAL_CLIENT_ID, currency: CURRENCY, price: PACKS[0].price, size: SIZE, worlds: WORLDS, barrioM: BARRIO_M, packSize: PACKS[0].credits, packs: PACKS,
       maxParcels: Number.isFinite(MAX_PARCELS_PER_ACCOUNT) ? MAX_PARCELS_PER_ACCOUNT : null, houseCost: HOUSE_COST, gifts: { on: GIFT_ON, max: GIFT_MAX, daily: GIFT_DAILY_MAX, minAgeHours: GIFT_MIN_AGE_H }, levels: { costs: LEVEL_COSTS, mults: LEVEL_MULTS }, guestCredits: GUEST_CREDITS, welcomeCredits: WELCOME_CREDITS, auth: { enabled: AUTH_ENABLED, required: REQUIRE_LOGIN, url: AUTH_ENABLED ? SUPABASE_URL : null, anonKey: AUTH_ENABLED ? SUPABASE_ANON_KEY : null, googleClientId: AUTH_ENABLED ? GOOGLE_CLIENT_ID : null } };
 
   if (req.method === 'GET' && pn === '/api/parcel') {
