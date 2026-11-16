@@ -514,7 +514,7 @@
     for (let i = 0; i < n; i++) {
       const sg = pick(fest ? SIGNS_P : SIGNS_M), sh = pick(SHIRTS), sk = pick(SKINS), pn = pick(PANTS);
       const html = `<div class="pw-in" style="opacity:0">${window.personSVG(sh, sk, pn, false)}<i class="sg">${sg}</i></div>`;
-      const o = mark('life', html, 20, 30, 10, 28, 0, 0, 'pw');
+      const o = mark('life', html, 20, 30, 10, 28, 0, 0, 'pwk');
       if (o.inner) o.inner.style.scale = fpNow().toFixed(3);
       members.push({ o, ds: -i * 15 - (i > 0 ? rnd(0, 6) : 0), lat: (i % 2 ? 1 : -1) * rnd(0.12, 0.3), flip: null });
     }

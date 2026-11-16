@@ -12,7 +12,7 @@
 
   const st = document.createElement('style');
   st.textContent = `
-    .pw { background: transparent !important; border: 0 !important; pointer-events: none !important; }
+    .pwk { background: transparent !important; border: 0 !important; pointer-events: none !important; }
     .pw-in { width: 20px; height: 30px; transform-origin: 10px 28px; animation: pwbob .36s ease-in-out infinite alternate; transition: opacity .3s; }
     .pw-in svg { overflow: visible; }
     .pw-in .umb { display: none; }
@@ -93,7 +93,7 @@
     const P = rr.path, scale = Math.pow(2, map.getZoom() - REF_Z);
     FP = map.sizes ? map.sizes().fp : 1;
     const icon = L.divIcon({
-      className: 'pw', iconSize: [20, 30], iconAnchor: [10, 28],
+      className: 'pwk', iconSize: [20, 30], iconAnchor: [10, 28],
       html: `<div class="pw-in" style="opacity:0;scale:${FP.toFixed(3)}">${personSVG(pick(SHIRTS), pick(SKINS), pick(PANTS), false)}</div>`
     });
     const w = {
