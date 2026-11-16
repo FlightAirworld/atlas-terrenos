@@ -1076,7 +1076,7 @@ function updateBuyParcelBtn(p) {
   b.classList.toggle('hidden', !(open && cur && !cur.owner));
   // Tu barrio 🔴 (barrio.js, solo en la Tierra): fuera del círculo rojo no se puede reclamar
   const bar = window.barrio && cur && !cur.owner && !isOtherWorld(cur) ? window.barrio.check(cur) : { ok: true };
-  b.textContent = bar.ok ? '🛒 Reclamar terreno' : '📍 Fuera de tu barrio';
+  b.textContent = bar.ok ? 'COMPRAR TERRENO\nvale ' + parcelCost() + ' créditos' : '📍 Fuera de tu barrio';   // negro, letras blancas y parpadeando (CSS en index.html)
   b.classList.toggle('barrio-off', !bar.ok);
   const go = $('barrio-go');   // «IR A TU POSICIÓN»: a la derecha de «Fuera de tu barrio», en verde parpadeando
   if (go) go.classList.toggle('hidden', bar.ok || b.classList.contains('hidden'));
@@ -2208,7 +2208,7 @@ if ('serviceWorker' in navigator) {
     if (credits < parcelCost() || ssGet('coachHide') === '1' || (welcome && !welcome.classList.contains('hidden'))) { box.classList.add('hidden'); return; }
     const panelOpen = !document.getElementById('panel').classList.contains('hidden');
     if (panelOpen && typeof selected !== 'undefined' && selected && !selected.owner) {
-      set('claim', 'Paso 2 de 2', 'Elige tu casa (o deja el dado, que la elige por ti) y pulsa «Reclamar terreno». El nombre es opcional.', '⬇ Ir al botón');
+      set('claim', 'Paso 2 de 2', 'Pulsa «COMPRAR TERRENO»: te saldrá una parcela al azar. El nombre es opcional.', '⬇ Ir al botón');
     } else {
       set('pick', 'Paso 1 de 2', `Tienes ${credits} ${plural(credits, 'crédito', 'créditos')}. Toca una parcela libre del mapa para hacerla tuya.`, '📍 Ir a mi ubicación');
     }

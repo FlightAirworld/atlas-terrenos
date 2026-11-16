@@ -125,7 +125,7 @@
     if (busy) return render({ badge, title, text: '✈️ ' + T('Te llevo a un terreno libre…'), go: T('Volando…'), disabled: true });
     let panelOpen = false, free = false;
     try { panelOpen = !document.getElementById('panel').classList.contains('hidden'); free = panelOpen && selected && !selected.owner; } catch (e) {}
-    if (free) render({ badge, title, text: T('Este terreno está libre y es tuyo gratis. Elige tu casa 🏠 (o deja el dado, que la elige por ti) y pulsa «Reclamar terreno».'),
+    if (free) render({ badge, title, text: T('Este terreno está libre y es tuyo gratis. Pulsa «COMPRAR TERRENO» y descubre qué parcela te toca.'),
       go: '⬇ ' + T('Ir al botón'), fn: () => { const b = document.getElementById('buy-parcel-btn'); if (b) b.scrollIntoView({ behavior: 'smooth', block: 'center' }); } });
     else render({ badge, title, text: T('Toca una parcela libre del mapa para hacerla tuya, o te llevo yo a una.'),
       go: '📍 ' + T('Llévame a un terreno libre'), fn: () => goToLot(stage === 'next' ? lastClaim : null, true) });
