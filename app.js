@@ -182,9 +182,38 @@ async function api(url, opts = {}) {
 
 // ---------- Parcelas compradas en pantalla ----------
 const HOUSES = [
-  'images/terreno-comun.webp', 'images/terreno-poco-comun.webp', 'images/terreno-raro.webp', 'images/terreno-muy-raro.webp', 'images/terreno-epico.webp', 'images/terreno-legendario.webp',
-  'images/terreno-mitico.webp', 'images/terreno-exotico.webp', 'images/terreno-unico.webp', 'images/terreno-especial.webp', 'images/terreno-celestial.webp'
-]   // 🌱 solo las 11 parcelas nuevas (mismas que terrenos-nuevos.js);
+  'images/casa-1.webp',
+  'images/casa-6.webp',
+  'images/colegio.webp',
+  'images/pisos.webp',
+  'images/pisos-2.webp',
+  'images/Farmacia.webp',
+  'images/bosque.webp',
+  'images/parque-infantil.webp',
+  'images/supermercado.webp',
+  'images/helipuerto.webp',
+  'images/jardin.webp',
+  'images/Restaurante.webp',
+  'images/torre-metalica.webp',
+  'images/casa-modernista.webp',
+  'images/casa-modernista-2.webp',
+  'images/estadio-1.webp',
+  'images/estadio-2.webp',
+  'images/rugby.webp',
+  'images/estadio-3.webp',
+  'images/estadio-4.webp',
+  'images/plaza-de-toros.webp',
+  'images/teatro.webp',
+  'images/cine.webp',
+  'images/supermercado-3.webp',
+  'images/supermercado-4.webp',
+  'images/supermercado-2.webp',
+  'images/pisos-3.webp',
+  'images/pisos-4.webp',
+  'images/pisos-5.webp',
+  'images/casa-7.webp',
+  'images/casa-8.webp'
+];   // casas antiguas (el reparto al azar depende de su orden y tamaño: no se tocan)
 
 // Casas de cada planeta (6 por mundo; imágenes images/<mundo>-<casa>.webp, las genera tools/make-planet-houses.py). Deben coincidir con WORLD_HOUSES de server.js.
 const WORLD_HOUSES = {
@@ -1159,7 +1188,20 @@ const pickableHouses = () => [] || (pickerWorld !== 'tierra' ? WORLD_HOUSES[pick
   : [...new Set([...eventHouses, ...EXTRA_HOUSES.slice().reverse(), ...GOLD_HOUSES.slice().reverse(), ...HOUSES.slice().reverse()])]);   // 🌱 ya no se elige casa: la parcela sale al azar al comprar
 const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp|gif)$/i, '').replace(/[-_]/g, ' ');
 // Categorías del selector de casas: al tocar una (🎬 Cines, 🏠 Casas…) solo salen las de ese tipo. Lo que no esté aquí va a «Otros» (así las casas nuevas siempre se ven).
-const HOUSE_CATS = [{ icon: '🌱', name: 'Terrenos', files: HOUSES.map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) }];
+const HOUSE_CATS = [
+  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2', 'casa-piscina', 'casa-bungalow', 'casa-moderna', 'adosados'] },
+  { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica', 'edificio-pisos', 'hotel'] },
+  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'Farmacia', 'supermercado-5', 'informatica', 'jugueteria', 'estanco', 'perfumeria', 'pasteleria', 'ferreteria', 'ferreteria-2', 'boutique'] },
+  { icon: '🍽️', name: 'Restaurantes', files: ['Restaurante', 'restaurante-2'] },
+  { icon: '🎬', name: 'Cines', files: ['cine', 'teatro', 'discoteca', 'sala-de-baile'] },
+  { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros', 'parque-futbol'] },
+  { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
+  { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto', 'consulado-espana', 'consulado-mexico', 'consulado-alemania', 'carcel'] },
+  { icon: '⛽', name: 'Motor', files: ['gasolinera'] },
+  { icon: '🚀', name: 'Espacio', files: Object.values(WORLD_HOUSES).flat().map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) },
+  { icon: '👑', name: 'Oro', files: GOLD_HOUSES.map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) },
+  { icon: '🎉', name: 'Eventos', files: [] }   // casas de edición limitada del evento activo (se rellena sola)
+];
 // Si una casa no está en la lista de arriba, su categoría sale del nombre del archivo: cine-2.webp → Cines, casa-9.webp → Casas, etc.
 const HOUSE_PREFIX = [
   ['Casas', ['casa', 'chalet', 'villa', 'mansion', 'adosado']],

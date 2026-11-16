@@ -118,9 +118,105 @@ const q = {
 const AVATARS = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀','👑','⚽','🌟'];
 const cleanAvatar = a => AVATARS.includes(a) ? a : AVATARS[0];
 // Casas que se pueden elegir (deben coincidir con HOUSES de app.js; para añadir más, ponlas al FINAL de ambas listas)
-const HOUSES = TERRENOS_NUEVOS.TERRENOS.map(t => t.img);   // 🌱 solo las 11 parcelas nuevas (terrenos-nuevos.js)
+const HOUSES = [
+  'images/casa-1.webp',
+  'images/casa-6.webp',
+  'images/colegio.webp',
+  'images/pisos.webp',
+  'images/pisos-2.webp',
+  'images/Farmacia.webp',
+  'images/bosque.webp',
+  'images/parque-infantil.webp',
+  'images/supermercado.webp',
+  'images/helipuerto.webp',
+  'images/jardin.webp',
+  'images/Restaurante.webp',
+  'images/cesped-2.webp',
+  'images/parque-picnic.webp',
+  'images/desierto-1.webp',
+  'images/desierto-2.webp',
+  'images/prado.webp',
+  'images/claro-bosque.webp',
+  'images/parque-futbol.webp',
+  'images/mar.webp',
+  'images/mar-peces.webp',
+  'images/torre-metalica.webp',
+  'images/casa-modernista.webp',
+  'images/casa-modernista-2.webp',
+  'images/estadio-1.webp',
+  'images/estadio-2.webp',
+  'images/rugby.webp',
+  'images/estadio-3.webp',
+  'images/estadio-4.webp',
+  'images/plaza-de-toros.webp',
+  'images/teatro.webp',
+  'images/cine.webp',
+  'images/supermercado-3.webp',
+  'images/supermercado-4.webp',
+  'images/supermercado-2.webp',
+  'images/pisos-3.webp',
+  'images/pisos-4.webp',
+  'images/pisos-5.webp',
+  'images/casa-7.webp',
+  'images/casa-8.webp',
+  'images/casa-piscina.webp',
+  'images/casa-bungalow.webp',
+  'images/casa-moderna.webp',
+  'images/adosados.webp',
+  'images/edificio-pisos.webp',
+  'images/hotel.webp',
+  'images/supermercado-5.webp',
+  'images/informatica.webp',
+  'images/jugueteria.webp',
+  'images/estanco.webp',
+  'images/perfumeria.webp',
+  'images/pasteleria.webp',
+  'images/ferreteria.webp',
+  'images/ferreteria-2.webp',
+  'images/boutique.webp',
+  'images/restaurante-2.webp',
+  'images/gasolinera.webp',
+  'images/consulado-espana.webp',
+  'images/consulado-mexico.webp',
+  'images/consulado-alemania.webp',
+  'images/carcel.webp',
+  'images/discoteca.webp',
+  'images/sala-de-baile.webp'
+];   // casas antiguas: se reparten AL AZAR al reclamar y el jugador no elige
 // Reparto al azar de las parcelas sin casa elegida: es la lista HOUSES de app.js en el MISMO orden (el servidor la usa para el álbum). No la cambies de orden ni de tamaño.
-const CLIENT_RANDOM_POOL = [TERRENOS_NUEVOS.TERRENOS[0].img];
+const CLIENT_RANDOM_POOL = [
+  'images/casa-1.webp',
+  'images/casa-6.webp',
+  'images/colegio.webp',
+  'images/pisos.webp',
+  'images/pisos-2.webp',
+  'images/Farmacia.webp',
+  'images/bosque.webp',
+  'images/parque-infantil.webp',
+  'images/supermercado.webp',
+  'images/helipuerto.webp',
+  'images/jardin.webp',
+  'images/Restaurante.webp',
+  'images/torre-metalica.webp',
+  'images/casa-modernista.webp',
+  'images/casa-modernista-2.webp',
+  'images/estadio-1.webp',
+  'images/estadio-2.webp',
+  'images/rugby.webp',
+  'images/estadio-3.webp',
+  'images/estadio-4.webp',
+  'images/plaza-de-toros.webp',
+  'images/teatro.webp',
+  'images/cine.webp',
+  'images/supermercado-3.webp',
+  'images/supermercado-4.webp',
+  'images/supermercado-2.webp',
+  'images/pisos-3.webp',
+  'images/pisos-4.webp',
+  'images/pisos-5.webp',
+  'images/casa-7.webp',
+  'images/casa-8.webp'
+];
 // ---------- Eventos de temporada: casas de edición limitada ----------
 // Cada evento se repite todos los años entre sus fechas (MM-DD). Sus casas SOLO se pueden elegir mientras el evento está activo
 // (quien ya la tiene se la queda para siempre). Para añadir una casa a un evento: sube la imagen (y sus -s -m -t) a images/ y ponla en su lista `houses`.
@@ -218,7 +314,7 @@ async function adminClaimParcel({ lat, lng, owner, avatar, country, house }) {
   }
 
   try {
-    await q.insertParcel(p.id, p.x, p.y, name, null, '0.00', 'ADMIN', now, cleanAvatar(avatar), cleanCountry(country), cleanHouse(house) || TERRENOS_NUEVOS.roll().img);
+    await q.insertParcel(p.id, p.x, p.y, name, null, '0.00', 'ADMIN', now, cleanAvatar(avatar), cleanCountry(country), HOUSES[crypto.randomInt(0, HOUSES.length)]);
   } catch (e) {
     if (isUniqueViolation(e)) throw new HttpError(409, 'No se ha podido reclamar esta parcela');
     throw e;
@@ -870,8 +966,9 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
     const d = BARRIO.distM(plat, plng, p.south + SIZE / 2, p.west + SIZE / 2);
     if (d > BARRIO_M + BARRIO_SLACK_M) throw new HttpError(403, `Este terreno está a ${Math.round(d)} m: fuera de tu barrio 🔴 Solo puedes reclamar a menos de ${BARRIO_M} m de donde estás`);
   }
-  const terreno = TERRENOS_NUEVOS.roll(() => crypto.randomInt(0, 2 ** 30) / 2 ** 30, world);   // 🌱 el jugador no elige: sale una al azar según su rareza
-  const chosenHouse = terreno.img;
+  // El jugador no elige: en la Tierra sale una casa antigua al azar (todas con la misma probabilidad); en otros mundos, una de las casas del planeta según su rareza
+  const terreno = world === 'tierra' ? null : TERRENOS_NUEVOS.roll(() => crypto.randomInt(0, 2 ** 30) / 2 ** 30, world);
+  const chosenHouse = terreno ? terreno.img : HOUSES[crypto.randomInt(0, HOUSES.length)];
   const prof = user && await getProfile(user.id);
   const vip = code && await one('SELECT fixed_nick, fixed_country FROM packs WHERE code = $1 AND fixed_nick IS NOT NULL', [code]);
   const name = vip ? vip.fixed_nick : prof ? prof.nickname : cleanName(owner);   // pack VIP o cuenta: siempre sale el apodo fijo
@@ -918,7 +1015,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
     if (user) { try { const rr = await rewardReferral(user.id, code); if (rr) bonus = rr.inviteeBonus; } catch (e) { console.error('Invitación:', e.message); } }
     let tienes = 1;   // cuántas parcelas de este tipo tiene ya el jugador (contando la que acaba de salir)
     try { tienes = Number((await one(user ? 'SELECT COUNT(*) AS n FROM parcels WHERE user_id = $1 AND house = $2' : 'SELECT COUNT(*) AS n FROM parcels WHERE pack_code = $1 AND house = $2', [user ? user.id : code, chosenHouse])).n) || 1; } catch (e) {}
-    return { ok: true, parcel: p.id, world, owner: name, house: chosenHouse, hoy: hoyN == null ? null : { n: hoyN, max: MAX_CLAIMS_PER_DAY }, terreno: { tienes, slug: terreno.slug, name: terreno.name, icon: terreno.icon, color: terreno.color, oneIn: terreno.oneIn, mult: terreno.mult, img: terreno.img }, credits: r.rows[0].credits + bonus, referralBonus: bonus };
+    return { ok: true, parcel: p.id, world, owner: name, house: chosenHouse, hoy: hoyN == null ? null : { n: hoyN, max: MAX_CLAIMS_PER_DAY }, terreno: terreno ? { tienes, slug: terreno.slug, name: terreno.name, icon: terreno.icon, color: terreno.color, oneIn: terreno.oneIn, mult: terreno.mult, img: terreno.img } : null, credits: r.rows[0].credits + bonus, referralBonus: bonus };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Este terreno ya tiene dueño');
@@ -931,6 +1028,10 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
 // Cambiar la casa de un terreno propio (solo el dueño con cuenta). Cuesta HOUSE_COST créditos.
 const HOUSE_COST = Math.max(0, Math.floor(Number(process.env.HOUSE_COST ?? 1)));
 async function setHouse(req, { id, house }) {
+  await needUser(req);
+  throw new HttpError(403, 'Las casas se asignan al azar al reclamar el terreno: ya no se pueden elegir ni cambiar');   // el jugador no elige
+}
+async function setHouseDisabled(req, { id, house }) {   // código antiguo (desactivado), se conserva por si se vuelve a permitir
   const user = await needUser(req);
   const h = await cleanHouseFor(house, user, worldOfId(id));
   if (!h) throw new HttpError(eventOfHouse(house) ? 409 : 400, eventOfHouse(house) ? 'Esta casa es de un evento que ya terminó. ¡Vuelve el año que viene!' : 'Casa no válida');
