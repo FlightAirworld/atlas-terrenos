@@ -27,10 +27,10 @@
 
   // ---------- Pantalla «¡Te ha tocado…!» (solo navegador) ----------
   const css = document.createElement('style');
-  css.textContent = `#tn-ov{position:fixed;inset:0;z-index:99999;background:#000d;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:16px;text-align:center;color:#fff;overflow:hidden}
+  css.textContent = `#tn-ov{position:fixed;inset:0;z-index:5000;background:#000d;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:16px;text-align:center;color:#fff;overflow:hidden}
   #tn-ov .orb{width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,#fff,var(--c) 60%,transparent 72%);animation:tnsh .35s infinite,tngr 1.6s forwards}
   @keyframes tnsh{0%,100%{transform:translateX(-5px) rotate(-3deg)}50%{transform:translateX(5px) rotate(3deg)}}@keyframes tngr{to{scale:1.8;filter:brightness(2)}}
-  #tn-ov .rays{pointer-events:none;position:absolute;width:140vmax;height:140vmax;background:repeating-conic-gradient(var(--c) 0 8deg,transparent 8deg 20deg);opacity:.25;animation:tnsp 14s linear infinite;-webkit-mask:radial-gradient(circle,#000 5%,transparent 45%);mask:radial-gradient(circle,#000 5%,transparent 45%)}
+  #tn-ov .rays{position:absolute;width:140vmax;height:140vmax;background:repeating-conic-gradient(var(--c) 0 8deg,transparent 8deg 20deg);opacity:.25;animation:tnsp 14s linear infinite;-webkit-mask:radial-gradient(circle,#000 5%,transparent 45%);mask:radial-gradient(circle,#000 5%,transparent 45%)}
   @keyframes tnsp{to{rotate:360deg}}
   #tn-ov .rv{display:flex;flex-direction:column;align-items:center;max-width:380px;position:relative;animation:tnpop .6s cubic-bezier(.2,1.5,.4,1)}
   @keyframes tnpop{from{scale:.2;opacity:0}to{scale:1;opacity:1}}
@@ -49,10 +49,8 @@
     document.body.appendChild(ov);
     setTimeout(() => {
       ov.innerHTML = '<div class="rays"></div><div class="rv"><img src="' + d.img.replace('.webp', '-m.webp') + '" alt=""><h2>' + d.icon + ' ' + d.name + '</h2><p>' +
-        (d.oneIn ? 'Sale 1 de cada ' + fmt(d.oneIn) + ' compras' : 'Terreno común') + '</p><p>Produce ' + fmt(API.PER_SEC_BASE * d.mult) + ' créditos/segundo</p>' + (t.tienes ? '<p style="font-weight:800;font-size:20px;color:#fff;margin-top:8px">TIENES ' + t.tienes + '</p>' : '') + '<button type="button">Aceptar</button></div>';
-      const cerrar = e => { if (e) { e.preventDefault(); e.stopPropagation(); } ov.remove(); };
-      const bt = ov.querySelector('button'); bt.onclick = cerrar; bt.addEventListener('touchend', cerrar); bt.addEventListener('pointerup', cerrar);
-      setTimeout(() => { if (document.body.contains(ov)) ov.remove(); }, 60000);   // por si acaso, nunca se queda pegada
+        (d.oneIn ? 'Sale 1 de cada ' + fmt(d.oneIn) + ' compras' : 'Terreno común') + '</p><p>Produce ' + fmt(API.PER_SEC_BASE * d.mult) + ' créditos/segundo</p><button type="button">Aceptar</button></div>';
+      ov.querySelector('button').onclick = () => ov.remove();
       if (window.sfx) try { window.sfx('claim'); } catch (e) {}
       for (let k = 0; k < 24 + i * 4; k++) {
         const p = document.createElement('i'), a = Math.random() * 6.28, r = 100 + Math.random() * 180;
