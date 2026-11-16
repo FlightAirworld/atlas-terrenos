@@ -66,3 +66,9 @@
     setTimeout(() => root.classList.remove('booting', 'boot-out'), 500);
   })();
 })();
+
+// 📰 Blog del juego: carga blog.js (botón "Blog" en el Menú con preguntas y respuestas)
+(function () {
+  const load = () => { const s = document.createElement('script'); s.src = 'blog.js'; s.defer = true; document.body.appendChild(s); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load); else load();
+})();
