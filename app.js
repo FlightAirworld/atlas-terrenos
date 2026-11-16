@@ -679,9 +679,9 @@ function drawOwned(p) {
 // Estilo «Verde»: suelo verde liso, calles gris oscuro, agua azul clara y sin manzanas beige (como Atlas Earth). Se guardan los valores originales del estilizado para poder volver.
 const VERDE = {
   'st-bg': { 'background-color': '#62b248' },
-  'st-landcover': { 'fill-color': '#5aa841' },
+  'st-landcover': { 'fill-opacity': 0 },   // se quita para que se vea la textura del suelo (images/terreno-verde.png)
   'st-landuse': { 'fill-opacity': 0 },
-  'st-park': { 'fill-color': '#4f9c3a' },
+  'st-park': { 'fill-opacity': 0 },
   'st-water': { 'fill-color': '#6fd0f2' },
   'st-waterway': { 'line-color': '#6fd0f2' },
   'st-road-casing': { 'line-color': '#2c3037' },
@@ -690,6 +690,17 @@ const VERDE = {
   'st-sy-road': { 'line-color': '#4a4f59' }
 };
 const VERDE_ORIG = {};
+// Textura del suelo Verde (césped con losetas, flores, setas y piedrecitas). Se carga una vez y se usa como patrón del fondo.
+let verdeTex = 0;   // 0 sin cargar, 1 cargando, 2 lista
+function withVerdeTex(cb) {
+  if (verdeTex === 2) return cb();
+  if (verdeTex === 1) return;
+  verdeTex = 1;
+  const im = new Image();
+  im.onload = () => { try { if (!gl.hasImage('terreno-verde')) gl.addImage('terreno-verde', im, { pixelRatio: 2 }); verdeTex = 2; cb(); } catch (e) { verdeTex = 0; } };
+  im.onerror = () => { verdeTex = 0; };
+  im.src = '/images/terreno-verde.png';
+}
 function applyBaseMode() {
   if (!gl || !gl.getLayer('sat')) return;
   const sat = baseMode === 'satelite', verde = baseMode === 'verde';
@@ -704,6 +715,8 @@ function applyBaseMode() {
       gl.setPaintProperty(id, prop, verde ? VERDE[id][prop] : VERDE_ORIG[key]);
     }
   }
+  if (verde) withVerdeTex(() => { if (baseMode === 'verde' && gl.getLayer('st-bg')) gl.setPaintProperty('st-bg', 'background-pattern', 'terreno-verde'); });
+  else if (gl.getLayer('st-bg')) gl.setPaintProperty('st-bg', 'background-pattern', null);
   for (const id of ['sy-sat-casing', 'sy-sat-road']) if (gl.getLayer(id)) gl.setLayoutProperty(id, 'visibility', sat ? 'visible' : 'none');
   if (gl.getLayer('wt-waterway')) {
     gl.setPaintProperty('wt-water', 'fill-opacity', sat ? 0.3 : 0.55);
