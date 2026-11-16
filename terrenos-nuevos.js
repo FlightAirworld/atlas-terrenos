@@ -65,6 +65,21 @@
   if (typeof module !== 'undefined' && module.exports) { module.exports = API; return; }
   root.TERRENOS_NUEVOS = API;
 
+
+  // ---------- Cartel «MAÑANA PODRÁS COMPRAR MÁS» (al llegar al tope de terrenos del día) ----------
+  root.TERRENOS_NUEVOS.avisoTope = function () {
+    if (document.getElementById('tn-tope')) return;
+    const st = document.createElement('style');
+    st.textContent = '#tn-tope{position:fixed;left:8px;right:8px;top:calc(env(safe-area-inset-top,0px) + 70px);z-index:100000;background:#e00000;color:#fff;font:900 20px/1.25 system-ui,sans-serif;text-align:center;padding:14px 12px;border-radius:14px;border:3px solid #fff;box-shadow:0 6px 24px #0008;animation:tntope .7s steps(1) infinite;text-transform:uppercase}' +
+      '#tn-tope small{display:block;margin-top:4px;font:600 11px system-ui,sans-serif;opacity:.9;text-transform:none}@keyframes tntope{0%{opacity:1}50%{opacity:.15}}';
+    document.head.appendChild(st);
+    const d = document.createElement('div'); d.id = 'tn-tope';
+    d.innerHTML = 'Mañana podrás comprar más<small>Has llegado al máximo de 10 terrenos hoy · toca para cerrar</small>';
+    d.onclick = () => { d.remove(); st.remove(); };
+    document.body.appendChild(d);
+    setTimeout(() => { if (d.isConnected) { d.remove(); st.remove(); } }, 20000);
+  };
+
   // ---------- Pantalla «¡Te ha tocado…!» (solo navegador) ----------
   const css = document.createElement('style');
   css.textContent = `#tn-ov{position:fixed;inset:0;z-index:99999;background:#000d;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:16px;text-align:center;color:#fff;overflow:hidden}

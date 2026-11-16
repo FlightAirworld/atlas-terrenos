@@ -1374,6 +1374,7 @@ $('buy-parcel-btn').onclick = async () => {
     selected.owner = j.owner; selected.avatar = avatar; selected.country = country; selected.since = Date.now();
     selected.house = j.house || chosenHouse; selected.mine = !!authToken;
     if (j.terreno && window.TERRENOS_NUEVOS) window.TERRENOS_NUEVOS.mostrar(j.terreno);   // 🌱 pantalla animada «¡Te ha tocado…!»
+    if (j.hoy && j.hoy.n >= j.hoy.max && window.TERRENOS_NUEVOS && window.TERRENOS_NUEVOS.avisoTope) window.TERRENOS_NUEVOS.avisoTope();   // 10 de 10: cartel rojo parpadeante
     showPanel(selected);
     setMsg('¡Listo! Es tuyo. 🎉' + (j.referralBonus ? ` 👫 (incluye +${j.referralBonus} de regalo por venir invitado)` : ''), 'ok'); sfx('claim');
     drawOwned({ world: selected.world, id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house });
@@ -1385,6 +1386,7 @@ $('buy-parcel-btn').onclick = async () => {
     if (window.celebrateClaim) window.celebrateClaim({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, first: firstClaim });
   } catch (e) {
     setMsg(e.message, 'err'); flashToast('⚠️ ' + e.message); sfx('error');
+    if (/por día/.test(e.message) && window.TERRENOS_NUEVOS && window.TERRENOS_NUEVOS.avisoTope) window.TERRENOS_NUEVOS.avisoTope();   // ya había llegado al tope de hoy
     refreshCredits();
   } finally { btn.disabled = false; }
 };

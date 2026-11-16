@@ -54,7 +54,7 @@ const PACKS = (() => {
   return list.length ? list : [{ credits: 50, price: '1.00' }, { credits: 150, price: '2.00' }, { credits: 300, price: '3.00' }, { credits: 500, price: '4.00' }];
 })();
 const MAX_PARCELS_PER_ACCOUNT = process.env.MAX_PARCELS_PER_ACCOUNT ? Math.max(1, Number(process.env.MAX_PARCELS_PER_ACCOUNT)) : Infinity;   // tope de terrenos por cuenta: ilimitado salvo que se ponga la variable de entorno
-const MAX_CLAIMS_PER_DAY = Math.max(1, Math.floor(Number(process.env.MAX_CLAIMS_PER_DAY ?? 10)));   // tope de terrenos que un jugador puede crear al día (por cuenta; sin cuenta, por pack). El día cambia a medianoche de DAILY_TZ
+const MAX_CLAIMS_PER_DAY = 10;   // fijo: 10 terrenos por usuario y día (antes se podía cambiar con la variable MAX_CLAIMS_PER_DAY)  //   // tope de terrenos que un jugador puede crear al día (por cuenta; sin cuenta, por pack). El día cambia a medianoche de DAILY_TZ
 const PARCEL_COST = Math.max(1, Math.floor(Number(process.env.PARCEL_COST ?? 10)));   // créditos que cuesta reclamar un terreno (PARCEL_COST en el entorno lo cambia)
 const DATABASE_URL = process.env.DATABASE_URL || '';      // cadena de conexión de Supabase
 if (!DATABASE_URL) {
@@ -885,6 +885,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
 
   // Una sola transacción: restar el crédito y guardar la parcela, o ninguna de las dos cosas.
   const client = await pool.connect();
+  let hoyN = null;   // terrenos creados hoy por el jugador (con este incluido); null para el dueño del juego
   try {
     await client.query('BEGIN');
     // El dueño del juego (OWNER_USER_ID / OWNER_EMAIL) reclama sin gastar créditos: terrenos ilimitados
@@ -904,6 +905,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
       const day = dayKey();
       const lim = await client.query('INSERT INTO claim_daily (day, who, n) VALUES ($1,$2,1) ON CONFLICT (day, who) DO UPDATE SET n = claim_daily.n + 1 WHERE claim_daily.n < $3 RETURNING n', [day, who, MAX_CLAIMS_PER_DAY]);
       if (!lim.rows[0]) throw new HttpError(429, `Has llegado al máximo de ${MAX_CLAIMS_PER_DAY} terrenos por día. Vuelve mañana 🌙`);
+      hoyN = Number(lim.rows[0].n);
     }
     await client.query(
       'INSERT INTO parcels (id, x, y, owner, order_id, paid, currency, created_at, avatar, country, user_id, house, world, city, pack_code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)',
@@ -915,7 +917,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
     if (user) { try { const rr = await rewardReferral(user.id, code); if (rr) bonus = rr.inviteeBonus; } catch (e) { console.error('Invitación:', e.message); } }
     let tienes = 1;   // cuántas parcelas de este tipo tiene ya el jugador (contando la que acaba de salir)
     try { tienes = Number((await one(user ? 'SELECT COUNT(*) AS n FROM parcels WHERE user_id = $1 AND house = $2' : 'SELECT COUNT(*) AS n FROM parcels WHERE pack_code = $1 AND house = $2', [user ? user.id : code, chosenHouse])).n) || 1; } catch (e) {}
-    return { ok: true, parcel: p.id, world, owner: name, house: chosenHouse, terreno: { tienes, slug: terreno.slug, name: terreno.name, icon: terreno.icon, color: terreno.color, oneIn: terreno.oneIn, mult: terreno.mult, img: terreno.img }, credits: r.rows[0].credits + bonus, referralBonus: bonus };
+    return { ok: true, parcel: p.id, world, owner: name, house: chosenHouse, hoy: hoyN == null ? null : { n: hoyN, max: MAX_CLAIMS_PER_DAY }, terreno: { tienes, slug: terreno.slug, name: terreno.name, icon: terreno.icon, color: terreno.color, oneIn: terreno.oneIn, mult: terreno.mult, img: terreno.img }, credits: r.rows[0].credits + bonus, referralBonus: bonus };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Este terreno ya tiene dueño');
