@@ -8,6 +8,10 @@
 // Solo se dibujan los cruces más cercanos al centro de la pantalla (hasta 14; 8 en móvil) y con zoom >= 16,5.
 (function () {
   if (typeof map === 'undefined' || !map || !window.roadGraph) return;
+  // SEMÁFOROS DESACTIVADOS (a petición del administrador): no se dibuja nada y ni coches ni peatones esperan.
+  // Para volver a tenerlos, borra estas dos líneas (todo el código de abajo sigue intacto).
+  window.Xings = { stopRem: () => Infinity, pedHold: () => false, list: () => [], near: () => false };
+  return;
   const REF_Z = 17, MIN_ZOOM = 16.5, CYCLE = 20, ZEBRA = '#363c48';   // ZEBRA: color del paso de cebra y de la línea de parada
   const SMALL = Math.min(innerWidth, innerHeight) < 600, MAX_J = SMALL ? 8 : 14;
   const pcap = (n, min) => window.Perf ? Perf.cap(n, min) : n;           // modo ligero (ligero.js)
