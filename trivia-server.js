@@ -13,9 +13,9 @@ module.exports = function (d) {
   const ON = String(process.env.TRIVIA || 'on').toLowerCase() !== 'off';
   const N = 5, PASS = 4;                                              // preguntas por partida y aciertos mínimos para ganar
   const GAMES_PER_DAY = numEnv('TRIVIA_GAMES_PER_DAY', 3);            // partidas al día por jugador
-  const DAILY_MAX = numEnv('TRIVIA_DAILY_MAX_CREDITS', 8);            // tope de créditos que se pueden ganar al día
-  const R_PASS = numEnv('TRIVIA_CREDITS_PASS', 2);                    // premio con 4 aciertos
-  const R_PERFECT = numEnv('TRIVIA_CREDITS_PERFECT', 4);              // premio con 5 aciertos
+  const DAILY_MAX = numEnv('TRIVIA_DAILY_MAX_CREDITS', 15);            // tope de créditos que se pueden ganar al día
+  const R_PASS = numEnv('TRIVIA_CREDITS_PASS', 4);                    // premio con 4 aciertos
+  const R_PERFECT = numEnv('TRIVIA_CREDITS_PERFECT', 8);              // premio con 5 aciertos
   const TIME_MS = numEnv('TRIVIA_SECONDS', 20) * 1000;                // tiempo por pregunta
   const GRACE_MS = 4000;                                              // margen por la red
 

@@ -3,7 +3,7 @@
 // El premio lo decide SIEMPRE el servidor (/api/roulette/spin); aquí solo se anima y suena.
 // Usa globals de app.js: authToken, credits, updateCreditUi(), openLogin(), api(), fmtNum().
 (function () {
-  const PRIZES = [0.10, 0.20, 0.50, 0.75, 1, 2, 5, 10];            // orden de los gajos (en sentido horario desde arriba)
+  const PRIZES = [0.19, 0.38, 0.95, 1.43, 1.9, 3.8, 9.5, 19];            // orden de los gajos (en sentido horario desde arriba)
   const COLORS = ['#e63946', '#f4a261', '#ffd43b', '#69db7c', '#2a9d8f', '#4dabf7', '#9b5de5', '#ff6fb5'];
   const TAU = Math.PI * 2, SEG = TAU / PRIZES.length;
   const $id = id => document.getElementById(id);
@@ -56,7 +56,7 @@
       ctx.fillStyle = COLORS[i]; ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.stroke();
       ctx.save(); ctx.rotate(a0 + SEG / 2); ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-      ctx.font = '800 ' + (PRIZES[i] >= 1 ? 54 : 46) + 'px system-ui, sans-serif';
+      ctx.font = '800 ' + (PRIZES[i] >= 1.9 ? 54 : 46) + 'px system-ui, sans-serif';
       ctx.fillStyle = (i === 2 || i === 3) ? '#222' : '#fff';
       ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 4;
       ctx.fillText(fmt(PRIZES[i]), r - 26, 0);
@@ -144,7 +144,7 @@
       spinning = false; canSpin = (j.extra || 0) > 0; setDot(canSpin);
       credits = j.credits; updateCreditUi();
       if (window.monthlyRefresh) monthlyRefresh();
-      const big = j.prize >= 1;
+      const big = j.prize >= 1.9;
       winSound(big);
       win.textContent = `${big ? '🏆' : '🎉'} +${fmt(j.prize)} ${j.prize === 1 ? 'crédito' : 'créditos'}`;
       win.className = ''; void win.offsetWidth; win.className = 'pop';

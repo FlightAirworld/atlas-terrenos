@@ -14,7 +14,7 @@ module.exports = function (d) {
   const rnd = n => crypto.randomInt(n);
 
   // ---------- Datos ----------
-  const STREAK_REWARDS = [1, 1, 2, 2, 3, 3, 5];   // créditos de cada día de la racha; el día 7 trae además un sobre
+  const STREAK_REWARDS = [2, 2, 4, 4, 6, 6, 10];   // créditos de cada día de la racha; el día 7 trae además un sobre
 
   const ADIVINA = [   // [pista, [opciones], índice correcto]
     ['🗼 Torre de hierro de 330 m inaugurada en 1889', ['París', 'Londres', 'Berlín', 'Roma'], 0],
@@ -53,7 +53,7 @@ module.exports = function (d) {
     ['Sídney', -33.8568, 151.2153], ['Moscú', 55.7539, 37.6208], ['Lisboa', 38.7223, -9.1393], ['Atenas', 37.9715, 23.7257], ['Lima', -12.0464, -77.0428],
     ['Toronto', 43.6426, -79.3871]
   ];
-  const COFRE_CREDITOS = [2, 2, 4, 4, 6, 10];
+  const COFRE_CREDITOS = [4, 4, 8, 8, 11, 19];
 
   // ---------- Utilidades ----------
   function seeded(seed) {   // generador repetible a partir de un texto (mismo día = mismo resultado para todos)
@@ -134,7 +134,7 @@ module.exports = function (d) {
       st.answers.push(a); if (ok) st.score++;
       let credits = null, packGiven = false;
       if (st.answers.length === 5) {
-        st.paid = st.score >= 5 ? 6 : st.score >= 3 ? 4 : st.score >= 1 ? 2 : 0;
+        st.paid = st.score >= 5 ? 11 : st.score >= 3 ? 8 : st.score >= 1 ? 4 : 0;
         if (st.paid) credits = await credit(c, pack.code, st.paid);
         if (st.score === 5) packGiven = !!(await gift(uid, 'bronce', 'adivina', c));
       }
@@ -171,7 +171,7 @@ module.exports = function (d) {
       if (ok) { st.streak++; st.a = st.b; st.b = mmNew(st.a); }
       else {
         st.over = true;
-        prize = Math.min(6, Math.floor(st.streak / 3) * 2);
+        prize = Math.min(11, Math.floor(st.streak / 3) * 4);
         if (prize) credits = await credit(c, pack.code, prize);
         if (st.streak >= 8) packGiven = !!(await gift(uid, 'bronce', 'mas-o-menos', c));
       }

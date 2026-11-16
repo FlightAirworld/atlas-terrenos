@@ -9,14 +9,14 @@ const crypto = require('node:crypto');
 module.exports = function (d) {
   const { pool, run, all, needUser, ensureUserPack, dayKey, HttpError, rateHit } = d;
   const ON = String(process.env.RASCA || 'on').toLowerCase() !== 'off';
-  // Premios: créditos, símbolo que sale 3 veces en la tarjeta y probabilidad (suman 100). Media ≈ 2,2 créditos por tarjeta.
+  // Premios: créditos, símbolo que sale 3 veces en la tarjeta y probabilidad (suman 100). Media ≈ 4,2 créditos por tarjeta (premios +90 %).
   const PRIZES = [
     { credits: 0,  sym: null, p: 35 },
-    { credits: 2,  sym: '🍀', p: 40 },
-    { credits: 4,  sym: '⭐', p: 15 },
-    { credits: 6,  sym: '💎', p: 7 },
-    { credits: 10,  sym: '👑', p: 2.5 },
-    { credits: 20, sym: '🚀', p: 0.5 }
+    { credits: 4,  sym: '🍀', p: 40 },
+    { credits: 8,  sym: '⭐', p: 15 },
+    { credits: 11,  sym: '💎', p: 7 },
+    { credits: 19,  sym: '👑', p: 2.5 },
+    { credits: 38, sym: '🚀', p: 0.5 }
   ];
   const SYMS = ['🍀', '⭐', '💎', '👑', '🚀', '🌎'];   // 🌎 solo sirve de relleno
   const CELLS = 6;

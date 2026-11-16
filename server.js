@@ -1045,8 +1045,8 @@ async function dailyClaim(req) {
 // El premio lo decide el servidor. Como los créditos (packs.credits) son enteros, los decimales se acumulan en packs.roulette_carry
 // y cada vez que suman 1 pasan a créditos enteros.
 // Se puede ajustar con variables: ROULETTE_BIG_CHANCE (prob. de premio grande por giro si aún no salió este mes, 0.10 por defecto).
-const ROULETTE_SMALL = [[0.10, 40], [0.20, 28], [0.50, 20], [0.75, 12]];   // [premio, peso]
-const ROULETTE_BIG = [[1, 60], [2, 25], [5, 12], [10, 3]];
+const ROULETTE_SMALL = [[0.19, 40], [0.38, 28], [0.95, 20], [1.43, 12]];   // [premio, peso] (premios +90 %)
+const ROULETTE_BIG = [[1.9, 60], [3.8, 25], [9.5, 12], [19, 3]];   // premios grandes +90 %
 const ROULETTE_BIG_CHANCE = Math.min(1, Math.max(0, Number(process.env.ROULETTE_BIG_CHANCE ?? 0.10)));
 function roulettePick(table) {
   const total = table.reduce((a, [, w]) => a + w, 0);
@@ -1072,7 +1072,7 @@ async function rouletteSpin(req) {
     const doneToday = (await client.query('SELECT 1 FROM roulette_spins WHERE user_id = $1 AND day = $2', [user.id, today])).rowCount > 0;
     let prize;
     if (!doneToday) {                                  // el giro gratis del día
-      const bigDone = (await client.query("SELECT 1 FROM roulette_spins WHERE user_id = $1 AND prize >= 1 AND to_char(day, 'YYYY-MM') = $2 LIMIT 1", [user.id, month])).rowCount > 0;
+      const bigDone = (await client.query("SELECT 1 FROM roulette_spins WHERE user_id = $1 AND (prize >= 1.9 OR prize IN (1, 2, 5, 10)) AND to_char(day, 'YYYY-MM') = $2 LIMIT 1", [user.id, month])).rowCount > 0;
       prize = (!bigDone && crypto.randomInt(0, 1_000_000) / 1_000_000 < ROULETTE_BIG_CHANCE) ? roulettePick(ROULETTE_BIG) : roulettePick(ROULETTE_SMALL);
       const ins = await client.query('INSERT INTO roulette_spins (user_id, day, prize, created_at) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING', [user.id, today, prize, Date.now()]);
       if (!ins.rowCount) throw new HttpError(409, 'Hoy ya has girado la ruleta. ¡Vuelve mañana!');
@@ -2167,7 +2167,7 @@ async function rankCities(url) {
 // Variables: FIGHT=off (apaga el campeonato), FIGHT_PRIZE (1), FIGHT_DAILY_MAX (3), FIGHT_MIN_AGE_HOURS (24), FIGHT_BASE (10),
 // FIGHT_PER_LEVEL (2), FIGHT_ELEMENT_BONUS (1.25), FIGHT_LEVEL_RANGE (5: diferencia de nivel buscada para el rival).
 const FIGHT_ON = String(process.env.FIGHT || '').toLowerCase() !== 'off';
-const FIGHT_PRIZE = Math.floor(numEnv('FIGHT_PRIZE', 1));
+const FIGHT_PRIZE = Math.floor(numEnv('FIGHT_PRIZE', 2));
 const FIGHT_DAILY_MAX = Math.max(1, Math.floor(numEnv('FIGHT_DAILY_MAX', 3)));
 const FIGHT_MIN_AGE_H = numEnv('FIGHT_MIN_AGE_HOURS', 24);
 const FIGHT_BASE = numEnv('FIGHT_BASE', 10), FIGHT_PER_LEVEL = numEnv('FIGHT_PER_LEVEL', 2);
@@ -3280,10 +3280,10 @@ async function likePost(req, body) {
 }
 
 // ---------- Visitar una casa (visita.js) ----------
-// El visitante entra en la casa de otro jugador, hay una animación automática de ~40 s y, al despedirse, recibe VISIT_CREDITS créditos (2 por defecto).
+// El visitante entra en la casa de otro jugador, hay una animación automática de ~40 s y, al despedirse, recibe VISIT_CREDITS créditos (10 por defecto).
 // /api/visit/start apunta la hora de entrada; /api/visit/finish solo paga si pasó el tiempo mínimo de la animación.
 // Límites: como mucho VISIT_ENTRIES_MAX (3) entradas en casas al día por visitante; una recompensa por visitante, casa y día, y como mucho VISIT_DAILY_MAX recompensas al día.
-const VISIT_CREDITS = Math.max(0, Math.floor(Number(process.env.VISIT_CREDITS ?? 2)));
+const VISIT_CREDITS = Math.max(0, Math.floor(Number(process.env.VISIT_CREDITS ?? 10)));
 const VISIT_DAILY_MAX = Math.max(1, Math.floor(Number(process.env.VISIT_DAILY_MAX ?? 10)));
 const VISIT_ENTRIES_MAX = Math.max(1, Math.floor(Number(process.env.VISIT_ENTRIES_MAX ?? 3)));   // veces al día que un jugador puede ENTRAR en casas (cuenten o no como regalo)
 const VISIT_MIN_MS = 25_000, VISIT_MAX_MS = 15 * 60_000;
