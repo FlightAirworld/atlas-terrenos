@@ -2909,7 +2909,7 @@ function readJson(req, max = 10_000) {
 
 // ---------- Servidor HTTP + estáticos ----------
 const PUBLIC = __dirname;
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.xml': 'application/xml; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.mp3': 'audio/mpeg' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.xml': 'application/xml; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.mp3': 'audio/mpeg' };
 
 // Migración automática (inofensiva si la columna ya existe)
 const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').catch(e => console.error('No se pudo añadir la columna house:', e.message))
@@ -2930,21 +2930,6 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
       await run(`UPDATE parcels SET house = CASE ${cases.join(' ')} ELSE '${T[0].img}' END`);
       console.log('Terrenos nuevos: todos los terrenos repartidos al azar. Copia de las casas antiguas en parcels_house_backup');
     } catch (e) { console.error('Migración de terrenos nuevos:', e.message); }
-  })
-  .then(async () => {   // ♻️ Devuelve los terrenos ya comprados a las casas que tenían ANTES del reparto al azar (usa la copia parcels_house_backup). Solo una vez y solo con RESTAURAR_CASAS=1. Los terrenos nuevos siguen saliendo al azar y sin poder elegir casa
-    if (process.env.RESTAURAR_CASAS !== '1') return;
-    try {
-      const hecho = await one("SELECT to_regclass('public.parcels_restaurado') AS t");
-      if (hecho && hecho.t) { console.log('Restaurar casas: ya estaba hecho (quita RESTAURAR_CASAS)'); return; }
-      const bk = await one("SELECT to_regclass('public.parcels_house_backup') AS t");
-      if (!bk || !bk.t) { console.log('Restaurar casas: no existe parcels_house_backup, no se toca nada'); return; }
-      await run('CREATE TABLE parcels_house_random_backup AS SELECT id, house FROM parcels');   // copia del reparto al azar actual, por si hay que volver
-      await run('ALTER TABLE parcels_house_random_backup ENABLE ROW LEVEL SECURITY');
-      await run('UPDATE parcels p SET house = b.house FROM parcels_house_backup b WHERE p.id = b.id');
-      await run('CREATE TABLE parcels_restaurado AS SELECT now() AS cuando');
-      await run('ALTER TABLE parcels_restaurado ENABLE ROW LEVEL SECURITY');
-      console.log('Restaurar casas: terrenos devueltos a como estaban antes del reparto al azar. Copia del reparto al azar en parcels_house_random_backup');
-    } catch (e) { console.error('Restaurar casas:', e.message); }
   })
   .then(async () => {   // 🌱 Las parcelas Comunes ya construidas pasan a una de las 15 categorías nuevas al azar. Solo una vez y solo con MIGRAR_COMUNES=1
     if (process.env.MIGRAR_COMUNES !== '1') return;
@@ -3403,7 +3388,7 @@ async function likesTop() {
 // ---------- Álbum de colecciones ----------
 // Categorías de casas (deben ser las mismas que HOUSE_CATS / HOUSE_PREFIX de app.js). Una casa que no esté en ninguna va a «Otros».
 const HOUSE_CATS = [{ icon: '🌱', name: 'Terrenos', files: TERRENOS_NUEVOS.TERRENOS.map(t => 'terreno-' + t.slug) }];
-const houseBase = h => String(h).replace(/^images\//, '').replace(/\.(png|webp)$/i, '');
+const houseBase = h => String(h).replace(/^images\//, '').replace(/\.(png|webp|gif)$/i, '');
 const catOfHouse = h => { const b = houseBase(h), c = HOUSE_CATS.find(c => c.files.includes(b)); return c ? c.name : 'Otros'; };
 function houseSeen(id, house) {   // la casa que ve el jugador en un terreno: la elegida, o la del reparto al azar (misma fórmula que houseFor de app.js)
   const h = typeof house === 'string' ? house.replace(/\.png$/i, '.webp') : house;

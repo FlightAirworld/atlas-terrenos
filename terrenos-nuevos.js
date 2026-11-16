@@ -30,7 +30,7 @@
     { slug: 'primordial', nueva: true, name: 'Primordial', icon: '💠', color: '#ff4fd8', oneIn: 45, mult: 690 },
     { slug: 'absoluto', nueva: true, name: 'Absoluto', icon: '👁️', color: '#ff1f1f', oneIn: 50, mult: 1000 }
   ];
-  T.forEach(t => { t.img = 'images/terreno-' + t.slug + '.webp'; });
+  T.forEach(t => { t.img = 'images/terreno-' + t.slug + '.' + (t.ext || 'webp'); });   // ext: 'gif' → el terreno usa un GIF (images/terreno-<slug>.gif)
   // 🪐 Terrenos de otros mundos: cada mundo tiene sus casas (de más sencilla a más espectacular, igual que WORLD_HOUSES de server.js/app.js).
   // Cada casa lleva la rareza y la producción de una de las categorías de arriba (repartidas de la más baja a la más alta), y se sortea igual que en la Tierra.
   const CASAS = {

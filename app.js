@@ -203,7 +203,7 @@ const worldOfId = id => { const m = /^([a-z]+):/.exec(String(id || '')); return 
 
 function houseFor(id, house) {
   if (house) house = String(house).replace(/\.png$/i, '.webp');   // terrenos guardados antes del cambio a webp
-  if (house && (HOUSES.includes(house) || /^images\/[A-Za-z0-9_-]+\.webp$/.test(house))) return house;   // la que eligió el dueño (el servidor solo guarda casas válidas, incluidas las de eventos)
+  if (house && (HOUSES.includes(house) || /^images\/[A-Za-z0-9_-]+\.(webp|gif)$/.test(house))) return house;   // la que eligió el dueño (el servidor solo guarda casas válidas, incluidas las de eventos)
   let h = 2166136261;
   for (const c of id) {
     h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
@@ -1157,7 +1157,7 @@ let pickerWorld = 'tierra';   // mundo de la parcela abierta: en un planeta el s
 // Solo cambia el orden en que se enseñan; HOUSES, EXTRA_HOUSES y GOLD_HOUSES no se tocan.
 const pickableHouses = () => [] || (pickerWorld !== 'tierra' ? WORLD_HOUSES[pickerWorld]
   : [...new Set([...eventHouses, ...EXTRA_HOUSES.slice().reverse(), ...GOLD_HOUSES.slice().reverse(), ...HOUSES.slice().reverse()])]);   // 🌱 ya no se elige casa: la parcela sale al azar al comprar
-const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '').replace(/[-_]/g, ' ');
+const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp|gif)$/i, '').replace(/[-_]/g, ' ');
 // Categorías del selector de casas: al tocar una (🎬 Cines, 🏠 Casas…) solo salen las de ese tipo. Lo que no esté aquí va a «Otros» (así las casas nuevas siempre se ven).
 const HOUSE_CATS = [{ icon: '🌱', name: 'Terrenos', files: HOUSES.map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) }];
 // Si una casa no está en la lista de arriba, su categoría sale del nombre del archivo: cine-2.webp → Cines, casa-9.webp → Casas, etc.
