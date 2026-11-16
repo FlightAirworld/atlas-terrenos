@@ -63,8 +63,7 @@
     ov.innerHTML = '<div class="rays"></div><div class="orb"></div><div style="margin-top:20px;font-weight:700">Abriendo terreno…</div>';
     document.body.appendChild(ov);
     setTimeout(() => {
-      ov.innerHTML = '<div class="rays"></div><div class="rv"><img src="' + d.img.replace('.webp', '-m.webp') + '" alt=""><h2>' + d.icon + ' ' + d.name + '</h2><p>' +
-        (d.oneIn ? 'Sale 1 de cada ' + fmt(d.oneIn) + ' compras' : 'Terreno común') + '</p><p>Produce ' + fmt(API.PER_SEC_BASE * d.mult) + ' créditos/segundo</p>' + (t.tienes ? '<p style="font-weight:800;font-size:20px;color:#fff;margin-top:8px">TIENES ' + t.tienes + '</p>' : '') + '<button type="button">Aceptar</button></div>';
+      ov.innerHTML = '<div class="rays"></div><div class="rv"><img src="' + d.img.replace('.webp', '-m.webp') + '" alt=""><h2>' + d.icon + ' ' + d.name + '</h2><p>Produce ' + fmt(API.PER_SEC_BASE * d.mult) + ' créditos/segundo</p>' + (t.tienes ? '<p style="font-weight:800;font-size:20px;color:#fff;margin-top:8px">TIENES ' + t.tienes + '</p>' : '') + '<button type="button">Aceptar</button></div>';
       const evs = ['pointerup', 'touchend', 'click', 'mouseup', 'keydown'], desde = Date.now() + 600;
       const cerrar = e => { if (e && e.type !== 'keydown' && Date.now() < desde) return; off(); ov.remove(); };
       const off = () => evs.forEach(n => window.removeEventListener(n, cerrar, true));
