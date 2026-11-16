@@ -144,6 +144,16 @@
         const ll = map.unproject(L.point(w.x, w.y), REF_Z);
         if (w.age > 3 && !view.contains(ll)) { remove(i); continue; }
         w.mk.setLatLng(ll);
+        // El muñeco del jugador está fijo en el centro de la pantalla y anda a su paso: los peatones que pasan por su sitio se quedaban «pegados» a él y se iban con él.
+        // Mientras están donde está su cuerpo se esconden (con su globo de charla), y vuelven a verse en cuanto lo dejan atrás.
+        const doll = window.playerWalker && window.playerWalker.el && window.playerWalker.el();
+        let near = false;
+        if (doll && doll.isConnected && doll.style.opacity !== '0') {
+          const sz = map.getSize(), pt = map.latLngToContainerPoint(ll), dx = pt.x - sz.x / 2, dy = pt.y - sz.y / 2;
+          near = Math.abs(dx) < 48 && dy > -100 && dy < 34;
+        }
+        w.near = near;
+        if (w.hid !== near) { const me = w.mk.getElement(); if (me) { me.style.visibility = near ? 'hidden' : ''; w.hid = near; } }
         if (!w.el) { const e = w.mk.getElement(); w.el = e && e.firstChild; }
         if (w.el) {
           if (w.fpA !== FP) { w.el.style.scale = FP.toFixed(3); w.fpA = FP; }
