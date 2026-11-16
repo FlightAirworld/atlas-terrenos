@@ -1,19 +1,34 @@
-/* 🌱 Terrenos nuevos: 11 parcelas al azar según su rareza. Lo usan el servidor (require) y el navegador (<script>).
+/* 🌱 Terrenos nuevos: 26 parcelas al azar según su rareza. Lo usan el servidor (require) y el navegador (<script>).
  *   oneIn = «sale 1 de cada N compras» (la Común es el resto). mult = lo que produce respecto a la Común.
  *   Para cambiar probabilidades o producción toca SOLO esta lista. */
 (function (root) {
   const T = [
     { slug: 'comun',      name: 'Común',      icon: '🌎', color: '#6dd36d', oneIn: null,  mult: 1 },
+    { slug: 'comun-plus', name: 'Común Plus', icon: '🍀', color: '#7be07b', oneIn: 4, mult: 0.1 },
+    { slug: 'superior', name: 'Superior', icon: '🔷', color: '#3d8bff', oneIn: 15, mult: 0.3 },
     { slug: 'poco-comun', name: 'Poco común', icon: '🔵', color: '#4aa3ff', oneIn: 10,    mult: 3 },
+    { slug: 'extraordinario', name: 'Extraordinario', icon: '💠', color: '#7fe8ff', oneIn: 40, mult: 6 },
     { slug: 'raro',       name: 'Raro',       icon: '🟣', color: '#b46bff', oneIn: 30,    mult: 10 },
+    { slug: 'arcano', name: 'Arcano', icon: '🧿', color: '#3b5bdb', oneIn: 75, mult: 15 },
     { slug: 'muy-raro',   name: 'Muy raro',   icon: '🌕', color: '#ffd84a', oneIn: 50,    mult: 25 },
+    { slug: 'supremo', name: 'Supremo', icon: '🏆', color: '#ffcc33', oneIn: 150, mult: 50 },
     { slug: 'epico',      name: 'Épico',      icon: '💎', color: '#4ff0e6', oneIn: 100,   mult: 80 },
+    { slug: 'ancestral', name: 'Ancestral', icon: '🔥', color: '#ff7a2f', oneIn: 350, mult: 150 },
     { slug: 'legendario', name: 'Legendario', icon: '🟡', color: '#ffb300', oneIn: 250,   mult: 250 },
+    { slug: 'trascendente', name: 'Trascendente', icon: '⚡', color: '#ffe94a', oneIn: 700, mult: 400 },
     { slug: 'mitico',     name: 'Mítico',     icon: '🔴', color: '#ff4b4b', oneIn: 500,   mult: 1000 },
+    { slug: 'imperial', name: 'Imperial', icon: '🐉', color: '#c0392b', oneIn: 1500, mult: 2000 },
     { slug: 'exotico',    name: 'Exótico',    icon: '🌈', color: '#ff7bd5', oneIn: 1000,  mult: 5000 },
+    { slug: 'astral', name: 'Astral', icon: '💫', color: '#b9a7ff', oneIn: 3000, mult: 10000 },
     { slug: 'unico',      name: 'Único',      icon: '👑', color: '#ffd700', oneIn: 2500,  mult: 25000 },
+    { slug: 'sagrado', name: 'Sagrado', icon: '☀️', color: '#fff0a8', oneIn: 7000, mult: 50000 },
     { slug: 'especial',   name: 'Especial',   icon: '⭐', color: '#fff27a', oneIn: 5000,  mult: 100000 },
-    { slug: 'celestial',  name: 'Celestial',  icon: '🌌', color: '#9d7bff', oneIn: 10000, mult: 1000000 }
+    { slug: 'abismal', name: 'Abismal', icon: '🌑', color: '#5b2a86', oneIn: 15000, mult: 200000 },
+    { slug: 'celestial',  name: 'Celestial',  icon: '🌌', color: '#9d7bff', oneIn: 10000, mult: 1000000 },
+    { slug: 'divino', name: 'Divino', icon: '🪽', color: '#fdfdfd', oneIn: 30000, mult: 2000000 },
+    { slug: 'infinito', name: 'Infinito', icon: '♾️', color: '#00e5ff', oneIn: 60000, mult: 10000000 },
+    { slug: 'primordial', name: 'Primordial', icon: '💠', color: '#ff4fd8', oneIn: 150000, mult: 50000000 },
+    { slug: 'absoluto', name: 'Absoluto', icon: '👁️', color: '#ff1f1f', oneIn: 500000, mult: 500000000 }
   ];
   T.forEach(t => { t.img = 'images/terreno-' + t.slug + '.webp'; });
   // Se mira de la más rara a la más común: cada una sale con probabilidad 1/oneIn; si ninguna, Común.
