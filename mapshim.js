@@ -193,10 +193,13 @@
         const z = gl.getZoom();
         return { half: expo(z, ROAD_STOPS) / 2, curb: expo(z, CASING_STOPS) / 2 + 1 };
       },
-      // Tamaños que mantienen las proporciones: el coche ocupa ~1/3 de la calzada y el peatón crece con ella
+      // Tamaños que mantienen las proporciones REALES: el coche ocupa ~1/3 de la calzada (1,8 m de ancho)
+      // y el peatón (1,75 m de alto) mide casi lo mismo que el ANCHO del coche, o sea ~0,4 de la longitud de un coche.
+      // El cuerpo dibujado de la persona mide ~22,5 px (a fp=1) y el coche 18 px de ancho (a fv=1): de ahí el 0,78.
       sizes() {
         const w = api.roadMetrics('minor').half * 2;
-        return { fv: Math.max(0.36, Math.min(1.5, w * 0.36 / 18)), fp: Math.max(0.5, Math.min(1.4, w / 30)) };
+        const fv = Math.max(0.36, Math.min(1.5, w * 0.36 / 18));
+        return { fv, fp: Math.max(0.28, Math.min(1.17, fv * 0.78)) };
       },
       getBounds() {
         // Con inclinación el rectángulo visible puede ser enorme: lo limitamos alrededor del centro
