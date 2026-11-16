@@ -591,6 +591,12 @@ function addDetail(ex) {
     mountDetail(ex, u || used, u);
   });
 }
+// En el estilo Verde las parcelas que son solo suelo (césped, prado, desierto) no enseñan su foto: se ve nuestra textura de césped en su lugar
+const SUELO_LLANO = /(cesped-2|prado|desierto-1|desierto-2)/i;
+function sueloVis(ex) {
+  if (!ex || !gl || !gl.getLayer(ex.srcId)) return;
+  gl.setLayoutProperty(ex.srcId, 'visibility', baseMode === 'verde' && SUELO_LLANO.test(String(ex.url || '')) ? 'none' : 'visible');
+}
 function mountDetail(ex, imgUrl, blob) {
   const [[s, w], [n, e]] = boundsOf(ex.p.x, ex.p.y);
   ex.blob = blob;
@@ -598,6 +604,7 @@ function mountDetail(ex, imgUrl, blob) {
   const cutNow = roadCut.get(ex.p.id), k = (cutNow && cutNow.road) ? 0 : 0.004, dw = (e - w) * k, dh = (n - s) * k;
   gl.addSource(ex.srcId, { type: 'image', url: imgUrl, coordinates: [[w - dw, n + dh], [e + dw, n + dh], [e + dw, s - dh], [w - dw, s - dh]] });
   gl.addLayer({ id: ex.srcId, type: 'raster', source: ex.srcId, paint: { 'raster-fade-duration': 0 } }, gl.getLayer('wt-water') ? 'wt-water' : 'owned-3d');
+  sueloVis(ex);
   const stars = document.createElement('span');
   stars.className = 'owner-stars';
   stars.textContent = starsOf(ex.level);
@@ -676,9 +683,9 @@ function drawOwned(p) {
 }
 
 // ---------- Mapa base: estilizado / satélite ----------
-// Estilo «Verde»: suelo verde liso, calles gris oscuro, agua azul clara y sin manzanas beige (como Atlas Earth). Se guardan los valores originales del estilizado para poder volver.
+// Estilo «Verde»: tierra marrón por fuera, césped con textura solo en las parcelas, calles gris oscuro, agua azul clara y sin manzanas beige (como Atlas Earth). Se guardan los valores originales del estilizado para poder volver.
 const VERDE = {
-  'st-bg': { 'background-color': '#62b248' },
+  'st-bg': { 'background-color': '#9a7550' },   // donde no hay parcelas: tierra marrón
   'st-landcover': { 'fill-opacity': 0 },   // se quita para que se vea la textura del suelo (images/terreno-verde.png)
   'st-landuse': { 'fill-opacity': 0 },
   'st-park': { 'fill-opacity': 0 },
@@ -715,14 +722,18 @@ function applyBaseMode() {
       gl.setPaintProperty(id, prop, verde ? VERDE[id][prop] : VERDE_ORIG[key]);
     }
   }
-  if (verde) withVerdeTex(() => { if (baseMode === 'verde' && gl.getLayer('st-bg')) gl.setPaintProperty('st-bg', 'background-pattern', 'terreno-verde'); });
-  else if (gl.getLayer('st-bg')) gl.setPaintProperty('st-bg', 'background-pattern', null);
+  // En Verde el césped con textura va SOLO sobre las parcelas (en lugar de los cuadros de colores); el resto del mapa es tierra marrón
+  if (gl.getLayer('owned-flat')) {
+    if (verde) withVerdeTex(() => { if (baseMode === 'verde' && gl.getLayer('owned-flat')) { gl.setPaintProperty('owned-flat', 'fill-pattern', 'terreno-verde'); gl.setPaintProperty('owned-flat', 'fill-opacity', 1); } });
+    else { gl.setPaintProperty('owned-flat', 'fill-pattern', null); gl.setPaintProperty('owned-flat', 'fill-opacity', 0.85); }
+  }
   for (const id of ['sy-sat-casing', 'sy-sat-road']) if (gl.getLayer(id)) gl.setLayoutProperty(id, 'visibility', sat ? 'visible' : 'none');
   if (gl.getLayer('wt-waterway')) {
     gl.setPaintProperty('wt-water', 'fill-opacity', sat ? 0.3 : 0.55);
     gl.setPaintProperty('wt-waterway', 'line-opacity', sat ? 0.6 : 0.9);
     gl.setPaintProperty('wt-waterway-edge', 'line-opacity', sat ? 0.35 : 0.7);
   }
+  drawn.forEach(ex => { if (ex.hasDetail) sueloVis(ex); });   // las fotos de solo suelo se esconden en Verde y vuelven en los otros estilos
   document.documentElement.classList.toggle('mapa-verde', verde);
   const b = document.getElementById('base-btn'), name = sat ? 'satélite' : verde ? 'verde' : 'estilizado';
   if (b) { b.setAttribute('aria-pressed', sat ? 'true' : 'false'); b.title = 'Estilo del mapa: ' + name; b.setAttribute('data-label', 'Estilo: ' + name); b.textContent = sat ? '🛰️' : verde ? '🌿' : '🎨'; }
