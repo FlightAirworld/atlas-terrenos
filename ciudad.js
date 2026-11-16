@@ -625,11 +625,20 @@
   }
 
   // ---------- Sonido ambiente ----------
-  let lastBell = -1, nextHorn = performance.now() / 1000 + rnd(6, 14);
+  let lastBell = -1, nextHorn = performance.now() / 1000 + rnd(6, 14), nextBird = performance.now() / 1000 + rnd(3, 8), nextCri = performance.now() / 1000 + rnd(3, 8);
   function audioTick(nowS) {
     const au = window.cityAudio; if (!au) return;
     const z = map.getZoom(), t = clamp((z - 14.5) / 3, 0, 1), lv = on ? t * t * (3 - 2 * t) * (0.3 + 0.7 * CL._d) * (1 - 0.45 * clamp(rainy(), 0, 1)) : 0;
     au.level(lv);
+    if (au.nature) {                                             // 🐦 pájaros de día, grillos de noche y viento: más en las afueras, menos con lluvia
+      const night = window.cityDark ? clamp(window.cityDark(), 0, 1) : 0, rain = clamp(rainy(), 0, 1);
+      const nv = on ? t * (1 - 0.55 * CL._d) * (1 - 0.7 * rain) : 0;
+      au.nature(nv);
+      if (nv > 0.05) {
+        if (nowS > nextBird) { nextBird = nowS + rnd(2.5, 7) / Math.max(0.25, 1 - night); if (night < 0.7) au.bird(nv * (1 - night)); }
+        if (nowS > nextCri) { nextCri = nowS + rnd(2, 6); if (night > 0.4) au.cricket(nv * night); }
+      }
+    }
     if (on && lv > 0.08 && nowS > nextHorn) { nextHorn = nowS + rnd(7, 18); au.horn(0.25 + 0.5 * CL._d); }
     const d = new Date();
     if (on && d.getMinutes() === 0 && d.getSeconds() < 3 && lastBell !== d.getHours() && z >= 15) { lastBell = d.getHours(); au.bells(d.getHours() % 12 || 12, clamp(t, 0.3, 1)); }

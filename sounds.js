@@ -15,7 +15,8 @@
     ['marcianos', '👽', 'Marcianos y platillos'],
     ['visitantes', '👥', 'Visitantes del mapa (muñecos que hablan)'],
     ['lluvia', '⛈️', 'Lluvia y truenos'],
-    ['campanas', '⛪', 'Campanas']
+    ['campanas', '⛪', 'Campanas'],
+    ['naturaleza', '🐦', 'Pájaros, grillos y viento']
   ];
   let st = {};
   try { st = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { st = {}; }
@@ -227,7 +228,7 @@
 
   // ---------- Ambiente de ciudad (lo maneja ciudad.js según el zoom) ----------
   // Murmullo y tráfico lejano (ruido filtrado), bocinazos lejanos y campanas. Todo sintetizado; respeta el botón 🔊 (apagado = silencio).
-  let amb = null, far = null;
+  let amb = null, far = null, wind = null;
   function noiseBuf(sec) {
     const n = Math.floor(ctx.sampleRate * sec), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
     let last = 0; for (let i = 0; i < n; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.5; }
@@ -252,6 +253,7 @@
     amb.crG.gain.setTargetAtTime(window.soundOn('gente') ? 1 : 0, ctx.currentTime, 0.2);
   }
   window.soundPrefs.onChange(ambPrefs);
+  window.soundPrefs.onChange((c) => { if (c === 'naturaleza' && !window.soundOn('naturaleza') && wind && ctx) wind.g.gain.setTargetAtTime(0, ctx.currentTime, 0.2); });
   function farBus() { if (!far) { far = ctx.createBiquadFilter(); far.type = 'lowpass'; far.frequency.value = 1500; far.connect(sfxBus); } return far; }
   window.cityAudio = {
     level(v) {
@@ -264,6 +266,34 @@
       const t = ctx.currentTime + 0.02, bus = close ? sfxBus : farBus(), d = 0.2 + Math.random() * 0.2;
       tone(bus, 'square', 415, t, d, 0.2 * vol); tone(bus, 'square', 523, t, d, 0.16 * vol);
       if (Math.random() < 0.5) { tone(bus, 'square', 415, t + d + 0.12, d, 0.2 * vol); tone(bus, 'square', 523, t + d + 0.12, d, 0.16 * vol); }
+    },
+    // Naturaleza: viento suave continuo (v = 0..1 según zoom/afueras) y, en eventos sueltos, pájaros de día y grillos de noche.
+    nature(v) {
+      if (!ctx) return;
+      const off = window.fightMuted || window.earthMuted || mode < 1 || ctx.state !== 'running' || !window.soundOn('naturaleza');
+      if (off) { if (wind) wind.g.gain.setTargetAtTime(0, ctx.currentTime, 0.4); return; }
+      if (!wind) {
+        const src = ctx.createBufferSource(); src.buffer = noiseBuf(4); src.loop = true;
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 520; bp.Q.value = 0.6;
+        const g = ctx.createGain(); g.gain.value = 0;
+        const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.11; lg.gain.value = 180; lfo.connect(lg); lg.connect(bp.frequency);   // el viento sube y baja despacio
+        src.connect(bp); bp.connect(g); g.connect(master); src.start(); lfo.start();
+        wind = { g };
+      }
+      wind.g.gain.setTargetAtTime(Math.max(0, Math.min(1, v)) * 0.05, ctx.currentTime, 1.2);
+    },
+    bird(vol) {
+      if (!ctx || window.fightMuted || window.earthMuted || mode < 1 || ctx.state !== 'running' || !window.soundOn('naturaleza')) return;
+      const t0 = ctx.currentTime + 0.02, n = 2 + Math.floor(Math.random() * 4), base = 2300 + Math.random() * 1800;
+      for (let i = 0; i < n; i++) {
+        const t = t0 + i * (0.09 + Math.random() * 0.05), f = base * (0.9 + Math.random() * 0.3);
+        tone(sfxBus, 'sine', f, t, 0.08, 0.14 * vol, { slideTo: f * (Math.random() < 0.5 ? 1.35 : 0.75), attack: 0.005 });
+      }
+    },
+    cricket(vol) {
+      if (!ctx || window.fightMuted || window.earthMuted || mode < 1 || ctx.state !== 'running' || !window.soundOn('naturaleza')) return;
+      const t0 = ctx.currentTime + 0.02, f = 4200 + Math.random() * 600, trains = 2 + Math.floor(Math.random() * 3);
+      for (let k = 0; k < trains; k++) for (let i = 0; i < 3; i++) tone(sfxBus, 'sine', f, t0 + k * 0.42 + i * 0.07, 0.04, 0.07 * vol, { attack: 0.004 });
     },
     bells(n, vol) {
       if (!ctx || window.fightMuted || window.earthMuted || mode < 1 || ctx.state !== 'running' || !window.soundOn('campanas')) return;
