@@ -465,11 +465,36 @@
   // el icono mide justo lo que una parcela en pantalla: 512·0,0005/360·2^z px (imagen de 128 px)
   const ICON = ['interpolate', ['exponential', 2], ['zoom'], 14, 0.0005 * 512 * Math.pow(2, 14) / 360 / 128, 22, 0.0005 * 512 * Math.pow(2, 22) / 360 / 128];
 
-  function loadHouse(m, url) {   // pinta la foto de la casa en 128×128 y la da de alta como imagen del mapa
+  // 🪐 Colores del terreno en cada planeta: la hierba verde se cambia por el suelo del mundo (tres tonos: sombra, medio, luz). Flores, tejados y agua se dejan.
+  // La Tierra y Prehistoria no cambian. Para otro planeta añade una línea aquí.
+  const SUELO = {
+    marte:    [[58, 24, 14], [176, 80, 46], [232, 164, 112]],
+    luna:     [[34, 34, 38], [128, 128, 134], [222, 222, 228]],
+    mercurio: [[40, 34, 30], [140, 128, 116], [214, 202, 188]],
+    venus:    [[84, 44, 12], [214, 150, 48], [250, 220, 140]],
+    jupiter:  [[96, 56, 30], [206, 150, 96], [244, 224, 190]],
+    saturno:  [[92, 70, 30], [204, 172, 98], [246, 232, 176]],
+    urano:    [[24, 82, 96], [96, 188, 200], [196, 244, 246]],
+    neptuno:  [[16, 34, 110], [56, 98, 214], [150, 190, 250]],
+    pluton:   [[70, 50, 44], [176, 146, 126], [240, 226, 212]]
+  };
+  function tinte(g, world) {
+    const C = SUELO[world]; if (!C) return;
+    const d = g.getImageData(0, 0, 128, 128), a = d.data;
+    for (let i = 0; i < a.length; i += 4) {
+      const r = a[i], gr = a[i + 1], b = a[i + 2];
+      if (gr < r * 1.04 || gr < b * 1.04) continue;   // solo lo verde (hierba, arbustos, hojas)
+      const l = Math.min(1, Math.max(0, (0.3 * r + 0.59 * gr + 0.11 * b) / 200)), t = l < 0.5 ? l * 2 : (l - 0.5) * 2, A = l < 0.5 ? C[0] : C[1], B = l < 0.5 ? C[1] : C[2];
+      a[i] = A[0] + (B[0] - A[0]) * t; a[i + 1] = A[1] + (B[1] - A[1]) * t; a[i + 2] = A[2] + (B[2] - A[2]) * t;
+    }
+    g.putImageData(d, 0, 0);
+  }
+  function loadHouse(m, url, world) {   // pinta la foto de la casa en 128×128 (con los colores del mundo) y la da de alta como imagen del mapa
     const tryLoad = u => new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = u; });
     tryLoad(url.replace(/\.webp$/i, '-s.webp')).catch(() => tryLoad(url)).then(im => {
       const c = document.createElement('canvas'); c.width = c.height = 128;
       const g = c.getContext('2d'); g.drawImage(im, 0, 0, 128, 128);
+      try { tinte(g, world); } catch (e) { /* sin colores del mundo: se queda la foto tal cual */ }
       if (!m.hasImage(url)) m.addImage(url, g.getImageData(0, 0, 128, 128));
     }).catch(() => {});
   }
@@ -625,7 +650,7 @@
       st.ready = true; flush(id); grid(id); loadTiles(id); loadOverview(id, true);
     });
     const loading = new Set();
-    m.on('styleimagemissing', e => { if (!loading.has(e.id)) { loading.add(e.id); loadHouse(m, e.id); } });   // la foto de cada casa se carga una vez, cuando hace falta
+    m.on('styleimagemissing', e => { if (!loading.has(e.id)) { loading.add(e.id); loadHouse(m, e.id, id); } });   // la foto de cada casa se carga una vez, cuando hace falta
     // Cada paso va en su try: si uno falla, los demás (y el movimiento del mapa) siguen. La cuadrícula también se redibuja mientras te mueves
     // (antes solo al terminar el movimiento, y por eso quedaba un rectángulo fijo que no cubría toda la pantalla).
     const step = f => { try { f(id); } catch (e) { console.error('[mundos] ' + id, e); } };
