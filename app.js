@@ -60,14 +60,14 @@ const MAP_STYLE = {
       paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 1, 16, 14, 19, 60] } },
     { id: 'st-sy-casing', type: 'line', source: 'synth', minzoom: 15,
       layout: { 'line-cap': 'butt' },
-      paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 1, 16, 14, 19, 60] } },
+      paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.5, 16, 7, 19, 30] } },
     { id: 'st-road', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
       filter: ['all', ['!=', ['get', 'brunnel'], 'tunnel'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'service']]]],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': ['match', ['get', 'class'], 'motorway', '#f6c76b', 'trunk', '#f6c76b', 'primary', '#fbe29a', '#ffffff'], 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.6, 16, 11, 19, 50] } },
     { id: 'st-sy-road', type: 'line', source: 'synth', minzoom: 15,
       layout: { 'line-cap': 'butt' },
-      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.6, 16, 11, 19, 50] } },
+      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.3, 16, 5.5, 19, 25] } },
     // Vías del tren (solo líneas principales, sin túneles ni apartaderos): trains.js hace circular el tren por ellas
     { id: 'st-rail-bed', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 11,
       filter: ['all', ['==', ['get', 'class'], 'rail'], ['!=', ['get', 'brunnel'], 'tunnel'], ['!', ['has', 'service']]],
@@ -79,10 +79,10 @@ const MAP_STYLE = {
     // Calles horizontales del juego sobre el satélite (solo se ven con el mapa de satélite; en el estilizado van intercaladas con las reales)
     { id: 'sy-sat-casing', type: 'line', source: 'synth', minzoom: 15,
       layout: { 'line-cap': 'butt', visibility: baseMode === 'satelite' ? 'visible' : 'none' },
-      paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 1, 16, 14, 19, 60] } },
+      paint: { 'line-color': '#b9b3a3', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.5, 16, 7, 19, 30] } },
     { id: 'sy-sat-road', type: 'line', source: 'synth', minzoom: 15,
       layout: { 'line-cap': 'butt', visibility: baseMode === 'satelite' ? 'visible' : 'none' },
-      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.6, 16, 11, 19, 50] } },
+      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['exponential', 1.6], ['zoom'], 11, 0.3, 16, 5.5, 19, 25] } },
     // Capa invisible: solo sirve para consultar la geometría de las calles (coches). Apagada hasta que se necesita.
     {
       id: 'roads-q', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 15,
@@ -297,7 +297,7 @@ const WATERWAY_WIDTH = { river: 14, canal: 10, stream: 4 };   // ancho de los r�
 // Las calles de parcelas que se tocan en la misma fila se unen en una sola; al cruzar una calle real se empalman con ella
 // (mapshim.withSynth parte las dos en el cruce), y por ellas circulan coches y peatones como por cualquier otra calle.
 // Cuentan todas las parcelas ocupadas, también parques, bosques, jardines y prados.
-const SYNTH_HALF_M = 3.5, SYNTH_MIN_Z = 15, SYNTH_MAX_LINES = 400;
+const SYNTH_HALF_M = 1.75, SYNTH_MIN_Z = 15, SYNTH_MAX_LINES = 400;
 function synthLat(y) { return y * cfg.size - 90; }
 let synthRuns = [], synthPairs = new Set(), synthDirty = true;
 function rebuildSynth() {

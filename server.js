@@ -168,7 +168,7 @@ const cleanHouse = (h, world = 'tierra') => {
   h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h;
   if (world !== 'tierra') return (WORLD_HOUSES[world] || []).includes(h) ? h : null;
   if (PLANET_HOUSES.includes(h)) return null;
-  if (HOUSES.includes(h)) return h;
+  if (HOUSES.includes(h) || TERRENOS_NUEVOS.byImg(h)) return h;
   if (GOLD_HOUSES.includes(h)) return null;   // las del Pase Oro pasan por cleanHouseFor (comprueba el pase)
   const e = eventOfHouse(h);
   return e && eventInfo(e).active ? h : null;   // las casas de evento solo se pueden elegir mientras dura el evento
@@ -1287,7 +1287,7 @@ async function upgradeParcel(req, { id, from }) {
 
 // 🌱 Cada parcela nueva produce según su rareza (mult de terrenos-nuevos.js; las casas sin parcela nueva cuentan ×1).
 // PROD_RATE es lo que produce la Común por hora: la Común = 0,000001 créditos/s son PROD_RATE=0.0036.
-const TERRENO_MULT_SQL = '(CASE house ' + TERRENOS_NUEVOS.TERRENOS.concat(...Object.values(TERRENOS_NUEVOS.MUNDOS)).map(t => `WHEN '${t.img}' THEN ${t.mult}`).join(' ') + ' ELSE 1 END)';
+const TERRENO_MULT_SQL = '(CASE house ' + TERRENOS_NUEVOS.TERRENOS.concat(...Object.values(TERRENOS_NUEVOS.MUNDOS)).flatMap(t => [t.img].concat(t.alt || []).map(i => `WHEN '${i}' THEN ${t.mult}`)).join(' ') + ' ELSE 1 END)';
 // Suma, por cada terreno de la cuenta, el tiempo producido desde la última recogida (o desde que se reclamó), con tope.
 // Cada terreno produce según su nivel. Si subió de nivel dentro del periodo que se está acumulando, el tiempo anterior a la
 // mejora cuenta con el multiplicador del nivel anterior y el posterior con el nuevo: la mejora solo vale desde que se hace,

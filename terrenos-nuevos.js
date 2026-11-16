@@ -8,7 +8,7 @@
     { slug: 'superior', nueva: true, name: 'Superior', icon: '🔷', color: '#3d8bff', oneIn: 15, mult: 0.14 },
     { slug: 'poco-comun', name: 'Poco común', icon: '🔵', color: '#4aa3ff', oneIn: 10,    mult: 0.3 },
     { slug: 'extraordinario', nueva: true, name: 'Extraordinario', icon: '💠', color: '#7fe8ff', oneIn: 40, mult: 0.44 },
-    { slug: 'raro',       name: 'Raro',       icon: '🟣', color: '#b46bff', oneIn: 30,    mult: 0.63 },
+    { slug: 'raro', alt: ['images/terreno-raro-2.webp'], name: 'Raro',       icon: '🟣', color: '#b46bff', oneIn: 30,    mult: 0.63 },
     { slug: 'arcano', nueva: true, name: 'Arcano', icon: '🧿', color: '#3b5bdb', oneIn: 75, mult: 0.91 },
     { slug: 'muy-raro',   name: 'Muy raro',   icon: '🌕', color: '#ffd84a', oneIn: 50,    mult: 1.3 },
     { slug: 'supremo', nueva: true, name: 'Supremo', icon: '🏆', color: '#ffcc33', oneIn: 150, mult: 1.9 },
@@ -55,10 +55,11 @@
   function roll(rnd, mundo) {
     rnd = rnd || Math.random;
     const L = mundo && MUNDOS[mundo] ? MUNDOS[mundo] : T;   // en la Tierra, las categorías de siempre; en otro mundo, sus casas
-    for (let i = L.length - 1; i > 0; i--) if (rnd() < 1 / L[i].oneIn) return L[i];
-    return L[0];
+    const pick = c => c.alt && c.alt.length ? Object.assign({}, c, { img: [c.img].concat(c.alt)[Math.floor(rnd() * (c.alt.length + 1)) % (c.alt.length + 1)] }) : c;   // varias imágenes de la misma rareza: sale una al azar
+    for (let i = L.length - 1; i > 0; i--) if (rnd() < 1 / L[i].oneIn) return pick(L[i]);
+    return pick(L[0]);
   }
-  const byImg = img => { const u = String(img || '').replace(/\.png$/i, '.webp'); return T.find(t => t.img === u) || [].concat(...Object.keys(MUNDOS).map(w => MUNDOS[w])).find(t => t.img === u) || null; };
+  const byImg = img => { const u = String(img || '').replace(/\.png$/i, '.webp'); return T.find(t => t.img === u || (t.alt && t.alt.includes(u))) || [].concat(...Object.keys(MUNDOS).map(w => MUNDOS[w])).find(t => t.img === u) || null; };
   const fmt = v => v.toLocaleString('es-ES', { maximumFractionDigits: v < 0.001 ? 8 : v < 1 ? 6 : 3 });
   const API = { TERRENOS: T, MUNDOS, CASAS, roll, byImg, PER_SEC_BASE: 1e-6 };
 
