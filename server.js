@@ -2931,6 +2931,21 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
       console.log('Terrenos nuevos: todos los terrenos repartidos al azar. Copia de las casas antiguas en parcels_house_backup');
     } catch (e) { console.error('Migración de terrenos nuevos:', e.message); }
   })
+  .then(async () => {   // ♻️ Devuelve los terrenos ya comprados a las casas que tenían ANTES del reparto al azar (usa la copia parcels_house_backup). Solo una vez y solo con RESTAURAR_CASAS=1. Los terrenos nuevos siguen saliendo al azar y sin poder elegir casa
+    if (process.env.RESTAURAR_CASAS !== '1') return;
+    try {
+      const hecho = await one("SELECT to_regclass('public.parcels_restaurado') AS t");
+      if (hecho && hecho.t) { console.log('Restaurar casas: ya estaba hecho (quita RESTAURAR_CASAS)'); return; }
+      const bk = await one("SELECT to_regclass('public.parcels_house_backup') AS t");
+      if (!bk || !bk.t) { console.log('Restaurar casas: no existe parcels_house_backup, no se toca nada'); return; }
+      await run('CREATE TABLE parcels_house_random_backup AS SELECT id, house FROM parcels');   // copia del reparto al azar actual, por si hay que volver
+      await run('ALTER TABLE parcels_house_random_backup ENABLE ROW LEVEL SECURITY');
+      await run('UPDATE parcels p SET house = b.house FROM parcels_house_backup b WHERE p.id = b.id');
+      await run('CREATE TABLE parcels_restaurado AS SELECT now() AS cuando');
+      await run('ALTER TABLE parcels_restaurado ENABLE ROW LEVEL SECURITY');
+      console.log('Restaurar casas: terrenos devueltos a como estaban antes del reparto al azar. Copia del reparto al azar en parcels_house_random_backup');
+    } catch (e) { console.error('Restaurar casas:', e.message); }
+  })
   .then(async () => {   // 🌱 Las parcelas Comunes ya construidas pasan a una de las 15 categorías nuevas al azar. Solo una vez y solo con MIGRAR_COMUNES=1
     if (process.env.MIGRAR_COMUNES !== '1') return;
     try {
