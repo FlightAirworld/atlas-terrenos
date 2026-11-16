@@ -41,7 +41,8 @@
     while (Date.now() - t0 < 360000 && ((window.worldBusy && window.worldBusy()) || (window.worldNow && window.worldNow() !== id))) await ctx.wait(500);
   }
   async function walkEarth(ctx) {   // en la Tierra el muñeco anda solo por las calles (jugador.js) mientras nadie toca nada
-    try { if (typeof gl !== 'undefined' && gl && gl.getZoom && gl.getZoom() < 15.5) gl.easeTo({ zoom: 16.5, duration: 1200 }); } catch (e) { /* nada */ }
+    try { if (typeof gl !== 'undefined' && gl && gl.getZoom && gl.getZoom() < 15.9) gl.easeTo({ zoom: 16.4, duration: 1200 }); } catch (e) { /* nada */ }
+    // (zoom mínimo 15.9: con menos no salen peatones, coches ni charla)
     ctx.say('🚶 Paseando por el mundo');
     await ctx.wait(WALK_DWELL);
   }
