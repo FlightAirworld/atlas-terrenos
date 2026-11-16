@@ -220,3 +220,71 @@
   window.L = L;
   window.createCompatMap = createCompatMap;
 })();
+
+// ---------- Casas por DEBAJO de las calles (estilos «estilizado» y «verde») ----------
+// Antes las fotos de las casas se dibujaban encima de todo y a cada una se le «borraba» la calle con turf + un canvas
+// (app.js: roadAreaFor / clippedPhoto). Ahora, salvo en satélite, las casas se insertan justo debajo de las capas de
+// aeropuerto, calles y vías del propio mapa: el mapa dibuja la calle encima de la casa y no hace falta recortar nada.
+// En satélite no hay calles dibujadas, así que ahí se conserva el recorte de siempre.
+// Para comparar con lo de antes: abrir el juego con ?capas=0 al final de la dirección.
+(function () {
+  let off = false;
+  try { off = new URLSearchParams(location.search).get('capas') === '0'; } catch (e) {}
+  if (off || !window.maplibregl || !maplibregl.Map || window.__capasCalles) return;
+  window.__capasCalles = true;
+  const FLAT_ANCHOR = 'st-aero-fill';   // primera capa del mapa que va por ENCIMA de las casas (después vienen pistas, calles y vías)
+  const isSat = () => { try { return baseMode === 'satelite'; } catch (e) { return false; } };
+  const isHouse = id => id === 'owned-flat' || /^img-/.test(id || '');
+  // Dónde van las casas ahora mismo en este mapa (undefined = no tocar: satélite, o no es el mapa principal)
+  const anchorOf = m => (isSat() || !m.getLayer(FLAT_ANCHOR)) ? undefined : FLAT_ANCHOR;
+  // Los edificios beige del mapa quedan DEBAJO de las casas (antes las casas ya iban por encima de ellos)
+  function buildingsDown(m) {
+    try { if (m.getLayer('st-buildings') && m.getLayer(FLAT_ANCHOR)) m.moveLayer('st-buildings', FLAT_ANCHOR); } catch (e) {}
+  }
+  const addLayer = maplibregl.Map.prototype.addLayer;
+  maplibregl.Map.prototype.addLayer = function (layer, before) {
+    try {
+      if (layer && isHouse(layer.id)) {
+        const a = anchorOf(this);
+        if (a) { buildingsDown(this); before = a; }
+      }
+    } catch (e) {}
+    return addLayer.call(this, layer, before);
+  };
+  // Recoloca las casas ya dibujadas: debajo de las calles, o encima de todo en satélite
+  function placeAll() {
+    try {
+      const m = gl;   // mapa principal (app.js)
+      if (!m || !m.getLayer('wt-water')) return;
+      const target = isSat() ? 'wt-water' : FLAT_ANCHOR;
+      if (!m.getLayer(target)) return;
+      if (!isSat()) buildingsDown(m);
+      m.getStyle().layers.map(l => l.id).filter(id => id === 'owned-far' || isHouse(id)).forEach(id => m.moveLayer(id, target));
+    } catch (e) {}
+  }
+  // Los recortes de calle (turf + canvas) solo hacen falta en satélite: al cambiar de estilo se restauran o se recalculan
+  function afterModeChange() {
+    placeAll();
+    try {
+      if (!isSat()) {
+        for (const ex of drawn.values()) {
+          const c = roadCut.get(ex.p.id);
+          if (!(c && c.road)) continue;
+          const f = ownedFeatures.get(ex.p.id);
+          if (f) f.geometry = { type: 'Polygon', coordinates: [ringOf(ex.p.x, ex.p.y)] };
+          roadCut.set(ex.p.id, { road: null, rest: null });
+          refreshPhoto(ex);
+        }
+        flushOwned();
+      } else { roadCut.clear(); queueCuts(); }
+    } catch (e) {}
+  }
+  document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#base-btn')) setTimeout(afterModeChange, 0); });
+  // app.js se carga después de este archivo: cuando ya está cargado, fuera de satélite roadAreaFor no recorta nada
+  document.addEventListener('DOMContentLoaded', () => {
+    if (typeof window.roadAreaFor !== 'function') return;
+    const orig = window.roadAreaFor;
+    window.roadAreaFor = p => isSat() ? orig(p) : { road: null, rest: null };
+    afterModeChange();
+  });
+})();
