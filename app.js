@@ -13,7 +13,7 @@ let flatView = true;
 try { flatView = localStorage.getItem('flatView') !== '0'; } catch (e) {}
 // Mapa base: 'estilizado' (dibujo limpio tipo Atlas Earth, vectorial) o 'satelite'
 let baseMode = 'estilizado';
-try { baseMode = localStorage.getItem('baseMode') === 'satelite' ? 'satelite' : 'estilizado'; } catch (e) {}
+try { const bm = localStorage.getItem('baseMode'); baseMode = bm === 'satelite' || bm === 'verde' ? bm : 'estilizado'; } catch (e) {}   // 'estilizado' | 'verde' (terreno verde liso, calles oscuras, como Atlas Earth) | 'satelite'
 // Ancho del río según el zoom (el mismo para el mapa base y para la capa que lo dibuja encima de las parcelas)
 const WATER_W = ['interpolate', ['exponential', 1.6], ['zoom'], 8, 0.5, 14, 2, 16, 5, 18, 13, 20, 30];
 const WATER_W_EDGE = ['interpolate', ['exponential', 1.6], ['zoom'], 8, 1, 14, 3.2, 16, 6.8, 18, 15, 20, 32];   // borde algo más ancho
@@ -676,22 +676,46 @@ function drawOwned(p) {
 }
 
 // ---------- Mapa base: estilizado / satélite ----------
+// Estilo «Verde»: suelo verde liso, calles gris oscuro, agua azul clara y sin manzanas beige (como Atlas Earth). Se guardan los valores originales del estilizado para poder volver.
+const VERDE = {
+  'st-bg': { 'background-color': '#62b248' },
+  'st-landcover': { 'fill-color': '#5aa841' },
+  'st-landuse': { 'fill-opacity': 0 },
+  'st-park': { 'fill-color': '#4f9c3a' },
+  'st-water': { 'fill-color': '#6fd0f2' },
+  'st-waterway': { 'line-color': '#6fd0f2' },
+  'st-road-casing': { 'line-color': '#2c3037' },
+  'st-sy-casing': { 'line-color': '#2c3037' },
+  'st-road': { 'line-color': '#4a4f59' },
+  'st-sy-road': { 'line-color': '#4a4f59' }
+};
+const VERDE_ORIG = {};
 function applyBaseMode() {
   if (!gl || !gl.getLayer('sat')) return;
-  const sat = baseMode === 'satelite';
+  const sat = baseMode === 'satelite', verde = baseMode === 'verde';
   gl.setLayoutProperty('sat', 'visibility', sat ? 'visible' : 'none');
   for (const l of gl.getStyle().layers) if (l.id.startsWith('st-')) gl.setLayoutProperty(l.id, 'visibility', sat ? 'none' : 'visible');
+  if (gl.getLayer('st-buildings')) gl.setLayoutProperty('st-buildings', 'visibility', sat || verde ? 'none' : 'visible');   // en Verde no se dibujan los edificios beige del mapa
+  for (const id of Object.keys(VERDE)) {
+    if (!gl.getLayer(id)) continue;
+    for (const prop of Object.keys(VERDE[id])) {
+      const key = id + '|' + prop;
+      if (!(key in VERDE_ORIG)) VERDE_ORIG[key] = gl.getPaintProperty(id, prop);
+      gl.setPaintProperty(id, prop, verde ? VERDE[id][prop] : VERDE_ORIG[key]);
+    }
+  }
   for (const id of ['sy-sat-casing', 'sy-sat-road']) if (gl.getLayer(id)) gl.setLayoutProperty(id, 'visibility', sat ? 'visible' : 'none');
   if (gl.getLayer('wt-waterway')) {
     gl.setPaintProperty('wt-water', 'fill-opacity', sat ? 0.3 : 0.55);
     gl.setPaintProperty('wt-waterway', 'line-opacity', sat ? 0.6 : 0.9);
     gl.setPaintProperty('wt-waterway-edge', 'line-opacity', sat ? 0.35 : 0.7);
   }
-  const b = document.getElementById('base-btn');
-  if (b) { b.setAttribute('aria-pressed', sat ? 'true' : 'false'); b.title = sat ? 'Mapa: satélite' : 'Mapa: estilizado'; b.textContent = sat ? '🛰️' : '🎨'; }
+  document.documentElement.classList.toggle('mapa-verde', verde);
+  const b = document.getElementById('base-btn'), name = sat ? 'satélite' : verde ? 'verde' : 'estilizado';
+  if (b) { b.setAttribute('aria-pressed', sat ? 'true' : 'false'); b.title = 'Estilo del mapa: ' + name; b.setAttribute('data-label', 'Estilo: ' + name); b.textContent = sat ? '🛰️' : verde ? '🌿' : '🎨'; }
 }
 function toggleBaseMode() {
-  baseMode = baseMode === 'satelite' ? 'estilizado' : 'satelite';
+  baseMode = baseMode === 'estilizado' ? 'verde' : baseMode === 'verde' ? 'satelite' : 'estilizado';
   try { localStorage.setItem('baseMode', baseMode); } catch (e) {}
   applyBaseMode();
 }
@@ -703,7 +727,11 @@ function applyViewMode(animate) {
   if (!gl) return;
   const vis = flatView ? 'none' : 'visible';
   for (const id of ['owned-3d', 'sel-plate']) if (gl.getLayer(id)) gl.setLayoutProperty(id, 'visibility', vis);
-  gl.setMaxPitch(flatView ? 0 : 60);
+  gl.setMaxPitch(flatView ? 0 : 70);
+  try {   // cielo y niebla en el horizonte solo en Modo 3D (en vista plana se vuelve al cielo normal del globo)
+    gl.setSky(flatView ? MAP_STYLE.sky : { 'sky-color': '#7fd4ff', 'horizon-color': '#d9f4ff', 'fog-color': '#e6f7ff', 'sky-horizon-blend': 0.55, 'horizon-fog-blend': 0.65, 'fog-ground-blend': 0.35, 'atmosphere-blend': 0 });
+  } catch (e) { /* sin cielo */ }
+  document.documentElement.classList.toggle('modo3d', !flatView);
   if (flatView) {
     if (animate) gl.easeTo({ pitch: 0, bearing: 0, duration: 600 });
     else gl.jumpTo({ pitch: 0, bearing: 0 });
@@ -715,7 +743,7 @@ function toggleViewMode() {
   flatView = !flatView;
   try { localStorage.setItem('flatView', flatView ? '1' : '0'); } catch (e) {}
   applyViewMode(true);
-  if (!flatView) gl.easeTo({ pitch: 45, duration: 600 });
+  if (!flatView) gl.easeTo({ pitch: 62, duration: 900 });   // cámara baja e inclinada, como en un juego 3D
 }
 document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#view-btn')) toggleViewMode(); });
 
