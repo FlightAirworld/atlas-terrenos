@@ -31,11 +31,36 @@
     { slug: 'absoluto', nueva: true, name: 'Absoluto', icon: '👁️', color: '#ff1f1f', oneIn: 500000, mult: 1000 }
   ];
   T.forEach(t => { t.img = 'images/terreno-' + t.slug + '.webp'; });
+  // 🪐 Terrenos de otros mundos: cada mundo tiene sus casas (de más sencilla a más espectacular, igual que WORLD_HOUSES de server.js/app.js).
+  // Cada casa lleva la rareza y la producción de una de las categorías de arriba (repartidas de la más baja a la más alta), y se sortea igual que en la Tierra.
+  const CASAS = {
+    luna: ['luna-cupula', 'luna-rover', 'luna-granja-solar', 'luna-radiotelescopio', 'luna-ciudad-lunar', 'luna-estacion-lunar', 'luna-complejo-lunar', 'luna-base-geodesica'],
+    marte: ['marte-cupula-marciana', 'marte-invernadero', 'marte-base-rover', 'marte-mina-roja', 'marte-torre-radio', 'marte-puerto-marte'],
+    mercurio: ['mercurio-base-crater', 'mercurio-escudo-solar', 'mercurio-observatorio', 'mercurio-mina-metal', 'mercurio-antena-solar', 'mercurio-estacion-polar'],
+    venus: ['venus-ciudad-aerostato', 'venus-plataforma-nube', 'venus-laboratorio-acido', 'venus-globo-dorado', 'venus-torre-nubes', 'venus-puerto-aereo'],
+    jupiter: ['jupiter-plataforma-flotante', 'jupiter-globo-gas', 'jupiter-refineria-hidrogeno', 'jupiter-observatorio-tormenta', 'jupiter-ciudad-nube', 'jupiter-puerto-nubes'],
+    saturno: ['saturno-plataforma-anillos', 'saturno-ciudad-flotante', 'saturno-globo-anillo', 'saturno-laboratorio-gas', 'saturno-refineria-saturno', 'saturno-puerto-saturno'],
+    urano: ['urano-cristal-hielo', 'urano-plataforma-azul', 'urano-globo-hielo', 'urano-estacion-eje', 'urano-refineria-metano', 'urano-puerto-urano'],
+    neptuno: ['neptuno-plataforma-tormenta', 'neptuno-globo-azul', 'neptuno-refineria-diamante', 'neptuno-ciudad-neptuno', 'neptuno-laboratorio-frio', 'neptuno-puerto-neptuno'],
+    pluton: ['pluton-cupula-hielo', 'pluton-base-corazon', 'pluton-criolaboratorio', 'pluton-mina-nitrogeno', 'pluton-sonda-horizontes', 'pluton-refugio-polar'],
+    prehistoria: ['prehistoria-cueva', 'prehistoria-choza-paja', 'prehistoria-nido-gigante', 'prehistoria-casa-arbol', 'prehistoria-cabana-troncos', 'prehistoria-fortaleza-huesos']
+  };
+  const porMult = T.slice().sort((a, b) => a.mult - b.mult);
+  const MUNDOS = {};   // mundo -> lista (de la más común a la más rara) de { ...categoría, img: casa del mundo }
+  Object.keys(CASAS).forEach(w => {
+    const n = CASAS[w].length;
+    MUNDOS[w] = CASAS[w].map((c, k) => Object.assign({}, porMult[Math.round(k * (porMult.length - 1) / (n - 1))], { img: 'images/' + c + '.webp', mundo: w, oneIn: Math.max(3, Math.round(Math.sqrt(porMult[Math.round(k * (porMult.length - 1) / (n - 1))].oneIn || 4))) }));   // en otros mundos salen más fácil: raíz cuadrada de la Tierra
+  });
   // Se mira de la más rara a la más común: cada una sale con probabilidad 1/oneIn; si ninguna, Común.
-  function roll(rnd) { rnd = rnd || Math.random; for (let i = T.length - 1; i > 0; i--) if (rnd() < 1 / T[i].oneIn) return T[i]; return T[0]; }
-  const byImg = img => T.find(t => t.img === String(img || '').replace(/\.png$/i, '.webp')) || null;
+  function roll(rnd, mundo) {
+    rnd = rnd || Math.random;
+    const L = mundo && MUNDOS[mundo] ? MUNDOS[mundo] : T;   // en la Tierra, las categorías de siempre; en otro mundo, sus casas
+    for (let i = L.length - 1; i > 0; i--) if (rnd() < 1 / L[i].oneIn) return L[i];
+    return L[0];
+  }
+  const byImg = img => { const u = String(img || '').replace(/\.png$/i, '.webp'); return T.find(t => t.img === u) || [].concat(...Object.keys(MUNDOS).map(w => MUNDOS[w])).find(t => t.img === u) || null; };
   const fmt = v => v.toLocaleString('es-ES', { maximumFractionDigits: v < 0.001 ? 8 : v < 1 ? 6 : 3 });
-  const API = { TERRENOS: T, roll, byImg, PER_SEC_BASE: 1e-6 };
+  const API = { TERRENOS: T, MUNDOS, CASAS, roll, byImg, PER_SEC_BASE: 1e-6 };
 
   if (typeof module !== 'undefined' && module.exports) { module.exports = API; return; }
   root.TERRENOS_NUEVOS = API;
@@ -43,13 +68,13 @@
   // ---------- Pantalla «¡Te ha tocado…!» (solo navegador) ----------
   const css = document.createElement('style');
   css.textContent = `#tn-ov{position:fixed;inset:0;z-index:99999;background:#000d;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:16px;text-align:center;color:#fff;overflow:hidden}
-  #tn-ov .orb{width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,#fff,var(--c) 60%,transparent 72%);animation:tnsh .35s infinite,tngr 1.6s forwards}
+  #tn-ov .orb{width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,#fff,var(--c) 60%,transparent 72%);animation:tnsh .35s infinite,tngr 1.6s forwards}
   @keyframes tnsh{0%,100%{transform:translateX(-5px) rotate(-3deg)}50%{transform:translateX(5px) rotate(3deg)}}@keyframes tngr{to{scale:1.8;filter:brightness(2)}}
   #tn-ov .rays{pointer-events:none;position:absolute;width:140vmax;height:140vmax;background:repeating-conic-gradient(var(--c) 0 8deg,transparent 8deg 20deg);opacity:.25;animation:tnsp 14s linear infinite;-webkit-mask:radial-gradient(circle,#000 5%,transparent 45%);mask:radial-gradient(circle,#000 5%,transparent 45%)}
   @keyframes tnsp{to{rotate:360deg}}
   #tn-ov .rv{display:flex;flex-direction:column;align-items:center;max-width:380px;position:relative;animation:tnpop .6s cubic-bezier(.2,1.5,.4,1)}
   @keyframes tnpop{from{scale:.2;opacity:0}to{scale:1;opacity:1}}
-  #tn-ov img{width:min(78vw,340px);border-radius:18px;border:3px solid var(--c);box-shadow:0 0 40px var(--c)}
+  #tn-ov img{width:min(52vw,220px);border-radius:18px;border:3px solid var(--c);box-shadow:0 0 40px var(--c)}
   #tn-ov h2{margin:14px 0 2px;font-size:26px;color:var(--c);text-shadow:0 0 14px var(--c)}#tn-ov p{margin:2px 0;color:#ddd}
   #tn-ov button{margin-top:14px;border:0;border-radius:12px;background:var(--c);color:#111;padding:11px 36px;font:inherit;font-weight:800;cursor:pointer}
   #tn-ov .pt{position:fixed;left:50%;top:45%;width:8px;height:8px;border-radius:50%;background:var(--c);pointer-events:none;animation:tnpt 1.4s forwards}
@@ -57,7 +82,7 @@
   document.head.appendChild(css);
   // t = { slug, name, icon, color, oneIn, mult, img } (lo manda el servidor al reclamar el terreno)
   root.TERRENOS_NUEVOS.mostrar = function (t) {
-    const d = byImg(t.img) || T.find(x => x.slug === t.slug) || T[0];
+    const d = Object.assign({}, byImg(t.img) || T.find(x => x.slug === t.slug) || T[0]); if (t.img) d.img = t.img;
     const i = T.indexOf(d), ov = document.createElement('div');
     ov.id = 'tn-ov'; ov.style.setProperty('--c', d.color);
     ov.innerHTML = '<div class="rays"></div><div class="orb"></div><div style="margin-top:20px;font-weight:700">Abriendo terreno…</div>';

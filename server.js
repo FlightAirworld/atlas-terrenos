@@ -869,7 +869,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
     const d = BARRIO.distM(plat, plng, p.south + SIZE / 2, p.west + SIZE / 2);
     if (d > BARRIO_M + BARRIO_SLACK_M) throw new HttpError(403, `Este terreno está a ${Math.round(d)} m: fuera de tu barrio 🔴 Solo puedes reclamar a menos de ${BARRIO_M} m de donde estás`);
   }
-  const terreno = TERRENOS_NUEVOS.roll(() => crypto.randomInt(0, 2 ** 30) / 2 ** 30);   // 🌱 el jugador no elige: sale una al azar según su rareza
+  const terreno = TERRENOS_NUEVOS.roll(() => crypto.randomInt(0, 2 ** 30) / 2 ** 30, world);   // 🌱 el jugador no elige: sale una al azar según su rareza
   const chosenHouse = terreno.img;
   const prof = user && await getProfile(user.id);
   const vip = code && await one('SELECT fixed_nick, fixed_country FROM packs WHERE code = $1 AND fixed_nick IS NOT NULL', [code]);
@@ -1284,7 +1284,7 @@ async function upgradeParcel(req, { id, from }) {
 
 // 🌱 Cada parcela nueva produce según su rareza (mult de terrenos-nuevos.js; las casas sin parcela nueva cuentan ×1).
 // PROD_RATE es lo que produce la Común por hora: la Común = 0,000001 créditos/s son PROD_RATE=0.0036.
-const TERRENO_MULT_SQL = '(CASE house ' + TERRENOS_NUEVOS.TERRENOS.map(t => `WHEN '${t.img}' THEN ${t.mult}`).join(' ') + ' ELSE 1 END)';
+const TERRENO_MULT_SQL = '(CASE house ' + TERRENOS_NUEVOS.TERRENOS.concat(...Object.values(TERRENOS_NUEVOS.MUNDOS)).map(t => `WHEN '${t.img}' THEN ${t.mult}`).join(' ') + ' ELSE 1 END)';
 // Suma, por cada terreno de la cuenta, el tiempo producido desde la última recogida (o desde que se reclamó), con tope.
 // Cada terreno produce según su nivel. Si subió de nivel dentro del periodo que se está acumulando, el tiempo anterior a la
 // mejora cuenta con el multiplicador del nivel anterior y el posterior con el nuevo: la mejora solo vale desde que se hace,
