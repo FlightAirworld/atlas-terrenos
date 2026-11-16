@@ -913,7 +913,9 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
     let bonus = 0;   // invitación: premio al invitado y a quien le invitó (si no hay invitación, no pasa nada)
     if (user) notifyFriendsOf(user.id, 'claim');   // sin esperar: el aviso no retrasa la respuesta
     if (user) { try { const rr = await rewardReferral(user.id, code); if (rr) bonus = rr.inviteeBonus; } catch (e) { console.error('Invitación:', e.message); } }
-    return { ok: true, parcel: p.id, world, owner: name, house: chosenHouse, terreno: { slug: terreno.slug, name: terreno.name, icon: terreno.icon, color: terreno.color, oneIn: terreno.oneIn, mult: terreno.mult, img: terreno.img }, credits: r.rows[0].credits + bonus, referralBonus: bonus };
+    let tienes = 1;   // cuántas parcelas de este tipo tiene ya el jugador (contando la que acaba de salir)
+    try { tienes = Number((await one(user ? 'SELECT COUNT(*) AS n FROM parcels WHERE user_id = $1 AND house = $2' : 'SELECT COUNT(*) AS n FROM parcels WHERE pack_code = $1 AND house = $2', [user ? user.id : code, chosenHouse])).n) || 1; } catch (e) {}
+    return { ok: true, parcel: p.id, world, owner: name, house: chosenHouse, terreno: { tienes, slug: terreno.slug, name: terreno.name, icon: terreno.icon, color: terreno.color, oneIn: terreno.oneIn, mult: terreno.mult, img: terreno.img }, credits: r.rows[0].credits + bonus, referralBonus: bonus };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Este terreno ya tiene dueño');
