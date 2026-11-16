@@ -90,7 +90,7 @@
   }
   const TRAIL = [[-4, 22], [-14, 30], [-8, 40], [-22, 18], [-20, 44]];
 
-  const sizeDeg = () => (typeof cfg !== 'undefined' && cfg && cfg.size) || 0.0005;
+  const sizeDeg = () => (typeof cfg !== 'undefined' && cfg && cfg.size) || 0.00025;
   const halfRef = () => sizeDeg() * 512 * Math.pow(2, REF_Z - 1) / 360 / 2;
   const scaleNow = () => Math.pow(2, map.getZoom() - REF_Z);
 

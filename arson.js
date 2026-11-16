@@ -80,7 +80,7 @@
   }
 
   // ---------- Geometría ----------
-  const sizeDeg = () => (typeof cfg !== 'undefined' && cfg && cfg.size) || 0.0005;
+  const sizeDeg = () => (typeof cfg !== 'undefined' && cfg && cfg.size) || 0.00025;
   const halfRef = () => sizeDeg() * 512 * Math.pow(2, REF_Z - 1) / 360 / 2;     // medio ancho de parcela en px de mundo a REF_Z
   const scaleNow = () => Math.pow(2, map.getZoom() - REF_Z);
 

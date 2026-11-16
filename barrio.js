@@ -42,7 +42,7 @@
     const r = radius();
     if (!r || !p || (p.world && p.world !== 'tierra')) return { ok: true };
     if (!pos) return { ok: false, msg: denied ? '📍 Permite tu ubicación para reclamar' : '📍 Buscando tu ubicación…' };
-    const size = (typeof cfg !== 'undefined' && cfg && cfg.size) || 0.0005;
+    const size = (typeof cfg !== 'undefined' && cfg && cfg.size) || 0.00025;
     const lat = Number.isFinite(p.south) ? p.south + size / 2 : pos.lat, lng = Number.isFinite(p.west) ? p.west + size / 2 : pos.lng;
     const d = distM(pos.lat, pos.lng, lat, lng);
     if (d > r) return { ok: false, msg: `🔴 A ${Math.round(d)} m: fuera de tu barrio`, dist: d };

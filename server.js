@@ -71,7 +71,7 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '675164689286-hqr16va7g
 const REQUIRE_LOGIN = AUTH_ENABLED && process.env.REQUIRE_LOGIN !== '0';     // comprar y cobrar el regalo exige cuenta
 
 // Rejilla del mundo: cada parcela es un cuadrado de 0.001° (~111 m de lado en latitud)
-const SIZE = 0.0005;
+const SIZE = 0.00025;   // mitad que antes (0,0005): cuatro veces más terrenos. Al arrancar, la base de datos se migra sola UNA vez (ver «grid_meta»)
 // Tu barrio 🔴 (barrio.js): en la Tierra solo se reclama dentro de BARRIO_M metros de la posición del jugador (0 lo desactiva). BARRIO_SLACK_M: margen para la imprecisión del GPS.
 const BARRIO = require('./barrio.js');
 const BARRIO_M = Math.max(0, Number(process.env.BARRIO_M === undefined || process.env.BARRIO_M === '' ? 500 : process.env.BARRIO_M) || 0);
@@ -2929,6 +2929,47 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
       await run(`UPDATE parcels SET house = CASE ${cases.join(' ')} ELSE '${base.img}' END WHERE house = '${comun}'`);
       console.log('Comunes: parcelas Comunes repartidas entre las categorías nuevas. Copia en parcels_comunes_backup');
     } catch (e) { console.error('Migración de Comunes:', e.message); }
+  })
+  .then(async () => {   // 🔲 Terrenos a la mitad de tamaño: los terrenos que ya existen conservan su esquina suroeste (x e y se duplican) y el resto de la casilla antigua queda libre. Solo una vez (marca en grid_meta). GRID_MIGRATE=0 la desactiva
+    try {
+      await run('CREATE TABLE IF NOT EXISTS grid_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL, at BIGINT NOT NULL)');
+      const hecho = await one("SELECT v FROM grid_meta WHERE k = 'size'");
+      if (hecho) return;
+      if (process.env.GRID_MIGRATE === '0') { console.log('Cuadrícula: migración desactivada (GRID_MIGRATE=0)'); return; }
+      const n = Number((await one('SELECT COUNT(*) AS n FROM parcels')).n);
+      if (n > 0) {
+        await run('CREATE TABLE IF NOT EXISTS parcels_size_backup AS SELECT id, x, y FROM parcels');   // copia para poder deshacerlo a mano
+        await run('ALTER TABLE parcels_size_backup ENABLE ROW LEVEL SECURITY');
+        // id nuevo a partir del viejo: «x:y» (Tierra) o «mundo:x:y»; todo se duplica. Se pasa por un prefijo «m:» para que dos ids no choquen a mitad de la operación.
+        const nuevo = col => `(CASE WHEN substr(${col}, 3) ~ '^[0-9]+:[0-9]+$' THEN (2 * split_part(substr(${col}, 3), ':', 1)::bigint)::text || ':' || (2 * split_part(substr(${col}, 3), ':', 2)::bigint)::text ` +
+          `ELSE split_part(substr(${col}, 3), ':', 1) || ':' || (2 * split_part(substr(${col}, 3), ':', 2)::bigint)::text || ':' || (2 * split_part(substr(${col}, 3), ':', 3)::bigint)::text END)`;
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          await client.query("UPDATE parcels SET id = 'm:' || id, x = x * 2, y = y * 2");
+          await client.query(`UPDATE parcels SET id = ${nuevo('id')} WHERE id LIKE 'm:%'`);
+          for (const [t, c] of [['orders', 'parcel_id'], ['parcel_likes', 'parcel_id'], ['house_visits', 'parcel_id'], ['santa_log', 'parcel_id'], ['santa_notices', 'parcel_id'],
+            ['arson_log', 'parcel_id'], ['arson_notices', 'parcel_id'], ['fights', 'attacker_parcel'], ['fights', 'defender_parcel']]) {
+            await client.query('SAVEPOINT s');
+            try {
+              await client.query(`UPDATE ${t} SET ${c} = 'm:' || ${c} WHERE ${c} IS NOT NULL AND ${c} NOT LIKE 'm:%'`);
+              await client.query(`UPDATE ${t} SET ${c} = ${nuevo(c)} WHERE ${c} LIKE 'm:%'`);
+              await client.query('RELEASE SAVEPOINT s');
+            } catch (e) { await client.query('ROLLBACK TO SAVEPOINT s'); console.log('Cuadrícula: se salta ' + t + '.' + c + ' (' + e.message + ')'); }
+          }
+          for (const t of ['santa_log', 'arson_log']) {
+            await client.query('SAVEPOINT s');
+            try { await client.query(`UPDATE ${t} SET x = x * 2, y = y * 2`); await client.query('RELEASE SAVEPOINT s'); } catch (e) { await client.query('ROLLBACK TO SAVEPOINT s'); }
+          }
+          await client.query("INSERT INTO grid_meta (k, v, at) VALUES ('size', $1, $2)", [String(SIZE), Date.now()]);
+          await client.query('COMMIT');
+          console.log('Cuadrícula: ' + n + ' terrenos migrados al tamaño ' + SIZE + ' (copia en parcels_size_backup)');
+        } catch (e) { await client.query('ROLLBACK').catch(() => {}); console.error('Cuadrícula: migración fallida, no se ha cambiado nada:', e.message); throw e; }
+        finally { client.release(); }
+      } else {
+        await run("INSERT INTO grid_meta (k, v, at) VALUES ('size', $1, $2) ON CONFLICT DO NOTHING", [String(SIZE), Date.now()]);
+      }
+    } catch (e) { console.error('Cuadrícula: ERROR, se detiene el arranque para no mezclar tamaños:', e.message); process.exit(1); }
   })
   .then(async () => {   // niveles de terreno (no hacen nada si las columnas ya existen)
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level SMALLINT NOT NULL DEFAULT 1');

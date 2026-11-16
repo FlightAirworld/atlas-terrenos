@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
-const MIN_ZOOM_PARCELS = 13;   // por debajo no se cargan ni se muestran parcelas (antes 15: al alejar un poco desaparecían)
-const MIN_ZOOM_BUY = 16;       // para comprar hay que acercarse
+const MIN_ZOOM_PARCELS = 14;   // por debajo no se cargan ni se muestran parcelas (antes 15: al alejar un poco desaparecían)
+const MIN_ZOOM_BUY = 17;       // para comprar hay que acercarse
 let cfg, map, gl, selected = null, paypalLoaded = null;
 let sb = null, authToken = null, authUser = null, linkedFor = null;   // sesión (Supabase Auth)
 let myNick = null;             // apodo fijo guardado en el servidor
@@ -491,7 +491,7 @@ function applyCut(ex, cut) {
 }
 
 // Tres tamaños según el zoom (la parcela se ve más grande al acercar): -t 128 px, -s 256 px y -m 512 px (el original de 768 px ya no se descarga)
-const THUMB_ZOOM = 17.5, SMALL_ZOOM = 18.5;
+const THUMB_ZOOM = 18.5, SMALL_ZOOM = 19.5;   // +1 de zoom: los terrenos miden la mitad
 const resOf = () => { const z = map.getZoom(); return z < THUMB_ZOOM ? 't' : z < SMALL_ZOOM ? 's' : 'm'; };
 const sizedUrl = (u, r) => String(u).replace(/\.webp$/i, '-' + r + '.webp');
 const srcUrl = (ex, r = resOf()) => sizedUrl(ex.url, r);

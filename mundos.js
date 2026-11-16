@@ -454,8 +454,8 @@
 
   // ---------- Parcelas en cada mundo ----------
   // Mismo reparto que en la Tierra: teselas de 16×16 casillas que se piden al servidor (/api/parcels/tile?world=…) y se guardan un minuto.
-  const SHOW_Z = 14, GRID_Z = 15, BUY_Z = 15.5, LABEL_Z = 17, TILE = 16, TILE_TTL = 60000, PAR = 6;
-  const cellSize = () => (typeof cfg !== 'undefined' && cfg && cfg.size) || 0.0005;
+  const SHOW_Z = 15, GRID_Z = 16, BUY_Z = 16.5, LABEL_Z = 18, TILE = 16, TILE_TTL = 60000, PAR = 6;
+  const cellSize = () => (typeof cfg !== 'undefined' && cfg && cfg.size) || 0.00025;
   const ringOf = (x, y) => { const s = cellSize(), w = x * s - 180, so = y * s - 90; return [[w, so], [w + s, so], [w + s, so + s], [w, so + s], [w, so]]; };
   const colorOf = n => (typeof colorFor === 'function' ? colorFor(n) : '#3ddc97');
   const houseOf = p => (typeof houseFor === 'function' ? houseFor(p.id, p.house) : 'images/casa-1.webp');
@@ -463,7 +463,7 @@
   const EMPTY = { type: 'FeatureCollection', features: [] };
   const isMine = id => current === id;
   // el icono mide justo lo que una parcela en pantalla: 512·0,0005/360·2^z px (imagen de 128 px)
-  const ICON = ['interpolate', ['exponential', 2], ['zoom'], 14, 0.0005 * 512 * Math.pow(2, 14) / 360 / 128, 22, 0.0005 * 512 * Math.pow(2, 22) / 360 / 128];
+  const ICON = ['interpolate', ['exponential', 2], ['zoom'], 15, 0.00025 * 512 * Math.pow(2, 15) / 360 / 128, 22, 0.00025 * 512 * Math.pow(2, 22) / 360 / 128];
 
   // 🪐 Colores del terreno en cada planeta: la hierba verde se cambia por el suelo del mundo (tres tonos: sombra, medio, luz). Flores, tejados y agua se dejan.
   // La Tierra y Prehistoria no cambian. Para otro planeta añade una línea aquí.

@@ -146,7 +146,7 @@
 
   // Una parcela se puede comprar si casi toda ella es tierra: el centro y al menos 3 de 4 puntos interiores
   function parcelOk(x, y, size) {
-    size = size || 0.0005;
+    size = size || 0.00025;
     const lo = x * size - 180, la = y * size - 90;
     if (!isLand(lo + size / 2, la + size / 2)) return false;
     let n = 0;
