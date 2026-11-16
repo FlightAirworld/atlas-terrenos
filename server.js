@@ -550,7 +550,8 @@ async function linkAccount(req) {
     await client.query('COMMIT');
     // Paga mensual del dueño (una vez por mes; no hace nada para el resto de jugadores)
     let ownerBonus = 0;
-    if (isOwner(user)) {
+    if (isOwner(user) || isPaga(user)) {
+      if (isPaga(user)) await run('INSERT INTO paga_users (user_id, email, created_at) VALUES ($1,$2,$3) ON CONFLICT (user_id) DO NOTHING', [String(user.id), user.email.toLowerCase(), Date.now()]).catch(() => {});
       ownerBonus = await grantOwnerMonthly(user.id);
       if (ownerBonus) mine.credits = (await one('SELECT credits FROM packs WHERE code = $1', [mine.code])).credits;
     }
@@ -1317,9 +1318,11 @@ async function prodCompute(db, userId, lastCollect, carry, now) {
 
 async function myParcels(req) {
   const user = await needUser(req);
-  const rows = await all('SELECT id, x, y, avatar, country, level, created_at, world, (SELECT COUNT(*) FROM parcel_likes l WHERE l.parcel_id = parcels.id) AS likes FROM parcels WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200', [user.id]);
+  const rows = await all('SELECT id, x, y, avatar, country, level, created_at, world, house, (SELECT COUNT(*) FROM parcel_likes l WHERE l.parcel_id = parcels.id) AS likes FROM parcels WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200', [user.id]);
   const total = (await one('SELECT COUNT(*) AS n FROM parcels WHERE user_id = $1', [user.id])).n;
-  return { total, parcels: rows.map(r => ({ id: r.id, x: r.x, y: r.y, world: r.world || 'tierra', avatar: r.avatar, country: r.country, level: r.level, since: r.created_at, likes: Number(r.likes) || 0 })) };
+  const porCasa = {};   // recuento REAL por parcela/rareza (la lista de abajo solo trae las 200 más recientes)
+  (await all('SELECT house, COUNT(*) AS n FROM parcels WHERE user_id = $1 GROUP BY house', [user.id])).forEach(r => { porCasa[r.house || ''] = Number(r.n) || 0; });
+  return { total, porCasa, parcels: rows.map(r => ({ id: r.id, x: r.x, y: r.y, world: r.world || 'tierra', house: r.house, avatar: r.avatar, country: r.country, level: r.level, since: r.created_at, likes: Number(r.likes) || 0 })) };
 }
 
 async function productionGet(req) {
@@ -1905,6 +1908,10 @@ async function friendsRemove(req, body) {
 const OWNER_USER_ID = (process.env.OWNER_USER_ID || '').trim();
 const OWNER_EMAIL = (process.env.OWNER_EMAIL || '').trim().toLowerCase();
 const OWNER_MONTHLY = Math.max(0, Math.min(100_000_000, Math.floor(Number(process.env.OWNER_MONTHLY_CREDITS ?? 10000)) || 0));
+// 🎟️ Cuentas con paga mensual (10.000 créditos cada mes, igual que el dueño). Se pueden cambiar con PAGA_EMAILS=correo1,correo2,... en el entorno.
+const PAGA_EMAILS = new Set((process.env.PAGA_EMAILS || 'toniromerorodriguez@gmail.com,kgvvhh54@gmail.com,frescosrt@gmail.com,terrenosatlas@gmail.com,carlottazarax@gmail.com,fruitschocho@gmail.com,tombolero20@gmail.com,heridasta51@gmail.com,ammmdisney@gmail.com,terrenoso30@gmail.com')
+  .split(',').map(e => e.trim().toLowerCase()).filter(Boolean));
+const isPaga = user => !!user && !!user.email && !!user.confirmed && PAGA_EMAILS.has(user.email.toLowerCase());
 const isOwner = user => !!user && (
   (OWNER_USER_ID !== '' && String(user.id) === OWNER_USER_ID) ||
   (OWNER_EMAIL !== '' && !!user.email && !!user.confirmed && user.email.toLowerCase() === OWNER_EMAIL));
@@ -1928,6 +1935,15 @@ async function grantOwnerMonthly(userId) {
     console.error('No se pudo pagar la paga mensual del dueño:', e.message);
     return 0;
   } finally { client.release(); }
+}
+async function pagaTick() {   // cada hora: paga el mes a todas las cuentas de la lista que ya han entrado alguna vez (se guardan en paga_users)
+  if (!OWNER_MONTHLY) return;
+  try {
+    for (const r of await all('SELECT user_id FROM paga_users')) {
+      const got = await grantOwnerMonthly(r.user_id);
+      if (got && PUSH_ON) pushSocial(r.user_id, { title: '🎟️ Paga mensual', body: `Ya tienes tus ${got.toLocaleString('es-ES')} créditos de este mes.`, tag: 'owner-grant', url: '/' }).catch(() => {});
+    }
+  } catch (e) { console.error('pagaTick:', e.message); }
 }
 async function ownerTick() {   // cada hora: si ya es otro mes, ingresa la paga aunque el dueño no haya entrado
   if (!OWNER_MONTHLY || !OWNER_USER_ID) return;
@@ -2998,7 +3014,9 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
     await run('CREATE INDEX IF NOT EXISTS gifts_to ON gifts (to_user, id)');
     await run('CREATE INDEX IF NOT EXISTS gifts_from ON gifts (from_user, created_at)');
     await run('CREATE TABLE IF NOT EXISTS owner_grants (user_id TEXT NOT NULL, month TEXT NOT NULL, credits INT NOT NULL, created_at BIGINT NOT NULL, PRIMARY KEY (user_id, month))');
+    await run('CREATE TABLE IF NOT EXISTS paga_users (user_id TEXT PRIMARY KEY, email TEXT, created_at BIGINT NOT NULL)');
     if (OWNER_MONTHLY && OWNER_USER_ID) { setTimeout(ownerTick, 20_000).unref(); setInterval(ownerTick, HOUR_MS).unref(); }
+    if (OWNER_MONTHLY) { setTimeout(pagaTick, 40_000).unref(); setInterval(pagaTick, HOUR_MS).unref(); }
   }).catch(e => console.error('No se pudieron crear las tablas de regalos / paga mensual:', e.message))
   .then(() => cardsMod().init()).then(() => cardsMod().ON && cardsMod().init2()).catch(e => console.error('No se pudieron crear las tablas de cartas:', e.message))
   .then(() => triviaMod().init()).catch(e => console.error('No se pudieron crear las tablas de la trivia:', e.message))

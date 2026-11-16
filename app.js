@@ -2005,10 +2005,22 @@ function renderMine(prod, mine) {
   setProd(prod); renderLive();
   $('mine-count').textContent = mine.total > mine.parcels.length ? `Mostrando los ${mine.parcels.length} más recientes de ${mine.total}.` : (mine.total ? `${mine.total} ${plural(mine.total, 'terreno', 'terrenos')} en total.` : '');
   const box = $('mine-list'); box.replaceChildren();
-  mine.parcels.forEach(p => {
+  // 🌱 Parcelas agrupadas por rareza, cada grupo en una ventanilla plegable (de la más rara a la más común)
+  const TN = window.TERRENOS_NUEVOS, grupos = new Map();
+  const infoOf = p => (TN && TN.byImg(p.house)) || { slug: 'otra', name: 'Otras', icon: '🏠', color: '#999', mult: 0 };
+  mine.parcels.forEach(p => { const t = infoOf(p); if (!grupos.has(t.slug + '|' + t.name)) grupos.set(t.slug + '|' + t.name, { t, list: [] }); grupos.get(t.slug + '|' + t.name).list.push(p); });
+  [...grupos.values()].sort((g1, g2) => (g2.t.mult || 0) - (g1.t.mult || 0)).forEach(g => {
+    const det = document.createElement('details');
+    det.style.cssText = 'margin:6px 0;border:1px solid ' + (g.t.color || '#999') + ';border-radius:12px;overflow:hidden';
+    const sum = document.createElement('summary');
+    sum.style.cssText = 'cursor:pointer;padding:10px 12px;font-weight:700;list-style:revert;background:' + (g.t.color || '#999') + '22';
+    const n = mine.porCasa ? (g.list[0] && mine.porCasa[g.list[0].house]) || g.list.length : g.list.length;
+    sum.textContent = `${g.t.icon || ''} ${g.t.name} · ${n} ${plural(n, 'terreno', 'terrenos')}`;
+    det.appendChild(sum);
+    g.list.forEach(p => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.style.cssText = 'display:block;width:100%;text-align:left;margin:6px 0;padding:10px';
+    b.style.cssText = 'display:block;width:calc(100% - 16px);text-align:left;margin:6px 8px;padding:10px';
     const wi = isOtherWorld(p) && window.worldInfo ? window.worldInfo(p.world) : null;
     b.textContent = `${flagOf(p.country)} ${p.avatar || ''} Terreno ${wi ? wi.name + ' ' + p.x + ':' + p.y : p.id} · ${starsOf(levelOf(p))} · ${new Date(p.since).toLocaleDateString('es-ES')}${p.likes ? ' · ❤️ ' + p.likes : ''}`.trim();
     b.onclick = () => {
@@ -2019,7 +2031,9 @@ function renderMine(prod, mine) {
       map.flyTo(ll, 18);
       map.once('moveend', () => selectAt(ll));
     };
-    box.appendChild(b);
+    det.appendChild(b);
+    });
+    box.appendChild(det);
   });
 }
 async function loadMine() {
