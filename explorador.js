@@ -1,5 +1,5 @@
 'use strict';
-// 🧭 EXPLORADOR (solo el muñeco del administrador, cuenta Lodam): SOLO pasea y viaja en cohete. No abre paneles, no pulsa botones, no entra en casas, bares ni monumentos.
+// 🧭 EXPLORADOR (solo el muñeco del administrador, cuenta Lodam): SOLO pasea por las calles de la Tierra (el viaje automático en cohete está apagado; se activa con localStorage 'explorerTravel' = '1'). No abre paneles, no pulsa botones, no entra en casas, bares ni monumentos.
 //   1. Cuando el administrador lleva 5 s sin tocar nada, su muñeco echa a andar solo por las calles de la Tierra (jugador.js → autoWalk) y pasea un buen rato.
 //   2. Después viaja en cohete (el viaje de verdad, con rampa y despegue) al siguiente mundo de la lista (Luna, Marte, planetas, Prehistoria…), se queda un rato y vuelve a la Tierra.
 //   3. En la Tierra vuelve a pasear y luego va al mundo siguiente, y así en bucle. Un mundo nuevo en mundos.js (window.worldIds()) entra solo.
@@ -30,6 +30,7 @@
 
   // ---------- Qué hace ----------
   let nextWorld = 0;
+  const TRAVEL = (() => { try { return localStorage.getItem('explorerTravel') === '1'; } catch (e) { return false; } })();
   const worldList = () => (window.worldIds ? window.worldIds() : []).filter(i => i !== 'tierra');
   const onEarth = () => !window.worldNow || window.worldNow() === 'tierra';
   async function arrive(ctx, id) {   // viaja en cohete y espera a que acabe el viaje
@@ -79,10 +80,9 @@
       try {
         await waitReady();                                   // 5 s sin tocar nada
         const ctx = makeCtx(Date.now());
-        if (!onEarth() && !(window.worldBusy && window.worldBusy())) await arrive(ctx, 'tierra');   // si lo dejó en otro mundo, vuelve primero
-        if (!earthReady()) { await sleep(1000); continue; }
+        if (!earthReady() || !onEarth()) { await sleep(1000); continue; }   // solo pasea por la Tierra; si estás en otro mundo no te trae de vuelta
         await walkEarth(ctx);                                // pasea
-        await trip(ctx);                                     // y viaja en cohete a otro mundo
+        if (TRAVEL) await trip(ctx);                         // viaje en cohete automático: apagado (solo pasea). Para activarlo: localStorage.setItem('explorerTravel','1')
       } catch (e) {
         if (e === INTERRUPT) { token.paused = true; continue; }   // el jugador tocó algo: se pausa y sigue cuando lleve 5 s quieto
         console.warn('[explorador]', e); await sleep(3000);
