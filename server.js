@@ -2913,6 +2913,21 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
       console.log('Terrenos nuevos: todos los terrenos repartidos al azar. Copia de las casas antiguas en parcels_house_backup');
     } catch (e) { console.error('Migración de terrenos nuevos:', e.message); }
   })
+  .then(async () => {   // 🌱 Las parcelas Comunes ya construidas pasan a una de las 15 categorías nuevas al azar. Solo una vez y solo con MIGRAR_COMUNES=1
+    if (process.env.MIGRAR_COMUNES !== '1') return;
+    try {
+      const hecho = await one("SELECT to_regclass('public.parcels_comunes_backup') AS t");
+      if (hecho && hecho.t) { console.log('Comunes: la migración ya estaba hecha (quita MIGRAR_COMUNES)'); return; }
+      const T = TERRENOS_NUEVOS.TERRENOS, N = T.filter(t => t.nueva), comun = T[0].img;
+      await run(`CREATE TABLE parcels_comunes_backup AS SELECT id, house FROM parcels WHERE house = '${comun}'`);   // copia de seguridad
+      await run('ALTER TABLE parcels_comunes_backup ENABLE ROW LEVEL SECURITY');
+      const cases = [];
+      N.slice().sort((a, b) => b.oneIn - a.oneIn).forEach((t, i, a) => { if (i < a.length - 1) cases.push(`WHEN random() < ${1 / t.oneIn} THEN '${t.img}'`); });
+      const base = N.slice().sort((a, b) => b.oneIn - a.oneIn)[N.length - 1];
+      await run(`UPDATE parcels SET house = CASE ${cases.join(' ')} ELSE '${base.img}' END WHERE house = '${comun}'`);
+      console.log('Comunes: parcelas Comunes repartidas entre las categorías nuevas. Copia en parcels_comunes_backup');
+    } catch (e) { console.error('Migración de Comunes:', e.message); }
+  })
   .then(async () => {   // niveles de terreno (no hacen nada si las columnas ya existen)
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level SMALLINT NOT NULL DEFAULT 1');
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level_at BIGINT');
