@@ -14,6 +14,6 @@ Qué hace:
 - Al reclamar un terreno el servidor sortea una parcela (crypto, no se puede trampear desde el navegador),
   la guarda y el juego enseña la pantalla animada con el nombre. También lo hacen los jugadores automáticos (bots) y el admin.
 - Probabilidades y producción: SOLO en la lista de terrenos-nuevos.js (oneIn = 1 de cada N, mult = veces la Común).
-  Ahora: Poco común 10, Raro 30, Muy raro 50, Épico 100, Legendario 250, Mítico 500, Exótico 1000, Único 2500,
-  Especial 5000, Celestial 10000.
+  Ahora todas están comprimidas a una escala de 50: Común Plus 3, Poco común 9, Raro 13, Muy raro 16, Épico 19, Legendario 22,
+  Mítico 25, Exótico 28, Único 31, Especial 34, Celestial 37 … y la más alta (Absoluto) 50.
 - El selector de casas ya no ofrece las antiguas (el jugador no elige). El álbum pasa a tener una sola categoría "Terrenos".
