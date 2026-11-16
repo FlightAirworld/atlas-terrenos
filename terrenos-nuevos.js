@@ -50,7 +50,11 @@
     setTimeout(() => {
       ov.innerHTML = '<div class="rays"></div><div class="rv"><img src="' + d.img.replace('.webp', '-m.webp') + '" alt=""><h2>' + d.icon + ' ' + d.name + '</h2><p>' +
         (d.oneIn ? 'Sale 1 de cada ' + fmt(d.oneIn) + ' compras' : 'Terreno común') + '</p><p>Produce ' + fmt(API.PER_SEC_BASE * d.mult) + ' créditos/segundo</p>' + (t.tienes ? '<p style="font-weight:800;font-size:20px;color:#fff;margin-top:8px">TIENES ' + t.tienes + '</p>' : '') + '<button type="button">Aceptar</button></div>';
-      const cerrar = e => { if (e) { e.preventDefault(); e.stopPropagation(); } ov.remove(); };
+      const evs = ['pointerup', 'touchend', 'click', 'mouseup', 'keydown'], desde = Date.now() + 600;
+      const cerrar = e => { if (e && e.type !== 'keydown' && Date.now() < desde) return; off(); ov.remove(); };
+      const off = () => evs.forEach(n => window.removeEventListener(n, cerrar, true));
+      evs.forEach(n => window.addEventListener(n, cerrar, true));   // toques en la ventana (fase de captura): cierra aunque otra capa tape el botón
+      const hint = document.createElement('p'); hint.style.cssText = 'font-size:12px;opacity:.7;margin-top:8px'; hint.textContent = 'Toca para cerrar'; ov.querySelector('.rv').appendChild(hint);
       const bt = ov.querySelector('button'); bt.onclick = cerrar; bt.addEventListener('touchend', cerrar); bt.addEventListener('pointerup', cerrar);
       setTimeout(() => { if (document.body.contains(ov)) ov.remove(); }, 60000);   // por si acaso, nunca se queda pegada
       if (window.sfx) try { window.sfx('claim'); } catch (e) {}
