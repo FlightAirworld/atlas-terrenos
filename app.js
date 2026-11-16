@@ -182,38 +182,9 @@ async function api(url, opts = {}) {
 
 // ---------- Parcelas compradas en pantalla ----------
 const HOUSES = [
-  'images/casa-1.webp',
-  'images/casa-6.webp',
-  'images/colegio.webp',
-  'images/pisos.webp',
-  'images/pisos-2.webp',
-  'images/Farmacia.webp',
-  'images/bosque.webp',
-  'images/parque-infantil.webp',
-  'images/supermercado.webp',
-  'images/helipuerto.webp',
-  'images/jardin.webp',
-  'images/Restaurante.webp',
-  'images/torre-metalica.webp',
-  'images/casa-modernista.webp',
-  'images/casa-modernista-2.webp',
-  'images/estadio-1.webp',
-  'images/estadio-2.webp',
-  'images/rugby.webp',
-  'images/estadio-3.webp',
-  'images/estadio-4.webp',
-  'images/plaza-de-toros.webp',
-  'images/teatro.webp',
-  'images/cine.webp',
-  'images/supermercado-3.webp',
-  'images/supermercado-4.webp',
-  'images/supermercado-2.webp',
-  'images/pisos-3.webp',
-  'images/pisos-4.webp',
-  'images/pisos-5.webp',
-  'images/casa-7.webp',
-  'images/casa-8.webp'
-];
+  'images/terreno-comun.webp', 'images/terreno-poco-comun.webp', 'images/terreno-raro.webp', 'images/terreno-muy-raro.webp', 'images/terreno-epico.webp', 'images/terreno-legendario.webp',
+  'images/terreno-mitico.webp', 'images/terreno-exotico.webp', 'images/terreno-unico.webp', 'images/terreno-especial.webp', 'images/terreno-celestial.webp'
+]   // 🌱 solo las 11 parcelas nuevas (mismas que terrenos-nuevos.js);
 
 // Casas de cada planeta (6 por mundo; imágenes images/<mundo>-<casa>.webp, las genera tools/make-planet-houses.py). Deben coincidir con WORLD_HOUSES de server.js.
 const WORLD_HOUSES = {
@@ -1184,24 +1155,11 @@ let eventHouses = [];
 let pickerWorld = 'tierra';   // mundo de la parcela abierta: en un planeta el selector solo enseña las casas de ese planeta
 // Las casas NUEVAS salen siempre las primeras del selector: primero las de evento y luego cada lista del final al principio (lo último que se añade queda arriba).
 // Solo cambia el orden en que se enseñan; HOUSES, EXTRA_HOUSES y GOLD_HOUSES no se tocan.
-const pickableHouses = () => pickerWorld !== 'tierra' ? WORLD_HOUSES[pickerWorld]
-  : [...new Set([...eventHouses, ...EXTRA_HOUSES.slice().reverse(), ...GOLD_HOUSES.slice().reverse(), ...HOUSES.slice().reverse()])];
+const pickableHouses = () => [] || (pickerWorld !== 'tierra' ? WORLD_HOUSES[pickerWorld]
+  : [...new Set([...eventHouses, ...EXTRA_HOUSES.slice().reverse(), ...GOLD_HOUSES.slice().reverse(), ...HOUSES.slice().reverse()])]);   // 🌱 ya no se elige casa: la parcela sale al azar al comprar
 const houseName = h => h.replace(/^images\//, '').replace(/\.(png|webp)$/i, '').replace(/[-_]/g, ' ');
 // Categorías del selector de casas: al tocar una (🎬 Cines, 🏠 Casas…) solo salen las de ese tipo. Lo que no esté aquí va a «Otros» (así las casas nuevas siempre se ven).
-const HOUSE_CATS = [
-  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2', 'casa-piscina', 'casa-bungalow', 'casa-moderna', 'adosados'] },
-  { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica', 'edificio-pisos', 'hotel'] },
-  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'Farmacia', 'supermercado-5', 'informatica', 'jugueteria', 'estanco', 'perfumeria', 'pasteleria', 'ferreteria', 'ferreteria-2', 'boutique'] },
-  { icon: '🍽️', name: 'Restaurantes', files: ['Restaurante', 'restaurante-2'] },
-  { icon: '🎬', name: 'Cines', files: ['cine', 'teatro', 'discoteca', 'sala-de-baile'] },
-  { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros', 'parque-futbol'] },
-  { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
-  { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto', 'consulado-espana', 'consulado-mexico', 'consulado-alemania', 'carcel'] },
-  { icon: '⛽', name: 'Motor', files: ['gasolinera'] },
-  { icon: '🚀', name: 'Espacio', files: Object.values(WORLD_HOUSES).flat().map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) },
-  { icon: '👑', name: 'Oro', files: GOLD_HOUSES.map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) },
-  { icon: '🎉', name: 'Eventos', files: [] }   // casas de edición limitada del evento activo (se rellena sola)
-];
+const HOUSE_CATS = [{ icon: '🌱', name: 'Terrenos', files: HOUSES.map(h => h.replace(/^images\//, '').replace(/\.webp$/, '')) }];
 // Si una casa no está en la lista de arriba, su categoría sale del nombre del archivo: cine-2.webp → Cines, casa-9.webp → Casas, etc.
 const HOUSE_PREFIX = [
   ['Casas', ['casa', 'chalet', 'villa', 'mansion', 'adosado']],
@@ -1414,7 +1372,8 @@ $('buy-parcel-btn').onclick = async () => {
     credits = j.credits; updateCreditUi();
     try { document.dispatchEvent(new CustomEvent('parcel:claimed', { detail: { credits: j.credits, lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, id: selected.id } })); } catch (e) {}
     selected.owner = j.owner; selected.avatar = avatar; selected.country = country; selected.since = Date.now();
-    selected.house = chosenHouse; selected.mine = !!authToken;
+    selected.house = j.house || chosenHouse; selected.mine = !!authToken;
+    if (j.terreno && window.TERRENOS_NUEVOS) window.TERRENOS_NUEVOS.mostrar(j.terreno);   // 🌱 pantalla animada «¡Te ha tocado…!»
     showPanel(selected);
     setMsg('¡Listo! Es tuyo. 🎉' + (j.referralBonus ? ` 👫 (incluye +${j.referralBonus} de regalo por venir invitado)` : ''), 'ok'); sfx('claim');
     drawOwned({ world: selected.world, id: selected.id, x: selected.x, y: selected.y, owner: selected.owner, avatar: selected.avatar, country: selected.country, house: selected.house });

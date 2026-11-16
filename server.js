@@ -8,6 +8,7 @@ const { Pool, types } = require('pg');
 const telegram = require('./telegram');   // avisos al móvil del dueño (TELEGRAM_TOKEN y TELEGRAM_CHAT_ID; sin ellas queda apagado)
 const indexNow = require('./indexnow');   // aviso a buscadores (IndexNow) cuando se despliega una versión nueva
 const onlineStats = require('./online-stats');   // jugadores en línea por país (panel al tocar el contador)
+const TERRENOS_NUEVOS = require('./terrenos-nuevos.js');   // 🌱 las 11 parcelas al azar (rareza, producción)
 const bots = require('./bots');   // jugadores automáticos 🌍: uno por país, una parcela al día cada uno (BOTS=off los apaga; ver bots.js)
 const ambient = require('./ambient');   // jugadores y mensajes de chat simulados (AMBIENT=off para apagarlo)
 
@@ -117,105 +118,9 @@ const q = {
 const AVATARS = ['😀','😎','🤠','🦊','🐱','🐶','🦁','🐼','🚀','👑','⚽','🌟'];
 const cleanAvatar = a => AVATARS.includes(a) ? a : AVATARS[0];
 // Casas que se pueden elegir (deben coincidir con HOUSES de app.js; para añadir más, ponlas al FINAL de ambas listas)
-const HOUSES = [
-  'images/casa-1.webp',
-  'images/casa-6.webp',
-  'images/colegio.webp',
-  'images/pisos.webp',
-  'images/pisos-2.webp',
-  'images/Farmacia.webp',
-  'images/bosque.webp',
-  'images/parque-infantil.webp',
-  'images/supermercado.webp',
-  'images/helipuerto.webp',
-  'images/jardin.webp',
-  'images/Restaurante.webp',
-  'images/cesped-2.webp',
-  'images/parque-picnic.webp',
-  'images/desierto-1.webp',
-  'images/desierto-2.webp',
-  'images/prado.webp',
-  'images/claro-bosque.webp',
-  'images/parque-futbol.webp',
-  'images/mar.webp',
-  'images/mar-peces.webp',
-  'images/torre-metalica.webp',
-  'images/casa-modernista.webp',
-  'images/casa-modernista-2.webp',
-  'images/estadio-1.webp',
-  'images/estadio-2.webp',
-  'images/rugby.webp',
-  'images/estadio-3.webp',
-  'images/estadio-4.webp',
-  'images/plaza-de-toros.webp',
-  'images/teatro.webp',
-  'images/cine.webp',
-  'images/supermercado-3.webp',
-  'images/supermercado-4.webp',
-  'images/supermercado-2.webp',
-  'images/pisos-3.webp',
-  'images/pisos-4.webp',
-  'images/pisos-5.webp',
-  'images/casa-7.webp',
-  'images/casa-8.webp',
-  'images/casa-piscina.webp',
-  'images/casa-bungalow.webp',
-  'images/casa-moderna.webp',
-  'images/adosados.webp',
-  'images/edificio-pisos.webp',
-  'images/hotel.webp',
-  'images/supermercado-5.webp',
-  'images/informatica.webp',
-  'images/jugueteria.webp',
-  'images/estanco.webp',
-  'images/perfumeria.webp',
-  'images/pasteleria.webp',
-  'images/ferreteria.webp',
-  'images/ferreteria-2.webp',
-  'images/boutique.webp',
-  'images/restaurante-2.webp',
-  'images/gasolinera.webp',
-  'images/consulado-espana.webp',
-  'images/consulado-mexico.webp',
-  'images/consulado-alemania.webp',
-  'images/carcel.webp',
-  'images/discoteca.webp',
-  'images/sala-de-baile.webp'
-];
+const HOUSES = TERRENOS_NUEVOS.TERRENOS.map(t => t.img);   // 🌱 solo las 11 parcelas nuevas (terrenos-nuevos.js)
 // Reparto al azar de las parcelas sin casa elegida: es la lista HOUSES de app.js en el MISMO orden (el servidor la usa para el álbum). No la cambies de orden ni de tamaño.
-const CLIENT_RANDOM_POOL = [
-  'images/casa-1.webp',
-  'images/casa-6.webp',
-  'images/colegio.webp',
-  'images/pisos.webp',
-  'images/pisos-2.webp',
-  'images/Farmacia.webp',
-  'images/bosque.webp',
-  'images/parque-infantil.webp',
-  'images/supermercado.webp',
-  'images/helipuerto.webp',
-  'images/jardin.webp',
-  'images/Restaurante.webp',
-  'images/torre-metalica.webp',
-  'images/casa-modernista.webp',
-  'images/casa-modernista-2.webp',
-  'images/estadio-1.webp',
-  'images/estadio-2.webp',
-  'images/rugby.webp',
-  'images/estadio-3.webp',
-  'images/estadio-4.webp',
-  'images/plaza-de-toros.webp',
-  'images/teatro.webp',
-  'images/cine.webp',
-  'images/supermercado-3.webp',
-  'images/supermercado-4.webp',
-  'images/supermercado-2.webp',
-  'images/pisos-3.webp',
-  'images/pisos-4.webp',
-  'images/pisos-5.webp',
-  'images/casa-7.webp',
-  'images/casa-8.webp'
-];
+const CLIENT_RANDOM_POOL = [TERRENOS_NUEVOS.TERRENOS[0].img];
 // ---------- Eventos de temporada: casas de edición limitada ----------
 // Cada evento se repite todos los años entre sus fechas (MM-DD). Sus casas SOLO se pueden elegir mientras el evento está activo
 // (quien ya la tiene se la queda para siempre). Para añadir una casa a un evento: sube la imagen (y sus -s -m -t) a images/ y ponla en su lista `houses`.
@@ -313,7 +218,7 @@ async function adminClaimParcel({ lat, lng, owner, avatar, country, house }) {
   }
 
   try {
-    await q.insertParcel(p.id, p.x, p.y, name, null, '0.00', 'ADMIN', now, cleanAvatar(avatar), cleanCountry(country), cleanHouse(house));
+    await q.insertParcel(p.id, p.x, p.y, name, null, '0.00', 'ADMIN', now, cleanAvatar(avatar), cleanCountry(country), cleanHouse(house) || TERRENOS_NUEVOS.roll().img);
   } catch (e) {
     if (isUniqueViolation(e)) throw new HttpError(409, 'No se ha podido reclamar esta parcela');
     throw e;
@@ -964,7 +869,8 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
     const d = BARRIO.distM(plat, plng, p.south + SIZE / 2, p.west + SIZE / 2);
     if (d > BARRIO_M + BARRIO_SLACK_M) throw new HttpError(403, `Este terreno está a ${Math.round(d)} m: fuera de tu barrio 🔴 Solo puedes reclamar a menos de ${BARRIO_M} m de donde estás`);
   }
-  const chosenHouse = await cleanHouseFor(house, user, world);   // lanza un aviso claro si es una casa del Pase Oro y no lo tiene
+  const terreno = TERRENOS_NUEVOS.roll(() => crypto.randomInt(0, 2 ** 30) / 2 ** 30);   // 🌱 el jugador no elige: sale una al azar según su rareza
+  const chosenHouse = terreno.img;
   const prof = user && await getProfile(user.id);
   const vip = code && await one('SELECT fixed_nick, fixed_country FROM packs WHERE code = $1 AND fixed_nick IS NOT NULL', [code]);
   const name = vip ? vip.fixed_nick : prof ? prof.nickname : cleanName(owner);   // pack VIP o cuenta: siempre sale el apodo fijo
@@ -1007,7 +913,7 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
     let bonus = 0;   // invitación: premio al invitado y a quien le invitó (si no hay invitación, no pasa nada)
     if (user) notifyFriendsOf(user.id, 'claim');   // sin esperar: el aviso no retrasa la respuesta
     if (user) { try { const rr = await rewardReferral(user.id, code); if (rr) bonus = rr.inviteeBonus; } catch (e) { console.error('Invitación:', e.message); } }
-    return { ok: true, parcel: p.id, world, owner: name, credits: r.rows[0].credits + bonus, referralBonus: bonus };
+    return { ok: true, parcel: p.id, world, owner: name, house: chosenHouse, terreno: { slug: terreno.slug, name: terreno.name, icon: terreno.icon, color: terreno.color, oneIn: terreno.oneIn, mult: terreno.mult, img: terreno.img }, credits: r.rows[0].credits + bonus, referralBonus: bonus };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => {});
     if (isUniqueViolation(e)) throw new HttpError(409, 'Este terreno ya tiene dueño');
@@ -1374,6 +1280,9 @@ async function upgradeParcel(req, { id, from }) {
   }
 }
 
+// 🌱 Cada parcela nueva produce según su rareza (mult de terrenos-nuevos.js; las casas sin parcela nueva cuentan ×1).
+// PROD_RATE es lo que produce la Común por hora: la Común = 0,000001 créditos/s son PROD_RATE=0.0036.
+const TERRENO_MULT_SQL = '(CASE house ' + TERRENOS_NUEVOS.TERRENOS.map(t => `WHEN '${t.img}' THEN ${t.mult}`).join(' ') + ' ELSE 1 END)';
 // Suma, por cada terreno de la cuenta, el tiempo producido desde la última recogida (o desde que se reclamó), con tope.
 // Cada terreno produce según su nivel. Si subió de nivel dentro del periodo que se está acumulando, el tiempo anterior a la
 // mejora cuenta con el multiplicador del nivel anterior y el posterior con el nuevo: la mejora solo vale desde que se hace,
@@ -1390,8 +1299,8 @@ async function prodCompute(db, userId, lastCollect, carry, now) {
                     LEAST(o, LEAST(e, $4::bigint)) * mp + (LEAST(e, $4::bigint) - LEAST(o, LEAST(e, $4::bigint))) * mc AS wms
                FROM (SELECT GREATEST($2::bigint - GREATEST(created_at, $3::bigint), 0) AS e,
                             GREATEST(COALESCE(level_at, 0) - GREATEST(created_at, $3::bigint), 0) AS o,
-                            ($5::float8[])[LEAST(GREATEST(level, 1), ${MAX_LEVEL})] AS mc,
-                            ($5::float8[])[LEAST(GREATEST(level - 1, 1), ${MAX_LEVEL})] AS mp
+                            ($5::float8[])[LEAST(GREATEST(level, 1), ${MAX_LEVEL})] * ${TERRENO_MULT_SQL} AS mc,
+                            ($5::float8[])[LEAST(GREATEST(level - 1, 1), ${MAX_LEVEL})] * ${TERRENO_MULT_SQL} AS mp
                        FROM parcels WHERE user_id = $1) a) s`,
     [userId, now, lastCollect || 0, Math.round(PROD_CAP_HOURS * HOUR_MS), LEVEL_MULTS])).rows[0];
   const n = Number(r.n);
@@ -2989,6 +2898,19 @@ const ready = run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS house TEXT').cat
       await run('UPDATE parcels SET house = $1 WHERE house IN ($2, $3)', ['images/' + to + '.webp', 'images/' + b + '.webp', 'images/' + b + '.png']).catch(e => console.error('Migración de casas:', e.message));
     }
   })
+  .then(async () => {   // 🌱 Parcelas nuevas: reparte al azar las 11 entre TODOS los terrenos ya comprados. Solo una vez y solo si pones MIGRAR_TERRENOS=1
+    if (process.env.MIGRAR_TERRENOS !== '1') return;
+    try {
+      const hecho = await one("SELECT to_regclass('public.parcels_house_backup') AS t");
+      if (hecho && hecho.t) { console.log('Terrenos nuevos: la migración ya estaba hecha (quita MIGRAR_TERRENOS)'); return; }
+      await run('CREATE TABLE parcels_house_backup AS SELECT id, house FROM parcels');   // copia de seguridad de las casas antiguas
+      await run('ALTER TABLE parcels_house_backup ENABLE ROW LEVEL SECURITY');
+      const T = TERRENOS_NUEVOS.TERRENOS, cases = [];
+      for (let i = T.length - 1; i > 0; i--) cases.push(`WHEN random() < ${1 / T[i].oneIn} THEN '${T[i].img}'`);
+      await run(`UPDATE parcels SET house = CASE ${cases.join(' ')} ELSE '${T[0].img}' END`);
+      console.log('Terrenos nuevos: todos los terrenos repartidos al azar. Copia de las casas antiguas en parcels_house_backup');
+    } catch (e) { console.error('Migración de terrenos nuevos:', e.message); }
+  })
   .then(async () => {   // niveles de terreno (no hacen nada si las columnas ya existen)
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level SMALLINT NOT NULL DEFAULT 1');
     await run('ALTER TABLE parcels ADD COLUMN IF NOT EXISTS level_at BIGINT');
@@ -3387,17 +3309,7 @@ async function likesTop() {
 
 // ---------- Álbum de colecciones ----------
 // Categorías de casas (deben ser las mismas que HOUSE_CATS / HOUSE_PREFIX de app.js). Una casa que no esté en ninguna va a «Otros».
-const HOUSE_CATS = [
-  { icon: '🏠', name: 'Casas', files: ['casa-1', 'casa-6', 'casa-7', 'casa-8', 'casa-modernista', 'casa-modernista-2', 'casa-piscina', 'casa-bungalow', 'casa-moderna', 'adosados'] },
-  { icon: '🏢', name: 'Edificios', files: ['pisos', 'pisos-2', 'pisos-3', 'pisos-4', 'pisos-5', 'torre-metalica', 'edificio-pisos', 'hotel'] },
-  { icon: '🛒', name: 'Tiendas', files: ['supermercado', 'supermercado-2', 'supermercado-3', 'supermercado-4', 'Farmacia', 'supermercado-5', 'informatica', 'jugueteria', 'estanco', 'perfumeria', 'pasteleria', 'ferreteria', 'ferreteria-2', 'boutique'] },
-  { icon: '🍽️', name: 'Restaurantes', files: ['Restaurante', 'restaurante-2'] },
-  { icon: '🎬', name: 'Cines', files: ['cine', 'teatro', 'discoteca', 'sala-de-baile'] },
-  { icon: '⚽', name: 'Deportes', files: ['estadio-1', 'estadio-2', 'estadio-3', 'estadio-4', 'rugby', 'plaza-de-toros', 'parque-futbol'] },
-  { icon: '🌳', name: 'Parques', files: ['bosque', 'parque-infantil', 'jardin', 'cesped-2', 'parque-picnic', 'prado', 'claro-bosque', 'desierto-1', 'desierto-2', 'mar', 'mar-peces'] },
-  { icon: '🏫', name: 'Servicios', files: ['colegio', 'helipuerto', 'consulado-espana', 'consulado-mexico', 'consulado-alemania', 'carcel'] },
-  { icon: '⛽', name: 'Motor', files: ['gasolinera'] }
-];
+const HOUSE_CATS = [{ icon: '🌱', name: 'Terrenos', files: TERRENOS_NUEVOS.TERRENOS.map(t => 'terreno-' + t.slug) }];
 const houseBase = h => String(h).replace(/^images\//, '').replace(/\.(png|webp)$/i, '');
 const catOfHouse = h => { const b = houseBase(h), c = HOUSE_CATS.find(c => c.files.includes(b)); return c ? c.name : 'Otros'; };
 function houseSeen(id, house) {   // la casa que ve el jugador en un terreno: la elegida, o la del reparto al azar (misma fórmula que houseFor de app.js)

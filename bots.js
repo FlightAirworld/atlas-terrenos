@@ -96,7 +96,7 @@ function start(deps) {
       if (await q.parcelById(p.id) || await q.activeOrderForParcel(p.id, t)) continue;   // ocupada: prueba otra
       try {
         // casa null = al azar; en otros mundos, con su mundo y sin pueblo (como las que se compran allí)
-        await q.insertParcel(p.id, p.x, p.y, b.name, null, '0.00', 'BOT', t, b.avatar, b.cc, null, b.world || 'tierra', b.world ? cityNone : null);
+        await q.insertParcel(p.id, p.x, p.y, b.name, null, '0.00', 'BOT', t, b.avatar, b.cc, require('./terrenos-nuevos.js').roll().img, b.world || 'tierra', b.world ? cityNone : null);
       } catch (e) { if (isUniqueViolation(e)) continue; throw e; }
       return { id: p.id, town: s.town };
     }
