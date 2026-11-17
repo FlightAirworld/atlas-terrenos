@@ -79,3 +79,36 @@
     catch (e) { setMsg2(linkUrl); }
   });
 })();
+
+// ---------- Enlaces directos a los minijuegos: /?juego=trivia | rasca | parejas | bingo ----------
+// Al entrar con uno de estos enlaces se abre el minijuego (se pulsa su botón del menú 🎮). Si hace falta cuenta, se pide el login
+// y, ya dentro (el login con Google recarga la página sin parámetros), se abre solo. Se puede combinar con la invitación:
+// /?ref=CODIGO&juego=trivia
+(function () {
+  const BTN = { trivia: 'trivia-btn', rasca: 'rasca-btn', parejas: 'parejas-btn', bingo: 'bingo-btn' };
+  const KEY = 'juegoPendiente', MAX_AGE = 10 * 60 * 1000;
+  let want = null;
+  try {
+    const u = new URL(location.href), g = (u.searchParams.get('juego') || '').toLowerCase();
+    if (BTN[g]) {
+      want = g;
+      localStorage.setItem(KEY, JSON.stringify({ g, t: Date.now() }));
+      u.searchParams.delete('juego');
+      history.replaceState(null, '', u.pathname + u.search + u.hash);
+    } else {
+      const s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (s && BTN[s.g] && Date.now() - s.t < MAX_AGE) want = s.g; else localStorage.removeItem(KEY);
+    }
+  } catch (e) {}
+  if (!want) return;
+  const clear = () => { try { localStorage.removeItem(KEY); } catch (e) {} };
+  const logged = () => { try { return !!authToken; } catch (e) { return false; } };
+  async function go() {
+    const btn = document.getElementById(BTN[want]);
+    if (!btn) return clear();
+    for (let i = 0; i < 40 && !logged(); i++) await new Promise(r => setTimeout(r, 200));   // espera a la sesión (hasta 8 s)
+    btn.click();
+    if (logged()) clear();   // sin sesión se queda guardado: tras entrar con Google se abrirá solo
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
+})();
