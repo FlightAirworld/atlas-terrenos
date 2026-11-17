@@ -2,8 +2,8 @@
 // Arregla el SEO de index.html (informes de Seobility del 17-11-2026): título y descripción más cortos,
 // un solo H1, sin etiquetas vacías, ALT en todas las imágenes, sin etiquetas <b>/<strong> repetidas,
 // enlaces externos, botones para compartir en redes y textos ancla que no se repiten.
-// También: pie legal fijo abajo (antes salía detrás de los botones de arriba) y enlace a la página de Prensa
-// en el Menú, el pie, la portada y el texto para buscadores, traducido a todos los idiomas del juego,
+// También: pie legal (Privacidad, Condiciones, Prensa) oculto a la vista pero presente en el HTML para los buscadores,
+// y enlace a la página de Prensa en el Menú, el pie, la portada y el texto para buscadores, traducido a todos los idiomas del juego,
 // y enlace a Prensa en el pie de las páginas por idioma (/en, /fr, /de, /it, /pt, /ja, /zh).
 // Se ejecuta solo: «npm install» (script postinstall, en el servidor de Render) y «node build-static.js» (sitio estático).
 // Es idempotente (se puede ejecutar mil veces) y NUNCA falla: si algo no encaja, deja el archivo como está y el juego arranca igual.
@@ -50,13 +50,10 @@ const CSS2 = [
   '.seo-share a{display:inline-block;margin:0 6px}',
 ].join('\n');
 
-// Pie legal: una pastilla fija abajo en el centro. Queda encima del mapa (z-index 950) y por debajo de los botones, paneles y ventanas (1000 o más).
-// Deja libre la esquina inferior derecha, donde MapLibre pone el botón «i» de los créditos del mapa.
+// Pie legal: ya no se ve encima del mapa (a petición del dueño). Se queda oculto a la vista, igual que el H1 y los botones de compartir,
+// pero sigue en el HTML para los buscadores. Los enlaces a Privacidad y Condiciones siguen en el aviso del formulario de entrada.
 const CSS3 = [
-  '.site-footer{position:fixed;left:50%;bottom:calc(8px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:950;width:max-content;max-width:calc(100vw - 96px);padding:2px 12px;border-radius:999px;background:var(--card);color:var(--fg);border:1px solid var(--line);box-shadow:0 2px 8px rgba(0,0,0,.25);font-size:12px;text-align:center}',
-  '.site-footer a{display:inline-block;padding:5px 3px;line-height:14px;color:inherit;text-decoration:none}',
-  '.site-footer a:hover,.site-footer a:focus-visible{text-decoration:underline}',
-  '@media (max-width:480px){.site-footer{font-size:11px}}',
+  '.site-footer{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);clip-path:inset(50%);white-space:nowrap;border:0}',
 ].join('\n');
 
 // Botón «Prensa» del Menú (se abre en una pestaña nueva para no sacar al jugador de la partida)
@@ -159,8 +156,8 @@ function patch(html) {
   // 9. Redes sociales y enlaces externos: botones de compartir + créditos del mapa, dentro del pie de página (ocultos a la vista, ver CSS2)
   if (!h.includes('id="seo-share"')) rep(/<\/footer>/, () => `${SHARE_HTML}\n</footer>`);
 
-  // 10. Pie legal fijo abajo + enlace a Prensa.
-  // 10a. El pie estaba suelto al final del <body> y, como el mapa es de pantalla completa, salía arriba del todo, detrás de los botones, y no se podía tocar.
+  // 10. Pie legal oculto a la vista + enlace a Prensa.
+  // 10a. El pie pasa a la clase .site-footer, que ya no se ve sobre el mapa (ver CSS3) pero sigue en el HTML.
   rep(/<footer style="text-align:center; font-size:13px; padding:12px;">/, () => '<footer class="site-footer">');
   if (!h.includes('id="seo-patch-3"')) rep(/<\/head>/, () => `<style id="seo-patch-3">\n${CSS3}\n</style>\n</head>`);
   // 10b. «Prensa» en el pie de página (enlace normal, lo ven los buscadores)
