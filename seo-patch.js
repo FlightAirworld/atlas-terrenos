@@ -1,6 +1,7 @@
 'use strict';
-// Arregla el SEO de index.html (informe de Seobility del 17-11-2026): título y descripción más cortos,
-// un solo H1, sin etiquetas vacías y con ALT en todas las imágenes.
+// Arregla el SEO de index.html (informes de Seobility del 17-11-2026): título y descripción más cortos,
+// un solo H1, sin etiquetas vacías, ALT en todas las imágenes, sin etiquetas <b>/<strong> repetidas,
+// enlaces externos, botones para compartir en redes y textos ancla que no se repiten.
 // Se ejecuta solo: «npm install» (script postinstall, en el servidor de Render) y «node build-static.js» (sitio estático).
 // Es idempotente (se puede ejecutar mil veces) y NUNCA falla: si algo no encaja, deja el archivo como está y el juego arranca igual.
 const fs = require('node:fs');
@@ -37,6 +38,30 @@ const CSS = [
   '#boot .boot-h1{margin:0 0 6px;font-size:30px;line-height:1.1;font-weight:700;text-shadow:0 2px 12px rgba(0,0,0,.6)}',
 ].join('\n');
 
+// Los contadores que antes eran <b> pasan a <span>: hay que darles el mismo aspecto que tenían
+const CSS2 = [
+  '#cover-online #cover-online-n{font-weight:900;font-variant-numeric:tabular-nums}',
+  '#map-controls #top-row #online-btn #online-n{font-size:16px;font-weight:800}',
+  '.seo-share{margin-top:8px;line-height:1.9}',
+  '.seo-share a{display:inline-block;margin:0 6px}',
+].join('\n');
+
+// Enlaces para compartir en redes (sin scripts de terceros: son enlaces normales) y enlaces externos de créditos del mapa
+const SITE = 'https://redecoraelmundo.com/';
+const SHARE_TXT = 'Redecora El Mundo: juego de mapa del mundo gratis. Reclama un terreno virtual con tu nombre';
+const U = encodeURIComponent(SITE);
+const T = encodeURIComponent(SHARE_TXT);
+const SHARE_HTML = [
+  '<div id="seo-share" class="seo-share">',
+  '<p>¿Te gusta el juego? Compártelo con tus amigos:</p>',
+  `<a href="https://www.facebook.com/sharer/sharer.php?u=${U}" target="_blank" rel="noopener noreferrer">Compartir en Facebook</a>`,
+  `<a href="https://twitter.com/intent/tweet?url=${U}&amp;text=${T}" target="_blank" rel="noopener noreferrer">Compartir en X</a>`,
+  `<a href="https://wa.me/?text=${T}%20${U}" target="_blank" rel="noopener noreferrer">Compartir en WhatsApp</a>`,
+  `<a href="https://t.me/share/url?url=${U}&amp;text=${T}" target="_blank" rel="noopener noreferrer">Compartir en Telegram</a>`,
+  '<p>Mapa con datos de <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> y tecnología de <a href="https://maplibre.org/" target="_blank" rel="noopener noreferrer">MapLibre</a>.</p>',
+  '</div>',
+].join('\n');
+
 function patch(html) {
   let h = html;
   const rep = (re, to) => { h = h.replace(re, to); };
@@ -64,6 +89,20 @@ function patch(html) {
   rep(/(<img class="cover-hero" src="data:[^"]*" )alt=""/, (m, a) => a + 'alt="Logotipo de Redecora El Mundo"');
   rep(/(<img id="boot-img" src="images\/splash\.jpg" )alt=""/, (m, a) => a + 'alt="Pantalla de inicio de Redecora El Mundo"');
   rep(/(<img src="\/images\/icon-192\.png" )alt=""/g, (m, a) => a + 'alt="Icono de Redecora El Mundo"');
+
+  // 7. Etiquetas <b>/<strong> repetidas (Seobility: «Algunas etiquetas se repiten, como por ejemplo: –»).
+  // Los marcadores «–», «0%» y «0» los rellena el JavaScript y no son énfasis de verdad: pasan a <span> en negrita
+  rep(/<b id="(cover-online-n|online-n|cl-pct)">([^<]*)<\/b>/g, (m, id, t) => `<span id="${id}" style="font-weight:bold">${t}</span>`);
+  rep(/<strong id="credits-left">([^<]*)<\/strong>/, (m, t) => `<span id="credits-left" style="font-weight:bold">${t}</span>`);
+  rep(/<b>G<\/b>/g, () => '<span style="font-weight:bold">G</span>');
+  if (!h.includes('id="seo-patch-2"')) rep(/<\/head>/, () => `<style id="seo-patch-2">\n${CSS2}\n</style>\n</head>`);
+
+  // 8. Textos ancla repetidos: el aviso legal del formulario de entrada repetía «Condiciones del Servicio» y «Política de Privacidad» del pie de página
+  rep(/(href="\/terminos\.html" target="_blank" rel="noopener">)Condiciones del Servicio(<\/a>)/, (m, a, b) => `${a}condiciones de uso${b}`);
+  rep(/(href="\/privacidad\.html" target="_blank" rel="noopener">)Política de Privacidad(<\/a>)/, (m, a, b) => `${a}política de datos personales${b}`);
+
+  // 9. Redes sociales y enlaces externos: botones de compartir + créditos del mapa, dentro del pie de página visible
+  if (!h.includes('id="seo-share"')) rep(/<\/footer>/, () => `${SHARE_HTML}\n</footer>`);
   return h;
 }
 
