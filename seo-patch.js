@@ -3,7 +3,8 @@
 // un solo H1, sin etiquetas vacías, ALT en todas las imágenes, sin etiquetas <b>/<strong> repetidas,
 // enlaces externos, botones para compartir en redes y textos ancla que no se repiten.
 // También: pie legal fijo abajo (antes salía detrás de los botones de arriba) y enlace a la página de Prensa
-// en el Menú, el pie, la portada y el texto para buscadores.
+// en el Menú, el pie, la portada y el texto para buscadores, traducido a todos los idiomas del juego,
+// y enlace a Prensa en el pie de las páginas por idioma (/en, /fr, /de, /it, /pt, /ja, /zh).
 // Se ejecuta solo: «npm install» (script postinstall, en el servidor de Render) y «node build-static.js» (sitio estático).
 // Es idempotente (se puede ejecutar mil veces) y NUNCA falla: si algo no encaja, deja el archivo como está y el juego arranca igual.
 const fs = require('node:fs');
@@ -60,6 +61,45 @@ const CSS3 = [
 
 // Botón «Prensa» del Menú (se abre en una pestaña nueva para no sacar al jugador de la partida)
 const PRESS_BTN = '<button id="press-btn" data-label="Prensa" type="button" title="Prensa y medios" aria-label="Prensa y medios" onclick="window.open(\'/prensa.html\',\'_blank\',\'noopener\')">📰</button>';
+
+// Traducción de los textos de Prensa a los idiomas del juego (es, en, pt, fr, de, it) y a los que están preparados (ar, zh, ru, ja, ko, tr, hi, id).
+// i18n.js solo traduce lo que tiene en su tabla, así que este pequeño script traduce los enlaces y el botón de Prensa según <html lang>, y se actualiza al cambiar de idioma.
+const PRESS_I18N = `<script id="prensa-i18n">
+(function () {
+  var D = {
+    'Prensa': { en: 'Press', pt: 'Imprensa', fr: 'Presse', de: 'Presse', it: 'Stampa', ar: 'الصحافة', zh: '媒体资料', ru: 'Пресса', ja: 'プレス', ko: '보도자료', tr: 'Basın', hi: 'प्रेस', id: 'Pers' },
+    'Prensa y medios': { en: 'Press and media', pt: 'Imprensa e mídia', fr: 'Presse et médias', de: 'Presse und Medien', it: 'Stampa e media', ar: 'الصحافة والإعلام', zh: '新闻与媒体', ru: 'Пресса и СМИ', ja: 'プレス・メディア', ko: '언론 및 미디어', tr: 'Basın ve medya', hi: 'प्रेस और मीडिया', id: 'Pers dan media' },
+    'Sala de prensa': { en: 'Press room', pt: 'Sala de imprensa', fr: 'Salle de presse', de: 'Pressebereich', it: 'Sala stampa', ar: 'غرفة الصحافة', zh: '新闻室', ru: 'Для прессы', ja: 'プレスルーム', ko: '프레스룸', tr: 'Basın odası', hi: 'प्रेस कक्ष', id: 'Ruang pers' },
+    'Dossier de prensa': { en: 'Press kit', pt: 'Press kit', fr: 'Dossier de presse', de: 'Pressemappe', it: 'Cartella stampa', ar: 'الملف الصحفي', zh: '新闻资料包', ru: 'Пресс-кит', ja: 'プレスキット', ko: '프레스 킷', tr: 'Basın kiti', hi: 'प्रेस किट', id: 'Press kit' }
+  };
+  function tr(es) {
+    var l = (document.documentElement.lang || 'es').slice(0, 2).toLowerCase();
+    if (l === 'es') return es;
+    var d = D[es];
+    return d ? (d[l] || d.en || es) : es;
+  }
+  function apply() {
+    var b = document.getElementById('press-btn');
+    if (b) {
+      b.setAttribute('data-label', tr('Prensa'));
+      b.setAttribute('title', tr('Prensa y medios'));
+      b.setAttribute('aria-label', tr('Prensa y medios'));
+    }
+    var a = document.querySelectorAll('a[href="/prensa.html"]');
+    for (var i = 0; i < a.length; i++) {
+      var el = a[i];
+      if (!el.hasAttribute('data-es')) el.setAttribute('data-es', el.textContent.trim());
+      var t = tr(el.getAttribute('data-es'));
+      if (el.textContent !== t) el.textContent = t;
+    }
+  }
+  apply();
+  try { new MutationObserver(apply).observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] }); } catch (e) {}
+})();
+</script>`;
+
+// Páginas por idioma (carpetas /en, /fr…): el pie lleva «Prensa» en su idioma (la página de prensa está en español, por eso hreflang="es", igual que Mundos y Privacidad)
+const PRESS_LANG = { en: 'Press', fr: 'Presse', de: 'Presse', it: 'Stampa', pt: 'Imprensa', ja: 'プレス', zh: '媒体资料' };
 
 // Enlaces para compartir en redes (sin scripts de terceros: son enlaces normales) y enlaces externos de créditos del mapa
 const SITE = 'https://redecoraelmundo.com/';
@@ -131,10 +171,35 @@ function patch(html) {
   if (!h.includes('>Dossier de prensa</a>')) rep(/(<a href="\/mundo-pluton\.html">Plutón<\/a>)(<\/p>)/, (m, a, b) => `${a}<a href="/prensa.html">Dossier de prensa</a>${b}`);
   if (!h.includes('>Sala de prensa</a>')) rep(/(<a href="\/terminos\.html">Condiciones<\/a>)(<\/div>)/, (m, a, b) => `${a} · <a href="/prensa.html">Sala de prensa</a>${b}`);
   if (!h.includes('>Prensa y medios</a>')) rep(/(<a href="\/mundos\.html">Mundos: Luna, Marte y planetas<\/a>)(<\/p>)/, (m, a, b) => `${a} · <a href="/prensa.html">Prensa y medios</a>${b}`);
+  // 10e. Traducción de todo lo anterior al idioma elegido (se pone justo antes de cerrar el <body>)
+  if (!h.includes('id="prensa-i18n"')) rep(/<\/body>/, () => `${PRESS_I18N}\n</body>`);
   return h;
 }
 
+// Páginas por idioma: añade «Prensa» (en su idioma) al pie, detrás de «Condiciones»
+function patchLang(html, label) {
+  if (html.includes('href="/prensa.html"')) return html;
+  return html.replace(/(<a href="\/terminos\.html" hreflang="es">[^<]*<\/a>)(\s*<\/footer>)/, (m, a, b) => `${a} · <a href="/prensa.html" hreflang="es">${label}</a>${b}`);
+}
+
+function runLangs(dir) {
+  Object.keys(PRESS_LANG).forEach(code => {
+    try {
+      const f = path.join(dir, code, 'index.html');
+      if (!fs.existsSync(f)) return;
+      const before = fs.readFileSync(f, 'utf8');
+      const after = patchLang(before, PRESS_LANG[code]);
+      if (after === before || !after.includes('</html>') || after.length < before.length) return;
+      fs.writeFileSync(f, after);
+      console.log(`seo-patch: ${code}/index.html con enlace a Prensa`);
+    } catch (e) {
+      console.warn(`seo-patch: ${code}/index.html omitido (` + (e && e.message) + ')');
+    }
+  });
+}
+
 function run(file) {
+  try { runLangs(path.dirname(file)); } catch (e) { /* las páginas por idioma son opcionales */ }
   try {
     const before = fs.readFileSync(file, 'utf8');
     const after = patch(before);
@@ -151,5 +216,5 @@ function run(file) {
   }
 }
 
-module.exports = { patch, run };
+module.exports = { patch, patchLang, run };
 if (require.main === module) run(path.join(__dirname, 'index.html'));
