@@ -1712,6 +1712,7 @@ function onlineStream(req, res, url) {
   const cc = onlineStats.countryOf(req.headers, url.searchParams.get('country'));
   if (cc) onlineCountryByCid.set(cid, cc);
   onlineLive.track(cid, req.headers, url.searchParams.get('country'));
+  if (url.searchParams.get('p') !== null) onlineLive.setPage(cid, url.searchParams.get('p'), url.searchParams.get('s'));   // la página ya viaja en la propia conexión
   let set = onlineClients.get(cid);
   if (!set) { set = new Set(); onlineClients.set(cid, set); }
   set.add(res);
@@ -2820,6 +2821,16 @@ async function rewardReferral(userId, claimPackCode) {
 
 async function route(req, res, url) {
   const { pathname: pn, searchParams: sp } = url;
+  // El jugador avisa de la página/sección donde está (panel de administrador). Va ANTES de los límites generales y acepta GET
+  // (el mismo camino que ya usa la conexión /api/online) y POST; límite propio por jugador, así no compite con las posiciones del mapa.
+  if ((req.method === 'GET' || req.method === 'POST') && pn === '/api/online/page') {
+    const cid = sp.get('cid') || '';
+    if (/^[\w-]{8,40}$/.test(cid)) {
+      if (rateHit('page:' + cid, 60_000) > 30) throw new HttpError(429, 'Más despacio');
+      onlineLive.setPage(cid, sp.get('p'), sp.get('s'));
+    }
+    return { ok: true };
+  }
   // Límite de peticiones por conexión: 240 por minuto en total y 40 por minuto las que modifican datos
   const ip = clientIp(req);
   if (rateHit('api:' + ip, 60_000) > 240) throw new HttpError(429, 'Demasiadas peticiones. Espera un momento');
@@ -2868,11 +2879,6 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/ping-db') { try { await run('SELECT 1 FROM parcels LIMIT 1'); return { ok: true, db: true }; } catch (e) { return { ok: false, db: false }; } }
   if (req.method === 'GET' && pn === '/api/health') return { ok: true };   // la pantalla de carga del sitio estático pregunta aquí si ya despertó
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineShown() };
-  if (req.method === 'POST' && pn === '/api/online/page') {   // el jugador avisa de la página/sección donde está (panel de administrador)
-    const q = url.searchParams, cid = q.get('cid') || '';
-    if (/^[\w-]{8,40}$/.test(cid)) onlineLive.setPage(cid, q.get('p'), q.get('s'));
-    return { ok: true };
-  }
   if (req.method === 'GET' && pn === '/api/online/countries') return onlineCountriesGet();
   if (req.method === 'POST' && pn === '/api/online/pos') return onlinePos(req, await readJson(req));   // muñecos de los demás jugadores en el mapa (jugadores.js)
   if (req.method === 'GET' && pn === '/api/where') return placeGet(req, url);   // pueblo, región y país de un punto del mapa (etiqueta de lugar)

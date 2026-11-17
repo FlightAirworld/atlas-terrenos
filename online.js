@@ -42,7 +42,9 @@
     if (es) return;
     if (window.apiState && !window.apiState.ready) return;      // servidor dormido: se abre cuando despierte
     const mine = myCountry();
-    es = new EventSource('/api/online?cid=' + encodeURIComponent(cid) + (mine ? '&country=' + mine : ''));
+    const w0 = where();   // la página/sección viaja ya en la propia conexión (el servidor la apunta al abrirla)
+    es = new EventSource('/api/online?cid=' + encodeURIComponent(cid) + (mine ? '&country=' + mine : '') + '&p=' + encodeURIComponent(w0.p) + '&s=' + encodeURIComponent(w0.s));
+    pageSent = w0.p + '|' + w0.s; pageAt = Date.now();
     es.onopen = () => { btn.classList.remove('off'); mirrors(m => m.classList.remove('off')); sendPage(true); };
     es.addEventListener('santa', e => { try { window.dispatchEvent(new CustomEvent('santa-msg', { detail: JSON.parse(e.data) })); } catch (x) {} });   // Papá Noel (santa.js)
     es.onmessage = e => { const n = parseInt(e.data, 10); if (Number.isFinite(n) && n >= 0) show(n); };
@@ -78,6 +80,7 @@
   // ---------- Aviso de «dónde estoy» (página y sección, para el panel de administrador) ----------
   // Solo se envía la ruta de la página y el título de la ventana abierta (por ejemplo «Ruleta»). Nada personal.
   // Se manda al abrir la conexión y cuando cambia (como mucho una vez cada 4 s). El servidor lo guarda solo en memoria.
+  // Se envía con GET (igual que la conexión /api/online, que sí llega siempre) y no cuenta en el límite de POST del servidor.
   let pageSent = '', pageAt = 0;
   function where() {
     const h = document.querySelector('.modal:not(.hidden) h2');
@@ -89,7 +92,7 @@
     if (!force && key === pageSent) return;
     if (!force && Date.now() - pageAt < 4000) return;
     pageSent = key; pageAt = Date.now();
-    fetch('/api/online/page?cid=' + encodeURIComponent(cid) + '&p=' + encodeURIComponent(w.p) + '&s=' + encodeURIComponent(w.s), { method: 'POST', keepalive: true }).catch(() => {});
+    fetch('/api/online/page?cid=' + encodeURIComponent(cid) + '&p=' + encodeURIComponent(w.p) + '&s=' + encodeURIComponent(w.s), { cache: 'no-store', keepalive: true }).catch(() => {});
   }
   setInterval(sendPage, 5000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) sendPage(true); });
