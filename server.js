@@ -7,6 +7,7 @@ const crypto = require('node:crypto');
 const { Pool, types } = require('pg');
 const telegram = require('./telegram');   // avisos al móvil del dueño (TELEGRAM_TOKEN y TELEGRAM_CHAT_ID; sin ellas queda apagado)
 const indexNow = require('./indexnow');   // aviso a buscadores (IndexNow) cuando se despliega una versión nueva
+const onlineLive = require('./online-live');   // detalle en vivo de cada jugador conectado (panel de administrador)
 const onlineStats = require('./online-stats');   // jugadores en línea por país (panel al tocar el contador)
 const TERRENOS_NUEVOS = require('./terrenos-nuevos.js');   // 🌱 las 11 parcelas al azar (rareza, producción)
 const bots = require('./bots');   // jugadores automáticos 🌍: uno por país, una parcela al día cada uno (BOTS=off los apaga; ver bots.js)
@@ -1566,7 +1567,7 @@ function onlinePeaksCheck(real, force) {   // compara el recuento actual con los
 function onlineRealGet() {   // solo jugadores REALES conectados ahora mismo (sin los de ambiente); para el administrador
   const real = onlineStats.tally(onlineClients.keys(), onlineCountryByCid);
   onlinePeaksCheck(real, true);
-  return { ...real, peaks: onlineStats.peaksList(onlinePeaks), shown: onlineShown(), at: Date.now() };
+  return { ...real, peaks: onlineStats.peaksList(onlinePeaks), shown: onlineShown(), at: Date.now(), live: onlineLive.list(onlineClients.keys()) };
 }
 // Jugadores con cuenta que se conectan: el cliente avisa con POST /api/online/seen (entrar, volver a la pestaña y cada ~10 min abierto).
 // Se guarda una fila por jugador y día (país de la conexión, región/ciudad si el proxy las da, nº de avisos). Como mucho una escritura cada 5 min por jugador.
@@ -1710,6 +1711,7 @@ function onlineStream(req, res, url) {
   });
   const cc = onlineStats.countryOf(req.headers, url.searchParams.get('country'));
   if (cc) onlineCountryByCid.set(cid, cc);
+  onlineLive.track(cid, req.headers, url.searchParams.get('country'));
   let set = onlineClients.get(cid);
   if (!set) { set = new Set(); onlineClients.set(cid, set); }
   set.add(res);
@@ -2866,6 +2868,11 @@ async function route(req, res, url) {
   if (req.method === 'GET' && pn === '/api/ping-db') { try { await run('SELECT 1 FROM parcels LIMIT 1'); return { ok: true, db: true }; } catch (e) { return { ok: false, db: false }; } }
   if (req.method === 'GET' && pn === '/api/health') return { ok: true };   // la pantalla de carga del sitio estático pregunta aquí si ya despertó
   if (req.method === 'GET' && pn === '/api/online/count') return { online: onlineShown() };
+  if (req.method === 'POST' && pn === '/api/online/page') {   // el jugador avisa de la página/sección donde está (panel de administrador)
+    const q = url.searchParams, cid = q.get('cid') || '';
+    if (/^[\w-]{8,40}$/.test(cid)) onlineLive.setPage(cid, q.get('p'), q.get('s'));
+    return { ok: true };
+  }
   if (req.method === 'GET' && pn === '/api/online/countries') return onlineCountriesGet();
   if (req.method === 'POST' && pn === '/api/online/pos') return onlinePos(req, await readJson(req));   // muñecos de los demás jugadores en el mapa (jugadores.js)
   if (req.method === 'GET' && pn === '/api/where') return placeGet(req, url);   // pueblo, región y país de un punto del mapa (etiqueta de lugar)
