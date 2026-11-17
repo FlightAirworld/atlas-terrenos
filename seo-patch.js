@@ -2,6 +2,8 @@
 // Arregla el SEO de index.html (informes de Seobility del 17-11-2026): título y descripción más cortos,
 // un solo H1, sin etiquetas vacías, ALT en todas las imágenes, sin etiquetas <b>/<strong> repetidas,
 // enlaces externos, botones para compartir en redes y textos ancla que no se repiten.
+// También: pie legal fijo abajo (antes salía detrás de los botones de arriba) y enlace a la página de Prensa
+// en el Menú, el pie, la portada y el texto para buscadores.
 // Se ejecuta solo: «npm install» (script postinstall, en el servidor de Render) y «node build-static.js» (sitio estático).
 // Es idempotente (se puede ejecutar mil veces) y NUNCA falla: si algo no encaja, deja el archivo como está y el juego arranca igual.
 const fs = require('node:fs');
@@ -46,6 +48,18 @@ const CSS2 = [
   '.seo-share{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);clip-path:inset(50%);white-space:nowrap;border:0}',
   '.seo-share a{display:inline-block;margin:0 6px}',
 ].join('\n');
+
+// Pie legal: una pastilla fija abajo en el centro. Queda encima del mapa (z-index 950) y por debajo de los botones, paneles y ventanas (1000 o más).
+// Deja libre la esquina inferior derecha, donde MapLibre pone el botón «i» de los créditos del mapa.
+const CSS3 = [
+  '.site-footer{position:fixed;left:50%;bottom:calc(8px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:950;width:max-content;max-width:calc(100vw - 96px);padding:2px 12px;border-radius:999px;background:var(--card);color:var(--fg);border:1px solid var(--line);box-shadow:0 2px 8px rgba(0,0,0,.25);font-size:12px;text-align:center}',
+  '.site-footer a{display:inline-block;padding:5px 3px;line-height:14px;color:inherit;text-decoration:none}',
+  '.site-footer a:hover,.site-footer a:focus-visible{text-decoration:underline}',
+  '@media (max-width:480px){.site-footer{font-size:11px}}',
+].join('\n');
+
+// Botón «Prensa» del Menú (se abre en una pestaña nueva para no sacar al jugador de la partida)
+const PRESS_BTN = '<button id="press-btn" data-label="Prensa" type="button" title="Prensa y medios" aria-label="Prensa y medios" onclick="window.open(\'/prensa.html\',\'_blank\',\'noopener\')">📰</button>';
 
 // Enlaces para compartir en redes (sin scripts de terceros: son enlaces normales) y enlaces externos de créditos del mapa
 const SITE = 'https://redecoraelmundo.com/';
@@ -104,6 +118,19 @@ function patch(html) {
 
   // 9. Redes sociales y enlaces externos: botones de compartir + créditos del mapa, dentro del pie de página (ocultos a la vista, ver CSS2)
   if (!h.includes('id="seo-share"')) rep(/<\/footer>/, () => `${SHARE_HTML}\n</footer>`);
+
+  // 10. Pie legal fijo abajo + enlace a Prensa.
+  // 10a. El pie estaba suelto al final del <body> y, como el mapa es de pantalla completa, salía arriba del todo, detrás de los botones, y no se podía tocar.
+  rep(/<footer style="text-align:center; font-size:13px; padding:12px;">/, () => '<footer class="site-footer">');
+  if (!h.includes('id="seo-patch-3"')) rep(/<\/head>/, () => `<style id="seo-patch-3">\n${CSS3}\n</style>\n</head>`);
+  // 10b. «Prensa» en el pie de página (enlace normal, lo ven los buscadores)
+  if (!h.includes('href="/prensa.html">Prensa</a>')) rep(/(<a href="\/terminos\.html">Condiciones del Servicio<\/a>)/, (m, a) => `${a} ·\n  <a href="/prensa.html">Prensa</a>`);
+  // 10c. Botón «Prensa» en el Menú (justo antes de «Invítame a un café» / «Cuenta»)
+  if (!h.includes('id="press-btn"')) rep(/([ \t]*)(<button id="coffee-btn")/, (m, sp, b) => `${sp}${PRESS_BTN}\n${sp}${b}`);
+  // 10d. Texto para buscadores («Guías y mundos»), portada y bloque <noscript>: cada enlace con un texto distinto para no repetir anclas
+  if (!h.includes('>Dossier de prensa</a>')) rep(/(<a href="\/mundo-pluton\.html">Plutón<\/a>)(<\/p>)/, (m, a, b) => `${a}<a href="/prensa.html">Dossier de prensa</a>${b}`);
+  if (!h.includes('>Sala de prensa</a>')) rep(/(<a href="\/terminos\.html">Condiciones<\/a>)(<\/div>)/, (m, a, b) => `${a} · <a href="/prensa.html">Sala de prensa</a>${b}`);
+  if (!h.includes('>Prensa y medios</a>')) rep(/(<a href="\/mundos\.html">Mundos: Luna, Marte y planetas<\/a>)(<\/p>)/, (m, a, b) => `${a} · <a href="/prensa.html">Prensa y medios</a>${b}`);
   return h;
 }
 
