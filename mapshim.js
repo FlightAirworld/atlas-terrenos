@@ -237,9 +237,17 @@
   const isHouse = id => id === 'owned-flat' || /^img-/.test(id || '');
   // Dónde van las casas ahora mismo en este mapa (undefined = no tocar: satélite, o no es el mapa principal)
   const anchorOf = m => (isSat() || !m.getLayer(FLAT_ANCHOR)) ? undefined : FLAT_ANCHOR;
-  // Los edificios beige del mapa quedan DEBAJO de las casas (antes las casas ya iban por encima de ellos)
+  // Los edificios beige del mapa quedan DEBAJO de las casas (antes las casas ya iban por encima de ellos).
+  // Se colocan debajo de la casa más baja que ya esté dibujada (o justo antes del ancla si aún no hay ninguna) y solo si
+  // están por encima: así NO se vuelven a subir encima de las casas que ya estaban puestas cada vez que se añade una nueva.
   function buildingsDown(m) {
-    try { if (m.getLayer('st-buildings') && m.getLayer(FLAT_ANCHOR)) m.moveLayer('st-buildings', FLAT_ANCHOR); } catch (e) {}
+    try {
+      if (!m.getLayer('st-buildings') || !m.getLayer(FLAT_ANCHOR)) return;
+      const ids = m.getStyle().layers.map(l => l.id);
+      const first = ids.find(id => id === 'owned-far' || isHouse(id));
+      const target = first || FLAT_ANCHOR;
+      if (ids.indexOf('st-buildings') > ids.indexOf(target)) m.moveLayer('st-buildings', target);
+    } catch (e) {}
   }
   const addLayer = maplibregl.Map.prototype.addLayer;
   maplibregl.Map.prototype.addLayer = function (layer, before) {
