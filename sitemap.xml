@@ -20,6 +20,16 @@
   <url>
     <loc>https://redecoraelmundo.com/prensa.html</loc>
     <lastmod>2026-11-17</lastmod>
+    <xhtml:link rel="alternate" hreflang="es" href="https://redecoraelmundo.com/prensa.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://redecoraelmundo.com/en/press.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://redecoraelmundo.com/prensa.html"/>
+  </url>
+  <url>
+    <loc>https://redecoraelmundo.com/en/press.html</loc>
+    <lastmod>2026-11-17</lastmod>
+    <xhtml:link rel="alternate" hreflang="es" href="https://redecoraelmundo.com/prensa.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://redecoraelmundo.com/en/press.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://redecoraelmundo.com/prensa.html"/>
   </url>
   <url>
     <loc>https://redecoraelmundo.com/juego-trivia.html</loc>
