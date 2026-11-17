@@ -1,0 +1,45 @@
+PARCHE PARA server.js  (4 cambios pequeños)
+===========================================
+Se hace en GitHub: abre server.js -> lápiz (editar) -> lupa (Ctrl+F) para buscar cada texto.
+
+1) AL PRINCIPIO, junto a los demás "require" (busca:  const onlineStats  ), añade debajo:
+
+const onlineLive = require('./online-live');
+
+
+2) EN LA CONEXIÓN SSE de /api/online (busca:  onlineCountryByCid.set(cid, cc);  )
+   Justo DESPUÉS de esa línea:  if (cc) onlineCountryByCid.set(cid, cc);   añade:
+
+  onlineLive.track(cid, req.headers, url.searchParams.get('country'));
+
+
+3) NUEVA RUTA (busca:  '/api/online/count'  y pégala junto a las otras rutas /api/online/...,
+   ANTES de las rutas de administrador, para que no pida clave):
+
+  if (req.method === 'POST' && pn === '/api/online/page') {
+    const q = url.searchParams, cid = q.get('cid') || '';
+    if (/^[\w-]{8,40}$/.test(cid)) onlineLive.setPage(cid, q.get('p'), q.get('s'));
+    return { ok: true };
+  }
+
+   (Si en ese router la URL no se llama "url" sino otra cosa, usa el mismo nombre que usan
+   las rutas de al lado.)
+
+
+4) EN LA FUNCIÓN onlineRealGet (busca:  function onlineRealGet  ). La línea del return:
+
+  return { ...real, peaks: onlineStats.peaksList(onlinePeaks), shown: onlineShown(), at: Date.now() };
+
+   cámbiala por:
+
+  return { ...real, peaks: onlineStats.peaksList(onlinePeaks), shown: onlineShown(), at: Date.now(), live: onlineLive.list(onlineClients.keys()) };
+
+
+ORDEN PARA SUBIR
+================
+1. Sube online-live.js (archivo nuevo).
+2. Haz el parche de server.js (los 4 cambios).
+3. Sube online.js y admin-online.html (sustituyen a los actuales).
+Espera a que se redespliegue el servidor y abre el panel de administrador.
+
+Si algo falla, el panel solo mostrará "falta añadir el parche"; el resto de la web no se ve afectado.

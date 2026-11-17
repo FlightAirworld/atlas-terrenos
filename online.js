@@ -43,7 +43,7 @@
     if (window.apiState && !window.apiState.ready) return;      // servidor dormido: se abre cuando despierte
     const mine = myCountry();
     es = new EventSource('/api/online?cid=' + encodeURIComponent(cid) + (mine ? '&country=' + mine : ''));
-    es.onopen = () => { btn.classList.remove('off'); mirrors(m => m.classList.remove('off')); };
+    es.onopen = () => { btn.classList.remove('off'); mirrors(m => m.classList.remove('off')); sendPage(true); };
     es.addEventListener('santa', e => { try { window.dispatchEvent(new CustomEvent('santa-msg', { detail: JSON.parse(e.data) })); } catch (x) {} });   // Papá Noel (santa.js)
     es.onmessage = e => { const n = parseInt(e.data, 10); if (Number.isFinite(n) && n >= 0) show(n); };
     es.onerror = () => {
@@ -74,6 +74,25 @@
   setInterval(seen, 30000);                                                    // entrar en la cuenta / cada ~10 min abierto
   document.addEventListener('visibilitychange', () => { if (!document.hidden) seen(); });
   setTimeout(seen, 4000);
+
+  // ---------- Aviso de «dónde estoy» (página y sección, para el panel de administrador) ----------
+  // Solo se envía la ruta de la página y el título de la ventana abierta (por ejemplo «Ruleta»). Nada personal.
+  // Se manda al abrir la conexión y cuando cambia (como mucho una vez cada 4 s). El servidor lo guarda solo en memoria.
+  let pageSent = '', pageAt = 0;
+  function where() {
+    const h = document.querySelector('.modal:not(.hidden) h2');
+    return { p: location.pathname + location.hash.slice(0, 40), s: h ? h.textContent.trim().slice(0, 60) : '' };
+  }
+  function sendPage(force) {
+    if (document.hidden || !es) return;
+    const w = where(), key = w.p + '|' + w.s;
+    if (!force && key === pageSent) return;
+    if (!force && Date.now() - pageAt < 4000) return;
+    pageSent = key; pageAt = Date.now();
+    fetch('/api/online/page?cid=' + encodeURIComponent(cid) + '&p=' + encodeURIComponent(w.p) + '&s=' + encodeURIComponent(w.s), { method: 'POST', keepalive: true }).catch(() => {});
+  }
+  setInterval(sendPage, 5000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) sendPage(true); });
 
   // ---------- Panel: jugadores en línea por país (se abre al tocar el contador) ----------
   // Solo cuenta jugadores realmente conectados. Se actualiza solo cada pocos segundos mientras está abierto.

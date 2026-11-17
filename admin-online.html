@@ -39,6 +39,7 @@
     .pl .on { color:var(--ok); font-size:.8rem; font-weight:600; margin-left:6px; }
     .pl .days { text-align:right; white-space:nowrap; font-weight:800; }
     .pl .days small { display:block; font-weight:500; color:var(--muted); font-size:.75rem; }
+    .lv .pg { font-size:.85rem; margin-top:2px; word-break:break-word; }
   </style>
 </head>
 <body>
@@ -59,6 +60,11 @@
       <div class="sub">Contador que ven los jugadores: <b id="shown">–</b></div>
       <div class="sub" id="upd"></div>
       <div class="sub" id="extra"></div>
+    </div>
+    <div class="card">
+      <b>Conectados ahora, uno por uno</b>
+      <div class="sub">Dónde está cada jugador, de dónde es, qué dispositivo usa y cuánto lleva conectado (se actualiza cada 5 s).</div>
+      <div id="live"><div class="sub">Cargando…</div></div>
     </div>
     <div class="card">
       <b>Resumen</b>
@@ -146,6 +152,30 @@
   var last = null;
   function repaint() { if (last) { render(last); renderPeaks(last); } }
 
+  // ---------- Conectados ahora, uno por uno ----------
+  var DEV = { mobile: '📱 Móvil', tablet: '📟 Tableta', desktop: '💻 PC' };
+  function dur(s) {
+    s = Math.max(0, s | 0);
+    if (s < 60) return s + ' s';
+    var m = Math.floor(s / 60);
+    if (m < 60) return m + ' min';
+    return Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
+  }
+  function renderLive(j) {
+    var el = $('live');
+    if (!Array.isArray(j.live)) { el.innerHTML = '<div class="sub">El servidor aún no envía este dato (falta añadir el parche en server.js).</div>'; return; }
+    if (!j.live.length) { el.innerHTML = '<div class="sub">Ahora mismo no hay jugadores reales conectados.</div>'; return; }
+    el.innerHTML = j.live.map(function (p) {
+      var country = p.cc ? flag(p.cc) + ' ' + esc(nameOf(p.cc)) : '🌐 Sin identificar';
+      var place = [p.city, p.region].filter(Boolean).map(esc).join(' · ');
+      var where = p.section ? esc(p.section) + (p.page ? ' <span class="sub">(' + esc(p.page) + ')</span>' : '') : (p.page ? esc(p.page) : '<span class="sub">Sin datos de página</span>');
+      return '<div class="pl lv"><div><span class="nm">' + country + '</span>' + (place ? '<div class="sub">📍 ' + place + '</div>' : '') +
+        '<div class="pg">🧭 ' + where + '</div></div>' +
+        '<div class="days">' + (DEV[p.device] || DEV.desktop) + '<small>conectado ' + dur(p.secs) + '</small>' +
+        (p.pageSecs != null ? '<small>aquí hace ' + dur(p.pageSecs) + '</small>' : '') + '</div></div>';
+    }).join('');
+  }
+
   function render(j) {
     last = j;
     $('real').textContent = (j.total || 0).toLocaleString('es');
@@ -157,6 +187,7 @@
     });
     if (j.unknown > 0) rows.push('<div class="row"><span>🌐 Sin identificar</span><b>' + j.unknown + '</b></div>');
     $('list').innerHTML = rows.length ? rows.join('') : '<div class="sub">Ahora mismo no hay jugadores reales conectados.</div>';
+    renderLive(j);
   }
 
   function renderPeaks(j) {
