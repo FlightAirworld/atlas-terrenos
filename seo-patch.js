@@ -39,10 +39,11 @@ const CSS = [
 ].join('\n');
 
 // Los contadores que antes eran <b> pasan a <span>: hay que darles el mismo aspecto que tenían
+// Los botones de compartir van ocultos a la vista (igual que el H1): el mapa a pantalla completa los tapaba y se veían cortados, pero siguen en el HTML para los buscadores
 const CSS2 = [
   '#cover-online #cover-online-n{font-weight:900;font-variant-numeric:tabular-nums}',
   '#map-controls #top-row #online-btn #online-n{font-size:16px;font-weight:800}',
-  '.seo-share{margin-top:8px;line-height:1.9}',
+  '.seo-share{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);clip-path:inset(50%);white-space:nowrap;border:0}',
   '.seo-share a{display:inline-block;margin:0 6px}',
 ].join('\n');
 
@@ -101,7 +102,7 @@ function patch(html) {
   rep(/(href="\/terminos\.html" target="_blank" rel="noopener">)Condiciones del Servicio(<\/a>)/, (m, a, b) => `${a}condiciones de uso${b}`);
   rep(/(href="\/privacidad\.html" target="_blank" rel="noopener">)Política de Privacidad(<\/a>)/, (m, a, b) => `${a}política de datos personales${b}`);
 
-  // 9. Redes sociales y enlaces externos: botones de compartir + créditos del mapa, dentro del pie de página visible
+  // 9. Redes sociales y enlaces externos: botones de compartir + créditos del mapa, dentro del pie de página (ocultos a la vista, ver CSS2)
   if (!h.includes('id="seo-share"')) rep(/<\/footer>/, () => `${SHARE_HTML}\n</footer>`);
   return h;
 }
