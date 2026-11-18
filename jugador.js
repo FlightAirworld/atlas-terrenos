@@ -1,8 +1,8 @@
 'use strict';
-// PERSONAJE PRINCIPAL: todos los jugadores comparten el mismo muñeco de dibujos animados
+// MUÑECO DEL JUGADOR: cada jugador tiene el suyo (piel, pelo, peinado o gorra, camiseta y pantalón salen de su apodo, siempre igual para la misma persona)
 // y lleva pegada en el pecho la bandera de su país. Siempre se dibuja DE FRENTE (nunca de perfil ni girado). Lo usan el cohete (la cabeza se ve por la ventanilla, el muñeco sube y baja por la rampa),
 // el paracaidista (skydive.js) y, ya en tierra, el muñeco que se queda en el mapa y camina según el jugador lo mueve.
-//   window.playerLook()            → aspecto común del personaje principal
+//   window.playerLook()            → { skin, hair, hs (peinado 0-4), shirt, pants }
 //   window.playerFlag()            → emoji de la bandera del jugador ('' si no hay país)
 //   window.playerBody({ suit })    → dibujo (sin <svg>) en un recuadro de 40 × 68; suit = traje de astronauta con pecera transparente
 //   window.playerSVG({ suit })     → <svg> completo con ese dibujo (clases .face, .lg, .l1, .l2 para animar las piernas)
@@ -40,13 +40,24 @@
     try { s = localStorage.getItem('playerSeed') || ''; if (!s) { s = Math.random().toString(36).slice(2, 10); localStorage.setItem('playerSeed', s); } } catch (e) { s = 'x'; }
     return 's:' + s;
   }
-  // Aspecto fijo para TODOS los jugadores. La bandera del país sigue siendo individual.
-  const MAIN_LOOK = Object.freeze({ skin: '#ffd9b3', hair: '#e6ad24', hs: 5, shirt: '#ff9f1c', pants: '#2b3a67' });
-  window.playerLook = function () { return { ...MAIN_LOOK }; };
+  let cacheKey = '', cache = null;
+  window.playerLook = function () {
+    const key = seedText() + (window.isAdminDoll() ? '|a' : '');
+    if (cache && key === cacheKey) return cache;
+    const r = rng(fnv(key.replace(/\|a$/, ''))), pick = a => a[Math.floor(r() * a.length)];
+    cacheKey = key;
+    cache = { skin: pick(SKIN), hair: pick(HAIR), hs: Math.floor(r() * 5), shirt: pick(SHIRT), pants: pick(PANTS) };
+    if (window.isAdminDoll()) cache.skin = ADMIN_SKIN;
+    return cache;
+  };
 
-  // Los demás jugadores también se muestran con el mismo personaje principal.
-  window.playerLookFor = function () { return { ...MAIN_LOOK }; };
-
+  // Aspecto de otro jugador a partir de su apodo (o de un código): siempre el mismo para la misma persona
+  window.playerLookFor = function (text) {
+    const nn = String(text || '').trim().toLowerCase(), r = rng(fnv('n:' + (LOOK_ALIAS[nn] || nn))), pick = a => a[Math.floor(r() * a.length)];
+    const L = { skin: pick(SKIN), hair: pick(HAIR), hs: Math.floor(r() * 5), shirt: pick(SHIRT), pants: pick(PANTS) };
+    if (ADMIN_NICKS.includes(nn)) L.skin = ADMIN_SKIN;   // los demás también ven al administrador con la piel blanca
+    return L;
+  };
   window.flagOf = cc => /^[A-Za-z]{2}$/.test(cc || '') ? String.fromCodePoint(...[...cc.toUpperCase()].map(ch => 127397 + ch.charCodeAt(0))) : '';
 
   // Bandera del país del jugador (la que eligió o detectó el juego); sin país no se pone ninguna
@@ -67,15 +78,14 @@
     const face = `<ellipse cx="20" cy="14.3" rx="7.9" ry="8.3" fill="${s}"/><path d="M13 18.6 Q20 25.4 27 18.6 Q24 22.6 20 22.6 Q16 22.6 13 18.6Z" fill="rgba(0,0,0,.07)"/>`
       + `<circle cx="14.7" cy="18" r="1.6" fill="rgba(255,100,115,.22)"/><circle cx="25.3" cy="18" r="1.6" fill="rgba(255,100,115,.22)"/>`;
     const fringe = `<path d="M11.9 13.4 C11.2 6.6 15 4.6 20 4.6 C25 4.6 28.8 6.6 28.1 13.4 C26.8 10.4 24.2 9 20 9 C15.8 9 13.2 10.4 11.9 13.4Z" fill="${h}"/><path d="M14.5 6.6 Q18 4.8 21 5.2" stroke="${hi}" stroke-width="1.2" fill="none" stroke-linecap="round"/>`;
-    const front = L.hs === 5 ? `<path d="M11.8 13.4 C10.8 10.2 12.3 7.8 14.8 7.1 L13.7 3.1 L18.1 5.2 L20.2 1.8 L22 5.2 L27.1 3.7 L25.8 7.4 C28.5 8.2 29.3 10.8 28.2 13.4 C25.8 10.8 23.1 9.7 20 9.7 C16.9 9.7 14.2 10.8 11.8 13.4Z" fill="${h}" stroke="rgba(120,75,15,.35)" stroke-width=".45"/><path d="M15 6.4 L17.4 6.1 M21.7 5.8 L24.7 5.2" stroke="rgba(255,255,255,.35)" stroke-width="1" stroke-linecap="round"/>`
-      : L.hs === 2 ? `<rect x="11.6" y="11.4" width="2.2" height="5" rx="1" fill="${h}"/><rect x="26.2" y="11.4" width="2.2" height="5" rx="1" fill="${h}"/>`
+    const front = L.hs === 2 ? `<rect x="11.6" y="11.4" width="2.2" height="5" rx="1" fill="${h}"/><rect x="26.2" y="11.4" width="2.2" height="5" rx="1" fill="${h}"/>`
         + `<path d="M11 12 C11 5.2 15 3.4 20 3.4 C25 3.4 29 5.2 29 12 Z" fill="${L.shirt}"/><path d="M11 12 C11 5.2 15 3.4 20 3.4 C25 3.4 29 5.2 29 12 Z" fill="rgba(0,0,0,.12)"/>`
         + `<path d="M10 11.4 Q20 9 30 11.4 Q30 12.8 20 12.6 Q10 12.8 10 11.4Z" fill="${L.shirt}" stroke="rgba(0,0,0,.28)" stroke-width=".5"/><circle cx="20" cy="3.6" r="1.1" fill="${L.shirt}" stroke="rgba(0,0,0,.25)" stroke-width=".4"/>`
       : L.hs === 1 ? fringe + `<rect x="9.4" y="11" width="3.4" height="20" rx="1.7" fill="${h}"/><rect x="27.2" y="11" width="3.4" height="20" rx="1.7" fill="${h}"/>`
       : L.hs === 3 ? fringe + `<circle cx="20" cy="3.4" r="3.6" fill="${h}"/><rect x="18.4" y="5.6" width="3.2" height="1.4" rx=".7" fill="rgba(0,0,0,.3)"/>`
       : fringe;
     const brows = L.hs === 2 ? '' : `<path d="M13.8 11.7 Q16.4 10.3 18.8 11.4 M21.2 11.4 Q23.6 10.3 26.2 11.7" stroke="${h}" stroke-width="1.35" fill="none" stroke-linecap="round"/>`;
-    const eye = x => `<g class="pw-eye"><ellipse cx="${x}" cy="14.8" rx="1.9" ry="1.5" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width=".35"/><circle cx="${x}" cy="14.9" r="1.05" fill="#3a2a1f"/><circle cx="${x}" cy="14.9" r=".5" fill="#111"/><circle cx="${x + .4}" cy="14.5" r=".32" fill="#fff"/></g>`;
+    const eye = x => `<ellipse cx="${x}" cy="14.8" rx="1.9" ry="1.5" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width=".35"/><circle cx="${x}" cy="14.9" r="1.05" fill="#3a2a1f"/><circle cx="${x}" cy="14.9" r=".5" fill="#111"/><circle cx="${x + .4}" cy="14.5" r=".32" fill="#fff"/>`;
     const feat = `${eye(16.7)}${eye(23.3)}<path d="M20 15.8 Q18.8 18.3 21 18.4" stroke="rgba(120,60,40,.7)" fill="none" stroke-width="1" stroke-linecap="round"/><path d="M17.1 19.8 Q20 22.6 22.9 19.8" stroke="#b03a48" fill="none" stroke-width="1.35" stroke-linecap="round"/>`;
     if (part === 'back') return back;
     return (part === 'front' ? '' : back) + `${ears}${face}${front}${brows}${feat}`;
@@ -116,14 +126,10 @@
 
   const st = document.createElement('style');
   st.textContent = `
-    .pw { position: absolute; left: 50%; top: 50%; width: 66px; height: 112px; margin: -112px 0 0 -33px; z-index: 3; pointer-events: none; transition: opacity .35s; animation: pwIn .4s ease-out both; }
+    .pw { position: absolute; left: 50%; top: 50%; width: 42px; height: 71px; margin: -71px 0 0 -21px; z-index: 3; pointer-events: none; transition: opacity .35s; animation: pwIn .4s ease-out both; }
     .pw svg { width: 100%; height: 100%; overflow: visible; display: block; filter: drop-shadow(0 3px 3px rgba(0,0,0,.4)); }
     .pw .pw-sh { position: absolute; left: 50%; bottom: -3px; width: 30px; height: 8px; margin-left: -15px; border-radius: 50%; background: rgba(0,0,0,.28); }
-    .pw .face { transform-box: view-box; transform-origin: 20px 34px; animation: pwIdle 2.8s ease-in-out infinite; }
-    .pw .pw-eye { transform-box: fill-box; transform-origin: center; animation: pwBlink 4.6s infinite; }
-    .pw .pw-eye:nth-of-type(2) { animation-delay: .04s; }
-    .pw:not(.walking) .a1 { animation: pwIdleArm 2.4s ease-in-out infinite; }
-    .pw:not(.walking) .a2 { animation: pwIdleArm 2.4s ease-in-out infinite reverse; }
+    .pw .face { transform-box: view-box; transform-origin: 20px 34px; }
     .pw .lg { transform-box: fill-box; transform-origin: 50% 0; }
     .pw.walking .l1 { animation: pwA .3s infinite alternate ease-in-out; }
     .pw.walking .l2 { animation: pwB .3s infinite alternate ease-in-out; }
@@ -133,9 +139,6 @@
     @keyframes pwA { from { transform: rotate(-24deg); } to { transform: rotate(24deg); } }
     @keyframes pwB { from { transform: rotate(24deg); } to { transform: rotate(-24deg); } }
     @keyframes pwBob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
-    @keyframes pwIdle { 0%, 88%, 100% { transform: rotate(0deg) translateY(0); } 92% { transform: rotate(-2deg) translateY(-.5px); } 96% { transform: rotate(2deg) translateY(0); } }
-    @keyframes pwBlink { 0%, 44%, 47%, 100% { transform: scaleY(1); } 45%, 46% { transform: scaleY(.08); } }
-    @keyframes pwIdleArm { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
     @keyframes pwIn { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: none; } }`;
   document.head.appendChild(st);
   const st2 = document.createElement('style');
