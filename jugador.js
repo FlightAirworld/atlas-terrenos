@@ -116,7 +116,7 @@
 
   const st = document.createElement('style');
   st.textContent = `
-    .pw { position: absolute; left: 50%; top: 50%; width: 42px; height: 71px; margin: -71px 0 0 -21px; z-index: 3; pointer-events: none; transition: opacity .35s; animation: pwIn .4s ease-out both; }
+    .pw { position: absolute; left: 50%; top: 50%; width: 66px; height: 112px; margin: -112px 0 0 -33px; z-index: 3; pointer-events: none; transition: opacity .35s; animation: pwIn .4s ease-out both; }
     .pw svg { width: 100%; height: 100%; overflow: visible; display: block; filter: drop-shadow(0 3px 3px rgba(0,0,0,.4)); }
     .pw .pw-sh { position: absolute; left: 50%; bottom: -3px; width: 30px; height: 8px; margin-left: -15px; border-radius: 50%; background: rgba(0,0,0,.28); }
     .pw .face { transform-box: view-box; transform-origin: 20px 34px; animation: pwIdle 2.8s ease-in-out infinite; }

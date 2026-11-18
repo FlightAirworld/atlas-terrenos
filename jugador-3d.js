@@ -24,7 +24,7 @@
   };
   function build(flag) {
     const root = new THREE.Group();
-    const skin=mat('#f5c99f'), hair=mat('#e7b52e'), shirt=mat('#ff8b19'), yellow=mat('#ffc928'), jeans=mat('#2860a5'), shoe=mat('#20232a'), white=mat('#fff');
+    const skin=mat('#d99a70'), hair=mat('#c88b16'), shirt=mat('#d9650b'), yellow=mat('#e0a900'), jeans=mat('#17477f'), shoe=mat('#171a20'), white=mat('#f4f4f4');
     // piernas y zapatillas
     const legs=[];
     for (const x of [-.22,.22]) {
@@ -70,14 +70,14 @@
     let renderer, raf=0, model, disposed=false;
     try {
       renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,powerPreference:'low-power'});
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5)); renderer.setSize(96,144,false); renderer.setClearColor(0x000000,0);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2)); renderer.setSize(132,224,false); renderer.setClearColor(0x000000,0);
       renderer.outputEncoding=THREE.sRGBEncoding; holder.appendChild(renderer.domElement);
       renderer.domElement.style.cssText='width:100%;height:100%;display:block;';
-      const scene=new THREE.Scene(); scene.add(new THREE.HemisphereLight(0xffffff,0x8290a8,2.0));
-      const key=new THREE.DirectionalLight(0xffffff,2.1); key.position.set(-3,5,5); scene.add(key);
-      const camera=new THREE.OrthographicCamera(-1.05,1.05,3.15,-.05,.1,20); camera.position.set(0,1.55,7); camera.lookAt(0,1.55,0);
+      const scene=new THREE.Scene(); scene.add(new THREE.HemisphereLight(0xffffff,0x596273,0.9));
+      const key=new THREE.DirectionalLight(0xffffff,1.15); key.position.set(-3,5,5); scene.add(key);
+      const camera=new THREE.OrthographicCamera(-.95,.95,2.78,.02,.1,20); camera.position.set(0,1.55,7); camera.lookAt(0,1.55,0);
       model=build(window.playerFlag?window.playerFlag():''); scene.add(model);
-      const resize=()=>{ if(!renderer || disposed)return; const w=Math.max(1,holder.clientWidth),h=Math.max(1,holder.clientHeight); renderer.setSize(w,h,false); const aspect=w/h; camera.left=-1.05*aspect; camera.right=1.05*aspect; camera.top=3.15; camera.bottom=-.05; camera.updateProjectionMatrix(); };
+      const resize=()=>{ if(!renderer || disposed)return; const w=Math.max(1,holder.clientWidth),h=Math.max(1,holder.clientHeight); renderer.setSize(w,h,false); const aspect=w/h; camera.left=-.95*aspect; camera.right=.95*aspect; camera.top=2.78; camera.bottom=.02; camera.updateProjectionMatrix(); };
       resize(); const ro=window.ResizeObserver?new ResizeObserver(resize):null; if(ro)ro.observe(holder);
       const clock=new THREE.Clock();
       const tick=()=>{ if(disposed)return; raf=requestAnimationFrame(tick); const t=clock.getElapsedTime(), walking=el.classList.contains('walking'); const speed=walking?9:1.7, amp=walking?.58:.035;
