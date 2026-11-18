@@ -1510,6 +1510,22 @@
       return null;
     },
     // Boda: 4 coches decorados por la misma ruta, tocando el claxon
+    zombieSmashAtCenter() {
+      if (!on || !vehicles.length) return false;
+      const size = map.getSize(), cx = size.x / 2, cy = size.y / 2;
+      let best = -1, bd = 48;
+      for (let i=0;i<vehicles.length;i++) {
+        const v=vehicles[i]; if (!v || !v.K || !v.K.traffic || !v.mk) continue;
+        const p=map.latLngToContainerPoint(v.mk.getLatLng()), d=Math.hypot(p.x-cx,p.y-cy);
+        if (d<bd) { bd=d; best=i; }
+      }
+      if (best<0) return false;
+      const v=vehicles[best], p=map.latLngToContainerPoint(v.mk.getLatLng());
+      const fx=document.createElement('div'); fx.textContent='💥';
+      fx.style.cssText=`position:absolute;left:${p.x}px;top:${p.y}px;z-index:9999;font-size:34px;transform:translate(-50%,-50%);pointer-events:none`;
+      map.getContainer().appendChild(fx); setTimeout(()=>fx.remove(),700);
+      removeVehicle(best); return true;
+    },
     convoy() {
       if (!on || map.getZoom() < MIN_ZOOM) return false;
       refreshSizes(); const r = pathRoute(40, true, false); if (!r) return false;

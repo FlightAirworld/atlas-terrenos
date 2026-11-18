@@ -141,6 +141,17 @@
     @keyframes pwBob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
     @keyframes pwIn { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: none; } }`;
   document.head.appendChild(st);
+  const zombieStyle = document.createElement('style');
+  zombieStyle.textContent = `
+    .pw.zombie svg { filter: drop-shadow(0 0 5px #7cff55) drop-shadow(0 3px 3px #0009); }
+    .pw.zombie .face { animation: zBob .22s infinite alternate; }
+    .pw.zombie:after { content:'🧟'; position:absolute; right:-13px; top:-8px; font-size:17px; animation:zPulse .55s infinite alternate; }
+    .pw-zfx { position:absolute; left:50%; top:0; transform:translate(-50%,-100%); font-size:23px; pointer-events:none; animation:zPop .8s ease-out forwards; }
+    @keyframes zBob { from { transform:rotate(-4deg) translateY(0) } to { transform:rotate(5deg) translateY(-2px) } }
+    @keyframes zPulse { from { scale:.85 } to { scale:1.18 } }
+    @keyframes zPop { from { opacity:1; transform:translate(-50%,-50%) scale(.6) } to { opacity:0; transform:translate(-50%,-150%) scale(1.5) } }
+  `;
+  document.head.appendChild(zombieStyle);
   const st2 = document.createElement('style');
   st2.textContent = `
     :is(#visita, #edif) .v-fig .flagp { left: 3px; top: 8px; width: 26px; height: 19px; border-radius: 4px; background: #fff; box-shadow: 0 0 0 1px #0004; display: grid; place-items: center; font-size: 15px; line-height: 1; font-family: ${EMOJI}; transform: scaleX(var(--fx, 1)); }
@@ -236,8 +247,31 @@
     return { pts, cum, total: cum[cum.length - 1] };
   }
 
+  const ZOMBIE_SVG = `<svg viewBox="0 0 40 68" aria-hidden="true"><g class="face">
+    <ellipse cx="20" cy="65" rx="13" ry="3" fill="#0005"/>
+    <path d="M13 42 L12 64 L18 64 L20 48 L23 64 L29 64 L27 42Z" fill="#35452d" stroke="#182416" stroke-width="1.5"/>
+    <path d="M11 23 Q20 18 29 23 L31 44 Q20 49 9 44Z" fill="#557b3b" stroke="#243d20" stroke-width="1.5"/>
+    <path d="M10 26 L5 39 L9 43 L15 31 M29 26 L35 38 L31 43 L25 31" fill="none" stroke="#557b3b" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="20" cy="13" r="10" fill="#91b66a" stroke="#38552c" stroke-width="1.5"/>
+    <path d="M11 9 Q17 -2 28 7 L29 12 Q20 7 11 13Z" fill="#26321f"/>
+    <circle cx="16" cy="13" r="2.1" fill="#f22"/><circle cx="24" cy="13" r="2.1" fill="#f22"/>
+    <path d="M13 20 Q20 25 28 19 L26 25 L15 25Z" fill="#321"/><path d="M16 21 L18 25 L20 21 L22 25 L24 21" fill="#fff"/>
+    <path d="M9 30 L4 34 M31 29 L36 34" stroke="#9bca73" stroke-width="2"/>
+  </g></svg>`;
+  function zombieSound(kind) {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      const a = zombieSound.ctx || (zombieSound.ctx = new AC()); if (a.state === 'suspended') a.resume();
+      const o = a.createOscillator(), g = a.createGain(); o.type = kind === 'smash' ? 'sawtooth' : 'triangle';
+      o.frequency.setValueAtTime(kind === 'smash' ? 95 : 72, a.currentTime);
+      o.frequency.exponentialRampToValueAtTime(kind === 'smash' ? 35 : 42, a.currentTime + .42);
+      g.gain.setValueAtTime(.0001, a.currentTime); g.gain.exponentialRampToValueAtTime(.12, a.currentTime + .04); g.gain.exponentialRampToValueAtTime(.0001, a.currentTime + .48);
+      o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + .5);
+    } catch(e) {}
+  }
+  function zombiePop(el, emoji) { const n=document.createElement('span'); n.className='pw-zfx'; n.textContent=emoji; el.appendChild(n); setTimeout(()=>n.remove(),850); }
   function autoWalk(m, el) {
-    let lastAct = Date.now(), walking = false, raf = 0, pending = 0, lastEnter = 0, noEnterUntil = 0;
+    let lastAct = Date.now(), walking = false, raf = 0, pending = 0, lastEnter = 0, noEnterUntil = 0, zombie = false, lastBite = 0, lastSmash = 0;
     const seen = new Map();   // id de parcela → cuándo se decidió si entrar
     const sceneOpen = () => !!(document.getElementById('visita') || document.getElementById('edif'));
     const scaleNow = () => Math.pow(2, m.getZoom() + 1 - REF_Z);   // píxeles de pantalla por píxel de mundo (el zoom de MapLibre va 1 por debajo del de Leaflet)
@@ -257,8 +291,13 @@
           && !(window.paseo && window.paseo.running && window.paseo.running());
       } catch (e) { return false; }
     };
-    function stopWalk() { walking = false; if (raf) cancelAnimationFrame(raf); raf = 0; }
-    const act = () => { lastAct = Date.now(); if (walking) stopWalk(); };
+    function setZombie(on) {
+      if (zombie === on) return; zombie = on;
+      if (on) { el.classList.add('zombie'); el.dataset.normalSvg = el.innerHTML; el.innerHTML = '<i class="pw-sh"></i>' + ZOMBIE_SVG; zombieSound('groan'); }
+      else { el.classList.remove('zombie'); el.innerHTML = el.dataset.normalSvg || ('<i class="pw-sh"></i>' + window.playerSVG({suit:false})); delete el.dataset.normalSvg; }
+    }
+    function stopWalk() { walking = false; setZombie(false); if (raf) cancelAnimationFrame(raf); raf = 0; }
+    const act = () => { lastAct = Date.now(); if (walking || zombie) stopWalk(); };
 
     // Busca por dónde seguir: la calle más cercana al muñeco que tenga trecho por delante. Devuelve el trayecto (muñeco → calle → calle adelante) o null.
     function plan(maxJoin) {
@@ -329,7 +368,7 @@
 
     // Va por el trayecto a velocidad constante moviendo el mapa bajo el muñeco (que está fijo en el centro), por el borde de la calzada
     function follow(R) {
-      walking = true;
+      walking = true; setZombie(true);
       let s = 0, seg = 0, off = 0, last = performance.now(), nextCheck = last + 800;
       const step = now => {
         if (!walking) return;
@@ -350,6 +389,15 @@
         off += Math.max(-24 * dt, Math.min(24 * dt, target - off));       // cambia suave al pasar de una calle a otra
         const o = off / sc, ll = fromW(a.x + (b.x - a.x) * t - uy * o, a.y + (b.y - a.y) * t + ux * o);
         m.jumpTo({ center: [ll.lng, ll.lat] });
+        // Mordisco: los peatones que cruzan el centro desaparecen con efecto y sonido.
+        if (now - lastBite > 1900 && window.peopleWalkers && window.peopleKill) {
+          const victim = window.peopleWalkers.find(w => w && w.near);
+          if (victim) { window.peopleKill(victim); lastBite = now; zombiePop(el, '🩸'); zombieSound('bite'); }
+        }
+        // Golpe a vehículos cercanos: la API de tráfico devuelve el coche eliminado.
+        if (now - lastSmash > 2600 && window.CityVeh && window.CityVeh.zombieSmashAtCenter) {
+          if (window.CityVeh.zombieSmashAtCenter()) { lastSmash = now; zombiePop(el, '💥'); zombieSound('smash'); }
+        }
         if (now >= nextCheck) { nextCheck = now + 400; if (maybeEnter()) return; }
         raf = requestAnimationFrame(step);
       };
