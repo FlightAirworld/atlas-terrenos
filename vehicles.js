@@ -31,7 +31,11 @@
   st.textContent = `
     .vh { background: transparent !important; border: 0 !important; pointer-events: none !important; }
     .vh-in, .vh-rot { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
-    .vh-rot svg { position: absolute; left: 0; top: 0; overflow: visible; }
+    .vh-in { animation: vhCartoonRide .38s ease-in-out infinite alternate; transform-origin: center center; }
+    .vh-rot svg { position: absolute; left: 0; top: 0; overflow: visible; filter: drop-shadow(0 1px 1px rgba(0,0,0,.22)); }
+    .vh-rot svg rect[rx] { stroke-linejoin: round; }
+    @keyframes vhCartoonRide { from { translate: 0 0; } to { translate: 0 -1px; } }
+    @media (prefers-reduced-motion: reduce) { .vh-in { animation: none; } }
     .vh-glow { position: absolute; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; }
     .g-r { background: radial-gradient(circle, rgba(255,40,50,.8), rgba(255,40,50,0) 68%); }
     .g-b { background: radial-gradient(circle, rgba(50,120,255,.85), rgba(50,120,255,0) 68%); }
@@ -1510,22 +1514,6 @@
       return null;
     },
     // Boda: 4 coches decorados por la misma ruta, tocando el claxon
-    zombieSmashAtCenter() {
-      if (!on || !vehicles.length) return false;
-      const size = map.getSize(), cx = size.x / 2, cy = size.y / 2;
-      let best = -1, bd = 48;
-      for (let i=0;i<vehicles.length;i++) {
-        const v=vehicles[i]; if (!v || !v.K || !v.K.traffic || !v.mk) continue;
-        const p=map.latLngToContainerPoint(v.mk.getLatLng()), d=Math.hypot(p.x-cx,p.y-cy);
-        if (d<bd) { bd=d; best=i; }
-      }
-      if (best<0) return false;
-      const v=vehicles[best], p=map.latLngToContainerPoint(v.mk.getLatLng());
-      const fx=document.createElement('div'); fx.textContent='💥';
-      fx.style.cssText=`position:absolute;left:${p.x}px;top:${p.y}px;z-index:9999;font-size:34px;transform:translate(-50%,-50%);pointer-events:none`;
-      map.getContainer().appendChild(fx); setTimeout(()=>fx.remove(),700);
-      removeVehicle(best); return true;
-    },
     convoy() {
       if (!on || map.getZoom() < MIN_ZOOM) return false;
       refreshSizes(); const r = pathRoute(40, true, false); if (!r) return false;

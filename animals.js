@@ -18,8 +18,13 @@
     .an-in svg { overflow: visible; }
     .an-in.flip svg { transform: scaleX(-1); }
     .an-in.still { animation: none; }
+    .an-in .an-tail { transform-box: fill-box; transform-origin: 80% 80%; animation: anTail .42s ease-in-out infinite alternate; }
+    .an-in .an-ear { transform-box: fill-box; transform-origin: 50% 90%; animation: anEar .7s ease-in-out infinite alternate; }
+    .an-in svg { filter: drop-shadow(0 1px 1px rgba(0,0,0,.22)); }
+    @keyframes anTail { from { transform: rotate(-16deg); } to { transform: rotate(20deg); } }
+    @keyframes anEar { from { transform: rotate(-5deg); } to { transform: rotate(7deg); } }
     @keyframes anbob { from { transform: translateY(0); } to { transform: translateY(-1.4px); } }
-    @media (prefers-reduced-motion: reduce) { .an-in { animation: none; } }`;
+    @media (prefers-reduced-motion: reduce) { .an-in, .an-in .an-tail, .an-in .an-ear { animation: none; } }`;
   document.head.appendChild(st);
   map.createPane('animals');
   const pane = map.getPane('animals');
@@ -44,23 +49,23 @@
     const c = pick(['#b5773a', '#8b5a2b', '#e8d3a8', '#4a4a4a', '#d9a441']), d = '#00000033';
     return `<svg width="26" height="18" viewBox="0 0 26 18" aria-hidden="true">
       <ellipse cx="12" cy="16.5" rx="9" ry="1.4" fill="rgba(0,0,0,.25)"/>
-      <path d="M5 7 Q1 4 3 1" stroke="${c}" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+      <path class="an-tail" d="M5 7 Q1 4 3 1" stroke="${c}" stroke-width="1.8" fill="none" stroke-linecap="round"/>
       ${leg(7, 10, 16, c, 1.8, 28, .5, false)}${leg(9.5, 10, 16, c, 1.8, 28, .5, true)}${leg(14, 10, 16, c, 1.8, 28, .5, true)}${leg(16.5, 10, 16, c, 1.8, 28, .5, false)}
       <ellipse cx="12" cy="9" rx="7.5" ry="3.8" fill="${c}"/>
       <circle cx="19" cy="6.5" r="3.4" fill="${c}"/>
       <ellipse cx="22.4" cy="8" rx="2.2" ry="1.6" fill="#f3e6cf"/><circle cx="24" cy="7.4" r=".9" fill="#222"/>
       <ellipse cx="17.2" cy="5" rx="1.3" ry="2.6" fill="${c}" stroke="${d}" stroke-width=".6" transform="rotate(15 17.2 5)"/>
-      <circle cx="20.4" cy="5.6" r=".7" fill="#222"/></svg>`;
+      <circle cx="20.4" cy="5.6" r=".7" fill="#222"/><path d="M22.2 9.2 Q23 10.6 23.7 9.2" fill="#ee7890" stroke="#c95b76" stroke-width=".35"/></svg>`;
   }
   function catSVG() {
     const c = pick(['#8e8e8e', '#f4a261', '#2b2b2b', '#e8e8e8', '#b5773a']);
     return `<svg width="26" height="18" viewBox="0 0 26 18" aria-hidden="true">
       <ellipse cx="12" cy="16.5" rx="8" ry="1.3" fill="rgba(0,0,0,.25)"/>
-      <path d="M5 9 Q-1 8 1 1" stroke="${c}" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+      <path class="an-tail" d="M5 9 Q-1 8 1 1" stroke="${c}" stroke-width="1.8" fill="none" stroke-linecap="round"/>
       ${leg(7.5, 11, 16, c, 1.5, 30, .45, false)}${leg(10, 11, 16, c, 1.5, 30, .45, true)}${leg(14, 11, 16, c, 1.5, 30, .45, true)}${leg(16.5, 11, 16, c, 1.5, 30, .45, false)}
       <ellipse cx="12" cy="10" rx="7" ry="3.3" fill="${c}"/>
       <circle cx="19" cy="7.5" r="3.1" fill="${c}"/>
-      <path d="M16.6 5.6 L17 2 L19 4.6Z M19.4 4.6 L21.4 2 L21.8 5.6Z" fill="${c}"/>
+      <path class="an-ear" d="M16.6 5.6 L17 2 L19 4.6Z M19.4 4.6 L21.4 2 L21.8 5.6Z" fill="${c}"/>
       <circle cx="18" cy="7.2" r=".6" fill="#222"/><circle cx="20.4" cy="7.2" r=".6" fill="#222"/>
       <circle cx="19.2" cy="8.4" r=".5" fill="#e07a8a"/></svg>`;
   }

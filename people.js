@@ -13,14 +13,12 @@
   const st = document.createElement('style');
   st.textContent = `
     .pwk { background: transparent !important; border: 0 !important; pointer-events: none !important; }
-    .pw-in { width: 20px; height: 30px; transform-origin: 10px 28px; animation: pwbob .36s ease-in-out infinite alternate; transition: opacity .3s; }
+    .pw-in { width: 20px; height: 30px; transform-origin: 10px 28px; animation: pwbob .32s ease-in-out infinite alternate; transition: opacity .3s; }
     .pw-in svg { overflow: visible; }
     .pw-in .umb { display: none; }
     .pw-in.rain .umb { display: inline; }
-    @keyframes pwbob { from { transform: translateY(0); } to { transform: translateY(-1.6px); } }
-    @keyframes z-victim-grab { 0% { opacity:1; transform:translateY(0) scale(1) rotate(0) } 42% { opacity:1; transform:translate(-5px,-8px) scale(.82) rotate(-18deg) } 100% { opacity:0; transform:translate(0,-22px) scale(.12) rotate(35deg) } }
-    .pw-in.z-victim-grab { animation:z-victim-grab 1.05s ease-in forwards !important; transform-origin:50% 75%; }
-    .pwk:has(.z-victim-grab) { visibility:visible !important; }
+    @keyframes pwbob { from { transform: translateY(0) rotate(-1deg); } to { transform: translateY(-2px) rotate(1deg); } }
+    .pw-in svg { filter: drop-shadow(0 1px 1px rgba(0,0,0,.24)); }
     @media (prefers-reduced-motion: reduce) { .pw-in { animation: none; } }`;
   document.head.appendChild(st);
   map.createPane('people');
@@ -56,8 +54,12 @@
       <rect x="7" y="5.6" width="2" height="2.4" fill="${skin}"/>
       <circle cx="8" cy="3.6" r="3.5" fill="${skin}"/>
       <path d="M4.5 3.4 Q4.4 -0.4 8 -0.5 Q11.6 -0.4 11.5 3.4 Q9.6 1.4 8 1.6 Q6.4 1.4 4.5 3.4Z" fill="${hair}"/>
-      <circle cx="6.7" cy="4.1" r=".5" fill="#222"/><circle cx="9.3" cy="4.1" r=".5" fill="#222"/>
-      <path d="M6.9 5.6 Q8 6.5 9.1 5.6" stroke="#8a3b3b" stroke-width=".5" fill="none" stroke-linecap="round"/>
+      <ellipse cx="5.5" cy="5.1" rx="1.15" ry=".62" fill="#f58b91" opacity=".62"/><ellipse cx="10.5" cy="5.1" rx="1.15" ry=".62" fill="#f58b91" opacity=".62"/>
+      <ellipse cx="6.7" cy="4.1" rx=".78" ry=".95" fill="#fff"/><ellipse cx="9.3" cy="4.1" rx=".78" ry=".95" fill="#fff"/>
+      <circle cx="6.85" cy="4.2" r=".48" fill="#30251f"/><circle cx="9.45" cy="4.2" r=".48" fill="#30251f"/>
+      <circle cx="7.02" cy="3.92" r=".2" fill="#fff"/><circle cx="9.62" cy="3.92" r=".2" fill="#fff"/>
+      <path d="M6.55 5.55 Q8 7.05 9.45 5.55" stroke="#9d4148" stroke-width=".72" fill="none" stroke-linecap="round"/>
+      <path d="M5.2 1.8 Q8 -1.3 10.8 1.8" stroke="rgba(255,255,255,.35)" stroke-width=".55" fill="none" stroke-linecap="round"/>
       <g class="umb"${umb ? ' style="display:inline"' : ''}><path d="M-3 1.5Q8 -11 19 1.5Z" fill="${pick(['#e63946', '#1d3557', '#2a9d8f', '#6a4c93', '#f4a261', '#ffb703'])}"/><line x1="8" y1="1.5" x2="8" y2="9" stroke="#444" stroke-width=".8"/></g>
     </svg>`;
   }
@@ -68,16 +70,6 @@
   const walkers = [];
   window.peopleWalkers = walkers;
   window.peopleKill = w => { const i = walkers.indexOf(w); if (i >= 0) remove(i); };
-  // El zombi agarra al peatón que pasa justo por el centro; animación caricaturesca, sin violencia gráfica.
-  window.peopleGrabAtCenter = () => {
-    const w = walkers.find(x => x && x.near && !x.zombieGrabbed && x.mk);
-    if (!w) return false;
-    w.zombieGrabbed = true;
-    const marker = w.mk.getElement();
-    if (marker) { marker.style.visibility = 'visible'; const body = marker.querySelector('.pw-in'); if (body) { body.classList.remove('z-victim-grab'); void body.offsetWidth; body.classList.add('z-victim-grab'); } }
-    setTimeout(() => { const i = walkers.indexOf(w); if (i >= 0) remove(i); }, 1080);
-    return true;
-  };
   let zooming = false;
 
   // Coloca al peatón sobre su trayecto (centro de la calle) según la distancia recorrida w.s
@@ -166,7 +158,7 @@
           near = Math.abs(dx) < 48 && dy > -100 && dy < 34;
         }
         w.near = near;
-        if (w.hid !== near) { const me = w.mk.getElement(); if (me) { me.style.visibility = (near && !w.zombieGrabbed) ? 'hidden' : ''; w.hid = near; } }
+        if (w.hid !== near) { const me = w.mk.getElement(); if (me) { me.style.visibility = near ? 'hidden' : ''; w.hid = near; } }
         if (!w.el) { const e = w.mk.getElement(); w.el = e && e.firstChild; }
         if (w.el) {
           if (w.fpA !== FP) { w.el.style.scale = FP.toFixed(3); w.fpA = FP; }
