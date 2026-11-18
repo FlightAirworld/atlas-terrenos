@@ -18,6 +18,9 @@
     .pw-in .umb { display: none; }
     .pw-in.rain .umb { display: inline; }
     @keyframes pwbob { from { transform: translateY(0); } to { transform: translateY(-1.6px); } }
+    @keyframes z-victim-grab { 0% { opacity:1; transform:translateY(0) scale(1) rotate(0) } 42% { opacity:1; transform:translate(-5px,-8px) scale(.82) rotate(-18deg) } 100% { opacity:0; transform:translate(0,-22px) scale(.12) rotate(35deg) } }
+    .pw-in.z-victim-grab { animation:z-victim-grab 1.05s ease-in forwards !important; transform-origin:50% 75%; }
+    .pwk:has(.z-victim-grab) { visibility:visible !important; }
     @media (prefers-reduced-motion: reduce) { .pw-in { animation: none; } }`;
   document.head.appendChild(st);
   map.createPane('people');
@@ -65,6 +68,16 @@
   const walkers = [];
   window.peopleWalkers = walkers;
   window.peopleKill = w => { const i = walkers.indexOf(w); if (i >= 0) remove(i); };
+  // El zombi agarra al peatón que pasa justo por el centro; animación caricaturesca, sin violencia gráfica.
+  window.peopleGrabAtCenter = () => {
+    const w = walkers.find(x => x && x.near && !x.zombieGrabbed && x.mk);
+    if (!w) return false;
+    w.zombieGrabbed = true;
+    const marker = w.mk.getElement();
+    if (marker) { marker.style.visibility = 'visible'; const body = marker.querySelector('.pw-in'); if (body) { body.classList.remove('z-victim-grab'); void body.offsetWidth; body.classList.add('z-victim-grab'); } }
+    setTimeout(() => { const i = walkers.indexOf(w); if (i >= 0) remove(i); }, 1080);
+    return true;
+  };
   let zooming = false;
 
   // Coloca al peatón sobre su trayecto (centro de la calle) según la distancia recorrida w.s
@@ -153,7 +166,7 @@
           near = Math.abs(dx) < 48 && dy > -100 && dy < 34;
         }
         w.near = near;
-        if (w.hid !== near) { const me = w.mk.getElement(); if (me) { me.style.visibility = near ? 'hidden' : ''; w.hid = near; } }
+        if (w.hid !== near) { const me = w.mk.getElement(); if (me) { me.style.visibility = (near && !w.zombieGrabbed) ? 'hidden' : ''; w.hid = near; } }
         if (!w.el) { const e = w.mk.getElement(); w.el = e && e.firstChild; }
         if (w.el) {
           if (w.fpA !== FP) { w.el.style.scale = FP.toFixed(3); w.fpA = FP; }

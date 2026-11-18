@@ -143,13 +143,33 @@
   document.head.appendChild(st);
   const zombieStyle = document.createElement('style');
   zombieStyle.textContent = `
-    .pw.zombie svg { filter: drop-shadow(0 0 5px #7cff55) drop-shadow(0 3px 3px #0009); }
-    .pw.zombie .face { animation: zBob .22s infinite alternate; }
+    .pw.zombie { filter: drop-shadow(0 2px 2px #0008); }
+    .pw.zombie svg { filter: drop-shadow(0 0 5px #83d65a) drop-shadow(0 3px 3px #0009); overflow:visible; }
+    .pw.zombie .z-body { transform-box:fill-box; transform-origin:50% 45%; animation:zombie-lurch .48s ease-in-out infinite alternate; }
+    .pw.zombie .z-leg-l { transform-box:fill-box; transform-origin:50% 0; animation:zombie-leg-a .34s ease-in-out infinite alternate; }
+    .pw.zombie .z-leg-r { transform-box:fill-box; transform-origin:50% 0; animation:zombie-leg-b .34s ease-in-out infinite alternate; }
+    .pw.zombie .z-arm-l { transform-box:fill-box; transform-origin:85% 15%; animation:zombie-arm-a .42s ease-in-out infinite alternate; }
+    .pw.zombie .z-arm-r { transform-box:fill-box; transform-origin:15% 15%; animation:zombie-arm-b .42s ease-in-out infinite alternate; }
+    .pw.zombie .z-jaw { transform-box:fill-box; transform-origin:50% 0; animation:zombie-jaw .32s ease-in-out infinite alternate; }
+    .pw.zombie.z-kick .z-leg-r { animation:zombie-kick .52s ease-out 1 !important; }
+    .pw.zombie.z-grab .z-arm-r { animation:zombie-grab .78s ease-in-out 1 forwards !important; }
+    .pw.zombie.z-grab .z-jaw { animation:zombie-chomp .2s ease-in-out 4 alternate !important; }
     .pw.zombie:after { content:'🧟'; position:absolute; right:-13px; top:-8px; font-size:17px; animation:zPulse .55s infinite alternate; }
-    .pw-zfx { position:absolute; left:50%; top:0; transform:translate(-50%,-100%); font-size:23px; pointer-events:none; animation:zPop .8s ease-out forwards; }
-    @keyframes zBob { from { transform:rotate(-4deg) translateY(0) } to { transform:rotate(5deg) translateY(-2px) } }
+    .pw-zfx { position:absolute; left:50%; top:0; transform:translate(-50%,-100%); font-size:22px; font-weight:900; color:#e8ffcf; text-shadow:0 2px 3px #000; pointer-events:none; animation:zPop .8s ease-out forwards; }
+    .pwk .z-victim-grab { animation:z-victim-grab 1.05s ease-in forwards !important; transform-origin:50% 75%; }
+    @keyframes zombie-lurch { from { transform:rotate(-5deg) translateY(0) } to { transform:rotate(6deg) translateY(-2px) } }
+    @keyframes zombie-leg-a { from { transform:rotate(-22deg) } to { transform:rotate(25deg) } }
+    @keyframes zombie-leg-b { from { transform:rotate(25deg) } to { transform:rotate(-22deg) } }
+    @keyframes zombie-arm-a { from { transform:rotate(-16deg) } to { transform:rotate(25deg) } }
+    @keyframes zombie-arm-b { from { transform:rotate(25deg) } to { transform:rotate(-18deg) } }
+    @keyframes zombie-jaw { from { transform:scaleY(.8) } to { transform:scaleY(1.35) } }
+    @keyframes zombie-kick { 0% { transform:rotate(-20deg) } 38% { transform:rotate(-105deg) } 72% { transform:rotate(35deg) } 100% { transform:rotate(0) } }
+    @keyframes zombie-grab { 0% { transform:rotate(10deg) } 35% { transform:rotate(-95deg) translate(-3px,-4px) } 65% { transform:rotate(-125deg) translate(-5px,-9px) } 100% { transform:rotate(-90deg) translate(-2px,-5px) } }
+    @keyframes zombie-chomp { from { transform:scaleY(.7) } to { transform:scaleY(1.65) } }
+    @keyframes z-victim-grab { 0% { opacity:1; transform:translateY(0) scale(1) rotate(0) } 45% { opacity:1; transform:translate(-5px,-9px) scale(.8) rotate(-18deg) } 100% { opacity:0; transform:translate(0,-22px) scale(.12) rotate(35deg) } }
     @keyframes zPulse { from { scale:.85 } to { scale:1.18 } }
     @keyframes zPop { from { opacity:1; transform:translate(-50%,-50%) scale(.6) } to { opacity:0; transform:translate(-50%,-150%) scale(1.5) } }
+    @media (prefers-reduced-motion: reduce) { .pw.zombie * { animation-duration:1.2s !important; } }
   `;
   document.head.appendChild(zombieStyle);
   const st2 = document.createElement('style');
@@ -247,26 +267,39 @@
     return { pts, cum, total: cum[cum.length - 1] };
   }
 
-  const ZOMBIE_SVG = `<svg viewBox="0 0 40 68" aria-hidden="true"><g class="face">
+  const ZOMBIE_SVG = `<svg viewBox="0 0 40 68" aria-hidden="true">
     <ellipse cx="20" cy="65" rx="13" ry="3" fill="#0005"/>
-    <path d="M13 42 L12 64 L18 64 L20 48 L23 64 L29 64 L27 42Z" fill="#35452d" stroke="#182416" stroke-width="1.5"/>
-    <path d="M11 23 Q20 18 29 23 L31 44 Q20 49 9 44Z" fill="#557b3b" stroke="#243d20" stroke-width="1.5"/>
-    <path d="M10 26 L5 39 L9 43 L15 31 M29 26 L35 38 L31 43 L25 31" fill="none" stroke="#557b3b" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="20" cy="13" r="10" fill="#91b66a" stroke="#38552c" stroke-width="1.5"/>
-    <path d="M11 9 Q17 -2 28 7 L29 12 Q20 7 11 13Z" fill="#26321f"/>
-    <circle cx="16" cy="13" r="2.1" fill="#f22"/><circle cx="24" cy="13" r="2.1" fill="#f22"/>
-    <path d="M13 20 Q20 25 28 19 L26 25 L15 25Z" fill="#321"/><path d="M16 21 L18 25 L20 21 L22 25 L24 21" fill="#fff"/>
-    <path d="M9 30 L4 34 M31 29 L36 34" stroke="#9bca73" stroke-width="2"/>
-  </g></svg>`;
+    <g class="z-body">
+      <g class="z-leg-l"><path d="M13 42 L12 60 L10 64 L19 64 L20 47Z" fill="#38452f" stroke="#1e2a1b" stroke-width="1.4"/><path d="M10 62 Q7 64 8 66 L20 66 L20 63Z" fill="#292d28"/></g>
+      <g class="z-leg-r"><path d="M21 46 L23 64 L31 64 L28 42Z" fill="#46513a" stroke="#1e2a1b" stroke-width="1.4"/><path d="M23 63 L22 66 L33 66 Q34 63 29 62Z" fill="#292d28"/></g>
+      <path d="M11 24 Q20 19 29 24 L31 45 Q20 50 9 45Z" fill="#557b3b" stroke="#243d20" stroke-width="1.5"/>
+      <path d="M13 28 L27 28 L25 43 L15 43Z" fill="#6e8d4c" opacity=".55"/><path d="M16 29 L19 33 L17 37" stroke="#293d25" stroke-width="1.4" fill="none"/>
+      <g class="z-arm-l"><path d="M11 27 L5 39 L8 45" stroke="#719653" stroke-width="5.5" stroke-linecap="round" fill="none"/><path d="M8 43 L5 46 L9 48 L12 44Z" fill="#91b66a"/></g>
+      <g class="z-arm-r"><path d="M29 27 L35 39 L32 45" stroke="#719653" stroke-width="5.5" stroke-linecap="round" fill="none"/><path d="M32 43 L35 46 L31 49 L28 45Z" fill="#91b66a"/></g>
+      <path d="M11 12 Q10 3 20 3 Q30 3 29 14 L27 22 Q20 27 13 21Z" fill="#91b66a" stroke="#38552c" stroke-width="1.5"/>
+      <path d="M11 10 Q17 -2 28 7 L29 12 Q20 7 11 13Z" fill="#26321f"/>
+      <ellipse cx="16" cy="14" rx="2.2" ry="2.7" fill="#f22"/><ellipse cx="24" cy="14" rx="2.2" ry="2.7" fill="#f22"/>
+      <circle cx="16" cy="14" r=".8" fill="#fff"/><circle cx="24" cy="14" r=".8" fill="#fff"/>
+      <path d="M19 16 L17 19 L20 20" stroke="#496c38" stroke-width="1.2" fill="none"/>
+      <g class="z-jaw"><path d="M13 20 Q20 24 28 19 L27 25 Q20 29 14 24Z" fill="#301e19"/><path d="M15 21 L18 25 L20 21 L22 25 L25 21" fill="#fff" stroke="#ddd" stroke-width=".4"/></g>
+      <path d="M9 30 L5 34 M31 29 L36 34" stroke="#9bca73" stroke-width="2"/>
+    </g></svg>`;
   function zombieSound(kind) {
     try {
       const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
       const a = zombieSound.ctx || (zombieSound.ctx = new AC()); if (a.state === 'suspended') a.resume();
-      const o = a.createOscillator(), g = a.createGain(); o.type = kind === 'smash' ? 'sawtooth' : 'triangle';
-      o.frequency.setValueAtTime(kind === 'smash' ? 95 : 72, a.currentTime);
-      o.frequency.exponentialRampToValueAtTime(kind === 'smash' ? 35 : 42, a.currentTime + .42);
-      g.gain.setValueAtTime(.0001, a.currentTime); g.gain.exponentialRampToValueAtTime(.12, a.currentTime + .04); g.gain.exponentialRampToValueAtTime(.0001, a.currentTime + .48);
-      o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + .5);
+      const now = a.currentTime;
+      const pulse = (freq, at, dur, type, volume) => {
+        const o = a.createOscillator(), g = a.createGain(); o.type = type || 'triangle';
+        o.frequency.setValueAtTime(freq, at); o.frequency.exponentialRampToValueAtTime(Math.max(25, freq * .58), at + dur);
+        g.gain.setValueAtTime(.0001, at); g.gain.exponentialRampToValueAtTime(volume || .09, at + .025); g.gain.exponentialRampToValueAtTime(.0001, at + dur);
+        o.connect(g); g.connect(a.destination); o.start(at); o.stop(at + dur + .02);
+      };
+      if (kind === 'bite') { // dos sonidos cortos, como «ñam ñam»
+        pulse(190, now, .19, 'triangle', .12); pulse(155, now + .22, .22, 'triangle', .13);
+        pulse(82, now + .02, .32, 'sawtooth', .035);
+      } else if (kind === 'smash') { pulse(105, now, .42, 'sawtooth', .14); pulse(62, now + .04, .34, 'square', .06); }
+      else { pulse(76, now, .55, 'sawtooth', .07); pulse(48, now + .08, .42, 'triangle', .05); }
     } catch(e) {}
   }
   function zombiePop(el, emoji) { const n=document.createElement('span'); n.className='pw-zfx'; n.textContent=emoji; el.appendChild(n); setTimeout(()=>n.remove(),850); }
@@ -297,7 +330,7 @@
       else { el.classList.remove('zombie'); el.innerHTML = el.dataset.normalSvg || ('<i class="pw-sh"></i>' + window.playerSVG({suit:false})); delete el.dataset.normalSvg; }
     }
     function stopWalk() { walking = false; setZombie(false); if (raf) cancelAnimationFrame(raf); raf = 0; }
-    const act = () => { lastAct = Date.now(); if (walking || zombie) stopWalk(); };
+    const act = () => { lastAct = Date.now(); try { const AC = window.AudioContext || window.webkitAudioContext; if (AC) { const a = zombieSound.ctx || (zombieSound.ctx = new AC()); if (a.state === 'suspended') a.resume(); } } catch (e) {} if (walking || zombie) stopWalk(); };
 
     // Busca por dónde seguir: la calle más cercana al muñeco que tenga trecho por delante. Devuelve el trayecto (muñeco → calle → calle adelante) o null.
     function plan(maxJoin) {
@@ -392,11 +425,11 @@
         // Mordisco: los peatones que cruzan el centro desaparecen con efecto y sonido.
         if (now - lastBite > 1900 && window.peopleWalkers && window.peopleKill) {
           const victim = window.peopleWalkers.find(w => w && w.near);
-          if (victim) { window.peopleKill(victim); lastBite = now; zombiePop(el, '🩸'); zombieSound('bite'); }
+          if (victim && window.peopleGrabAtCenter && window.peopleGrabAtCenter()) { lastBite = now; el.classList.remove('z-grab'); void el.offsetWidth; el.classList.add('z-grab'); zombiePop(el, 'ÑAM ÑAM'); zombieSound('bite'); setTimeout(() => el.classList.remove('z-grab'), 950); }
         }
         // Golpe a vehículos cercanos: la API de tráfico devuelve el coche eliminado.
         if (now - lastSmash > 2600 && window.CityVeh && window.CityVeh.zombieSmashAtCenter) {
-          if (window.CityVeh.zombieSmashAtCenter()) { lastSmash = now; zombiePop(el, '💥'); zombieSound('smash'); }
+          el.classList.remove('z-kick'); void el.offsetWidth; el.classList.add('z-kick'); setTimeout(() => { if (window.CityVeh.zombieSmashAtCenter()) { zombiePop(el, '💥'); zombieSound('smash'); } }, 260); lastSmash = now;
         }
         if (now >= nextCheck) { nextCheck = now + 400; if (maybeEnter()) return; }
         raf = requestAnimationFrame(step);
