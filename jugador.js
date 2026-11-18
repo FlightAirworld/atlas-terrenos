@@ -1,8 +1,8 @@
 'use strict';
-// MUÑECO DEL JUGADOR: cada jugador tiene el suyo (piel, pelo, peinado o gorra, camiseta y pantalón salen de su apodo, siempre igual para la misma persona)
+// PERSONAJE PRINCIPAL: todos los jugadores comparten el mismo muñeco de dibujos animados
 // y lleva pegada en el pecho la bandera de su país. Siempre se dibuja DE FRENTE (nunca de perfil ni girado). Lo usan el cohete (la cabeza se ve por la ventanilla, el muñeco sube y baja por la rampa),
 // el paracaidista (skydive.js) y, ya en tierra, el muñeco que se queda en el mapa y camina según el jugador lo mueve.
-//   window.playerLook()            → { skin, hair, hs (peinado 0-4), shirt, pants }
+//   window.playerLook()            → aspecto común del personaje principal
 //   window.playerFlag()            → emoji de la bandera del jugador ('' si no hay país)
 //   window.playerBody({ suit })    → dibujo (sin <svg>) en un recuadro de 40 × 68; suit = traje de astronauta con pecera transparente
 //   window.playerSVG({ suit })     → <svg> completo con ese dibujo (clases .face, .lg, .l1, .l2 para animar las piernas)
@@ -40,24 +40,13 @@
     try { s = localStorage.getItem('playerSeed') || ''; if (!s) { s = Math.random().toString(36).slice(2, 10); localStorage.setItem('playerSeed', s); } } catch (e) { s = 'x'; }
     return 's:' + s;
   }
-  let cacheKey = '', cache = null;
-  window.playerLook = function () {
-    const key = seedText() + (window.isAdminDoll() ? '|a' : '');
-    if (cache && key === cacheKey) return cache;
-    const r = rng(fnv(key.replace(/\|a$/, ''))), pick = a => a[Math.floor(r() * a.length)];
-    cacheKey = key;
-    cache = { skin: pick(SKIN), hair: pick(HAIR), hs: Math.floor(r() * 5), shirt: pick(SHIRT), pants: pick(PANTS) };
-    if (window.isAdminDoll()) cache.skin = ADMIN_SKIN;
-    return cache;
-  };
+  // Aspecto fijo para TODOS los jugadores. La bandera del país sigue siendo individual.
+  const MAIN_LOOK = Object.freeze({ skin: '#ffd9b3', hair: '#e6ad24', hs: 5, shirt: '#ff9f1c', pants: '#2b3a67' });
+  window.playerLook = function () { return { ...MAIN_LOOK }; };
 
-  // Aspecto de otro jugador a partir de su apodo (o de un código): siempre el mismo para la misma persona
-  window.playerLookFor = function (text) {
-    const nn = String(text || '').trim().toLowerCase(), r = rng(fnv('n:' + (LOOK_ALIAS[nn] || nn))), pick = a => a[Math.floor(r() * a.length)];
-    const L = { skin: pick(SKIN), hair: pick(HAIR), hs: Math.floor(r() * 5), shirt: pick(SHIRT), pants: pick(PANTS) };
-    if (ADMIN_NICKS.includes(nn)) L.skin = ADMIN_SKIN;   // los demás también ven al administrador con la piel blanca
-    return L;
-  };
+  // Los demás jugadores también se muestran con el mismo personaje principal.
+  window.playerLookFor = function () { return { ...MAIN_LOOK }; };
+
   window.flagOf = cc => /^[A-Za-z]{2}$/.test(cc || '') ? String.fromCodePoint(...[...cc.toUpperCase()].map(ch => 127397 + ch.charCodeAt(0))) : '';
 
   // Bandera del país del jugador (la que eligió o detectó el juego); sin país no se pone ninguna
@@ -78,14 +67,15 @@
     const face = `<ellipse cx="20" cy="14.3" rx="7.9" ry="8.3" fill="${s}"/><path d="M13 18.6 Q20 25.4 27 18.6 Q24 22.6 20 22.6 Q16 22.6 13 18.6Z" fill="rgba(0,0,0,.07)"/>`
       + `<circle cx="14.7" cy="18" r="1.6" fill="rgba(255,100,115,.22)"/><circle cx="25.3" cy="18" r="1.6" fill="rgba(255,100,115,.22)"/>`;
     const fringe = `<path d="M11.9 13.4 C11.2 6.6 15 4.6 20 4.6 C25 4.6 28.8 6.6 28.1 13.4 C26.8 10.4 24.2 9 20 9 C15.8 9 13.2 10.4 11.9 13.4Z" fill="${h}"/><path d="M14.5 6.6 Q18 4.8 21 5.2" stroke="${hi}" stroke-width="1.2" fill="none" stroke-linecap="round"/>`;
-    const front = L.hs === 2 ? `<rect x="11.6" y="11.4" width="2.2" height="5" rx="1" fill="${h}"/><rect x="26.2" y="11.4" width="2.2" height="5" rx="1" fill="${h}"/>`
+    const front = L.hs === 5 ? `<path d="M11.8 13.4 C10.8 10.2 12.3 7.8 14.8 7.1 L13.7 3.1 L18.1 5.2 L20.2 1.8 L22 5.2 L27.1 3.7 L25.8 7.4 C28.5 8.2 29.3 10.8 28.2 13.4 C25.8 10.8 23.1 9.7 20 9.7 C16.9 9.7 14.2 10.8 11.8 13.4Z" fill="${h}" stroke="rgba(120,75,15,.35)" stroke-width=".45"/><path d="M15 6.4 L17.4 6.1 M21.7 5.8 L24.7 5.2" stroke="rgba(255,255,255,.35)" stroke-width="1" stroke-linecap="round"/>`
+      : L.hs === 2 ? `<rect x="11.6" y="11.4" width="2.2" height="5" rx="1" fill="${h}"/><rect x="26.2" y="11.4" width="2.2" height="5" rx="1" fill="${h}"/>`
         + `<path d="M11 12 C11 5.2 15 3.4 20 3.4 C25 3.4 29 5.2 29 12 Z" fill="${L.shirt}"/><path d="M11 12 C11 5.2 15 3.4 20 3.4 C25 3.4 29 5.2 29 12 Z" fill="rgba(0,0,0,.12)"/>`
         + `<path d="M10 11.4 Q20 9 30 11.4 Q30 12.8 20 12.6 Q10 12.8 10 11.4Z" fill="${L.shirt}" stroke="rgba(0,0,0,.28)" stroke-width=".5"/><circle cx="20" cy="3.6" r="1.1" fill="${L.shirt}" stroke="rgba(0,0,0,.25)" stroke-width=".4"/>`
       : L.hs === 1 ? fringe + `<rect x="9.4" y="11" width="3.4" height="20" rx="1.7" fill="${h}"/><rect x="27.2" y="11" width="3.4" height="20" rx="1.7" fill="${h}"/>`
       : L.hs === 3 ? fringe + `<circle cx="20" cy="3.4" r="3.6" fill="${h}"/><rect x="18.4" y="5.6" width="3.2" height="1.4" rx=".7" fill="rgba(0,0,0,.3)"/>`
       : fringe;
     const brows = L.hs === 2 ? '' : `<path d="M13.8 11.7 Q16.4 10.3 18.8 11.4 M21.2 11.4 Q23.6 10.3 26.2 11.7" stroke="${h}" stroke-width="1.35" fill="none" stroke-linecap="round"/>`;
-    const eye = x => `<ellipse cx="${x}" cy="14.8" rx="1.9" ry="1.5" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width=".35"/><circle cx="${x}" cy="14.9" r="1.05" fill="#3a2a1f"/><circle cx="${x}" cy="14.9" r=".5" fill="#111"/><circle cx="${x + .4}" cy="14.5" r=".32" fill="#fff"/>`;
+    const eye = x => `<g class="pw-eye"><ellipse cx="${x}" cy="14.8" rx="1.9" ry="1.5" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width=".35"/><circle cx="${x}" cy="14.9" r="1.05" fill="#3a2a1f"/><circle cx="${x}" cy="14.9" r=".5" fill="#111"/><circle cx="${x + .4}" cy="14.5" r=".32" fill="#fff"/></g>`;
     const feat = `${eye(16.7)}${eye(23.3)}<path d="M20 15.8 Q18.8 18.3 21 18.4" stroke="rgba(120,60,40,.7)" fill="none" stroke-width="1" stroke-linecap="round"/><path d="M17.1 19.8 Q20 22.6 22.9 19.8" stroke="#b03a48" fill="none" stroke-width="1.35" stroke-linecap="round"/>`;
     if (part === 'back') return back;
     return (part === 'front' ? '' : back) + `${ears}${face}${front}${brows}${feat}`;
@@ -129,7 +119,11 @@
     .pw { position: absolute; left: 50%; top: 50%; width: 42px; height: 71px; margin: -71px 0 0 -21px; z-index: 3; pointer-events: none; transition: opacity .35s; animation: pwIn .4s ease-out both; }
     .pw svg { width: 100%; height: 100%; overflow: visible; display: block; filter: drop-shadow(0 3px 3px rgba(0,0,0,.4)); }
     .pw .pw-sh { position: absolute; left: 50%; bottom: -3px; width: 30px; height: 8px; margin-left: -15px; border-radius: 50%; background: rgba(0,0,0,.28); }
-    .pw .face { transform-box: view-box; transform-origin: 20px 34px; }
+    .pw .face { transform-box: view-box; transform-origin: 20px 34px; animation: pwIdle 2.8s ease-in-out infinite; }
+    .pw .pw-eye { transform-box: fill-box; transform-origin: center; animation: pwBlink 4.6s infinite; }
+    .pw .pw-eye:nth-of-type(2) { animation-delay: .04s; }
+    .pw:not(.walking) .a1 { animation: pwIdleArm 2.4s ease-in-out infinite; }
+    .pw:not(.walking) .a2 { animation: pwIdleArm 2.4s ease-in-out infinite reverse; }
     .pw .lg { transform-box: fill-box; transform-origin: 50% 0; }
     .pw.walking .l1 { animation: pwA .3s infinite alternate ease-in-out; }
     .pw.walking .l2 { animation: pwB .3s infinite alternate ease-in-out; }
@@ -139,39 +133,11 @@
     @keyframes pwA { from { transform: rotate(-24deg); } to { transform: rotate(24deg); } }
     @keyframes pwB { from { transform: rotate(24deg); } to { transform: rotate(-24deg); } }
     @keyframes pwBob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+    @keyframes pwIdle { 0%, 88%, 100% { transform: rotate(0deg) translateY(0); } 92% { transform: rotate(-2deg) translateY(-.5px); } 96% { transform: rotate(2deg) translateY(0); } }
+    @keyframes pwBlink { 0%, 44%, 47%, 100% { transform: scaleY(1); } 45%, 46% { transform: scaleY(.08); } }
+    @keyframes pwIdleArm { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(4deg); } }
     @keyframes pwIn { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: none; } }`;
   document.head.appendChild(st);
-  const zombieStyle = document.createElement('style');
-  zombieStyle.textContent = `
-    .pw.zombie { filter: drop-shadow(0 2px 2px #0008); }
-    .pw.zombie svg { filter: drop-shadow(0 0 5px #83d65a) drop-shadow(0 3px 3px #0009); overflow:visible; }
-    .pw.zombie .z-body { transform-box:fill-box; transform-origin:50% 45%; animation:zombie-lurch .48s ease-in-out infinite alternate; }
-    .pw.zombie .z-leg-l { transform-box:fill-box; transform-origin:50% 0; animation:zombie-leg-a .34s ease-in-out infinite alternate; }
-    .pw.zombie .z-leg-r { transform-box:fill-box; transform-origin:50% 0; animation:zombie-leg-b .34s ease-in-out infinite alternate; }
-    .pw.zombie .z-arm-l { transform-box:fill-box; transform-origin:85% 15%; animation:zombie-arm-a .42s ease-in-out infinite alternate; }
-    .pw.zombie .z-arm-r { transform-box:fill-box; transform-origin:15% 15%; animation:zombie-arm-b .42s ease-in-out infinite alternate; }
-    .pw.zombie .z-jaw { transform-box:fill-box; transform-origin:50% 0; animation:zombie-jaw .32s ease-in-out infinite alternate; }
-    .pw.zombie.z-kick .z-leg-r { animation:zombie-kick .52s ease-out 1 !important; }
-    .pw.zombie.z-grab .z-arm-r { animation:zombie-grab .78s ease-in-out 1 forwards !important; }
-    .pw.zombie.z-grab .z-jaw { animation:zombie-chomp .2s ease-in-out 4 alternate !important; }
-    .pw.zombie:after { content:'🧟'; position:absolute; right:-13px; top:-8px; font-size:17px; animation:zPulse .55s infinite alternate; }
-    .pw-zfx { position:absolute; left:50%; top:0; transform:translate(-50%,-100%); font-size:22px; font-weight:900; color:#e8ffcf; text-shadow:0 2px 3px #000; pointer-events:none; animation:zPop .8s ease-out forwards; }
-    .pwk .z-victim-grab { animation:z-victim-grab 1.05s ease-in forwards !important; transform-origin:50% 75%; }
-    @keyframes zombie-lurch { from { transform:rotate(-5deg) translateY(0) } to { transform:rotate(6deg) translateY(-2px) } }
-    @keyframes zombie-leg-a { from { transform:rotate(-22deg) } to { transform:rotate(25deg) } }
-    @keyframes zombie-leg-b { from { transform:rotate(25deg) } to { transform:rotate(-22deg) } }
-    @keyframes zombie-arm-a { from { transform:rotate(-16deg) } to { transform:rotate(25deg) } }
-    @keyframes zombie-arm-b { from { transform:rotate(25deg) } to { transform:rotate(-18deg) } }
-    @keyframes zombie-jaw { from { transform:scaleY(.8) } to { transform:scaleY(1.35) } }
-    @keyframes zombie-kick { 0% { transform:rotate(-20deg) } 38% { transform:rotate(-105deg) } 72% { transform:rotate(35deg) } 100% { transform:rotate(0) } }
-    @keyframes zombie-grab { 0% { transform:rotate(10deg) } 35% { transform:rotate(-95deg) translate(-3px,-4px) } 65% { transform:rotate(-125deg) translate(-5px,-9px) } 100% { transform:rotate(-90deg) translate(-2px,-5px) } }
-    @keyframes zombie-chomp { from { transform:scaleY(.7) } to { transform:scaleY(1.65) } }
-    @keyframes z-victim-grab { 0% { opacity:1; transform:translateY(0) scale(1) rotate(0) } 45% { opacity:1; transform:translate(-5px,-9px) scale(.8) rotate(-18deg) } 100% { opacity:0; transform:translate(0,-22px) scale(.12) rotate(35deg) } }
-    @keyframes zPulse { from { scale:.85 } to { scale:1.18 } }
-    @keyframes zPop { from { opacity:1; transform:translate(-50%,-50%) scale(.6) } to { opacity:0; transform:translate(-50%,-150%) scale(1.5) } }
-    @media (prefers-reduced-motion: reduce) { .pw.zombie * { animation-duration:1.2s !important; } }
-  `;
-  document.head.appendChild(zombieStyle);
   const st2 = document.createElement('style');
   st2.textContent = `
     :is(#visita, #edif) .v-fig .flagp { left: 3px; top: 8px; width: 26px; height: 19px; border-radius: 4px; background: #fff; box-shadow: 0 0 0 1px #0004; display: grid; place-items: center; font-size: 15px; line-height: 1; font-family: ${EMOJI}; transform: scaleX(var(--fx, 1)); }
@@ -267,44 +233,8 @@
     return { pts, cum, total: cum[cum.length - 1] };
   }
 
-  const ZOMBIE_SVG = `<svg viewBox="0 0 40 68" aria-hidden="true">
-    <ellipse cx="20" cy="65" rx="13" ry="3" fill="#0005"/>
-    <g class="z-body">
-      <g class="z-leg-l"><path d="M13 42 L12 60 L10 64 L19 64 L20 47Z" fill="#38452f" stroke="#1e2a1b" stroke-width="1.4"/><path d="M10 62 Q7 64 8 66 L20 66 L20 63Z" fill="#292d28"/></g>
-      <g class="z-leg-r"><path d="M21 46 L23 64 L31 64 L28 42Z" fill="#46513a" stroke="#1e2a1b" stroke-width="1.4"/><path d="M23 63 L22 66 L33 66 Q34 63 29 62Z" fill="#292d28"/></g>
-      <path d="M11 24 Q20 19 29 24 L31 45 Q20 50 9 45Z" fill="#557b3b" stroke="#243d20" stroke-width="1.5"/>
-      <path d="M13 28 L27 28 L25 43 L15 43Z" fill="#6e8d4c" opacity=".55"/><path d="M16 29 L19 33 L17 37" stroke="#293d25" stroke-width="1.4" fill="none"/>
-      <g class="z-arm-l"><path d="M11 27 L5 39 L8 45" stroke="#719653" stroke-width="5.5" stroke-linecap="round" fill="none"/><path d="M8 43 L5 46 L9 48 L12 44Z" fill="#91b66a"/></g>
-      <g class="z-arm-r"><path d="M29 27 L35 39 L32 45" stroke="#719653" stroke-width="5.5" stroke-linecap="round" fill="none"/><path d="M32 43 L35 46 L31 49 L28 45Z" fill="#91b66a"/></g>
-      <path d="M11 12 Q10 3 20 3 Q30 3 29 14 L27 22 Q20 27 13 21Z" fill="#91b66a" stroke="#38552c" stroke-width="1.5"/>
-      <path d="M11 10 Q17 -2 28 7 L29 12 Q20 7 11 13Z" fill="#26321f"/>
-      <ellipse cx="16" cy="14" rx="2.2" ry="2.7" fill="#f22"/><ellipse cx="24" cy="14" rx="2.2" ry="2.7" fill="#f22"/>
-      <circle cx="16" cy="14" r=".8" fill="#fff"/><circle cx="24" cy="14" r=".8" fill="#fff"/>
-      <path d="M19 16 L17 19 L20 20" stroke="#496c38" stroke-width="1.2" fill="none"/>
-      <g class="z-jaw"><path d="M13 20 Q20 24 28 19 L27 25 Q20 29 14 24Z" fill="#301e19"/><path d="M15 21 L18 25 L20 21 L22 25 L25 21" fill="#fff" stroke="#ddd" stroke-width=".4"/></g>
-      <path d="M9 30 L5 34 M31 29 L36 34" stroke="#9bca73" stroke-width="2"/>
-    </g></svg>`;
-  function zombieSound(kind) {
-    try {
-      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-      const a = zombieSound.ctx || (zombieSound.ctx = new AC()); if (a.state === 'suspended') a.resume();
-      const now = a.currentTime;
-      const pulse = (freq, at, dur, type, volume) => {
-        const o = a.createOscillator(), g = a.createGain(); o.type = type || 'triangle';
-        o.frequency.setValueAtTime(freq, at); o.frequency.exponentialRampToValueAtTime(Math.max(25, freq * .58), at + dur);
-        g.gain.setValueAtTime(.0001, at); g.gain.exponentialRampToValueAtTime(volume || .09, at + .025); g.gain.exponentialRampToValueAtTime(.0001, at + dur);
-        o.connect(g); g.connect(a.destination); o.start(at); o.stop(at + dur + .02);
-      };
-      if (kind === 'bite') { // dos sonidos cortos, como «ñam ñam»
-        pulse(190, now, .19, 'triangle', .12); pulse(155, now + .22, .22, 'triangle', .13);
-        pulse(82, now + .02, .32, 'sawtooth', .035);
-      } else if (kind === 'smash') { pulse(105, now, .42, 'sawtooth', .14); pulse(62, now + .04, .34, 'square', .06); }
-      else { pulse(76, now, .55, 'sawtooth', .07); pulse(48, now + .08, .42, 'triangle', .05); }
-    } catch(e) {}
-  }
-  function zombiePop(el, emoji) { const n=document.createElement('span'); n.className='pw-zfx'; n.textContent=emoji; el.appendChild(n); setTimeout(()=>n.remove(),850); }
   function autoWalk(m, el) {
-    let lastAct = Date.now(), walking = false, raf = 0, pending = 0, lastEnter = 0, noEnterUntil = 0, zombie = false, lastBite = 0, lastSmash = 0;
+    let lastAct = Date.now(), walking = false, raf = 0, pending = 0, lastEnter = 0, noEnterUntil = 0;
     const seen = new Map();   // id de parcela → cuándo se decidió si entrar
     const sceneOpen = () => !!(document.getElementById('visita') || document.getElementById('edif'));
     const scaleNow = () => Math.pow(2, m.getZoom() + 1 - REF_Z);   // píxeles de pantalla por píxel de mundo (el zoom de MapLibre va 1 por debajo del de Leaflet)
@@ -324,13 +254,8 @@
           && !(window.paseo && window.paseo.running && window.paseo.running());
       } catch (e) { return false; }
     };
-    function setZombie(on) {
-      if (zombie === on) return; zombie = on;
-      if (on) { el.classList.add('zombie'); el.dataset.normalSvg = el.innerHTML; el.innerHTML = '<i class="pw-sh"></i>' + ZOMBIE_SVG; zombieSound('groan'); }
-      else { el.classList.remove('zombie'); el.innerHTML = el.dataset.normalSvg || ('<i class="pw-sh"></i>' + window.playerSVG({suit:false})); delete el.dataset.normalSvg; }
-    }
-    function stopWalk() { walking = false; setZombie(false); if (raf) cancelAnimationFrame(raf); raf = 0; }
-    const act = () => { lastAct = Date.now(); try { const AC = window.AudioContext || window.webkitAudioContext; if (AC) { const a = zombieSound.ctx || (zombieSound.ctx = new AC()); if (a.state === 'suspended') a.resume(); } } catch (e) {} if (walking || zombie) stopWalk(); };
+    function stopWalk() { walking = false; if (raf) cancelAnimationFrame(raf); raf = 0; }
+    const act = () => { lastAct = Date.now(); if (walking) stopWalk(); };
 
     // Busca por dónde seguir: la calle más cercana al muñeco que tenga trecho por delante. Devuelve el trayecto (muñeco → calle → calle adelante) o null.
     function plan(maxJoin) {
@@ -401,7 +326,7 @@
 
     // Va por el trayecto a velocidad constante moviendo el mapa bajo el muñeco (que está fijo en el centro), por el borde de la calzada
     function follow(R) {
-      walking = true; setZombie(true);
+      walking = true;
       let s = 0, seg = 0, off = 0, last = performance.now(), nextCheck = last + 800;
       const step = now => {
         if (!walking) return;
@@ -422,15 +347,6 @@
         off += Math.max(-24 * dt, Math.min(24 * dt, target - off));       // cambia suave al pasar de una calle a otra
         const o = off / sc, ll = fromW(a.x + (b.x - a.x) * t - uy * o, a.y + (b.y - a.y) * t + ux * o);
         m.jumpTo({ center: [ll.lng, ll.lat] });
-        // Mordisco: los peatones que cruzan el centro desaparecen con efecto y sonido.
-        if (now - lastBite > 1900 && window.peopleWalkers && window.peopleKill) {
-          const victim = window.peopleWalkers.find(w => w && w.near);
-          if (victim && window.peopleGrabAtCenter && window.peopleGrabAtCenter()) { lastBite = now; el.classList.remove('z-grab'); void el.offsetWidth; el.classList.add('z-grab'); zombiePop(el, 'ÑAM ÑAM'); zombieSound('bite'); setTimeout(() => el.classList.remove('z-grab'), 950); }
-        }
-        // Golpe a vehículos cercanos: la API de tráfico devuelve el coche eliminado.
-        if (now - lastSmash > 2600 && window.CityVeh && window.CityVeh.zombieSmashAtCenter) {
-          el.classList.remove('z-kick'); void el.offsetWidth; el.classList.add('z-kick'); setTimeout(() => { if (window.CityVeh.zombieSmashAtCenter()) { zombiePop(el, '💥'); zombieSound('smash'); } }, 260); lastSmash = now;
-        }
         if (now >= nextCheck) { nextCheck = now + 400; if (maybeEnter()) return; }
         raf = requestAnimationFrame(step);
       };
