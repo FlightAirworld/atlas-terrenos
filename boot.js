@@ -72,3 +72,22 @@
   const load = () => { const s = document.createElement('script'); s.src = 'blog.js'; s.defer = true; document.body.appendChild(s); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load); else load();
 })();
+
+// 📜 Certificados: botón en el Menú que abre la web de certificados
+(function () {
+  function add(tries) {
+    const list = document.getElementById('menu-items');
+    if (!list) { if (tries < 40) setTimeout(() => add(tries + 1), 250); return; }
+    if (document.getElementById('cert-btn')) return;
+    const b = document.createElement('button');
+    b.id = 'cert-btn'; b.type = 'button';
+    b.title = 'Certificado de terreno gratis';
+    b.setAttribute('data-label', 'Certificado');
+    b.setAttribute('aria-label', 'Certificado de terreno gratis');
+    const s = document.createElement('span');
+    s.className = 'mp-ic'; s.textContent = '📜'; b.appendChild(s);
+    b.onclick = () => window.open('https://certificados-redecora.onrender.com', '_blank', 'noopener');
+    list.insertBefore(b, document.getElementById('account-btn') || null);
+  }
+  add(0);
+})();
