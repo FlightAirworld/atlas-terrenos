@@ -85,6 +85,12 @@
     #bingo .bn-g span.lin { box-shadow: 0 0 0 2px #2f9e44 inset; }
     #bingo .bn-msg { font-size: 13px; min-height: 18px; margin: 0 0 4px; }
     #bingo .bn-msg.err { color: #e03131; }
+    #bingo .bn-games { flex-basis: 100%; display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 700; }
+    #bingo .bn-games select { font-size: 15px; font-weight: 800; padding: 6px 8px; border-radius: 10px; border: 1px solid rgba(128,128,128,.5); background: var(--card, #fff); color: inherit; }
+    #bingo .bn-auto { flex-basis: 100%; font-size: 13px; font-weight: 700; padding: 8px 10px; border-radius: 10px; background: #e6f4ea; color: #1b5e20; }
+    #bingo .bn-buy button.bn-cancel { background: #fff; color: #c92a2a; border: 2px solid #c92a2a; border-radius: 10px; }
+    #bn-toast { display: none; position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 100002; width: max-content; max-width: 92vw; box-sizing: border-box; padding: 12px 16px; border-radius: 14px; background: #1b1b1b; color: #ffe600; font-size: 15px; font-weight: 800; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,.55); border: 2px solid #ffe600; cursor: pointer; animation: bnpop .5s; }
+    #bn-toast div + div { margin-top: 4px; }
     #bingo .bn-mute { position: absolute; top: 10px; right: 46px; background: none; border: 0; font-size: 20px; cursor: pointer; }
   `;
   document.head.appendChild(st);
@@ -360,24 +366,38 @@
   function fmtLeft(ms) { const s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
   function paintBuy() {
     const s = state; if (!s) return;
+    { const ae = document.activeElement; if (ae && ae.tagName === 'SELECT' && elBuy.contains(ae)) return; }   // no se repinta mientras eliges en la lista (si no, se cerraría sola cada segundo)
     const owned = s.mine ? s.mine.length : 0;
     const nextOnly = s.phase === 'drawing' || s.phase === 'done';   // con la partida ya empezada solo se puede reservar para la próxima
     const canBuy = s.phase === 'idle' || s.phase === 'buying' || nextOnly;
     const left = s.maxCards - (s.phase === 'buying' ? owned : 0);
     if (want > left) want = Math.max(1, left);
     const frag = document.createDocumentFragment();
-    if (canBuy && left > 0) {
-      const mk = (t, f) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.onclick = f; return b; };
-      const setWant = v => { want = v; if (reserved) reserved = want; paintBuy(); };
+    const mk = (t, f) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.onclick = f; return b; };
+    const part = n => (n === 1 ? 'partida' : 'partidas');
+    if (s.auto) {   // ya hay partidas seguidas programadas: se juegan solas aunque cierres el bingo
+      const a = document.createElement('div'); a.className = 'bn-auto';
+      a.textContent = `🔁 Juegas solo: ${s.auto.cards} ${s.auto.cards === 1 ? 'cartón' : 'cartones'} por partida · quedan ${s.auto.gamesLeft} ${part(s.auto.gamesLeft)}. Se cobra al abrirse cada una y te avisamos si ganas.`;
+      const c = mk('Cancelar las partidas seguidas', () => cancelAuto()); c.className = 'bn-cancel'; c.disabled = busy;
+      frag.append(a, c);
+    } else if (canBuy && (left > 0 || nextOnly)) {
+      const cardsNow = nextOnly ? Math.min(want, s.maxCards) : want;
       const n = document.createElement('span'); n.className = 'n'; n.textContent = want;
-      const cost = `${want} ${want === 1 ? 'cartón' : 'cartones'} · ${nf(want * s.price)} ${word(want * s.price)}`;
-      let buy;
-      if (nextOnly) {
-        buy = mk(reserved ? `✅ ${reserved} ${reserved === 1 ? 'cartón reservado' : 'cartones reservados'} · toca para cancelar` : `COMPRAR PARA LA PRÓXIMA PARTIDA · ${cost}`, () => { reserved = reserved ? 0 : want; paintBuy(); });
-        buy.className = 'go' + (reserved ? ' ok' : '');
-      } else { buy = mk(`Comprar ${cost}`, () => buyCards()); buy.className = 'go'; buy.disabled = busy; }
-      frag.append(mk('−', () => setWant(Math.max(1, want - 1))), n, mk('+', () => setWant(Math.min(left, want + 1))), mk('Máx', () => setWant(left)), buy);
-      if (nextOnly) { const h = document.createElement('div'); h.className = 'bn-hint'; h.textContent = 'Se compran solos cuando se abra la próxima partida (deja el bingo abierto).'; frag.append(h); }
+      const total = cardsNow * s.price * games;
+      const cost = `${want} ${want === 1 ? 'cartón' : 'cartones'}` + (games > 1 ? ` × ${games} ${part(games)} · ${nf(total)} ${word(total)}` : ` · ${nf(want * s.price)} ${word(want * s.price)}`);
+      const buy = nextOnly ? mk(`RESERVAR PARA LA PRÓXIMA · ${cost}`, () => reserveAuto()) : mk(`${games > 1 ? 'Comprar y jugar' : 'Comprar'} ${cost}`, () => buyCards());
+      buy.className = 'go'; buy.disabled = busy;
+      const lim = nextOnly ? s.maxCards : left;
+      frag.append(mk('−', () => { want = Math.max(1, want - 1); paintBuy(); }), n, mk('+', () => { want = Math.min(lim, want + 1); paintBuy(); }), mk('Máx', () => { want = lim; paintBuy(); }));
+      // Partidas seguidas: lista cerrada de 1 a 100
+      const gr = document.createElement('div'); gr.className = 'bn-games';
+      const lb = document.createElement('span'); lb.textContent = '🔁 Partidas seguidas:';
+      const sel = document.createElement('select'); sel.setAttribute('aria-label', 'Partidas seguidas');
+      for (let i = 1; i <= 100; i++) { const o = document.createElement('option'); o.value = i; o.textContent = i; if (i === games) o.selected = true; sel.appendChild(o); }
+      sel.onchange = () => { games = Number(sel.value) || 1; sel.blur(); paintBuy(); };
+      gr.append(lb, sel); frag.append(gr, buy);
+      if (games > 1) { const h = document.createElement('div'); h.className = 'bn-hint'; h.textContent = 'Seguirás jugando aunque cierres esta pantalla: se compra al abrirse cada partida y te avisamos en el juego si te toca.'; frag.append(h); }
+      else if (nextOnly) { const h = document.createElement('div'); h.className = 'bn-hint'; h.textContent = 'Se compran solos cuando se abra la próxima partida, aunque cierres el bingo.'; frag.append(h); }
     }
     elBuy.replaceChildren(frag);
   }
@@ -440,10 +460,10 @@
       else say(`🏆 Bingo de ${names(s.bingo)}. ¡Suerte en la próxima!`);
     }
     paintWins(); paintTube(); paintCards(); paintBuy(); paintTimer(); paintCaption();
-    if (reserved > 0 && s.phase === 'buying' && !busy && (!s.mine || !s.mine.length)) { want = Math.min(reserved, s.maxCards); reserved = 0; buyCards(); }   // la reserva se compra sola al abrirse la próxima partida
+    setAutoFlag(!!s.auto || (s.mine && s.mine.length > 0)); handleWins(s);
   }
 
-  let loadErr = false, reserved = 0, startSpoken = 0;   // reserved: cartones que se compran solos al abrirse la próxima partida
+  let loadErr = false, startSpoken = 0, games = 1;   // games: partidas seguidas que se quieren jugar (1 a 100)
   async function load() {
     try { apply(await api('/api/bingo')); if (loadErr) { loadErr = false; say(''); } }
     catch (e) { loadErr = true; const m = String((e && e.message) || ''); say(/failed to fetch|network/i.test(m) ? 'Sin conexión, reintentando…' : (m || 'No se pudo cargar el bingo'), true); }
@@ -452,11 +472,75 @@
     if (busy) return;
     busy = true; paintBuy(); say('');
     try {
-      const j = await api('/api/bingo/buy', { method: 'POST', body: { count: want, country: (typeof country !== 'undefined' ? country : '') || '', avatar: (typeof avatar !== 'undefined' ? avatar : '') || '' } });
-      apply(j); sndTick(); say(`✅ Tienes ${j.mine.length} ${j.mine.length === 1 ? 'cartón' : 'cartones'}. ¡Suerte!`);
+      const j = await api('/api/bingo/buy', { method: 'POST', body: { count: want, games, country: (typeof country !== 'undefined' ? country : '') || '', avatar: (typeof avatar !== 'undefined' ? avatar : '') || '' } });
+      apply(j); sndTick();
+      say(games > 1 ? `✅ ${j.mine.length} cartones ahora y ${games - 1} partidas más programadas. ¡Suerte!` : `✅ Tienes ${j.mine.length} ${j.mine.length === 1 ? 'cartón' : 'cartones'}. ¡Suerte!`);
     } catch (e) { say(e.message || 'No se pudo comprar', true); }
     busy = false; paintBuy();
   }
+  async function reserveAuto() {   // desde la próxima partida (la actual ya ha empezado)
+    if (busy) return;
+    busy = true; paintBuy(); say('');
+    try {
+      apply(await api('/api/bingo/buy', { method: 'POST', body: { count: want, games, reserve: true, country: (typeof country !== 'undefined' ? country : '') || '', avatar: (typeof avatar !== 'undefined' ? avatar : '') || '' } }));
+      sndTick(); say(`✅ Reservado: ${want} ${want === 1 ? 'cartón' : 'cartones'} × ${games} ${games === 1 ? 'partida' : 'partidas'}. Aunque cierres el bingo seguirás jugando.`);
+    } catch (e) { say(e.message || 'No se pudo reservar', true); }
+    busy = false; paintBuy();
+  }
+  async function cancelAuto() {
+    if (busy) return;
+    busy = true; paintBuy();
+    try { apply(await api('/api/bingo/buy', { method: 'POST', body: { cancelAuto: true } })); say('Partidas seguidas canceladas.'); }
+    catch (e) { say(e.message || 'No se pudo cancelar', true); }
+    busy = false; paintBuy();
+  }
+
+  // ---- Seguir jugando fuera del bingo: aviso en el juego si te ha tocado algo y cuánto ----
+  const toast = document.createElement('div'); toast.id = 'bn-toast'; document.body.appendChild(toast);
+  let toastT = null, ackedUpTo = 0;
+  toast.addEventListener('click', () => { toast.style.display = 'none'; clearTimeout(toastT); });
+  function showToast(lines) {
+    toast.replaceChildren(...lines.map(t => { const d = document.createElement('div'); d.textContent = t; return d; }));
+    toast.style.display = 'block'; toast.style.animation = 'none'; void toast.offsetWidth; toast.style.animation = '';
+    clearTimeout(toastT); toastT = setTimeout(() => { toast.style.display = 'none'; }, 10000);
+    try { sndWin(false); } catch (e) { /* nada */ }
+  }
+  function handleWins(s) {
+    const w = (s.wins || []).filter(x => x.id > ackedUpTo);
+    if (!w.length) return;
+    ackedUpTo = Math.max(...w.map(x => x.id));
+    const isOpen = !modal.classList.contains('hidden');
+    const fresh = isOpen ? w.filter(x => x.round !== s.round) : w;   // con el bingo abierto ya salen el rótulo y el confeti de la ronda actual
+    if (fresh.length) {
+      const lines = [];
+      let total = 0;
+      fresh.forEach(x => {
+        if (x.kind === 'line') { lines.push(`🎯 ¡Te ha tocado la LÍNEA! +${nf(x.prize)} ${word(x.prize)}`); total += x.prize; }
+        else if (x.kind === 'bingo') { lines.push(`🏆 ¡BINGO! Has ganado +${nf(x.prize)} ${word(x.prize)}`); total += x.prize; }
+        else if (x.kind === 'jackpot') { lines.push(`💰 ¡BOTE ACUMULADO! +${dots(x.prize)} ${word(x.prize)}`); total += x.prize; }
+        else if (x.kind === 'stop') lines.push('⚠️ Se pararon tus partidas seguidas: no te quedan créditos');
+        else if (x.kind === 'end') lines.push('✅ Terminaron tus partidas seguidas del bingo');
+      });
+      if (total > 0 && lines.length > 1) lines.push(`Total: +${nf(total)} ${word(total)}`);
+      if (lines.length) { lines.unshift('🎱 Bingo'); showToast(lines); }
+    }
+    api('/api/bingo/buy', { method: 'POST', body: { ackUpTo: ackedUpTo } }).catch(() => { /* nada */ });
+  }
+  // Mientras haya partidas programadas (o cartones en juego) se consulta el servidor cada 10 s aunque el bingo esté cerrado
+  const AUTO_KEY = 'bingoAuto';
+  const autoFlag = () => { try { return localStorage.getItem(AUTO_KEY) === '1'; } catch (e) { return false; } };
+  function setAutoFlag(on) { try { if (on) localStorage.setItem(AUTO_KEY, '1'); else localStorage.removeItem(AUTO_KEY); } catch (e) { /* nada */ } }
+  async function bgPoll() {
+    if (typeof authToken === 'undefined' || !authToken || !modal.classList.contains('hidden')) return;
+    try {
+      const j = await api('/api/bingo');
+      if (j && typeof j.credits === 'number') { try { if (credits !== j.credits) { credits = j.credits; updateCreditUi(); } } catch (e) { /* nada */ } }
+      setAutoFlag(!!(j && (j.auto || (j.mine && j.mine.length))));
+      handleWins(j || {});
+    } catch (e) { /* sin conexión: se reintenta */ }
+  }
+  setInterval(() => { if (autoFlag()) bgPoll(); }, 10000);
+  setTimeout(bgPoll, 5000);   // al abrir la app: recoge premios que hayan salido mientras estabas fuera
 
   function tick() {
     if (modal.classList.contains('hidden')) return;
@@ -473,7 +557,7 @@
     load(); clearInterval(timer); timer = setInterval(tick, 500);
   }
   function close() {
-    reserved = 0; hideBanner(); stopConfetti(); clearTimeout(voiceT); modal.classList.add('hidden'); clearInterval(timer); timer = null; try { speechSynthesis.cancel(); } catch (e) { /* nada */ }
+    hideBanner(); stopConfetti(); clearTimeout(voiceT); modal.classList.add('hidden'); clearInterval(timer); timer = null; try { speechSynthesis.cancel(); } catch (e) { /* nada */ }
     if (earthWasMuted === false && window.fightMute) window.fightMute(false);   // vuelve el sonido de la Tierra
     earthWasMuted = null;
   }

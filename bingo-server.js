@@ -18,6 +18,10 @@
 //    repartidos a lo largo del minuto de compra. Sus cartones cuentan para el bote y el número de jugadores; sus premios no se pagan a nadie.
 //    Al cerrarse la compra se decide que la línea y el bingo los cante un jugador real con probabilidad BINGO_HUMAN_WIN_PCT (55 %), y se reordena el bombo para que ocurra.
 //    BINGO_BOTS=off los desactiva.
+//  · JUGAR VARIAS PARTIDAS SEGUIDAS (1 a 100): POST /api/bingo/buy con { count, games } compra ahora (si la compra está abierta) y deja el resto programado en bingo_auto;
+//    con { reserve: true } solo programa (desde la próxima partida). Cada vez que se abre una ronda el servidor compra solo los cartones de quien tenga partidas pendientes
+//    (aunque haya cerrado el bingo) y, si no le quedan créditos, para sus partidas. Los premios que le tocan se guardan en bingo_wins para avisarle en el juego (GET /api/bingo → wins).
+//    { cancelAuto: true } cancela; { ackUpTo: id } marca los avisos como vistos.
 // El servidor decide TODO: baraja las 90 bolas, nunca las manda antes de que caigan, evalúa y paga. El navegador solo dibuja (bingo.js).
 // La partida se calcula con el reloj (la bola n cae en draw_start + (n-1) × BALL_MS), así que sobrevive a un reinicio del servidor.
 // Se monta desde server.js igual que la trivia: require('./bingo-server')({ pool, run, all, needUser, ensureUserPack, HttpError, rateHit, numEnv }).
@@ -67,6 +71,11 @@ module.exports = function (d) {
     await run('ALTER TABLE bingo_rounds ADD COLUMN IF NOT EXISTS bingo_all TEXT').catch(() => {});
     await run('ALTER TABLE public.bingo_rounds ENABLE ROW LEVEL SECURITY').catch(() => {});   // solo el servidor accede
     await run('ALTER TABLE public.bingo_cards ENABLE ROW LEVEL SECURITY').catch(() => {});
+    await run('CREATE TABLE IF NOT EXISTS bingo_auto (user_id TEXT PRIMARY KEY, pack_code TEXT NOT NULL, nick TEXT NOT NULL, country TEXT, avatar TEXT, n_cards INT NOT NULL, games_left INT NOT NULL, created_at BIGINT NOT NULL)');
+    await run('CREATE TABLE IF NOT EXISTS bingo_wins (id BIGSERIAL PRIMARY KEY, user_id TEXT NOT NULL, round_id BIGINT NOT NULL, kind TEXT NOT NULL, prize INT NOT NULL DEFAULT 0, seen INT NOT NULL DEFAULT 0, created_at BIGINT NOT NULL)');
+    await run('CREATE INDEX IF NOT EXISTS bingo_wins_user ON bingo_wins (user_id, seen)');
+    await run('ALTER TABLE public.bingo_auto ENABLE ROW LEVEL SECURITY').catch(() => {});
+    await run('ALTER TABLE public.bingo_wins ENABLE ROW LEVEL SECURITY').catch(() => {});
     const old = Date.now() - 2 * 24 * 3600 * 1000;   // solo hacen falta las rondas recientes
     await run('DELETE FROM bingo_cards WHERE round_id IN (SELECT id FROM bingo_rounds WHERE created_at < $1)', [old]).catch(() => {});
     await run('DELETE FROM bingo_rounds WHERE created_at < $1', [old]).catch(() => {});
@@ -77,6 +86,7 @@ module.exports = function (d) {
       const old2 = Date.now() - 2 * 24 * 3600 * 1000;
       run('DELETE FROM bingo_cards WHERE round_id IN (SELECT id FROM bingo_rounds WHERE created_at < $1)', [old2]).catch(() => {});
       run('DELETE FROM bingo_rounds WHERE created_at < $1', [old2]).catch(() => {});
+      run('DELETE FROM bingo_wins WHERE created_at < $1', [Date.now() - 7 * 24 * 3600 * 1000]).catch(() => {});
     };
     setInterval(clean, 3600_000).unref();   // con partidas automáticas salen muchas rondas: se limpian cada hora
     setInterval(() => { advance().catch(() => {}); }, 1000).unref();   // paga línea y bingo aunque nadie tenga la pantalla abierta
@@ -132,6 +142,31 @@ module.exports = function (d) {
       await client.query(`INSERT INTO bingo_cards (round_id, user_id, pack_code, nick, country, avatar, grid, created_at) VALUES ${ph.join(',')}`, vals);
     }
   }
+  // Partidas seguidas: al abrirse una ronda se compran solos los cartones de quien las tenga programadas (cada uno con su SAVEPOINT: un fallo no tumba la ronda)
+  async function runAuto(client, roundId, now) {
+    const rows = (await client.query('SELECT * FROM bingo_auto ORDER BY created_at FOR UPDATE')).rows;
+    for (const a of rows) {
+      await client.query('SAVEPOINT bingo_auto_one');
+      try {
+        const cost = a.n_cards * PRICE;
+        const pay = await client.query('UPDATE packs SET credits = credits - $1 WHERE code = $2 AND credits >= $1 RETURNING credits', [cost, a.pack_code]);
+        if (!pay.rows[0]) {   // sin créditos: se paran sus partidas y se le avisa
+          await client.query('DELETE FROM bingo_auto WHERE user_id = $1', [a.user_id]);
+          await client.query("INSERT INTO bingo_wins (user_id, round_id, kind, prize, created_at) VALUES ($1,$2,'stop',0,$3)", [a.user_id, roundId, now]);
+        } else {
+          for (let i = 0; i < a.n_cards; i++) {
+            await client.query('INSERT INTO bingo_cards (round_id, user_id, pack_code, nick, country, avatar, grid, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+              [roundId, a.user_id, a.pack_code, a.nick, a.country, a.avatar, JSON.stringify(genCard()), now]);
+          }
+          if (a.games_left <= 1) {
+            await client.query('DELETE FROM bingo_auto WHERE user_id = $1', [a.user_id]);
+            await client.query("INSERT INTO bingo_wins (user_id, round_id, kind, prize, created_at) VALUES ($1,$2,'end',0,$3)", [a.user_id, roundId, now]);
+          } else await client.query('UPDATE bingo_auto SET games_left = games_left - 1 WHERE user_id = $1', [a.user_id]);
+        }
+        await client.query('RELEASE SAVEPOINT bingo_auto_one');
+      } catch (e) { await client.query('ROLLBACK TO SAVEPOINT bingo_auto_one'); }
+    }
+  }
   // Los cartones de una ronda no cambian cuando empiezan las bolas: se guardan ya leídos para no releerlos cada 4 segundos
   let cardCache = null;
   async function loadCards(client, roundId, fresh) {
@@ -158,6 +193,7 @@ module.exports = function (d) {
             const ins = await client.query("INSERT INTO bingo_rounds (status, ord, created_at, buy_until) VALUES ('buying', $1, $2, $3) RETURNING id",
               [JSON.stringify(shuffle(Array.from({ length: 90 }, (_, i) => i + 1))), nowA, nowA + BUY_MS]);
             await spawnBots(client, ins.rows[0].id, nowA, nowA + BUY_MS);
+            await runAuto(client, ins.rows[0].id, nowA);
             await client.query('COMMIT'); return;
           }
         }
@@ -196,7 +232,10 @@ module.exports = function (d) {
           const w = ws[0];
           Object.assign(upd, { [p + '_user']: w.user_id, [p + '_nick']: w.nick, [p + '_country']: w.country, [p + '_avatar']: w.avatar, [p + '_prize']: share,
             [p + '_all']: JSON.stringify(ws.map(x => ({ user: x.user_id, nick: x.nick, country: x.country, avatar: x.avatar }))) });
-          if (share > 0) for (const x of ws) if (!x.bot) await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2', [share, x.pack_code]);   // los ficticios no cobran
+          if (share > 0) for (const x of ws) if (!x.bot) {   // los ficticios no cobran
+            await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2', [share, x.pack_code]);
+            await client.query('INSERT INTO bingo_wins (user_id, round_id, kind, prize, created_at) VALUES ($1,$2,$3,$4,$5)', [x.user_id, r.id, p, share, now]);   // para avisarle en el juego
+          }
         };
         for (let k = evaluated + 1; k <= total; k++) {
           drawn.add(order[k - 1]);
@@ -218,7 +257,10 @@ module.exports = function (d) {
             if (k <= JACKPOT_BALLS) {   // bingo en 48 bolas o menos: se llevan el bote acumulado y vuelve a empezar
               const jp = Number(((await client.query('SELECT amount FROM bingo_jackpot WHERE id = 1 FOR UPDATE')).rows[0] || { amount: JACKPOT_BASE }).amount);
               const share = Math.floor(jp / ws.length);
-              if (share > 0) for (const x of ws) if (!x.bot) await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2', [share, x.pack_code]);
+              if (share > 0) for (const x of ws) if (!x.bot) {
+                await client.query('UPDATE packs SET credits = credits + $1 WHERE code = $2', [share, x.pack_code]);
+                await client.query("INSERT INTO bingo_wins (user_id, round_id, kind, prize, created_at) VALUES ($1,$2,'jackpot',$3,$4)", [x.user_id, r.id, share, now]);
+              }
               upd.jackpot_prize = share; jackpotWon = true;
               await client.query('UPDATE bingo_jackpot SET amount = $1 WHERE id = 1', [jpStart()]);
             }
@@ -251,7 +293,10 @@ module.exports = function (d) {
     const pack = await ensureUserPack(user);
     const now = Date.now();
     const jpRow = (await all('SELECT amount FROM bingo_jackpot WHERE id = 1'))[0];
-    const base = { jackpot: jpRow ? Number(jpRow.amount) : JACKPOT_BASE, jackpotBalls: JACKPOT_BALLS, ok: true, on: true, now, connected: connected(), price: PRICE, maxCards: MAX_CARDS, ballMs: BALL_MS, credits: Number(pack.credits), soloLine: SOLO_LINE, soloBingo: SOLO_BINGO };
+    const autoRow = (await all('SELECT n_cards, games_left FROM bingo_auto WHERE user_id = $1', [uid]))[0];
+    const winRows = await all('SELECT id, round_id, kind, prize FROM bingo_wins WHERE user_id = $1 AND seen = 0 ORDER BY id LIMIT 30', [uid]);
+    const base = { auto: autoRow ? { cards: Number(autoRow.n_cards), gamesLeft: Number(autoRow.games_left) } : null,
+      wins: winRows.map(w => ({ id: Number(w.id), round: Number(w.round_id), kind: w.kind, prize: Number(w.prize) })), jackpot: jpRow ? Number(jpRow.amount) : JACKPOT_BASE, jackpotBalls: JACKPOT_BALLS, ok: true, on: true, now, connected: connected(), price: PRICE, maxCards: MAX_CARDS, ballMs: BALL_MS, credits: Number(pack.credits), soloLine: SOLO_LINE, soloBingo: SOLO_BINGO };
     const r = (await all('SELECT * FROM bingo_rounds ORDER BY id DESC LIMIT 1'))[0];
     let phase = 'idle';
     if (r) {
@@ -291,23 +336,39 @@ module.exports = function (d) {
     const user = await needUser(req); const uid = String(user.id);
     touch(uid);
     if (rateHit('bingo-buy:' + uid, 60_000) > 30) throw new HttpError(429, 'Vas muy rápido. Espera un minuto');
+    if (body && body.ackUpTo !== undefined) {   // avisos vistos
+      await run('UPDATE bingo_wins SET seen = 1 WHERE user_id = $1 AND id <= $2', [uid, Math.floor(Number(body.ackUpTo)) || 0]);
+      return view(user);
+    }
+    if (body && body.cancelAuto) { await run('DELETE FROM bingo_auto WHERE user_id = $1', [uid]); return view(user); }
     const count = Math.floor(Number(body && body.count));
     if (!Number.isFinite(count) || count < 1 || count > MAX_CARDS) throw new HttpError(400, `Elige entre 1 y ${MAX_CARDS} cartones`);
+    const games = Math.max(1, Math.min(100, Math.floor(Number(body && body.games)) || 1));   // partidas seguidas (1 a 100)
+    const reserveOnly = !!(body && body.reserve);
     const country = cleanCountry(body && body.country), avatar = cleanAvatar(body && body.avatar);
     const prof = (await all('SELECT nickname FROM profiles WHERE user_id::text = $1', [uid]))[0];
     if (!prof || !prof.nickname) throw new HttpError(409, 'Elige tu apodo para jugar al bingo');
     const pack = await ensureUserPack(user);
+    const saveAuto = (c, left) => c.query('INSERT INTO bingo_auto (user_id, pack_code, nick, country, avatar, n_cards, games_left, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (user_id) DO UPDATE SET pack_code = $2, nick = $3, country = $4, avatar = $5, n_cards = $6, games_left = $7',
+      [uid, pack.code, prof.nickname, country, avatar, count, left, Date.now()]);
+    if (reserveOnly) {   // reservar: se compra solo desde que se abra la próxima partida
+      await run('DELETE FROM bingo_auto WHERE user_id = $1', [uid]);
+      await saveAuto({ query: (s, p) => run(s, p) }, games);
+      return view(user);
+    }
     await advance();
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       await client.query('SELECT pg_advisory_xact_lock($1)', [LOCK_ID]);
       const now = Date.now();
+      await client.query('DELETE FROM bingo_auto WHERE user_id = $1', [uid]);   // lo nuevo sustituye a lo programado antes
       let r = (await client.query("SELECT * FROM bingo_rounds WHERE status <> 'done' ORDER BY id DESC LIMIT 1 FOR UPDATE")).rows[0];
       if (!r) {
         r = (await client.query("INSERT INTO bingo_rounds (status, ord, created_at, buy_until) VALUES ('buying', $1, $2, $3) RETURNING *",
           [JSON.stringify(shuffle(Array.from({ length: 90 }, (_, i) => i + 1))), now, now + BUY_MS])).rows[0];
         await spawnBots(client, r.id, now, now + BUY_MS);
+        await runAuto(client, r.id, now);
       } else if (r.status !== 'buying' || now >= Number(r.buy_until)) {
         throw new HttpError(409, 'La partida ya ha empezado. Espera a la siguiente 🎱');
       }
@@ -319,6 +380,7 @@ module.exports = function (d) {
         await client.query('INSERT INTO bingo_cards (round_id, user_id, pack_code, nick, country, avatar, grid, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
           [r.id, uid, pack.code, prof.nickname, country, avatar, JSON.stringify(genCard()), now]);
       }
+      if (games > 1) await saveAuto(client, games - 1);   // el resto de partidas, programadas
       await client.query('COMMIT');
     } catch (e) { try { await client.query('ROLLBACK'); } catch (e2) { /* nada */ } throw e; }
     finally { client.release(); }
