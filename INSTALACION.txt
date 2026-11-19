@@ -1,20 +1,35 @@
-CASCADA — BOTES GLOBALES COMPARTIDOS
+CORRECCIÓN DEL INDICADOR «PERDIDO» — CASCADA
 
-CAMBIOS
-- Bote Río, Bote Mar y Cascada viven en una sola fila global de PostgreSQL, no por usuario.
-- Todos los jugadores ven los mismos importes aunque cierren sesión, salgan del juego o vuelvan otro día.
-- Cada partida añade 10 créditos a cada uno de los tres botes.
-- Cuando sale un premio de nivel Río/Mar/Cascada, se suma el bote correspondiente al premio de esa tirada y ese bote vuelve a cero. Los otros dos siguen acumulando.
-- La fila global se bloquea FOR UPDATE dentro de la misma transacción que cobra/paga la partida; evita que dos jugadores cobren simultáneamente el mismo bote.
-- La pantalla muestra los importes compartidos, no el número de veces que ese usuario ganó.
+Archivos incluidos:
+- cascada/index.html
+- cascada/game.js
+- cascada-server.js
+- migration.sql
+
+QUÉ CORRIGE
+1. «Perdido» está escrito directamente en el HTML: ya no depende de que JavaScript
+   cree la ventanilla dinámicamente.
+2. El contador suma la pérdida de cada partida individual:
+      pérdida de partida = max(apuesta - premio de esa partida, 0)
+   Por ejemplo, apuesta 10 y premio 0 => suma 10; apuesta 10 y premio 4 => suma 6;
+   apuesta 10 y premio 15 => suma 0. Un premio grande no borra pérdidas anteriores.
+3. Supabase/PostgreSQL guarda el acumulado en cascada_stats.lost y lo devuelve al cliente.
+4. Se conserva el total de créditos gastados (spent) para estadísticas internas.
 
 INSTALACIÓN
-1. Sustituir cascada/game.js y cascada-server.js en el proyecto por los incluidos.
-2. Ejecutar migration.sql en Supabase SQL Editor.
-3. Desplegar el servicio en Render.
-4. Recargar Cascada. Todos los usuarios consultan el mismo bote en GET /api/cascada.
+1. Sustituir los tres archivos por los incluidos, respetando las rutas.
+2. Aplicar migration.sql en Supabase SQL Editor (o dejar que init() ejecute el ALTER
+   TABLE al arrancar el servidor; la migración es idempotente).
+3. Desplegar de nuevo el servicio en Render.
+4. Abrir Cascada y recargar completamente la página.
 
-NOTAS
-- La acumulación es +10 por partida completada, una vez por cada juego individual dentro de una compra múltiple.
-- Los botes empiezan en cero al crear la tabla. No se migran los contadores antiguos por usuario porque no representan un fondo común fiable.
-- La operación se ejecuta en el backend y requiere el despliegue y la migración SQL para estar activa en producción.
+NOTA SOBRE HISTÓRICO
+Las partidas anteriores no se pueden reconstruir como pérdidas por partida usando
+solo los totales agregados de gasto y premios. Por eso el nuevo contador empieza a
+acumular correctamente desde que se aplique esta versión. No se borran los datos
+anteriores de partidas, premios ni créditos.
+
+COMPROBACIONES REALIZADAS
+- node --check cascada/game.js: correcto
+- node --check cascada-server.js: correcto
+- node --check cascada/engine.js: correcto
