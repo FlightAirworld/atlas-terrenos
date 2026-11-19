@@ -57,10 +57,10 @@
   /* ---------------- estado ---------------- */
   // En el navegador solo se guardan preferencias y la compra en curso; el saldo y las estadísticas vienen del servidor.
   const def = () => ({
-    credits: 0, last: null, spins: 0, won: 0, spent: 0, best: 0, auto: false, sel: 10, mult: 1,
+    credits: 0, last: null, spins: 0, won: 0, spent: 0, lost: 0, best: 0, auto: false, sel: 10, mult: 1,
     sound: true, notify: false, cf: { at: 0, n: 0 },
     bulk: { left: 0, total: 0, done: 0, won: 0, queue: [] },
-    botes: [0, 0, 0, 0], jackpots: [0, 0, 0, 0], tick: Date.now(),
+    botes: [0, 0, 0, 0], tick: Date.now(),
   });
   const load = () => {
     try {
@@ -152,13 +152,13 @@
   const playServer = (n, m) => api('/api/cascada/play', { n, m });
   const takeStats = (st) => {
     if (!st) return;
-    S.spins = st.spins; S.won = st.won; S.spent = st.spent || 0; S.best = st.best; S.botes = st.botes || S.botes; S.last = st.last || S.last;
+    S.spins = st.spins; S.won = st.won; S.spent = st.spent || 0; S.lost = st.lost || 0; S.best = st.best; S.botes = st.botes || S.botes; S.last = st.last || S.last;
   };
   const sync = async () => {
     try {
       const j = await api('/api/cascada');
       if (j.on === false) { await modal('<h2>Cascada</h2><p>Ahora mismo está desactivada.</p><a class="btn gold" href="/">Volver</a>'); return false; }
-      S.credits = j.credits; S.jackpots = j.jackpots || S.jackpots; takeStats(j.stats); ready = true; needLogin = false;
+      S.credits = j.credits; takeStats(j.stats); ready = true; needLogin = false;
       if (j.bonusPending > 0) needBonus = true;
       return true;
     } catch (e) {
@@ -307,17 +307,7 @@
   };
   const highlight = (r) => {
     const rs = reelEls();
-    // El servidor devuelve todas las líneas premiadas; se iluminan sus celdas exactas.
-    if (Array.isArray(r.lines) && r.lines.length) {
-      for (const line of r.lines) for (const cell of (line.cells || [])) {
-        const strip = rs[cell.col] && rs[cell.col].firstElementChild;
-        const node = strip && strip.children[cell.row + 1];
-        if (node) node.classList.add('win');
-      }
-    } else if (!r.bonus) {
-      // Compatibilidad con resultados antiguos guardados o pendientes.
-      for (let c = 0; c < (r.count || 0); c++) rs[c].firstElementChild.children[1].classList.add('win');
-    }
+    for (let c = 0; c < r.count; c++) rs[c].firstElementChild.children[1].classList.add('win');
     $('#line').classList.add('on');
   };
 
@@ -353,12 +343,12 @@
   const apply = (r, inBulk, sum) => {
     S.spins++;
     S.spent += r.mult || 1;
+    S.lost += Math.max(0, (r.mult || 1) - r.prize); // pérdida neta de ESTA partida; los premios previos no la compensan
     S.credits += r.prize;
     S.won += r.prize;
     if (r.prize > S.best) S.best = r.prize;
     if (inBulk) S.bulk.won += r.prize;
     if (r.tier) S.botes[r.tier]++;
-    if (r.jackpots) S.jackpots = r.jackpots;
     if (r.prize) S.last = { prize: r.prize, tier: r.tier, sym: r.sym, count: r.count };
     if (sum) {
       sum.plays++; sum.won += r.prize;
@@ -527,7 +517,7 @@
     } else {
       clampMult();
       const j = await playServer(1, S.mult);         // el servidor cobra la apuesta y paga el premio; si no hay saldo, falla y no pasa nada
-      r = j.results[0]; if (j.jackpots) S.jackpots = j.jackpots;
+      r = j.results[0];
       S.credits = j.credits - r.prize;               // el saldo lo manda el servidor (el premio se suma al revelarlo)
     }
     const bestPrev = S.best;
@@ -576,7 +566,7 @@
         if (k < 1) { S.auto = false; AW.noCredits = true; break; }
         let j;
         try { j = await playServer(k, S.mult); } catch (e) { if (e.status === 402) { S.auto = false; AW.noCredits = true; } break; }
-        S.credits = j.credits - sumPrize(j.results); if (j.jackpots) S.jackpots = j.jackpots;
+        S.credits = j.credits - sumPrize(j.results);
         for (const r of j.results) {
           apply(r, false, AW);
           if (r.tier) notify('¡' + TIER_NAME[r.tier] + '!', `Has ganado ${fmt(r.prize)} créditos`);
@@ -650,12 +640,11 @@
     $('#balance').textContent = fmt(cr);
     $('#stSpins').textContent = fmt(S.spins);
     $('#stWon').textContent = fmt(S.won - h.prize);
-    $('#stLost').textContent = fmt(Math.max(0, S.spent - (S.won - h.prize)));   // perdido = gastado − ganado (nunca negativo)
+    $('#stLost').textContent = fmt(S.lost);
     $('#stBest').textContent = fmt(hold ? h.bestPrev : S.best);
     ['Rio', 'Mar', 'Cas'].forEach((k, i) => {
       const n = S.botes[i + 1] - (h.tier === i + 1 ? 1 : 0);
       $('#n' + k).textContent = n === 1 ? '1 vez' : n + ' veces';
-      const v = $('#v' + k); if (v) v.textContent = fmt(S.jackpots[i + 1]) + ' créditos';
     });
 
     // la apuesta nunca puede pasar del saldo real
@@ -719,14 +708,7 @@
   };
 
   /* ---------------- controles ---------------- */
-  // Recuadro «Perdido» junto a «Ganado»
-  if (!$('#stLost')) {
-    const wonBox = $('#stWon').closest('.stat');
-    const lostBox = document.createElement('div');
-    lostBox.className = 'stat lost';
-    lostBox.innerHTML = '<b id="stLost">0</b><span>Perdido</span>';
-    wonBox.after(lostBox);
-  }
+  // «Perdido» forma parte del HTML inicial para que siempre esté visible, incluso antes de iniciar JavaScript.
 
   // No se pueden «cargar» créditos gratis: el bloque de carga se sustituye por el selector de apuesta (1 a 50), con su botón de PARAR
   const loadBlock = $('#bLoad') && $('#bLoad').closest('.bulk');
@@ -815,7 +797,7 @@
     busy = true; render();
     try {
       const j = await playServer(n, m);              // el servidor cobra n×m y paga todos los premios de golpe
-      S.credits = j.credits - sumPrize(j.results); if (j.jackpots) S.jackpots = j.jackpots;   // botes progresivos sincronizados con el servidor
+      S.credits = j.credits - sumPrize(j.results);   // los premios se van sumando al revelarlas
       S.bulk = { left: n, total: n, done: 0, won: 0, queue: j.results };
       save(); busy = false; render(); loop();
     } catch (e) {
