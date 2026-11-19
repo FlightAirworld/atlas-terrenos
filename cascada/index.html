@@ -1,1 +1,340 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#06323f">
+<title>Cascada · tragaperras de ríos, mares y cascadas</title>
+<style>
+:root{
+  --cell:clamp(52px,17vw,92px);
+  --gold:#ffd86b; --gold2:#f0a81c;
+  --ink:#04202b;
+  --glass:rgba(5,40,58,.62);
+  font-family:"Trebuchet MS",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;color:#eaffff;background:#06323f}
+body{
+  background:
+    radial-gradient(120% 60% at 50% -10%,#3fc7d6 0,transparent 60%),
+    linear-gradient(#0a4f6e 0,#08697f 35%,#0a8a94 70%,#07525f 100%);
+  background-attachment:fixed;
+  overflow-x:hidden;
+  user-select:none;-webkit-user-select:none;
+}
+button{font:inherit;color:inherit;border:0;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
 
+/* ---------- decorado ---------- */
+.scenery{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.scenery svg{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:max(100%,820px);height:100%;opacity:.55}
+.bubble{position:absolute;bottom:-20px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#fff9,#7fe8ff22 60%,transparent 70%);animation:rise linear infinite}
+@keyframes rise{to{transform:translateY(-110vh) translateX(20px)}}
+
+#app{position:relative;z-index:1;max-width:560px;margin:0 auto;padding:10px 12px calc(24px + env(safe-area-inset-bottom))}
+
+/* ---------- cabecera ---------- */
+.top{display:flex;align-items:center;gap:8px}
+.top a.back{color:#bff6ff;text-decoration:none;font-weight:700;font-size:14px;padding:8px 10px;border-radius:12px;background:var(--glass)}
+.logo{flex:1;text-align:center;font-weight:900;letter-spacing:3px;font-size:clamp(26px,8vw,40px);line-height:1;
+  background:linear-gradient(#fff 0,#a8f3ff 45%,#2cb9d8 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 0 #05455f) drop-shadow(0 0 14px #52e3ff88)}
+.logo small{display:block;font-size:10px;letter-spacing:4px;color:#bff6ff;-webkit-text-fill-color:#bff6ff;margin-top:3px;filter:none}
+.ico{width:38px;height:38px;border-radius:12px;background:var(--glass);display:grid;place-items:center;font-size:18px}
+.ico.off{opacity:.55}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0 8px}
+.stat{background:var(--glass);border:1px solid #6fe3ff33;border-radius:12px;padding:6px 4px;text-align:center}
+.stat b{display:block;font-size:16px;color:#fff}
+.stat span{font-size:10px;letter-spacing:1px;color:#9ee9f7;text-transform:uppercase}
+.stat.credits b{color:var(--gold);font-size:19px}
+
+/* ---------- botes ---------- */
+.botes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.bote{border-radius:14px;padding:8px 4px 6px;text-align:center;border:2px solid;position:relative;overflow:hidden}
+.bote::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 40%,#fff5 50%,transparent 60%);transform:translateX(-120%);animation:shine 4.5s infinite}
+.bote:nth-child(2)::after{animation-delay:1.2s}.bote:nth-child(3)::after{animation-delay:2.4s}
+@keyframes shine{to{transform:translateX(120%)}}
+.bote h4{margin:0;font-size:11px;letter-spacing:2px}
+.bote .v{font-size:clamp(17px,5.4vw,24px);font-weight:900;margin:2px 0}
+.bote .n{font-size:10px;opacity:.9}
+.bote.rio{background:linear-gradient(#2b8a5f,#145c44);border-color:#7dffc1;color:#d9ffec}
+.bote.mar{background:linear-gradient(#5e7fa8,#2e4a73);border-color:#cfe4ff;color:#eef6ff}
+.bote.cas{background:linear-gradient(#e7a21a,#a35a06);border-color:#ffe38a;color:#fff6d4}
+.bote.hit{animation:hit 1s 3}
+@keyframes hit{50%{transform:scale(1.07);filter:brightness(1.5)}}
+
+.lastprize{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:8px 12px;border-radius:14px;background:var(--glass);border:1px solid #6fe3ff33;text-align:center}
+.lastprize span{font-size:11px;letter-spacing:2px;color:#9ee9f7}
+.lastprize b{font-size:26px;color:var(--gold);text-shadow:0 2px 0 #7a4a00}
+.lastprize em{font-style:normal;font-size:13px;color:#d6fbff}
+.lastprize.has{border-color:var(--gold2);background:linear-gradient(#0e6b8fcc,#07405acc)}
+/* ---------- tablero ---------- */
+.board{position:relative;border-radius:22px;padding:10px;background:linear-gradient(160deg,#6e7f86,#3a4a52 55%,#22323a);
+  box-shadow:0 10px 30px #0008,inset 0 2px 0 #fff4,inset 0 -3px 0 #0006}
+.board::before,.board::after{content:"";position:absolute;top:-6px;width:26px;height:26px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#baf7ff,#1da0c4 60%,#0a5876);box-shadow:0 0 14px #5fe8ff}
+.board::before{left:14px}.board::after{right:14px}
+.window{position:relative;border-radius:14px;overflow:hidden;background:linear-gradient(#0c5f86,#0a3f66);border:3px solid #0c2631}
+.fall{position:absolute;inset:0;
+  background:
+    repeating-linear-gradient(90deg,rgba(255,255,255,.0) 0 9px,rgba(255,255,255,.17) 9px 13px,rgba(255,255,255,0) 13px 22px),
+    linear-gradient(#58d6f0cc,#1d8fc3cc);
+  background-size:22px 70px,100% 100%;animation:flow .9s linear infinite;opacity:.9}
+@keyframes flow{to{background-position:0 70px,0 0}}
+.mist{position:absolute;left:0;right:0;bottom:0;height:30%;background:linear-gradient(transparent,#fff6);pointer-events:none}
+.reels{position:relative;display:grid;grid-template-columns:repeat(5,var(--cell));gap:4px;justify-content:center;padding:6px 4px}
+.reel{height:calc(var(--cell)*3);overflow:hidden;border-radius:10px;background:#0a2a4a66;box-shadow:inset 0 0 0 1px #8ff2ff55,inset 0 8px 14px #0005,inset 0 -8px 14px #0005}
+.strip{display:flex;flex-direction:column;will-change:transform}
+.cell{height:var(--cell);width:100%;display:grid;place-items:center;padding:5px}
+.cell svg{width:100%;height:100%;filter:drop-shadow(0 3px 2px #0008);overflow:visible}
+.cell.win svg{animation:pop .6s infinite alternate;filter:drop-shadow(0 0 10px #fff) drop-shadow(0 0 18px #ffe36b)}
+@keyframes pop{to{transform:scale(1.14) rotate(-3deg)}}
+.line{position:absolute;left:6px;right:6px;top:calc(6px + var(--cell)*1.5);height:3px;border-radius:3px;background:linear-gradient(90deg,transparent,#ffe36b,transparent);opacity:0;transition:opacity .2s}
+.line.on{opacity:.9}
+.toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.6);opacity:0;pointer-events:none;z-index:5;
+  font-weight:900;font-size:clamp(28px,9vw,46px);color:#fff;text-shadow:0 3px 0 #06455f,0 0 22px #ffe36b;white-space:nowrap;text-align:center}
+.toast.show{animation:toast 1.5s ease-out}
+.toast small{display:block;font-size:.4em;letter-spacing:3px;color:#ffe9a0}
+@keyframes toast{0%{opacity:0;transform:translate(-50%,-50%) scale(.5)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}30%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-80%) scale(1)}}
+
+/* ---------- controles ---------- */
+.panel{margin-top:12px;background:var(--glass);border:1px solid #6fe3ff33;border-radius:20px;padding:12px;backdrop-filter:blur(4px)}
+.main-row{display:flex;align-items:center;gap:10px}
+.info{flex:1;min-width:0}
+.info .lbl{font-size:11px;letter-spacing:1px;color:#9ee9f7;text-transform:uppercase}
+.info .bal{font-size:26px;font-weight:800}
+.info .hint{font-size:11px;color:#b5f1fb}
+.play{flex:none;width:118px;height:118px;border-radius:50%;background:radial-gradient(circle at 35% 28%,#ff8d7a,#e02f3e 55%,#a3121f);
+  border:5px solid #fff;box-shadow:0 8px 20px #0007,inset 0 -6px 12px #0004;font-weight:900;line-height:1.05;text-transform:lowercase;font-size:18px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;transition:transform .1s}
+.play b{font-size:34px;text-transform:none;line-height:1}
+.play small{font-size:14px;font-weight:800}
+.play:active:not(:disabled){transform:scale(.94)}
+.play.spinning{filter:saturate(.6)}
+.side{display:flex;flex-direction:column;gap:8px}
+.btn{padding:10px 12px;border-radius:14px;font-weight:800;font-size:13px;letter-spacing:.5px;background:linear-gradient(#37c4e6,#1b86b3);box-shadow:0 3px 0 #0a4e6e}
+.btn.gold{background:linear-gradient(#ffd25a,#ea9a10);color:#4a2a00;box-shadow:0 3px 0 #8a5300}
+.btn.red{background:linear-gradient(#ff7d70,#cf2d3a);box-shadow:0 3px 0 #7b1019}
+.btn.on{background:linear-gradient(#7dffa9,#1ab35a);color:#033d1b;box-shadow:0 3px 0 #0a6a34}
+.btn:active:not(:disabled){transform:translateY(2px);box-shadow:none}
+
+.bulk{margin-top:12px;border-top:1px dashed #6fe3ff44;padding-top:12px}
+.bulk h3{margin:0 0 8px;font-size:12px;letter-spacing:2px;color:#9ee9f7;text-transform:uppercase;display:flex;justify-content:space-between}
+.stepper{display:flex;align-items:center;gap:8px}
+.stepper .rnd{width:42px;height:42px;border-radius:50%;background:#ffffff1f;border:2px solid #cffaff;font-size:24px;font-weight:700;line-height:1}
+.stepper .num{flex:1;text-align:center;font-size:30px;font-weight:900;color:var(--gold)}
+.stepper .num small{font-size:12px;color:#b5f1fb;font-weight:600}
+input[type=range]{width:100%;margin:10px 0 6px;accent-color:#ffd25a}
+.chips{display:flex;gap:6px;margin-bottom:10px}
+.chip{flex:1;padding:7px 0;border-radius:10px;background:#ffffff1c;font-weight:800;font-size:13px}
+.chip.sel{background:var(--gold);color:#4a2a00}
+.prog{height:12px;border-radius:8px;background:#00000055;overflow:hidden;margin:10px 0 4px}
+.prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,#51e0ff,#7dffa9);transition:width .25s}
+.progtxt{font-size:12px;color:#bff6ff;text-align:center}
+.row2{display:flex;gap:8px}
+.row2 .btn{flex:1}
+.foot{margin-top:14px;text-align:center;font-size:11px;color:#9ee9f7;opacity:.85;line-height:1.5}
+
+/* ---------- ventanas ---------- */
+.ov{position:fixed;inset:0;z-index:50;background:#021820cc;display:none;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(3px)}
+.ov.show{display:flex}
+.modal{width:100%;max-width:420px;max-height:88vh;overflow:auto;border-radius:24px;padding:22px 18px 18px;text-align:center;
+  background:linear-gradient(#0e6b8f,#07405a);border:3px solid #8ff2ff;box-shadow:0 20px 60px #000a;animation:mpop .35s cubic-bezier(.2,1.4,.4,1)}
+@keyframes mpop{from{transform:scale(.7);opacity:0}}
+.modal h2{margin:0 0 6px;font-size:26px;letter-spacing:1px}
+.modal .big{font-size:56px;font-weight:900;color:var(--gold);text-shadow:0 3px 0 #7a4a00,0 0 26px #ffd25a99;margin:4px 0}
+.modal p{margin:6px 0;color:#d6fbff;font-size:15px;line-height:1.45}
+.modal .btn{margin-top:12px;width:100%;font-size:16px;padding:13px}
+.modal.rio{border-color:#7dffc1}.modal.mar{border-color:#cfe4ff}.modal.cas{border-color:#ffe38a;background:linear-gradient(#e0a024,#7d4400)}
+.modal.cas h2,.modal.cas p{color:#fff}
+.pt{display:grid;grid-template-columns:auto 1fr auto;gap:8px 10px;align-items:center;text-align:left;margin:10px 0;font-size:13px}
+.pt svg{width:30px;height:30px}
+.pt .c{display:flex;gap:1px}
+.pt b{color:var(--gold)}
+.pt .sec{grid-column:1/-1;font-size:11px;letter-spacing:2px;color:#9ee9f7;text-transform:uppercase;margin-top:6px;border-bottom:1px solid #6fe3ff44;padding-bottom:3px}
+.splash{position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden}
+.drop{position:absolute;top:-30px;width:14px;height:20px;border-radius:50% 50% 50% 50%/60% 60% 40% 40%;background:linear-gradient(#e8fcff,#38c8ee);animation:fall linear forwards}
+.coin{position:absolute;top:-30px;width:20px;height:20px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#fff3b0,#f2a900);border:2px solid #b86d00;animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(360deg)}}
+@media (max-width:380px){.play{width:100px;height:100px;font-size:15px}.play b{font-size:26px}}
+</style>
+</head>
+<body>
+
+<!-- ============ IMÁGENES (SVG dibujadas a mano) ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<defs>
+  <linearGradient id="gWater" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b9f6ff"/><stop offset=".5" stop-color="#32b8f0"/><stop offset="1" stop-color="#0a64b8"/></linearGradient>
+  <linearGradient id="gWave" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7ef0ff"/><stop offset="1" stop-color="#0b6fd0"/></linearGradient>
+  <linearGradient id="gFish" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd36b"/><stop offset=".55" stop-color="#ff8a2e"/><stop offset="1" stop-color="#e2461c"/></linearGradient>
+  <linearGradient id="gShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe3f0"/><stop offset=".6" stop-color="#ff9cc2"/><stop offset="1" stop-color="#d4558a"/></linearGradient>
+  <linearGradient id="gStar" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset=".6" stop-color="#ff9a2e"/><stop offset="1" stop-color="#d2561a"/></linearGradient>
+  <linearGradient id="gDolph" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe9ff"/><stop offset=".5" stop-color="#6fa8e0"/><stop offset="1" stop-color="#2f5fae"/></linearGradient>
+  <radialGradient id="gPearl" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff"/><stop offset=".55" stop-color="#e8e6ff"/><stop offset="1" stop-color="#9c98d8"/></radialGradient>
+  <linearGradient id="gOyster" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b79bff"/><stop offset="1" stop-color="#5b3fb0"/></linearGradient>
+  <linearGradient id="gWood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b36a2c"/><stop offset="1" stop-color="#6a3512"/></linearGradient>
+  <linearGradient id="gGold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff1a0"/><stop offset=".5" stop-color="#ffc21f"/><stop offset="1" stop-color="#b87300"/></linearGradient>
+
+  <symbol id="s0" viewBox="0 0 100 100"><!-- Gota -->
+    <path d="M50 6C50 6 18 44 18 64a32 32 0 0 0 64 0C82 44 50 6 50 6Z" fill="url(#gWater)" stroke="#08589a" stroke-width="3"/>
+    <ellipse cx="37" cy="62" rx="7" ry="14" fill="#fff" opacity=".65" transform="rotate(18 37 62)"/>
+    <circle cx="62" cy="78" r="3.5" fill="#fff" opacity=".6"/>
+  </symbol>
+  <symbol id="s1" viewBox="0 0 100 100"><!-- Ola -->
+    <path d="M6 72C12 42 40 18 72 28C56 31 54 46 66 53C76 59 88 54 94 44C98 68 80 88 48 88C26 88 10 82 6 72Z" fill="url(#gWave)" stroke="#07509a" stroke-width="3"/>
+    <path d="M24 70C30 56 46 46 60 48" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".85"/>
+    <path d="M70 30C60 30 56 38 58 44" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="80" cy="30" r="3" fill="#fff"/><circle cx="88" cy="38" r="2.2" fill="#fff"/><circle cx="74" cy="20" r="2" fill="#fff"/>
+  </symbol>
+  <symbol id="s2" viewBox="0 0 100 100"><!-- Pez -->
+    <path d="M78 50L96 30V70Z" fill="#ff6a2a" stroke="#9a2c0c" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M40 30L52 14L62 32Z" fill="#ff7a2f" stroke="#9a2c0c" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M42 70L54 86L62 68Z" fill="#ff7a2f" stroke="#9a2c0c" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M6 50C22 22 62 22 82 50C62 78 22 78 6 50Z" fill="url(#gFish)" stroke="#9a2c0c" stroke-width="3"/>
+    <path d="M52 30C58 42 58 58 52 70M64 34C69 43 69 57 64 66" fill="none" stroke="#fff" stroke-width="4" opacity=".75" stroke-linecap="round"/>
+    <circle cx="25" cy="45" r="6" fill="#fff"/><circle cx="24" cy="45" r="3" fill="#102"/>
+  </symbol>
+  <symbol id="s3" viewBox="0 0 100 100"><!-- Concha -->
+    <path d="M50 88L12 54C4 30 28 10 50 10C72 10 96 30 88 54Z" fill="url(#gShell)" stroke="#a23a6c" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M50 88L20 38M50 88L34 20M50 88L50 12M50 88L66 20M50 88L80 38" stroke="#c9507f" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M36 88h28l-4 8H40Z" fill="#e2759e" stroke="#a23a6c" stroke-width="3" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="s4" viewBox="0 0 100 100"><!-- Estrella de mar -->
+    <polygon points="50,10 60,38 88,40 66,57 73.5,86 50,69 26.5,86 34,57 12,40 40,38" fill="url(#gStar)" stroke="#9a3a0c" stroke-width="3" stroke-linejoin="round"/>
+    <g fill="#fff3b8" opacity=".9"><circle cx="50" cy="26" r="2.6"/><circle cx="50" cy="40" r="2.6"/><circle cx="50" cy="54" r="2.6"/><circle cx="28" cy="43" r="2.4"/><circle cx="72" cy="43" r="2.4"/><circle cx="35" cy="76" r="2.4"/><circle cx="65" cy="76" r="2.4"/></g>
+  </symbol>
+  <symbol id="s5" viewBox="0 0 100 100"><!-- Delfín -->
+    <path d="M6 22C16 26 22 34 28 42C40 24 60 16 78 24C84 20 90 20 96 22C92 28 92 32 96 36C86 44 76 44 70 50C62 70 40 84 18 84C30 76 34 64 28 56C20 46 12 38 6 22Z" fill="url(#gDolph)" stroke="#1d3f84" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M50 26L58 6L68 24Z" fill="#4f86cc" stroke="#1d3f84" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M34 74C50 72 62 62 68 50" fill="none" stroke="#fff" stroke-width="4" opacity=".7" stroke-linecap="round"/>
+    <circle cx="78" cy="31" r="3.5" fill="#102"/><circle cx="79" cy="30" r="1.2" fill="#fff"/>
+  </symbol>
+  <symbol id="s6" viewBox="0 0 100 100"><!-- Perla -->
+    <path d="M6 54C6 90 94 90 94 54C70 66 30 66 6 54Z" fill="url(#gOyster)" stroke="#3a2284" stroke-width="3"/>
+    <path d="M10 52C14 18 86 18 90 52C70 40 30 40 10 52Z" fill="url(#gOyster)" stroke="#3a2284" stroke-width="3"/>
+    <path d="M26 46C34 30 66 30 74 46M38 32L36 44M50 28V42M62 32L64 44" stroke="#d8c9ff" stroke-width="2.5" fill="none" opacity=".7"/>
+    <circle cx="50" cy="52" r="19" fill="url(#gPearl)" stroke="#7e78c8" stroke-width="2.5"/>
+    <ellipse cx="43" cy="45" rx="6" ry="4" fill="#fff" opacity=".95" transform="rotate(-30 43 45)"/>
+  </symbol>
+  <symbol id="s7" viewBox="0 0 100 100"><!-- Cofre del tesoro -->
+    <path d="M12 46C12 18 88 18 88 46Z" fill="url(#gWood)" stroke="#3a1a06" stroke-width="3"/>
+    <rect x="12" y="46" width="76" height="40" rx="4" fill="url(#gWood)" stroke="#3a1a06" stroke-width="3"/>
+    <path d="M30 24V46M70 24V46M30 46V86M70 46V86" stroke="url(#gGold)" stroke-width="7"/>
+    <rect x="10" y="42" width="80" height="8" fill="url(#gGold)" stroke="#8a5300" stroke-width="2"/>
+    <rect x="43" y="46" width="14" height="18" rx="3" fill="url(#gGold)" stroke="#8a5300" stroke-width="2.5"/>
+    <circle cx="50" cy="54" r="2.5" fill="#4a2a00"/><rect x="49" y="55" width="2" height="6" fill="#4a2a00"/>
+    <path d="M70 14l2.4 6 6 2.4-6 2.4-2.4 6-2.4-6-6-2.4 6-2.4Z" fill="#fff6b8"/>
+    <path d="M22 10l1.6 4 4 1.6-4 1.6-1.6 4-1.6-4-4-1.6 4-1.6Z" fill="#fff6b8"/>
+  </symbol>
+</defs>
+</svg>
+
+<!-- ============ DECORADO: montañas, cascada y burbujas ============ -->
+<div class="scenery" id="scenery">
+  <svg viewBox="0 0 800 900" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="rock" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f6b78"/><stop offset="1" stop-color="#0b3a47"/></linearGradient>
+      <linearGradient id="fallg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8fdff"/><stop offset="1" stop-color="#58d0ea"/></linearGradient>
+    </defs>
+    <path d="M0 520L90 330L170 430L250 250L340 400L340 900L0 900Z" fill="url(#rock)"/>
+    <path d="M800 480L720 300L640 410L560 230L470 390L470 900L800 900Z" fill="url(#rock)"/>
+    <rect x="352" y="380" width="96" height="420" rx="30" fill="url(#fallg)" opacity=".8"/>
+    <ellipse cx="400" cy="800" rx="150" ry="26" fill="#d8fbff" opacity=".55"/>
+    <g fill="#0c5a3f" opacity=".8">
+      <path d="M40 520l20-70 20 70zM70 540l24-84 24 84zM710 500l20-70 20 70zM740 520l24-80 24 80z"/>
+    </g>
+    <g fill="none" stroke="#bff6ff" stroke-width="3" opacity=".5">
+      <path d="M0 840q50-18 100 0t100 0 100 0 100 0 100 0 100 0 100 0 100 0"/>
+      <path d="M0 870q50-18 100 0t100 0 100 0 100 0 100 0 100 0 100 0 100 0"/>
+    </g>
+  </svg>
+</div>
+
+<div id="app">
+  <div class="top">
+    <a class="back" href="/">‹ Inicio</a>
+    <div class="logo">CASCADA<small>ríos · mares · cascadas</small></div>
+    <button class="ico" id="bSound" title="Sonido">🔊</button>
+    <button class="ico" id="bBell" title="Avisos">🔔</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat credits"><b id="stCredits">0</b><span>Créditos</span></div>
+    <div class="stat"><b id="stSpins">0</b><span>Partidas</span></div>
+    <div class="stat"><b id="stWon">0</b><span>Ganado</span></div>
+    <div class="stat"><b id="stBest">0</b><span>Mejor</span></div>
+  </div>
+
+  <div class="botes">
+    <div class="bote rio" id="boteRio"><h4>BOTE RÍO</h4><div class="v">100–150</div><div class="n" id="nRio">0 veces</div></div>
+    <div class="bote mar" id="boteMar"><h4>BOTE MAR</h4><div class="v">250–500</div><div class="n" id="nMar">0 veces</div></div>
+    <div class="bote cas" id="boteCas"><h4>CASCADA</h4><div class="v">1000</div><div class="n" id="nCas">0 veces</div></div>
+  </div>
+
+  <div class="lastprize" id="lastPrize"><span>ÚLTIMO PREMIO</span><em>todavía ninguno · ¡suerte!</em></div>
+
+  <div class="board">
+    <div class="window">
+      <div class="fall"></div><div class="mist"></div>
+      <div class="reels" id="reels"></div>
+      <div class="line" id="line"></div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="main-row">
+      <button class="ico" id="bInfo" title="Cómo se juega" style="flex:none;font-weight:900">i</button>
+      <div class="info">
+        <div class="lbl">Saldo</div>
+        <div class="bal"><span id="balance">0</span> <small style="font-size:14px">créditos</small></div>
+        <div class="hint" id="hint">cada partida cuesta 1 crédito</div>
+      </div>
+      <button class="play" id="bPlay">jugar<b>1</b><small>crédito</small></button>
+    </div>
+    <div class="row2" style="margin-top:12px">
+      <button class="btn" id="bAuto">▶ AUTOMÁTICO</button>
+    </div>
+
+    <div class="bulk">
+      <h3><span>Cargar créditos</span><span>1 partida = 1 crédito</span></h3>
+      <div class="stepper">
+        <button class="rnd" id="lMinus">−</button>
+        <div class="num"><span id="loadN">50</span> <small>créditos</small></div>
+        <button class="rnd" id="lPlus">+</button>
+      </div>
+      <input type="range" id="loadRange" min="1" max="1000" value="50">
+      <div class="chips" id="lchips"></div>
+      <button class="btn gold" id="bLoad" style="width:100%;font-size:16px;padding:13px">CARGAR 50 créditos</button>
+    </div>
+
+    <div class="bulk">
+      <h3><span>Comprar partidas</span><span>1 a 100</span></h3>
+      <div class="stepper">
+        <button class="rnd" id="bMinus">−</button>
+        <div class="num"><span id="selN">10</span> <small>partidas</small></div>
+        <button class="rnd" id="bPlus">+</button>
+      </div>
+      <input type="range" id="range" min="1" max="100" value="10">
+      <div class="chips" id="chips"></div>
+      <button class="btn gold" id="bBuy" style="width:100%;font-size:16px;padding:13px">COMPRAR 10 · 10 créditos</button>
+      <div id="bulkInfo" style="display:none">
+        <div class="prog"><i id="progBar"></i></div>
+        <div class="progtxt" id="progTxt"></div>
+        <button class="btn red" id="bStop" style="width:100%;margin-top:8px">PARAR y devolver las que quedan</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Juego recreativo con créditos virtuales: no se juega ni se gana dinero real. Los créditos de Cascada se guardan sólo en este dispositivo.<br>Si cierras la pantalla, el modo automático o la compra siguen jugando.</div>
+</div>
+
+<div class="ov" id="ov"><div class="modal" id="modal"></div></div>
+<div class="splash" id="splash"></div>
+
+<script src="engine.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
