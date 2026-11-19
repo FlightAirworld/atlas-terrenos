@@ -102,6 +102,8 @@
   // partidas que se pueden comprar con la apuesta actual y el saldo real
   const maxSel = () => Math.max(1, Math.min(100, Math.floor(S.credits / S.mult)));
   const unit = (n) => (n === 1 ? 'crédito' : 'créditos');
+  // parte del bote que corresponde a la apuesta actual (igual que el servidor: bote × apuesta / 50)
+  const potShare = (pot) => Math.floor(Math.max(0, Number(pot) || 0) * Math.min(MAX_MULT, Math.max(1, Math.floor(S.mult) || 1)) / MAX_MULT);
 
   /* ---------------- conexión con el servidor ---------------- */
   const findSession = () => {
@@ -656,15 +658,15 @@
     $('#stWon').textContent = fmt(S.won - h.prize);
     $('#stLost').textContent = fmt(S.lost);
     $('#stBest').textContent = fmt(hold ? h.bestPrev : S.best);
+    clampMult();   // la apuesta nunca puede pasar del saldo real (y los botes se calculan con ella)
     ['Rio', 'Mar', 'Cas'].forEach((k, i) => {
       const n = S.botes[i + 1] - (h.tier === i + 1 ? 1 : 0);
       $('#n' + k).textContent = n === 1 ? '1 vez' : n + ' veces';
       const value = $('#bote' + k + ' .v');
-      if (value) value.textContent = fmt(S.jackpots[i + 1] || 0);
+      // el bote que se ve es la parte que cobrarías con la apuesta actual: bote × apuesta / 50
+      if (value) value.textContent = fmt(potShare(S.jackpots[i + 1]));
     });
 
-    // la apuesta nunca puede pasar del saldo real
-    clampMult();
     const lock = running || busy || !ready;
     $('#bPlay').innerHTML = `jugar<b>${S.mult}</b><small>${unit(S.mult)}</small>`;
     $('#bPlay').disabled = lock || S.credits < S.mult;
@@ -842,7 +844,7 @@
     const sec = (t) => `<div class="sec">${t}</div>`;
     let h = '<h2>Cómo se juega</h2>'
       + '<p>Cada partida cuesta lo que apuestes: de <b>1 a 50 créditos</b> de tu saldo. Gana quien consigue símbolos iguales seguidos desde la izquierda en la <b>línea central</b>, y el premio se <b>multiplica por tu apuesta</b>.</p>'
-      + '<p style="font-size:13px">Los premios de la tabla son con apuesta 1.</p>'
+      + '<p style="font-size:13px">Los premios de la tabla son con apuesta 1. Los botes que ves son la parte que cobrarías con tu apuesta actual: con apuesta 50 cobras el bote entero.</p>'
       + '<p>🧰 <b>Tres cofres</b> seguidos abren la <b>partida del tesoro</b>: 15 cartas tapadas y 3 con bomba. Las demás suman premio (× tu apuesta). Si sale una bomba <b>pierdes lo acumulado</b>; puedes <b>cobrar</b> cuando quieras. Sale de media 1 de cada 500 partidas.</p>'
       + '<div class="pt">';
     let last = -1;
