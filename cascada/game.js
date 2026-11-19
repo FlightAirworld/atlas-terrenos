@@ -60,7 +60,7 @@
     credits: 0, last: null, spins: 0, won: 0, spent: 0, best: 0, auto: false, sel: 10, mult: 1,
     sound: true, notify: false, cf: { at: 0, n: 0 },
     bulk: { left: 0, total: 0, done: 0, won: 0, queue: [] },
-    botes: [0, 0, 0, 0], tick: Date.now(),
+    botes: [0, 0, 0, 0], jackpots: [0, 0, 0, 0], tick: Date.now(),
   });
   const load = () => {
     try {
@@ -158,7 +158,7 @@
     try {
       const j = await api('/api/cascada');
       if (j.on === false) { await modal('<h2>Cascada</h2><p>Ahora mismo está desactivada.</p><a class="btn gold" href="/">Volver</a>'); return false; }
-      S.credits = j.credits; takeStats(j.stats); ready = true; needLogin = false;
+      S.credits = j.credits; S.jackpots = j.jackpots || S.jackpots; takeStats(j.stats); ready = true; needLogin = false;
       if (j.bonusPending > 0) needBonus = true;
       return true;
     } catch (e) {
@@ -358,6 +358,7 @@
     if (r.prize > S.best) S.best = r.prize;
     if (inBulk) S.bulk.won += r.prize;
     if (r.tier) S.botes[r.tier]++;
+    if (r.jackpots) S.jackpots = r.jackpots;
     if (r.prize) S.last = { prize: r.prize, tier: r.tier, sym: r.sym, count: r.count };
     if (sum) {
       sum.plays++; sum.won += r.prize;
@@ -526,7 +527,7 @@
     } else {
       clampMult();
       const j = await playServer(1, S.mult);         // el servidor cobra la apuesta y paga el premio; si no hay saldo, falla y no pasa nada
-      r = j.results[0];
+      r = j.results[0]; if (j.jackpots) S.jackpots = j.jackpots;
       S.credits = j.credits - r.prize;               // el saldo lo manda el servidor (el premio se suma al revelarlo)
     }
     const bestPrev = S.best;
@@ -575,7 +576,7 @@
         if (k < 1) { S.auto = false; AW.noCredits = true; break; }
         let j;
         try { j = await playServer(k, S.mult); } catch (e) { if (e.status === 402) { S.auto = false; AW.noCredits = true; } break; }
-        S.credits = j.credits - sumPrize(j.results);
+        S.credits = j.credits - sumPrize(j.results); if (j.jackpots) S.jackpots = j.jackpots;
         for (const r of j.results) {
           apply(r, false, AW);
           if (r.tier) notify('¡' + TIER_NAME[r.tier] + '!', `Has ganado ${fmt(r.prize)} créditos`);
@@ -654,6 +655,7 @@
     ['Rio', 'Mar', 'Cas'].forEach((k, i) => {
       const n = S.botes[i + 1] - (h.tier === i + 1 ? 1 : 0);
       $('#n' + k).textContent = n === 1 ? '1 vez' : n + ' veces';
+      const v = $('#v' + k); if (v) v.textContent = fmt(S.jackpots[i + 1]) + ' créditos';
     });
 
     // la apuesta nunca puede pasar del saldo real
@@ -813,7 +815,7 @@
     busy = true; render();
     try {
       const j = await playServer(n, m);              // el servidor cobra n×m y paga todos los premios de golpe
-      S.credits = j.credits - sumPrize(j.results);   // los premios se van sumando al revelarlas
+      S.credits = j.credits - sumPrize(j.results); if (j.jackpots) S.jackpots = j.jackpots;   // botes progresivos sincronizados con el servidor
       S.bulk = { left: n, total: n, done: 0, won: 0, queue: j.results };
       save(); busy = false; render(); loop();
     } catch (e) {

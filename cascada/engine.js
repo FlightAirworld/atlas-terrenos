@@ -27,7 +27,7 @@ const CascadaEngine = (() => {
     if(o.prize>0){const li=Math.floor(Math.random()*LINES.length),dir=Math.random()<.5?1:-1,cols=dir===1?[0,1,2,3,4]:[4,3,2,1,0],rows=LINES[li];for(let k=0;k<o.count;k++){const c=cols[k];g[rows[c]][c]=o.sym;}}
     return g;
   };
-  const play=()=>{const o=draw();if(o.bonus){const grid=buildGrid(o);return{sym:7,count:3,prize:0,tier:0,bonus:true,grid,lines:[]};}const grid=buildGrid(o),lines=evaluate(grid),prize=lines.reduce((s,l)=>s+l.prize,0),primary=lines.slice().sort((a,b)=>b.prize-a.prize)[0];return{sym:primary?primary.sym:o.sym,count:primary?primary.count:o.count,prize,tier:tier(prize),bonus:false,grid,lines};};
+  const play=()=>{const o=draw();if(o.bonus){const grid=buildGrid(o);return{sym:7,count:3,prize:0,tier:0,bonus:true,grid,lines:[]};}const grid=buildGrid(o),lines=evaluate(grid),prize=lines.reduce((s,l)=>s+l.prize,0),primary=lines.slice().sort((a,b)=>b.prize-a.prize)[0];return{sym:primary?primary.sym:o.sym,count:primary?primary.count:o.count,prize,tier:tier(primary?primary.prize:0),bonus:false,grid,lines};};
   return{NAMES,PAY,LINES,TOTAL,BONUS_W,play,tier,evaluate};
 })();
 if(typeof module!=='undefined')module.exports=CascadaEngine;
