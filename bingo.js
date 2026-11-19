@@ -1,9 +1,9 @@
 'use strict';
 // BINGO (botón 🎱 en Juegos). Sala compartida: el servidor baraja las bolas, evalúa y paga (ver bingo-server.js: /api/bingo y /api/bingo/buy).
 // Aquí solo se dibuja: el bombo girando, la bola que cae, los cartones (se marcan solos y suben en la lista según los números que les faltan),
-// el tubo blanco de arriba a la izquierda con las bolas rojas que van corriendo según salen, y a la derecha Bingo y Línea (con su premio y quien lo canta) y los jugadores.
+// el tubo blanco de arriba a la izquierda con las bolas rojas que van corriendo según salen, y a la derecha Bingo y Línea (con su premio y quien lo canta) y los jugadores en línea (en rojo).
 // Cápsula negra con la cuenta atrás parpadeando hasta la próxima partida. Con sonido y voz; mientras está abierto se silencia la Tierra para oír las bolas cantadas.
-// Debajo de la cápsula: la lista de jugadores de la sala (bandera + apodo + cartones), con los jugadores ficticios incluidos (campo "roster" de /api/bingo).
+// Debajo de la cápsula: 3 jugadores de la sala (bandera + apodo + cartones) y debajo «+N más» (campo "roster" de /api/bingo).
 // Usa globals de app.js: authToken, credits, updateCreditUi(), openLogin(), api(), flagOf(), country, avatar.
 (function () {
   const btn = document.getElementById('bingo-btn');
@@ -32,7 +32,7 @@
     #bingo .bn-prz.jp { background: #1b1b1b; color: #fff; }
     #bingo .bn-prz.jp .p { color: #ffd43b; font-size: 19px; }
     #bingo .bn-prz.jp small { display: block; font-size: 10px; line-height: 1.15; opacity: .85; }
-    #bingo .bn-ply { background: var(--card, rgba(127,127,127,.12)); border-radius: 10px; padding: 5px 4px; text-align: center; font-size: 12px; }
+    #bingo .bn-ply { background: #a5d8ff; border-radius: 10px; padding: 5px 4px; text-align: center; font-size: 12px; font-weight: 800; color: #c92a2a; }
     #bingo .bn-ply b { font-size: 16px; }
     @keyframes bnpop { 0% { transform: scale(.5); opacity: 0; } 70% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
     #bingo .bn-timerrow { display: flex; justify-content: center; margin: 4px 0 8px; }
@@ -41,7 +41,7 @@
     @keyframes bnblink { 0%, 100% { opacity: 1; } 50% { opacity: .2; } }
     #bingo .bn-roster { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin: 0 0 8px; font-size: 11px; }
     #bingo .bn-roster span { background: var(--card, rgba(127,127,127,.14)); border-radius: 999px; padding: 2px 8px; white-space: nowrap; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
-    #bingo .bn-roster span.more { opacity: .7; }
+    #bingo .bn-roster span.more { opacity: .7; flex-basis: 100%; max-width: 100%; text-align: center; background: none; }
     #bn-banner { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 100000; max-width: 92vw; min-width: 230px; box-sizing: border-box; padding: 18px 24px; border-radius: 18px; text-align: center; background: #d6001c; color: #ffe600; box-shadow: 0 10px 40px rgba(0,0,0,.6); pointer-events: none; }
     #bn-banner .b1 { font-size: 46px; font-weight: 900; letter-spacing: 2px; line-height: 1.1; }
     #bn-banner .b2 { font-size: 22px; font-weight: 800; margin-top: 8px; word-break: break-word; }
@@ -88,7 +88,6 @@
     #bingo .bn-games { flex-basis: 100%; display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 700; }
     #bingo .bn-games select { font-size: 15px; font-weight: 800; padding: 6px 8px; border-radius: 10px; border: 1px solid rgba(128,128,128,.5); background: var(--card, #fff); color: inherit; }
     #bingo .bn-auto { flex-basis: 100%; font-size: 13px; font-weight: 700; padding: 8px 10px; border-radius: 10px; background: #e6f4ea; color: #1b5e20; }
-    #bingo .bn-buy button.bn-cancel { background: #fff; color: #c92a2a; border: 2px solid #c92a2a; border-radius: 10px; }
     #bn-toast { display: none; position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 100002; width: max-content; max-width: 92vw; box-sizing: border-box; padding: 12px 16px; border-radius: 14px; background: #1b1b1b; color: #ffe600; font-size: 15px; font-weight: 800; text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,.55); border: 2px solid #ffe600; cursor: pointer; animation: bnpop .5s; }
     #bn-toast div + div { margin-top: 4px; }
     #bingo .bn-mute { position: absolute; top: 10px; right: 46px; background: none; border: 0; font-size: 20px; cursor: pointer; }
@@ -115,7 +114,7 @@
           '<div class="bn-prz bingo"><div class="t">🏆 Bingo</div><div class="p" id="bn-p-bingo">—</div><div class="w" id="bn-w-bingo"></div></div>' +
           '<div class="bn-prz line"><div class="t">🎯 Línea</div><div class="p" id="bn-p-line">—</div><div class="w" id="bn-w-line"></div></div>' +
           '<div class="bn-prz jp"><div class="t">💰 Bote</div><div class="p" id="bn-p-jp">1.000</div><small id="bn-jp-s"></small></div>' +
-          '<div class="bn-ply">👥 <b id="bn-players">0</b> <span id="bn-ply-l">jugadores</span></div>' +
+          '<div class="bn-ply">👥 <b id="bn-players">0</b> <span id="bn-ply-l">jugadores en línea</span></div>' +
         '</div>' +
       '</div>' +
       '<div class="bn-timerrow"><span id="bn-timer" class="bn-timer"></span></div>' +
@@ -333,10 +332,11 @@
       el.style.transform = tubePos(idx);
     });
   }
-  // Lista de jugadores de la sala: bandera + apodo + cartones (incluye a los jugadores ficticios del servidor)
+  // Lista de jugadores de la sala: solo 3 (bandera + apodo + cartones) y debajo «+N más»
+  const ROSTER_SHOW = 3;
   function paintRoster() {
     const s = state || {};
-    const list = Array.isArray(s.roster) ? s.roster.slice(0, 12) : [];
+    const list = Array.isArray(s.roster) ? s.roster.slice(0, ROSTER_SHOW) : [];
     const frag = document.createDocumentFragment();
     list.forEach(p => {
       const sp = document.createElement('span');
@@ -360,7 +360,7 @@
     elJPs.textContent = passed ? `ya pasó de ${JB} bolas` : `bingo en ${JB} bolas o menos`;
     elJPs.style.opacity = passed ? '.45' : '';
     const pl = Math.max(s.connected || 0, s.players || 0);   // jugadores en la sala (reales y ficticios)
-    elPlayers.textContent = nf(pl); elPlyL.textContent = pl === 1 ? 'jugador' : 'jugadores';
+    elPlayers.textContent = nf(pl); elPlyL.textContent = pl === 1 ? 'jugador en línea' : 'jugadores en línea';
     paintRoster();
   }
   function fmtLeft(ms) { const s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
@@ -377,9 +377,8 @@
     const part = n => (n === 1 ? 'partida' : 'partidas');
     if (s.auto) {   // ya hay partidas seguidas programadas: se juegan solas aunque cierres el bingo
       const a = document.createElement('div'); a.className = 'bn-auto';
-      a.textContent = `🔁 Juegas solo: ${s.auto.cards} ${s.auto.cards === 1 ? 'cartón' : 'cartones'} por partida · quedan ${s.auto.gamesLeft} ${part(s.auto.gamesLeft)}. Se cobra al abrirse cada una y te avisamos si ganas.`;
-      const c = mk('Cancelar las partidas seguidas', () => cancelAuto()); c.className = 'bn-cancel'; c.disabled = busy;
-      frag.append(a, c);
+      a.textContent = 'Te puedes ir de esta pantalla. Te avisamos si ganas.';
+      frag.append(a);
     } else if (canBuy && (left > 0 || nextOnly)) {
       const cardsNow = nextOnly ? Math.min(want, s.maxCards) : want;
       const n = document.createElement('span'); n.className = 'n'; n.textContent = want;
@@ -485,13 +484,6 @@
       apply(await api('/api/bingo/buy', { method: 'POST', body: { count: want, games, reserve: true, country: (typeof country !== 'undefined' ? country : '') || '', avatar: (typeof avatar !== 'undefined' ? avatar : '') || '' } }));
       sndTick(); say(`✅ Reservado: ${want} ${want === 1 ? 'cartón' : 'cartones'} × ${games} ${games === 1 ? 'partida' : 'partidas'}. Aunque cierres el bingo seguirás jugando.`);
     } catch (e) { say(e.message || 'No se pudo reservar', true); }
-    busy = false; paintBuy();
-  }
-  async function cancelAuto() {
-    if (busy) return;
-    busy = true; paintBuy();
-    try { apply(await api('/api/bingo/buy', { method: 'POST', body: { cancelAuto: true } })); say('Partidas seguidas canceladas.'); }
-    catch (e) { say(e.message || 'No se pudo cancelar', true); }
     busy = false; paintBuy();
   }
 
