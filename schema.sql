@@ -4,6 +4,9 @@
 -- RLS: el servidor entra con DATABASE_URL (rol postgres, que se salta RLS). Las tablas llevan RLS activado y SIN políticas,
 -- así la clave pública (anon) de Supabase no puede leer ni escribir nada directamente.
 
+-- Marca de la migración de tamaño de cuadrícula ejecutada por server.js.
+CREATE TABLE IF NOT EXISTS grid_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL, at BIGINT NOT NULL);
+
 CREATE TABLE IF NOT EXISTS parcels (
   id TEXT PRIMARY KEY, x INT NOT NULL, y INT NOT NULL, owner TEXT NOT NULL, order_id TEXT, paid TEXT, currency TEXT,
   created_at BIGINT NOT NULL, avatar TEXT, country TEXT, user_id UUID, house TEXT, level SMALLINT NOT NULL DEFAULT 1,
@@ -39,6 +42,8 @@ CREATE TABLE IF NOT EXISTS pack_orders (
 CREATE INDEX IF NOT EXISTS pack_orders_capture ON pack_orders (capture_id);
 
 CREATE TABLE IF NOT EXISTS refund_events (event_id TEXT PRIMARY KEY, order_id TEXT, created_at BIGINT NOT NULL);
+
+CREATE TABLE IF NOT EXISTS paga_users (user_id TEXT PRIMARY KEY, email TEXT, created_at BIGINT NOT NULL);
 
 CREATE TABLE IF NOT EXISTS profiles (user_id UUID PRIMARY KEY, nickname TEXT NOT NULL, created_at BIGINT NOT NULL, avatar TEXT);
 

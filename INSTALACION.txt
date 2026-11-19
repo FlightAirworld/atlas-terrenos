@@ -1,0 +1,26 @@
+PARCHE CASCADA — 19/11/2026
+
+ARCHIVOS
+- cascada/engine.js: motor con 5 líneas fijas (3 horizontales + 2 diagonales zigzag), válidas desde ambos extremos.
+- cascada/game.js: suma premios de todas las líneas y resalta todas las casillas ganadoras; conserva compatibilidad con resultados antiguos.
+- cascada/index.html: muestra «Perdido» directamente en el HTML.
+- cascada-wire.js: conecta rutas /api/cascada y las rutas del juego especial; añade juego en segundo plano.
+- cascada/engine.test.js: pruebas de líneas, direcciones, diagonales y suma de premios.
+- schema.sql y test/smoke.test.js: completan el esquema base y evitan exigir una tabla de copia temporal de migración.
+
+INSTALACIÓN
+1. Haz una copia de seguridad del repositorio antes de sustituir archivos.
+2. Descomprime este ZIP en la raíz del repositorio y acepta reemplazar los archivos manteniendo las carpetas.
+3. Revisa el diff y ejecuta `npm test`.
+4. Haz commit y push a la rama conectada a Render. El postinstall ya ejecuta cascada-wire.js y npm start inicia server.js.
+5. Comprueba en Render los logs de build y arranque. En Supabase/Postgres verifica que DATABASE_URL apunta a la base correcta.
+
+MECÁNICA
+- 5 líneas fijas: filas 1, 2 y 3; diagonales zigzag superior-inferior-superior e inferior-superior-inferior.
+- Cada línea se comprueba desde izquierda a derecha y desde derecha a izquierda.
+- Una misma línea se paga una sola vez, usando la coincidencia/premio más alto de sus dos sentidos.
+- Las líneas distintas se suman. El servidor sigue siendo quien calcula, cobra y paga; el navegador solo anima y resalta.
+- Los premios del motor se sortean en servidor; la cuadrícula vacía se genera sin líneas ganadoras aleatorias.
+
+IMPORTANTE
+Este paquete no despliega por sí mismo ni modifica las cuentas de Render/Supabase. No contiene credenciales. La conexión real y el despliegue requieren autorizar las integraciones de Render y Supabase y revisar el proyecto seleccionado antes de aplicar cambios.
