@@ -5,8 +5,8 @@ const CascadaEngine = (() => {
 
   // [símbolo, cuántos seguidos desde la izquierda, premio en créditos, peso sobre 100.000]
   const PAY = [
-    // Premios pequeños (1–10): ~21,5 % de las partidas  → varios cada 20 partidas
-    [0, 3, 1, 11000],
+    // Premios pequeños (1–10): ~20 % de las partidas  → varios cada 20 partidas
+    [0, 3, 1, 9420],    // (antes 11000: se rebajó para pagar la partida del tesoro y mantener el mismo retorno)
     [1, 3, 2, 5000],
     [2, 3, 3, 2420],
     [3, 3, 5, 1760],
@@ -25,6 +25,8 @@ const CascadaEngine = (() => {
     [6, 5, 500, 12],    // Bote Mar
     [7, 5, 1000, 6],    // Bote Cascada
   ];
+  // TRES COFRES seguidos en la línea central = partida especial del tesoro (15 cartas, 3 bombas). 1 de cada 500 partidas.
+  const BONUS_W = 200;
   const TOTAL = 100000;
   const FILL = [22, 20, 18, 14, 10, 7, 5, 4];
   const FILL_SUM = FILL.reduce((a, b) => a + b, 0);
@@ -35,6 +37,8 @@ const CascadaEngine = (() => {
       a += w;
       if (r < a) return { sym, count, prize };
     }
+    a += BONUS_W;
+    if (r < a) return { sym: 7, count: 3, prize: 0, bonus: true };
     return { sym: -1, count: 0, prize: 0 };
   };
 
@@ -56,7 +60,7 @@ const CascadaEngine = (() => {
     for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) g[r][c] = fillSym();
     noLine(g[0]); noLine(g[2]);
     const m = g[1];
-    if (o.prize > 0) {
+    if (o.prize > 0 || o.bonus) {
       for (let c = 0; c < o.count; c++) m[c] = o.sym;
       if (o.count < 5) while (m[o.count] === o.sym) m[o.count] = fillSym();
     } else {
@@ -70,10 +74,10 @@ const CascadaEngine = (() => {
 
   const play = () => {
     const o = draw();
-    return { sym: o.sym, count: o.count, prize: o.prize, tier: tier(o.prize), grid: buildGrid(o) };
+    return { sym: o.sym, count: o.count, prize: o.prize, tier: tier(o.prize), bonus: !!o.bonus, grid: buildGrid(o) };
   };
 
-  return { NAMES, PAY, TOTAL, play, tier };
+  return { NAMES, PAY, TOTAL, BONUS_W, play, tier };
 })();
 
 if (typeof module !== 'undefined') module.exports = CascadaEngine;
