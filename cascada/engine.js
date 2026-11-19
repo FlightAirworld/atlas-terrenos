@@ -9,7 +9,8 @@ const CascadaEngine = (() => {
   ];
   // 3 horizontales y 2 diagonales en zigzag. Se recorren en ambos sentidos.
   const LINES = [[0,0,0,0,0],[1,1,1,1,1],[2,2,2,2,2],[0,1,2,1,0],[2,1,0,1,2]];
-  const BONUS_W=200,TOTAL=100000,FILL=[22,20,18,14,10,7,5,4],FILL_SUM=FILL.reduce((a,b)=>a+b,0);
+  // BONUS_W = 0: los tres cofres ya NO salen por sorteo en cada partida; el servidor los fuerza cada 30 o 50 partidas de cada jugador (bonus()).
+  const BONUS_W=0,TOTAL=100000,FILL=[22,20,18,14,10,7,5,4],FILL_SUM=FILL.reduce((a,b)=>a+b,0);
   const draw=()=>{let r=Math.random()*TOTAL,a=0;for(const [sym,count,prize,w] of PAY){a+=w;if(r<a)return{sym,count,prize};}a+=BONUS_W;if(r<a)return{sym:7,count:3,prize:0,bonus:true};return{sym:-1,count:0,prize:0};};
   const fillSym=()=>{let r=Math.random()*FILL_SUM,a=0;for(let i=0;i<FILL.length;i++){a+=FILL[i];if(r<a)return i;}return 0;};
   const tier=p=>p>=1000?3:p>=250?2:p>=100?1:0;
@@ -42,6 +43,8 @@ const CascadaEngine = (() => {
     return g;
   };
   const play=()=>{const o=draw();if(o.bonus){const grid=buildGrid(o);return{sym:7,count:3,prize:0,tier:0,bonus:true,grid,lines:[]};}const grid=buildGrid(o),lines=evaluate(grid),prize=lines.reduce((s,l)=>s+l.prize,0),primary=lines.slice().sort((a,b)=>b.prize-a.prize)[0];return{sym:primary?primary.sym:o.sym,count:primary?primary.count:o.count,prize,tier:tier(primary?primary.prize:0),bonus:false,grid,lines};};
-  return{NAMES,PAY,LINES,PATHS,TOTAL,BONUS_W,play,tier,evaluate};
+  // Partida con los tres cofres en la línea central (abre la partida especial del tesoro). La usa el servidor cada 30 o 50 partidas.
+  const bonus=()=>({sym:7,count:3,prize:0,tier:0,bonus:true,grid:buildGrid({bonus:true}),lines:[]});
+  return{NAMES,PAY,LINES,PATHS,TOTAL,BONUS_W,play,bonus,tier,evaluate};
 })();
 if(typeof module!=='undefined')module.exports=CascadaEngine;
