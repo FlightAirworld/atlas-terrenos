@@ -1,0 +1,26 @@
+# Actualización de botes globales de CASCADA
+
+Esta actualización hace que los tres botes sean compartidos por todos los usuarios y queden guardados en PostgreSQL/Supabase.
+
+## Qué hace
+- Cada partida confirmada suma 10 créditos a Río, Mar y Cascada.
+- Si sale un bote, se entrega el acumulado de ese bote y solo ese bote vuelve a cero.
+- Los otros dos conservan su acumulado.
+- La operación se hace dentro de una transacción con bloqueo de fila, para evitar que dos jugadores pisen los importes.
+- Todos los usuarios ven los importes actualizados mediante una consulta periódica.
+- Los botes quedan en la base de datos aunque el jugador cierre la página o deje de jugar.
+
+## Cómo aplicarlo
+1. Haz una copia de seguridad de tu repositorio.
+2. Descomprime este ZIP en la raíz de `atlas-terrenos`.
+3. Ejecuta `node aplicar-botes-cascada.js`.
+4. El script modificará únicamente `cascada-server.js` y `cascada/game.js`.
+5. Sube esos dos archivos modificados a GitHub en las mismas rutas.
+6. Render desplegará el cambio con el despliegue habitual.
+
+La tabla `cascada_jackpots` ya está declarada en el `schema.sql` del repositorio y, además, el servidor la crea/siembra automáticamente al arrancar.
+
+## Importante
+- No subas este script como sustituto de los dos archivos modificados: ejecútalo primero en la copia local del repositorio.
+- No modifica los créditos gratuitos obtenidos mediante tareas ni los otros juegos.
+- No cambia el diseño general de CASCADA.
