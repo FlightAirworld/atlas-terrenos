@@ -1,32 +1,35 @@
-PARCHE CASCADA — BOTES PROGRESIVOS Y LÍNEAS — 19/11/2026
+CORRECCIÓN DEL INDICADOR «PERDIDO» — CASCADA
 
-CAMBIOS
-- Mantiene las 5 líneas acordadas: 3 horizontales y 2 diagonales en zigzag, en ambos sentidos.
-- Cada partida añade 10 créditos a CADA bote: Río, Mar y Cascada.
-- Cuando sale un bote, se paga su acumulado (multiplicado por la apuesta actual) y SOLO ese bote vuelve a cero.
-- Los otros dos botes conservan su acumulado y siguen creciendo.
-- Los tres acumulados son compartidos entre jugadores y se guardan en PostgreSQL/Supabase.
-- La fila de botes se bloquea dentro de la transacción para impedir pagos dobles o actualizaciones perdidas cuando juegan varias personas a la vez.
-- La pantalla muestra los importes actuales y se actualiza con los datos del servidor.
-- El nivel de bote se determina por la línea individual ganadora principal, no por sumar premios pequeños de varias líneas.
-- Incluye las pruebas de las líneas y de acumulación/reinicio de los tres botes.
-
-ARCHIVOS
+Archivos incluidos:
+- cascada/index.html
+- cascada/game.js
 - cascada-server.js
-- cascada/jackpots.js y cascada/jackpots.test.js
-- cascada/engine.js y cascada/engine.test.js
-- cascada/game.js, cascada/index.html, cascada/bg.js
-- cascada-wire.js
-- schema.sql
+- migration.sql
+
+QUÉ CORRIGE
+1. «Perdido» está escrito directamente en el HTML: ya no depende de que JavaScript
+   cree la ventanilla dinámicamente.
+2. El contador suma la pérdida de cada partida individual:
+      pérdida de partida = max(apuesta - premio de esa partida, 0)
+   Por ejemplo, apuesta 10 y premio 0 => suma 10; apuesta 10 y premio 4 => suma 6;
+   apuesta 10 y premio 15 => suma 0. Un premio grande no borra pérdidas anteriores.
+3. Supabase/PostgreSQL guarda el acumulado en cascada_stats.lost y lo devuelve al cliente.
+4. Se conserva el total de créditos gastados (spent) para estadísticas internas.
 
 INSTALACIÓN
-1. Haz una copia de seguridad del repositorio y de la base de datos.
-2. Descomprime este ZIP en la raíz del repositorio y reemplaza los archivos indicados, conservando las carpetas.
-3. Ejecuta npm test y revisa el diff antes de desplegar.
-4. Haz commit y push a la rama conectada a Render.
-5. El servidor crea la tabla cascada_jackpots y su fila inicial automáticamente al arrancar. También se incluye el SQL en schema.sql para instalaciones que prefieran aplicar el esquema manualmente.
-6. Comprueba en Render los logs de build/arranque y en Supabase/Postgres que existe cascada_jackpots con la fila id=1.
-7. Prueba una partida normal: los tres botes deben subir 10. Prueba el premio de cada nivel en un entorno de pruebas: solo el bote premiado debe pagarse y volver a cero.
+1. Sustituir los tres archivos por los incluidos, respetando las rutas.
+2. Aplicar migration.sql en Supabase SQL Editor (o dejar que init() ejecute el ALTER
+   TABLE al arrancar el servidor; la migración es idempotente).
+3. Desplegar de nuevo el servicio en Render.
+4. Abrir Cascada y recargar completamente la página.
 
-IMPORTANTE
-Este ZIP contiene los cambios de código, pero no se ha desplegado en tu proyecto ni se ha ejecutado contra tu base de datos real. No contiene credenciales. La integración con Render/Supabase debe estar autorizada y el despliegue debe hacerse en el repositorio/proyecto correcto.
+NOTA SOBRE HISTÓRICO
+Las partidas anteriores no se pueden reconstruir como pérdidas por partida usando
+solo los totales agregados de gasto y premios. Por eso el nuevo contador empieza a
+acumular correctamente desde que se aplique esta versión. No se borran los datos
+anteriores de partidas, premios ni créditos.
+
+COMPROBACIONES REALIZADAS
+- node --check cascada/game.js: correcto
+- node --check cascada-server.js: correcto
+- node --check cascada/engine.js: correcto
