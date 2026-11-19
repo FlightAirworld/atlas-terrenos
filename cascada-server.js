@@ -1,15 +1,17 @@
 'use strict';
 // CASCADA (servidor). La tragaperras usa los MISMOS créditos que el jugador tiene en todo el juego (tabla packs).
 // El servidor sortea con crypto y cobra/paga en una sola operación atómica; el navegador (cascada/game.js) solo dibuja el resultado.
+// APUESTA: cada partida cuesta m créditos (m de 1 a 50) y todos sus premios se multiplican por m.
 // Se monta desde server.js igual que el rasca y gana (lo hace cascada-wire.js al instalar):
 //   const cascadaMod = () => cascadaMod.m || (cascadaMod.m = require('./cascada-server')({ pool, run, all, needUser, ensureUserPack, HttpError, rateHit }));
-// y se llama a cascadaMod().init() al arrancar. Rutas: GET /api/cascada → get, POST /api/cascada/play {n} → play.
+// y se llama a cascadaMod().init() al arrancar. Rutas: GET /api/cascada → get, POST /api/cascada/play {n, m} → play.
 const Engine = require('./cascada/engine.js');
 
 module.exports = function (d) {
   const { pool, run, all, needUser, ensureUserPack, HttpError, rateHit } = d;
   const ON = String(process.env.CASCADA || 'on').toLowerCase() !== 'off';
   const MAX_N = 100;          // partidas máximas por petición
+  const MAX_M = 50;           // apuesta máxima por partida (multiplicador)
   const MAX_PER_MIN = 150;    // peticiones por minuto y jugador
 
   async function init() {
@@ -29,7 +31,7 @@ module.exports = function (d) {
     const pack = await ensureUserPack(user);
     const cr = (await all('SELECT credits FROM packs WHERE code = $1', [pack.code]))[0];
     const st = (await all('SELECT * FROM cascada_stats WHERE user_id = $1', [uid]))[0];
-    return { ok: true, on: true, credits: Number((cr || {}).credits || 0), stats: statsOf(st) };
+    return { ok: true, on: true, credits: Number((cr || {}).credits || 0), maxMult: MAX_M, stats: statsOf(st) };
   }
 
   async function play(req, body) {
@@ -37,13 +39,18 @@ module.exports = function (d) {
     const user = await needUser(req); const uid = String(user.id);
     const n = Math.floor(Number(body && body.n));
     if (!Number.isFinite(n) || n < 1 || n > MAX_N) throw new HttpError(400, `Se pueden jugar de 1 a ${MAX_N} partidas cada vez`);
+    const m = body && body.m !== undefined && body.m !== null ? Math.floor(Number(body.m)) : 1;
+    if (!Number.isFinite(m) || m < 1 || m > MAX_M) throw new HttpError(400, `La apuesta va de 1 a ${MAX_M} créditos por partida`);
     if (rateHit('cascada:' + uid, 60_000) > MAX_PER_MIN) throw new HttpError(429, 'Vas muy rápido. Espera un momento');
     const pack = await ensureUserPack(user);
+    const cost = n * m;         // lo que cuestan todas las partidas pedidas
 
     // El sorteo se hace antes de tocar la base de datos; si luego no hay créditos, no se guarda nada
+    // Los botes (tier) los marca el premio base; el premio que se paga es el base × apuesta.
     const results = []; let prize = 0, best = 0; const bt = [0, 0, 0, 0]; let last = null;
     for (let i = 0; i < n; i++) {
       const r = Engine.play();
+      r.prize *= m; r.mult = m;
       results.push(r); prize += r.prize; bt[r.tier]++;
       if (r.prize > best) best = r.prize;
       if (r.prize) last = { prize: r.prize, tier: r.tier, sym: r.sym, count: r.count };
@@ -52,8 +59,8 @@ module.exports = function (d) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      // cobra n y paga los premios en UNA sola sentencia: no se puede gastar dos veces el mismo saldo
-      const up = await client.query('UPDATE packs SET credits = credits - $1 + $2 WHERE code = $3 AND credits >= $1 RETURNING credits', [n, prize, pack.code]);
+      // cobra el coste y paga los premios en UNA sola sentencia: no se puede gastar dos veces el mismo saldo ni jugar más de lo que se tiene
+      const up = await client.query('UPDATE packs SET credits = credits - $1 + $2 WHERE code = $3 AND credits >= $1 RETURNING credits', [cost, prize, pack.code]);
       if (!up.rows.length) throw new HttpError(402, 'No tienes créditos suficientes');
       const st = await client.query(
         'INSERT INTO cascada_stats (user_id, spins, won, best, botes_rio, botes_mar, botes_cas, last, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ' +
@@ -62,7 +69,7 @@ module.exports = function (d) {
         'last = COALESCE(EXCLUDED.last, cascada_stats.last), updated_at = EXCLUDED.updated_at RETURNING *',
         [uid, n, prize, best, bt[1], bt[2], bt[3], last ? JSON.stringify(last) : null, Date.now()]);
       await client.query('COMMIT');
-      return { ok: true, credits: Number(up.rows[0].credits), results, stats: statsOf(st.rows[0]) };
+      return { ok: true, credits: Number(up.rows[0].credits), mult: m, results, stats: statsOf(st.rows[0]) };
     } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
   }
 
