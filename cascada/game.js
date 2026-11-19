@@ -307,7 +307,17 @@
   };
   const highlight = (r) => {
     const rs = reelEls();
-    for (let c = 0; c < r.count; c++) rs[c].firstElementChild.children[1].classList.add('win');
+    // El servidor devuelve todas las líneas premiadas; se iluminan sus celdas exactas.
+    if (Array.isArray(r.lines) && r.lines.length) {
+      for (const line of r.lines) for (const cell of (line.cells || [])) {
+        const strip = rs[cell.col] && rs[cell.col].firstElementChild;
+        const node = strip && strip.children[cell.row + 1];
+        if (node) node.classList.add('win');
+      }
+    } else if (!r.bonus) {
+      // Compatibilidad con resultados antiguos guardados o pendientes.
+      for (let c = 0; c < (r.count || 0); c++) rs[c].firstElementChild.children[1].classList.add('win');
+    }
     $('#line').classList.add('on');
   };
 
@@ -708,11 +718,13 @@
 
   /* ---------------- controles ---------------- */
   // Recuadro «Perdido» junto a «Ganado»
-  const wonBox = $('#stWon').closest('.stat');
-  const lostBox = document.createElement('div');
-  lostBox.className = 'stat lost';
-  lostBox.innerHTML = '<b id="stLost">0</b><span>Perdido</span>';
-  wonBox.after(lostBox);
+  if (!$('#stLost')) {
+    const wonBox = $('#stWon').closest('.stat');
+    const lostBox = document.createElement('div');
+    lostBox.className = 'stat lost';
+    lostBox.innerHTML = '<b id="stLost">0</b><span>Perdido</span>';
+    wonBox.after(lostBox);
+  }
 
   // No se pueden «cargar» créditos gratis: el bloque de carga se sustituye por el selector de apuesta (1 a 50), con su botón de PARAR
   const loadBlock = $('#bLoad') && $('#bLoad').closest('.bulk');
