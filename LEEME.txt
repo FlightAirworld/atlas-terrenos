@@ -1,26 +1,42 @@
-# Actualización de botes globales de CASCADA
+ACTUALIZACIÓN CASCADA — Atlas Terrenos
 
-Esta actualización hace que los tres botes sean compartidos por todos los usuarios y queden guardados en PostgreSQL/Supabase.
+PAQUETE CORREGIDO
+- cascada-fix.js: aplica el motor de líneas, el juego especial y los tres botes globales.
+- package.json: conserva las dependencias y scripts del repositorio actual; añade cascada-fix.js al postinstall.
+- supabase-cascada-jackpots.sql: creación idempotente de la tabla global, por si hiciera falta.
 
-## Qué hace
-- Cada partida confirmada suma 10 créditos a Río, Mar y Cascada.
-- Si sale un bote, se entrega el acumulado de ese bote y solo ese bote vuelve a cero.
-- Los otros dos conservan su acumulado.
-- La operación se hace dentro de una transacción con bloqueo de fila, para evitar que dos jugadores pisen los importes.
-- Todos los usuarios ven los importes actualizados mediante una consulta periódica.
-- Los botes quedan en la base de datos aunque el jugador cierre la página o deje de jugar.
+COMPROBACIONES REALIZADAS
+- El parche JavaScript pasa node --check.
+- El package.json pasa la validación JSON.
+- Se corrigió la sincronización de los botes en las DOS rutas de partidas múltiples (automático en segundo plano y partidas por lote).
+- Supabase ya contiene cascada_jackpots, cascada_stats y cascada_bonus.
+- La fila global cascada_jackpots (id=1) ya existe y muestra actualmente 1910 créditos en cada bote. No ejecutes un reinicio ni borres esa fila.
 
-## Cómo aplicarlo
-1. Haz una copia de seguridad de tu repositorio.
-2. Descomprime este ZIP en la raíz de `atlas-terrenos`.
-3. Ejecuta `node aplicar-botes-cascada.js`.
-4. El script modificará únicamente `cascada-server.js` y `cascada/game.js`.
-5. Sube esos dos archivos modificados a GitHub en las mismas rutas.
-6. Render desplegará el cambio con el despliegue habitual.
+PASOS PARA SUBIR
+1. En GitHub, entra en FlightAirworld/atlas-terrenos.
+2. Sube cascada-fix.js a la raíz.
+3. Sustituye package.json por el incluido. El archivo conserva las dependencias actuales y añade el parche al postinstall.
+4. Haz commit en la rama que despliega Render.
+5. Render debe ejecutar el postinstall automáticamente si tiene auto-deploy activado.
 
-La tabla `cascada_jackpots` ya está declarada en el `schema.sql` del repositorio y, además, el servidor la crea/siembra automáticamente al arrancar.
+SUPABASE
+La tabla ya existe, así que no necesitas ejecutar el SQL ahora. El archivo SQL se incluye como respaldo y usa CREATE TABLE IF NOT EXISTS / ON CONFLICT DO NOTHING; no reinicia los importes existentes.
 
-## Importante
-- No subas este script como sustituto de los dos archivos modificados: ejecútalo primero en la copia local del repositorio.
-- No modifica los créditos gratuitos obtenidos mediante tareas ni los otros juegos.
-- No cambia el diseño general de CASCADA.
+LOGS DE RENDER
+Busca:
+  Cascada: parche aplicado correctamente.
+
+Si aparece:
+  Cascada: NO se completó el parche
+o
+  No encuentro...
+el parche se detuvo porque algún archivo no coincide con la versión esperada. No sigas haciendo commits a ciegas: comparte el error completo.
+
+COMPORTAMIENTO PREVISTO
+- Cada partida añade 10 créditos a cada bote global.
+- Los botes Río, Mar y Cascada son independientes.
+- Al salir un bote, se paga su acumulado y solo ese bote vuelve a cero.
+- Los importes se guardan en Supabase y son compartidos por todos los jugadores.
+- Los tres cofres deben abrir la partida especial del tesoro.
+- Premios horizontales y diagonales comprobados en ambos sentidos.
+- El juego utiliza créditos gratuitos ganados dentro del juego; no se vende nada ni se usa dinero real.
