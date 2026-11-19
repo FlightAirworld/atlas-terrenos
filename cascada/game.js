@@ -155,7 +155,7 @@
   const takeJackpots = (jp) => { if (jp) S.jackpots = [0, Number(jp.rio || 0), Number(jp.mar || 0), Number(jp.cas || 0)]; };
   const takeStats = (st) => {
     if (!st) return;
-    S.spins = st.spins; S.won = st.won; S.spent = st.spent || 0; S.lost = st.lost || 0; S.best = st.best; S.botes = st.botes || S.botes; S.last = st.last || S.last;
+    S.spins = st.spins; S.won = st.won; S.spent = st.spent || 0; S.lost = Math.max(0, st.lost || 0); S.best = st.best; S.botes = st.botes || S.botes; S.last = st.last || S.last;
   };
   const sync = async () => {
     try {
@@ -346,7 +346,8 @@
   const apply = (r, inBulk, sum) => {
     S.spins++;
     S.spent += r.mult || 1;
-    S.lost += Math.max(0, (r.mult || 1) - r.prize); // pérdida neta de ESTA partida; los premios previos no la compensan
+    // PERDIDO: suma la apuesta y RESTA el premio; al ganar baja, pero nunca por debajo de 0 (igual que el servidor)
+    S.lost = Math.max(0, S.lost + (r.mult || 1) - r.prize);
     S.credits += r.prize;
     S.won += r.prize;
     if (r.prize > S.best) S.best = r.prize;
@@ -436,7 +437,10 @@
     };
     const won = (j) => {
       S.credits = j.credits;
-      if (j.paid > 0) { S.won += j.paid; if (j.paid > S.best) S.best = j.paid; S.last = { prize: j.paid, tier: 0, sym: 7, count: 3 }; }
+      if (j.paid > 0) {
+        S.won += j.paid; if (j.paid > S.best) S.best = j.paid; S.last = { prize: j.paid, tier: 0, sym: 7, count: 3 };
+        S.lost = Math.max(0, S.lost - j.paid);   // el premio del tesoro también resta de PERDIDO (mínimo 0)
+      }
     };
     for (let i = 0; i < b.cards; i++) {
       const c = document.createElement('button');
