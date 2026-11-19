@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "postinstall": "node seo-patch.js && node i18n-wire.js && node cascada-wire.js",
+    "postinstall": "node seo-patch.js && node i18n-wire.js && node cascada-wire.js && node via-patch.js",
     "build:static": "node build-static.js",
     "test": "node --test"
   },
