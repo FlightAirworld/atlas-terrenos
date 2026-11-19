@@ -35,3 +35,14 @@
   setInterval(syncDot, 3000);
   syncDot();
 })();
+
+// ---------- 🌊 CASCADA: tragaperras de ríos, mares y cascadas (carpeta cascada/) ----------
+// Juego aparte con sus propios créditos virtuales (se guardan en el dispositivo). El botón abre su página; «‹ Inicio» vuelve al mapa.
+(function () {
+  const items = document.getElementById('games-items');
+  if (!items || document.getElementById('cascada-btn')) return;
+  const b = document.createElement('button');
+  b.id = 'cascada-btn'; b.type = 'button'; b.setAttribute('data-label', 'Cascada'); b.title = 'Cascada: tragaperras de ríos, mares y cascadas'; b.setAttribute('aria-label', 'Cascada: tragaperras de ríos, mares y cascadas'); b.textContent = '🌊';
+  b.addEventListener('click', () => { location.href = '/cascada/index.html'; });
+  items.appendChild(b);
+})();
