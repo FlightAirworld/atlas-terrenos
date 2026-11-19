@@ -1,26 +1,32 @@
-PARCHE CASCADA — 19/11/2026
+PARCHE CASCADA — BOTES PROGRESIVOS Y LÍNEAS — 19/11/2026
+
+CAMBIOS
+- Mantiene las 5 líneas acordadas: 3 horizontales y 2 diagonales en zigzag, en ambos sentidos.
+- Cada partida añade 10 créditos a CADA bote: Río, Mar y Cascada.
+- Cuando sale un bote, se paga su acumulado (multiplicado por la apuesta actual) y SOLO ese bote vuelve a cero.
+- Los otros dos botes conservan su acumulado y siguen creciendo.
+- Los tres acumulados son compartidos entre jugadores y se guardan en PostgreSQL/Supabase.
+- La fila de botes se bloquea dentro de la transacción para impedir pagos dobles o actualizaciones perdidas cuando juegan varias personas a la vez.
+- La pantalla muestra los importes actuales y se actualiza con los datos del servidor.
+- El nivel de bote se determina por la línea individual ganadora principal, no por sumar premios pequeños de varias líneas.
+- Incluye las pruebas de las líneas y de acumulación/reinicio de los tres botes.
 
 ARCHIVOS
-- cascada/engine.js: motor con 5 líneas fijas (3 horizontales + 2 diagonales zigzag), válidas desde ambos extremos.
-- cascada/game.js: suma premios de todas las líneas y resalta todas las casillas ganadoras; conserva compatibilidad con resultados antiguos.
-- cascada/index.html: muestra «Perdido» directamente en el HTML.
-- cascada-wire.js: conecta rutas /api/cascada y las rutas del juego especial; añade juego en segundo plano.
-- cascada/engine.test.js: pruebas de líneas, direcciones, diagonales y suma de premios.
-- schema.sql y test/smoke.test.js: completan el esquema base y evitan exigir una tabla de copia temporal de migración.
+- cascada-server.js
+- cascada/jackpots.js y cascada/jackpots.test.js
+- cascada/engine.js y cascada/engine.test.js
+- cascada/game.js, cascada/index.html, cascada/bg.js
+- cascada-wire.js
+- schema.sql
 
 INSTALACIÓN
-1. Haz una copia de seguridad del repositorio antes de sustituir archivos.
-2. Descomprime este ZIP en la raíz del repositorio y acepta reemplazar los archivos manteniendo las carpetas.
-3. Revisa el diff y ejecuta `npm test`.
-4. Haz commit y push a la rama conectada a Render. El postinstall ya ejecuta cascada-wire.js y npm start inicia server.js.
-5. Comprueba en Render los logs de build y arranque. En Supabase/Postgres verifica que DATABASE_URL apunta a la base correcta.
-
-MECÁNICA
-- 5 líneas fijas: filas 1, 2 y 3; diagonales zigzag superior-inferior-superior e inferior-superior-inferior.
-- Cada línea se comprueba desde izquierda a derecha y desde derecha a izquierda.
-- Una misma línea se paga una sola vez, usando la coincidencia/premio más alto de sus dos sentidos.
-- Las líneas distintas se suman. El servidor sigue siendo quien calcula, cobra y paga; el navegador solo anima y resalta.
-- Los premios del motor se sortean en servidor; la cuadrícula vacía se genera sin líneas ganadoras aleatorias.
+1. Haz una copia de seguridad del repositorio y de la base de datos.
+2. Descomprime este ZIP en la raíz del repositorio y reemplaza los archivos indicados, conservando las carpetas.
+3. Ejecuta npm test y revisa el diff antes de desplegar.
+4. Haz commit y push a la rama conectada a Render.
+5. El servidor crea la tabla cascada_jackpots y su fila inicial automáticamente al arrancar. También se incluye el SQL en schema.sql para instalaciones que prefieran aplicar el esquema manualmente.
+6. Comprueba en Render los logs de build/arranque y en Supabase/Postgres que existe cascada_jackpots con la fila id=1.
+7. Prueba una partida normal: los tres botes deben subir 10. Prueba el premio de cada nivel en un entorno de pruebas: solo el bote premiado debe pagarse y volver a cero.
 
 IMPORTANTE
-Este paquete no despliega por sí mismo ni modifica las cuentas de Render/Supabase. No contiene credenciales. La conexión real y el despliegue requieren autorizar las integraciones de Render y Supabase y revisar el proyecto seleccionado antes de aplicar cambios.
+Este ZIP contiene los cambios de código, pero no se ha desplegado en tu proyecto ni se ha ejecutado contra tu base de datos real. No contiene credenciales. La integración con Render/Supabase debe estar autorizada y el despliegue debe hacerse en el repositorio/proyecto correcto.

@@ -214,3 +214,16 @@ ALTER TABLE indexnow_state ENABLE ROW LEVEL SECURITY;
 CREATE TABLE IF NOT EXISTS online_players (user_id TEXT NOT NULL, day TEXT NOT NULL, cc TEXT NOT NULL, region TEXT, city TEXT, first_at BIGINT NOT NULL, last_at BIGINT NOT NULL, pings INT NOT NULL DEFAULT 1, PRIMARY KEY (user_id, day));
 CREATE INDEX IF NOT EXISTS online_players_cc ON online_players (cc, user_id);
 ALTER TABLE online_players ENABLE ROW LEVEL SECURITY;
+
+-- Botes progresivos compartidos de Cascada: cada partida añade 10 créditos a cada bote.
+-- El servidor bloquea esta fila durante cada tirada y reinicia únicamente el bote premiado.
+CREATE TABLE IF NOT EXISTS cascada_jackpots (
+  id SMALLINT PRIMARY KEY CHECK (id = 1),
+  rio BIGINT NOT NULL DEFAULT 0,
+  mar BIGINT NOT NULL DEFAULT 0,
+  cas BIGINT NOT NULL DEFAULT 0,
+  updated_at BIGINT NOT NULL
+);
+INSERT INTO cascada_jackpots (id, rio, mar, cas, updated_at)
+VALUES (1, 0, 0, 0, (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT)
+ON CONFLICT (id) DO NOTHING;

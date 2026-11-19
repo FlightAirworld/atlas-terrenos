@@ -7,6 +7,7 @@
 // Rutas: GET /api/cascada → get, POST /api/cascada/play {n, m} → play, POST /api/cascada/bonus/{state|pick|cash} → bonus.
 const crypto = require('node:crypto');
 const Engine = require('./cascada/engine.js');
+const Jackpot = require('./cascada/jackpots.js');
 
 module.exports = function (d) {
   const { pool, run, all, needUser, ensureUserPack, HttpError, rateHit } = d;
@@ -27,6 +28,8 @@ module.exports = function (d) {
     await run('ALTER TABLE cascada_stats ADD COLUMN IF NOT EXISTS spent BIGINT NOT NULL DEFAULT 0');   // créditos gastados (para «Perdido»)
     await run('CREATE TABLE IF NOT EXISTS cascada_bonus (id BIGSERIAL PRIMARY KEY, user_id TEXT NOT NULL, mult INT NOT NULL, board TEXT NOT NULL, picked TEXT NOT NULL DEFAULT \'[]\', acc BIGINT NOT NULL DEFAULT 0, state TEXT NOT NULL DEFAULT \'open\', created_at BIGINT NOT NULL)');
     await run('CREATE INDEX IF NOT EXISTS cascada_bonus_user ON cascada_bonus (user_id, state)');
+    await run('CREATE TABLE IF NOT EXISTS cascada_jackpots (id SMALLINT PRIMARY KEY CHECK (id = 1), rio BIGINT NOT NULL DEFAULT 0, mar BIGINT NOT NULL DEFAULT 0, cas BIGINT NOT NULL DEFAULT 0, updated_at BIGINT NOT NULL)');
+    await run('INSERT INTO cascada_jackpots (id, rio, mar, cas, updated_at) VALUES (1,0,0,0,$1) ON CONFLICT (id) DO NOTHING', [Date.now()]);
   }
 
   const statsOf = row => {
@@ -41,8 +44,9 @@ module.exports = function (d) {
     const pack = await ensureUserPack(user);
     const cr = (await all('SELECT credits FROM packs WHERE code = $1', [pack.code]))[0];
     const st = (await all('SELECT * FROM cascada_stats WHERE user_id = $1', [uid]))[0];
+    const jp = (await all('SELECT rio, mar, cas FROM cascada_jackpots WHERE id = 1'))[0] || {rio:0,mar:0,cas:0};
     const pend = (await all('SELECT COUNT(*) AS n FROM cascada_bonus WHERE user_id = $1 AND state = $2', [uid, 'open']))[0];
-    return { ok: true, on: true, credits: Number((cr || {}).credits || 0), maxMult: MAX_M, stats: statsOf(st), bonusPending: Number((pend || {}).n || 0) };
+    return { ok: true, on: true, credits: Number((cr || {}).credits || 0), maxMult: MAX_M, stats: statsOf(st), jackpots: [0, Number(jp.rio), Number(jp.mar), Number(jp.cas)], bonusPending: Number((pend || {}).n || 0) };
   }
 
   async function play(req, body) {
@@ -59,17 +63,26 @@ module.exports = function (d) {
     // El sorteo se hace antes de tocar la base de datos; si luego no hay créditos, no se guarda nada
     // Los botes (tier) los marca el premio base; el premio que se paga es el base × apuesta.
     const results = []; let prize = 0, best = 0; const bt = [0, 0, 0, 0]; let last = null;
-    for (let i = 0; i < n; i++) {
-      const r = Engine.play();
-      r.prize *= m; r.mult = m;
-      results.push(r); prize += r.prize; bt[r.tier]++;
-      if (r.prize > best) best = r.prize;
-      if (r.prize) last = { prize: r.prize, tier: r.tier, sym: r.sym, count: r.count };
-    }
+    for (let i = 0; i < n; i++) results.push(Engine.play());
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // Bloqueo global: evita que dos jugadores lean o paguen el mismo bote simultáneamente.
+      const jpq = await client.query('SELECT rio, mar, cas FROM cascada_jackpots WHERE id = 1 FOR UPDATE');
+      let jackpots = [0, Number(jpq.rows[0].rio), Number(jpq.rows[0].mar), Number(jpq.rows[0].cas)];
+      for (const r of results) {
+        const adv = Jackpot.advance(jackpots, r.tier);
+        jackpots = adv.jackpots;
+        if (r.tier) r.jackpotBase = adv.payout;
+        r.prize = (r.tier ? adv.payout : r.prize) * m;
+        r.mult = m;
+        r.jackpots = jackpots.slice();
+        prize += r.prize; bt[r.tier]++;
+        if (r.prize > best) best = r.prize;
+        if (r.prize) last = { prize: r.prize, tier: r.tier, sym: r.sym, count: r.count };
+      }
+      await client.query('UPDATE cascada_jackpots SET rio=$1, mar=$2, cas=$3, updated_at=$4 WHERE id=1', [jackpots[1], jackpots[2], jackpots[3], Date.now()]);
       // cobra el coste y paga los premios en UNA sola sentencia: no se puede gastar dos veces el mismo saldo ni jugar más de lo que se tiene
       const up = await client.query('UPDATE packs SET credits = credits - $1 + $2 WHERE code = $3 AND credits >= $1 RETURNING credits', [cost, prize, pack.code]);
       if (!up.rows.length) throw new HttpError(402, 'No tienes créditos suficientes');
@@ -86,7 +99,7 @@ module.exports = function (d) {
         'last = COALESCE(EXCLUDED.last, cascada_stats.last), updated_at = EXCLUDED.updated_at, spent = cascada_stats.spent + EXCLUDED.spent RETURNING *',
         [uid, n, prize, best, bt[1], bt[2], bt[3], last ? JSON.stringify(last) : null, Date.now(), cost]);
       await client.query('COMMIT');
-      return { ok: true, credits: Number(up.rows[0].credits), mult: m, results, stats: statsOf(st.rows[0]) };
+      return { ok: true, credits: Number(up.rows[0].credits), mult: m, results, stats: statsOf(st.rows[0]), jackpots };
     } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
   }
 
