@@ -3,8 +3,11 @@
 //  · Cada cartón cuesta BINGO_PRICE créditos (1) y cada jugador puede comprar como mucho BINGO_MAX_CARDS (24) por ronda.
 //  · La primera compra abre la ronda: hay BINGO_BUY_SECONDS (60, un minuto) para comprar y después cae una bola cada BINGO_BALL_SECONDS (4).
 //  · Bingo de 90 bolas: cartón de 3 filas × 9 columnas con 15 números. Línea = una fila completa; bingo = el cartón entero.
-//  · La partida empieza SOLA: la cuenta atrás de 1 minuto arranca en cuanto se acaba la anterior (no hace falta que nadie compre).
+//  · La partida empieza SOLA mientras haya jugadores reales: la cuenta atrás de 1 minuto arranca en cuanto se acaba la anterior (no hace falta que nadie compre).
 //    Si al acabar la cuenta atrás no hay cartones, salen unas pocas bolas de muestra (BINGO_EMPTY_BALLS) y vuelve a empezar la cuenta atrás.
+//  · SOLO FUNCIONA CON JUGADORES REALES: si nadie tiene el bingo abierto (BINGO_PRESENCE_SECONDS, 30 s), no hay partidas programadas ni cartones reales en juego,
+//    el servidor NO abre rondas, NO crea jugadores ficticios, NO guarda cartones ni consulta la base de datos cada segundo (solo una consulta barata cada 10 s) y
+//    cierra la ronda abierta que solo tuviera ficticios. En cuanto alguien abre el bingo (o compra), todo vuelve a funcionar solo.
 //  · BOTE ACUMULADO: empieza en un valor al azar entre 500 y 3000 créditos y sube BINGO_JACKPOT_STEP (1) con cada partida que termina. Se lo lleva (a partes iguales si hay varios)
 //    quien canta bingo en BINGO_JACKPOT_BALLS (48) bolas o menos, además del premio del bingo; entonces vuelve a empezar en 1000.
 //  · Con varios jugadores: línea 20 % y bingo 80 % de los créditos gastados entre todos en esa partida (prizesFor).
@@ -48,11 +51,13 @@ module.exports = function (d) {
   const EMPTY_BALLS = Math.max(1, Math.floor(numEnv('BINGO_EMPTY_BALLS', 12)));   // bolas de muestra si nadie compró
   const LINE_PAUSE_MS = Math.max(0, numEnv('BINGO_LINE_PAUSE_SECONDS', 8)) * 1000;   // pausa tras cantar la línea
   const RESULT_MS = 15_000;       // tras el bingo se enseña el resultado este tiempo; luego la sala queda libre para otra ronda
+  const PRESENCE_MS = Math.max(5, numEnv('BINGO_PRESENCE_SECONDS', 30)) * 1000;   // sin nadie con el bingo abierto durante este tiempo, la sala se duerme
   const LOCK_ID = 7_771_001;      // cerrojo de Postgres para que dos compras a la vez no abran dos rondas
 
   // Jugadores conectados: los que tienen la sala abierta (el navegador pregunta cada segundo)
   const seen = new Map();
-  const touch = uid => { const now = Date.now(); seen.set(uid, now); if (seen.size > 2000) for (const [k, v] of seen) if (now - v > 60_000) seen.delete(k); };
+  let lastPresence = 0;   // última vez que un jugador real preguntó por el bingo o compró
+  const touch = uid => { const now = Date.now(); lastPresence = now; seen.set(uid, now); if (seen.size > 2000) for (const [k, v] of seen) if (now - v > 60_000) seen.delete(k); };
   const connected = () => { const now = Date.now(); let n = 0; for (const v of seen.values()) if (now - v <= 6000) n++; return n; };
 
   const cleanCountry = c => (typeof c === 'string' && /^[A-Za-z]{2}$/.test(c)) ? c.toUpperCase() : null;
@@ -89,7 +94,7 @@ module.exports = function (d) {
       run('DELETE FROM bingo_wins WHERE created_at < $1', [Date.now() - 7 * 24 * 3600 * 1000]).catch(() => {});
     };
     setInterval(clean, 3600_000).unref();   // con partidas automáticas salen muchas rondas: se limpian cada hora
-    setInterval(() => { advance().catch(() => {}); }, 1000).unref();   // paga línea y bingo aunque nadie tenga la pantalla abierta
+    setInterval(() => { tick().catch(() => {}); }, 1000).unref();   // paga línea y bingo aunque nadie tenga la pantalla abierta, pero solo si hay jugadores reales
   }
 
   // ---------- Cartones y bombo ----------
@@ -276,6 +281,46 @@ module.exports = function (d) {
       await client.query('COMMIT');
     } catch (e) { cardCache = null; try { await client.query('ROLLBACK'); } catch (e2) { /* nada */ } throw e; }
     finally { client.release(); }
+  }
+
+  // ---------- Solo con jugadores reales ----------
+  // «Jugador real» = alguien con el bingo abierto (o que acaba de comprar), o con partidas programadas, o con cartones reales en una ronda abierta.
+  // Sin ninguno de los tres el servidor no hace nada: ni rondas, ni ficticios, ni consultas por segundo.
+  const REAL_SQL = "SELECT (SELECT COUNT(*) FROM bingo_auto) AS a, (SELECT COUNT(*) FROM bingo_cards c JOIN bingo_rounds r ON r.id = c.round_id WHERE r.status <> 'done' AND c.user_id NOT LIKE 'bot:%') AS h";
+  async function hasRealWork() {
+    const row = (await all(REAL_SQL))[0] || {};
+    return Number(row.a) > 0 || Number(row.h) > 0;
+  }
+  // Cierra la ronda abierta que solo tenga ficticios y borra sus cartones (con cerrojo, por si alguien compra justo ahora). Devuelve true si la sala ha quedado dormida
+  async function settleIdle() {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock($1)', [LOCK_ID]);
+      const busy = (await client.query(REAL_SQL)).rows[0] || {};
+      if (Number(busy.a) > 0 || Number(busy.h) > 0) { await client.query('ROLLBACK'); return false; }
+      const open = (await client.query("SELECT id FROM bingo_rounds WHERE status <> 'done' FOR UPDATE")).rows.map(x => x.id);
+      if (open.length) {
+        await client.query('DELETE FROM bingo_cards WHERE round_id = ANY($1::bigint[])', [open]);
+        await client.query("UPDATE bingo_rounds SET status = 'done', finished_at = $1 WHERE id = ANY($2::bigint[])", [Date.now() - RESULT_MS - 1, open]);   // sin ganadores y sin sumar al bote; la sala queda libre ya
+        cardCache = null;
+      }
+      await client.query('COMMIT');
+      return true;
+    } catch (e) { try { await client.query('ROLLBACK'); } catch (e2) { /* nada */ } return false; }
+    finally { client.release(); }
+  }
+  let work = true, settled = false, lastCheck = 0;
+  async function tick() {   // cada segundo: avanza la partida solo si hay jugadores reales; si no, una consulta barata cada 10 s
+    const now = Date.now();
+    if (now - lastPresence <= PRESENCE_MS) { work = true; settled = false; }
+    else if (now - lastCheck >= 10_000) {
+      lastCheck = now;
+      work = await hasRealWork();
+      if (work) settled = false;
+      else if (!settled) { settled = await settleIdle(); if (!settled) work = true; }
+    }
+    if (work) await advance();
   }
 
   // ---------- Estado que ve el jugador ----------
