@@ -43,7 +43,8 @@ module.exports = function (d) {
     const cr = (await all('SELECT credits FROM packs WHERE code = $1', [pack.code]))[0];
     const st = (await all('SELECT * FROM cascada_stats WHERE user_id = $1', [uid]))[0];
     const pend = (await all('SELECT COUNT(*) AS n FROM cascada_bonus WHERE user_id = $1 AND state = $2', [uid, 'open']))[0];
-    return { ok: true, on: true, credits: Number((cr || {}).credits || 0), maxMult: MAX_M, stats: statsOf(st), bonusPending: Number((pend || {}).n || 0) };
+    const jp = (await all('SELECT rio, mar, cascada FROM cascada_jackpots WHERE id = 1'))[0] || { rio: 0, mar: 0, cascada: 0 };
+    return { ok: true, on: true, credits: Number((cr || {}).credits || 0), maxMult: MAX_M, stats: statsOf(st), jackpots: [0, Number(jp.rio), Number(jp.mar), Number(jp.cascada)], bonusPending: Number((pend || {}).n || 0) };
   }
 
   async function play(req, body) {
@@ -71,6 +72,20 @@ module.exports = function (d) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // Acumulación global compartida: +10 créditos por partida en cada bote.
+      // La fila única bloqueada serializa las partidas simultáneas de todos los usuarios.
+      const jpRes = await client.query('SELECT rio, mar, cascada FROM cascada_jackpots WHERE id = 1 FOR UPDATE');
+      const jp = jpRes.rows[0] || { rio: 0, mar: 0, cascada: 0 };
+      let pots = { rio: Number(jp.rio), mar: Number(jp.mar), cascada: Number(jp.cascada) };
+      for (const r of results) {
+        pots.rio += 10; pots.mar += 10; pots.cascada += 10;
+        if (r.tier === 1) { r.prize += pots.rio; pots.rio = 0; }
+        else if (r.tier === 2) { r.prize += pots.mar; pots.mar = 0; }
+        else if (r.tier === 3) { r.prize += pots.cascada; pots.cascada = 0; }
+      }
+      prize = results.reduce((sum, r) => sum + r.prize, 0);
+      lost = results.reduce((sum, r) => sum + Math.max(0, m - r.prize), 0);
+      await client.query('UPDATE cascada_jackpots SET rio=$1, mar=$2, cascada=$3, updated_at=$4 WHERE id=1', [pots.rio, pots.mar, pots.cascada, Date.now()]);
       // cobra el coste y paga los premios en UNA sola sentencia: no se puede gastar dos veces el mismo saldo ni jugar más de lo que se tiene
       const up = await client.query('UPDATE packs SET credits = credits - $1 + $2 WHERE code = $3 AND credits >= $1 RETURNING credits', [cost, prize, pack.code]);
       if (!up.rows.length) throw new HttpError(402, 'No tienes créditos suficientes');
@@ -87,7 +102,7 @@ module.exports = function (d) {
         'last = COALESCE(EXCLUDED.last, cascada_stats.last), updated_at = EXCLUDED.updated_at, spent = cascada_stats.spent + EXCLUDED.spent, lost = cascada_stats.lost + EXCLUDED.lost RETURNING *',
         [uid, n, prize, best, bt[1], bt[2], bt[3], last ? JSON.stringify(last) : null, Date.now(), cost, lost]);
       await client.query('COMMIT');
-      return { ok: true, credits: Number(up.rows[0].credits), mult: m, results, stats: statsOf(st.rows[0]) };
+      return { ok: true, credits: Number(up.rows[0].credits), mult: m, results, jackpots: [0, pots.rio, pots.mar, pots.cascada], stats: statsOf(st.rows[0]) };
     } catch (e) { await client.query('ROLLBACK').catch(() => {}); throw e; } finally { client.release(); }
   }
 
