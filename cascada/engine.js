@@ -14,12 +14,26 @@ const CascadaEngine = (() => {
   const fillSym=()=>{let r=Math.random()*FILL_SUM,a=0;for(let i=0;i<FILL.length;i++){a+=FILL[i];if(r<a)return i;}return 0;};
   const tier=p=>p>=1000?3:p>=250?2:p>=100?1:0;
   const payoutFor=(sym,count)=>{let best=0;for(const p of PAY)if(p[0]===sym&&p[1]<=count&&p[2]>best)best=p[2];return best;};
-  const scanLine=(grid,rows,lineIndex)=>{
+  const PATHS = LINES.map(rows => rows.map((row, col) => ({ row, col }))).concat(
+    Array.from({ length: 5 }, (_, col) => [0,1,2].map(row => ({ row, col })))
+  );
+  const scanLine=(grid,cells,lineIndex)=>{
     const found=[];
-    for(const dir of [1,-1]){const cols=dir===1?[0,1,2,3,4]:[4,3,2,1,0],sym=grid[rows[cols[0]]][cols[0]];let count=1;for(let k=1;k<5;k++){const c=cols[k];if(grid[rows[c]][c]!==sym)break;count++;}const prize=count>=3?payoutFor(sym,count):0;if(prize)found.push({line:lineIndex+1,direction:dir===1?'izquierda-derecha':'derecha-izquierda',sym,count,prize,cells:cols.slice(0,count).map(c=>({row:rows[c],col:c}))});}
+    for(const dir of [1,-1]){
+      const path=dir===1?cells:cells.slice().reverse();
+      const {row,col}=path[0],sym=grid[row][col];
+      let count=1;
+      for(let k=1;k<path.length;k++){
+        const p=path[k];
+        if(grid[p.row][p.col]!==sym)break;
+        count++;
+      }
+      const prize=count>=3?payoutFor(sym,count):0;
+      if(prize)found.push({line:lineIndex+1,direction:cells[0].col===cells[cells.length-1].col?(dir===1?'arriba-abajo':'abajo-arriba'):(dir===1?'izquierda-derecha':'derecha-izquierda'),sym,count,prize,cells:path.slice(0,count)});
+    }
     return found.sort((a,b)=>b.prize-a.prize)[0]||null;
   };
-  const evaluate=grid=>LINES.map((rows,i)=>scanLine(grid,rows,i)).filter(Boolean);
+  const evaluate=grid=>PATHS.map((cells,i)=>scanLine(grid,cells,i)).filter(Boolean);
   const buildGrid=o=>{
     if(o.bonus){const g=Array.from({length:3},()=>Array.from({length:5},fillSym));for(let c=0;c<3;c++)g[1][c]=7;return g;}
     // La cuadrícula base no debe regalar premios aleatorios: los premios nacen del sorteo del servidor.
@@ -28,6 +42,6 @@ const CascadaEngine = (() => {
     return g;
   };
   const play=()=>{const o=draw();if(o.bonus){const grid=buildGrid(o);return{sym:7,count:3,prize:0,tier:0,bonus:true,grid,lines:[]};}const grid=buildGrid(o),lines=evaluate(grid),prize=lines.reduce((s,l)=>s+l.prize,0),primary=lines.slice().sort((a,b)=>b.prize-a.prize)[0];return{sym:primary?primary.sym:o.sym,count:primary?primary.count:o.count,prize,tier:tier(primary?primary.prize:0),bonus:false,grid,lines};};
-  return{NAMES,PAY,LINES,TOTAL,BONUS_W,play,tier,evaluate};
+  return{NAMES,PAY,LINES,PATHS,TOTAL,BONUS_W,play,tier,evaluate};
 })();
 if(typeof module!=='undefined')module.exports=CascadaEngine;

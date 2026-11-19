@@ -60,7 +60,7 @@
     credits: 0, last: null, spins: 0, won: 0, spent: 0, lost: 0, best: 0, auto: false, sel: 10, mult: 1,
     sound: true, notify: false, cf: { at: 0, n: 0 },
     bulk: { left: 0, total: 0, done: 0, won: 0, queue: [] },
-    botes: [0, 0, 0, 0], tick: Date.now(),
+    botes: [0, 0, 0, 0], jackpots: [0, 0, 0, 0], tick: Date.now(),
   });
   const load = () => {
     try {
@@ -150,6 +150,7 @@
   };
   // Pide n partidas con apuesta m al servidor (cobra n×m y paga los premios en una sola operación). Devuelve { credits, results }.
   const playServer = (n, m) => api('/api/cascada/play', { n, m });
+  const takeJackpots = (jp) => { if (jp) S.jackpots = [0, Number(jp.rio || 0), Number(jp.mar || 0), Number(jp.cas || 0)]; };
   const takeStats = (st) => {
     if (!st) return;
     S.spins = st.spins; S.won = st.won; S.spent = st.spent || 0; S.lost = st.lost || 0; S.best = st.best; S.botes = st.botes || S.botes; S.last = st.last || S.last;
@@ -158,7 +159,7 @@
     try {
       const j = await api('/api/cascada');
       if (j.on === false) { await modal('<h2>Cascada</h2><p>Ahora mismo está desactivada.</p><a class="btn gold" href="/">Volver</a>'); return false; }
-      S.credits = j.credits; takeStats(j.stats); ready = true; needLogin = false;
+      S.credits = j.credits; takeStats(j.stats); takeJackpots(j.jackpots); ready = true; needLogin = false;
       if (j.bonusPending > 0) needBonus = true;
       return true;
     } catch (e) {
@@ -490,11 +491,22 @@
     inBonus = true;
     try {
       let b = pre;
-      if (!b) { const j = await api('/api/cascada/bonus/state', { id }); b = j.bonus; }
-      if (!b) return false;
+      if (!b) {
+        try { const j = await api('/api/cascada/bonus/state', { id }); b = j.bonus; }
+        catch (firstError) {
+          // Recuperación: si el ID recibido no se puede consultar, busca la partida pendiente del usuario.
+          const fallback = await api('/api/cascada/bonus/state', {});
+          b = fallback.bonus;
+          if (!b) throw firstError;
+        }
+      }
+      if (!b) throw new Error('La partida del tesoro no aparece como pendiente en el servidor.');
       await bonusScreen(b);
       return true;
-    } catch (e) { return false; } finally { inBonus = false; render(); }
+    } catch (e) {
+      await modal(`<h2>No se pudo abrir el tesoro</h2><p>${String(e.message || 'Error de conexión')}</p><p>La partida queda guardada. Vuelve a intentarlo al recargar CASCADA.</p><button class="btn gold" data-close>Vale</button>`);
+      return false;
+    } finally { inBonus = false; render(); }
   };
   // Juega todas las partidas del tesoro que estén pendientes en el servidor (por ejemplo las que salieron en segundo plano)
   const pendingBonus = async () => {
@@ -517,6 +529,7 @@
     } else {
       clampMult();
       const j = await playServer(1, S.mult);         // el servidor cobra la apuesta y paga el premio; si no hay saldo, falla y no pasa nada
+      takeJackpots(j.jackpots);
       r = j.results[0];
       S.credits = j.credits - r.prize;               // el saldo lo manda el servidor (el premio se suma al revelarlo)
     }
@@ -566,6 +579,7 @@
         if (k < 1) { S.auto = false; AW.noCredits = true; break; }
         let j;
         try { j = await playServer(k, S.mult); } catch (e) { if (e.status === 402) { S.auto = false; AW.noCredits = true; } break; }
+        takeJackpots(j.jackpots);
         S.credits = j.credits - sumPrize(j.results);
         for (const r of j.results) {
           apply(r, false, AW);
@@ -645,6 +659,8 @@
     ['Rio', 'Mar', 'Cas'].forEach((k, i) => {
       const n = S.botes[i + 1] - (h.tier === i + 1 ? 1 : 0);
       $('#n' + k).textContent = n === 1 ? '1 vez' : n + ' veces';
+      const value = $('#bote' + k + ' .v');
+      if (value) value.textContent = fmt(S.jackpots[i + 1] || 0);
     });
 
     // la apuesta nunca puede pasar del saldo real
@@ -797,6 +813,7 @@
     busy = true; render();
     try {
       const j = await playServer(n, m);              // el servidor cobra n×m y paga todos los premios de golpe
+      takeJackpots(j.jackpots);
       S.credits = j.credits - sumPrize(j.results);   // los premios se van sumando al revelarlas
       S.bulk = { left: n, total: n, done: 0, won: 0, queue: j.results };
       save(); busy = false; render(); loop();
@@ -870,6 +887,15 @@
   window.addEventListener('pagehide', leave);
   window.addEventListener('beforeunload', leave);
   heartbeat(); setInterval(heartbeat, 2000);
+  // Los tres botes son globales: actualizar su importe también mientras el jugador está quieto.
+  setInterval(async () => {
+    if (!ready || running || busy || document.hidden) return;
+    try {
+      const j = await api('/api/cascada');
+      takeJackpots(j.jackpots);
+      render();
+    } catch (e) { /* se reintentará en la siguiente actualización */ }
+  }, 5000);
 
   /* ---------------- arranque ---------------- */
   // burbujas de fondo
