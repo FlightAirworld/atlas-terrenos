@@ -1,39 +1,129 @@
-/* Cascada · lógica del juego, sonidos y partidas en segundo plano */
+/* Cascada · lógica del juego, sonidos y partidas en segundo plano
+ * VERSIÓN CON CRÉDITOS REALES: el saldo es el del jugador en todo el juego (tabla packs) y lo manda el SERVIDOR.
+ * Cada partida (o compra de partidas) se cobra y se paga en el servidor (/api/cascada/play); aquí solo se dibuja el resultado.
+ * No existe «Cargar créditos»: no se pueden jugar más créditos de los que tienes.
+ * APUESTA: el botón rojo juega con una apuesta de 1 a 50 créditos; los premios se multiplican por la apuesta. */
 (() => {
   'use strict';
   const E = CascadaEngine;
   const $ = (s) => document.querySelector(s);
-  const KEY = 'cascada.v1';
-  const MAX_LOAD = 100000; // máximo de créditos que se pueden cargar de una vez
+  const KEY = 'cascada.v2';
   const BG_MS = 3000;     // ritmo de juego cuando la pantalla está cerrada/oculta
+  const MAX_MULT = 50;    // apuesta máxima por partida
   const TIER = ['', 'rio', 'mar', 'cas'];
   const TIER_NAME = ['', 'Bote Río', 'Bote Mar', 'Bote Cascada'];
   const fmt = (n) => Number(n).toLocaleString('es-ES');
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  /* ---------------- estado persistente ---------------- */
+  /* ---------------- estado ---------------- */
+  // En el navegador solo se guardan preferencias y la compra en curso; el saldo y las estadísticas vienen del servidor.
   const def = () => ({
-    credits: 0, loaded: 0, last: null, spins: 0, won: 0, best: 0, auto: false, sel: 10, load: 50,
+    credits: 0, last: null, spins: 0, won: 0, best: 0, auto: false, sel: 10, mult: 1,
     sound: true, notify: false,
-    bulk: { left: 0, total: 0, done: 0, won: 0 },
+    bulk: { left: 0, total: 0, done: 0, won: 0, queue: [] },
     botes: [0, 0, 0, 0], tick: Date.now(),
   });
   const load = () => {
     try {
       const j = JSON.parse(localStorage.getItem(KEY));
-      if (j && typeof j.credits === 'number' && isFinite(j.credits)) return Object.assign(def(), j);
+      if (j && typeof j === 'object') {
+        const d = def();
+        d.auto = !!j.auto; d.sel = Math.min(100, Math.max(1, +j.sel || 10));
+        d.mult = Math.min(MAX_MULT, Math.max(1, Math.floor(+j.mult) || 1));
+        d.sound = j.sound !== false; d.notify = !!j.notify;
+        if (j.bulk && Array.isArray(j.bulk.queue)) d.bulk = Object.assign(d.bulk, j.bulk);
+        d.tick = +j.tick || Date.now();
+        return d;
+      }
     } catch (e) { /* sin datos */ }
     return def();
   };
   let S = load();
-  const save = () => { S.tick = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* sin espacio */ } };
+  const save = () => {
+    S.tick = Date.now();
+    try { localStorage.setItem(KEY, JSON.stringify({ auto: S.auto, sel: S.sel, mult: S.mult, sound: S.sound, notify: S.notify, bulk: S.bulk, tick: S.tick })); } catch (e) { /* sin espacio */ }
+  };
 
   const newAW = () => ({ plays: 0, won: 0, wins: 0, best: 0, botes: [], bulks: [], noCredits: false });
   let AW = newAW();             // resumen de lo jugado mientras no mirabas
   let running = false;          // bucle automático / compra activo
   let busy = false;             // partida manual en curso
+  let ready = false;            // saldo cargado del servidor
+  let needLogin = false;
+  let catching = false;
   let hold = null;              // premio que aún no se ha "revelado" en pantalla
-  let cur = E.play().grid;      // rodillos visibles
+  let cur = E.play().grid;      // rodillos visibles (solo dibujo inicial)
+
+  // apuesta: nunca más que el saldo real, y como mucho 50
+  const maxMult = () => Math.max(1, Math.min(MAX_MULT, Math.floor(S.credits)));
+  const clampMult = () => { S.mult = Math.min(Math.max(1, Math.floor(S.mult) || 1), maxMult()); };
+  // partidas que se pueden comprar con la apuesta actual y el saldo real
+  const maxSel = () => Math.max(1, Math.min(100, Math.floor(S.credits / S.mult)));
+  const unit = (n) => (n === 1 ? 'crédito' : 'créditos');
+
+  /* ---------------- conexión con el servidor ---------------- */
+  const findSession = () => {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!/^sb-.+-auth-token$/.test(k)) continue;
+        const j = JSON.parse(localStorage.getItem(k));
+        const s = j && (j.currentSession || j);
+        if (s && s.access_token) return { k, j, s };
+      }
+    } catch (e) { /* sin sesión */ }
+    return null;
+  };
+  const refreshSession = async () => {
+    const ss = findSession(); if (!ss || !ss.s.refresh_token) return null;
+    try {
+      const cfg = await (await fetch('/api/config')).json();
+      const a = cfg && cfg.auth; if (!a || !a.url || !a.anonKey) return null;
+      const r = await fetch(a.url + '/auth/v1/token?grant_type=refresh_token', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: a.anonKey }, body: JSON.stringify({ refresh_token: ss.s.refresh_token }) });
+      if (!r.ok) return null;
+      const n = await r.json();
+      if (!n.access_token) return null;
+      const merged = Object.assign({}, ss.s, n);
+      localStorage.setItem(ss.k, JSON.stringify(ss.j.currentSession ? Object.assign({}, ss.j, { currentSession: merged }) : merged));   // se guarda también para el resto del juego
+      return n.access_token;
+    } catch (e) { return null; }
+  };
+  const call = async (url, body, token) => {
+    const r = await fetch(url, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', 'X-Auth-Token': token || '' }, body: body ? JSON.stringify(body) : undefined });
+    const j = await r.json().catch(() => ({}));
+    return { r, j };
+  };
+  const api = async (url, body) => {
+    const ss = findSession();
+    if (!ss) { const e = new Error('Entra con tu cuenta'); e.login = true; throw e; }
+    let { r, j } = await call(url, body, ss.s.access_token);
+    if (r.status === 401) {
+      const t = await refreshSession();
+      if (!t) { const e = new Error('Entra con tu cuenta'); e.login = true; throw e; }
+      ({ r, j } = await call(url, body, t));
+      if (r.status === 401) { const e = new Error('Entra con tu cuenta'); e.login = true; throw e; }
+    }
+    if (!r.ok) { const e = new Error(j.error || 'Error ' + r.status); e.status = r.status; throw e; }
+    return j;
+  };
+  // Pide n partidas con apuesta m al servidor (cobra n×m y paga los premios en una sola operación). Devuelve { credits, results }.
+  const playServer = (n, m) => api('/api/cascada/play', { n, m });
+  const takeStats = (st) => {
+    if (!st) return;
+    S.spins = st.spins; S.won = st.won; S.best = st.best; S.botes = st.botes || S.botes; S.last = st.last || S.last;
+  };
+  const sync = async () => {
+    try {
+      const j = await api('/api/cascada');
+      if (j.on === false) { await modal('<h2>Cascada</h2><p>Ahora mismo está desactivada.</p><a class="btn gold" href="/">Volver</a>'); return false; }
+      S.credits = j.credits; takeStats(j.stats); ready = true; needLogin = false;
+      return true;
+    } catch (e) {
+      if (e.login) { needLogin = true; return false; }
+      return false;
+    }
+  };
+  const loginModal = () => modal('<h2>Entra con tu cuenta</h2><p>Cascada se juega con tus créditos del juego. Entra con tu cuenta en el juego y vuelve aquí.</p><a class="btn gold" href="/" style="display:block;text-decoration:none">Ir al juego</a>');
 
   /* ---------------- sonido (sintetizado, sin archivos) ---------------- */
   let ac = null;
@@ -158,7 +248,7 @@
   });
 
   /* ---------------- resultado de una partida ---------------- */
-  // aplica el resultado al estado (y al resumen "mientras no mirabas" si se pasa sum)
+  // El servidor ya ha cobrado y pagado: aquí solo se «revela» (se suma el premio a lo que se ve en pantalla)
   const apply = (r, inBulk, sum) => {
     S.spins++;
     S.credits += r.prize;
@@ -174,6 +264,7 @@
       if (r.tier) sum.botes.push({ tier: r.tier, prize: r.prize });
     }
   };
+  const sumPrize = (list) => list.reduce((a, r) => a + r.prize, 0);
 
   const celebrate = (r) => {
     if (!r.prize) return;
@@ -192,7 +283,7 @@
       modal(
         `<h2>🌊 ¡${TIER_NAME[r.tier].toUpperCase()}! 🌊</h2>
          <div class="big">+${fmt(r.prize)}</div><p>créditos</p>
-         <p>${r.count} × ${E.NAMES[r.sym]} en la línea central</p>
+         <p>${r.count} × ${E.NAMES[r.sym]} en la línea central${r.mult > 1 ? ' · apuesta ×' + r.mult : ''}</p>
          <button class="btn gold" data-close>¡Genial!</button>`, TIER[r.tier]);
       notify('¡' + TIER_NAME[r.tier] + '!', `Has ganado ${fmt(r.prize)} créditos`);
     } else {
@@ -204,8 +295,15 @@
   const one = async (kind) => {
     const fast = kind !== 'manual';
     const inBulk = kind === 'bulk';
-    if (inBulk) { S.bulk.left--; S.bulk.done++; } else S.credits--;
-    const r = E.play();
+    let r;
+    if (inBulk) {
+      r = S.bulk.queue.shift(); S.bulk.left--; S.bulk.done++;
+    } else {
+      clampMult();
+      const j = await playServer(1, S.mult);         // el servidor cobra la apuesta y paga el premio; si no hay saldo, falla y no pasa nada
+      r = j.results[0];
+      S.credits = j.credits - r.prize;               // el saldo lo manda el servidor (el premio se suma al revelarlo)
+    }
     const bestPrev = S.best;
     apply(r, inBulk, null);
     hold = { prize: r.prize, tier: r.tier, bestPrev };
@@ -221,28 +319,43 @@
   /* ---------------- juego en segundo plano / pantalla cerrada ---------------- */
   const endBulk = () => {
     const info = { total: S.bulk.total, won: S.bulk.won };
-    S.bulk = { left: 0, total: 0, done: 0, won: 0 };
+    S.bulk = { left: 0, total: 0, done: 0, won: 0, queue: [] };
     return info;
   };
 
-  const catchUp = (minEl) => {
+  const catchUp = async (minEl) => {
+    if (catching) return;
     const now = Date.now(), el = now - S.tick;
     if (el < minEl) return;
     if (!(S.auto || S.bulk.left > 0)) { S.tick = now; return; }
-    const n = Math.min(Math.floor(el / BG_MS), 5000);
-    for (let i = 0; i < n; i++) {
-      let inBulk = false;
-      if (S.bulk.left > 0) { S.bulk.left--; S.bulk.done++; inBulk = true; }
-      else if (S.auto && S.credits >= 1) S.credits--;
-      else { if (S.auto) { S.auto = false; AW.noCredits = true; } break; }
-      const r = E.play();
-      apply(r, inBulk, AW);
-      if (r.tier) notify('¡' + TIER_NAME[r.tier] + '!', `Has ganado ${fmt(r.prize)} créditos`);
-      if (inBulk && S.bulk.left === 0) {
-        AW.bulks.push(endBulk());
-        notify('Compra completada', 'Se han jugado todas las partidas compradas');
+    catching = true;
+    try {
+      let n = Math.min(Math.floor(el / BG_MS), 5000);
+      // compra en curso: se van revelando las partidas que ya cobró el servidor
+      while (n > 0 && S.bulk.left > 0) {
+        const r = S.bulk.queue.shift(); S.bulk.left--; S.bulk.done++; n--;
+        apply(r, true, AW);
+        if (r.tier) notify('¡' + TIER_NAME[r.tier] + '!', `Has ganado ${fmt(r.prize)} créditos`);
+        if (S.bulk.left === 0) {
+          AW.bulks.push(endBulk());
+          notify('Compra completada', 'Se han jugado todas las partidas compradas');
+        }
       }
-    }
+      // automático: se piden al servidor en bloques, sin pasarse del saldo
+      while (n > 0 && S.auto && S.bulk.left === 0) {
+        clampMult();
+        const k = Math.min(n, 100, Math.floor(S.credits / S.mult));
+        if (k < 1) { S.auto = false; AW.noCredits = true; break; }
+        let j;
+        try { j = await playServer(k, S.mult); } catch (e) { if (e.status === 402) { S.auto = false; AW.noCredits = true; } break; }
+        S.credits = j.credits - sumPrize(j.results);
+        for (const r of j.results) {
+          apply(r, false, AW);
+          if (r.tier) notify('¡' + TIER_NAME[r.tier] + '!', `Has ganado ${fmt(r.prize)} créditos`);
+        }
+        n -= k;
+      }
+    } finally { catching = false; }
     save();
   };
 
@@ -261,11 +374,11 @@
 
   /* ---------------- bucle automático / compras ---------------- */
   const loop = async () => {
-    if (running) return;
+    if (running || !ready) return;
     running = true; render();
     try {
       while (S.bulk.left > 0 || S.auto) {
-        if (document.hidden) { await sleep(BG_MS); catchUp(BG_MS); continue; }
+        if (document.hidden) { await sleep(BG_MS); await catchUp(BG_MS); continue; }
         if (AW.plays > 0 || AW.noCredits || AW.bulks.length) await showAway();
         if (S.bulk.left > 0) {
           const r = await one('bulk');
@@ -282,7 +395,13 @@
             await modal('<h2>Sin créditos</h2><p>El modo automático se ha parado.</p><button class="btn gold" data-close>Aceptar</button>');
             break;
           }
-          const r = await one('auto');
+          let r;
+          try { r = await one('auto'); } catch (e) {
+            S.auto = false; save(); render();
+            await modal(`<h2>Modo automático parado</h2><p>${e.login ? 'Entra con tu cuenta para jugar.' : e.status === 402 ? 'No tienes créditos suficientes.' : e.message}</p><button class="btn gold" data-close>Aceptar</button>`);
+            await sync(); render();
+            break;
+          }
           if (r.tier) await sleep(2600);
         }
         await sleep(450);
@@ -303,20 +422,31 @@
       const n = S.botes[i + 1] - (h.tier === i + 1 ? 1 : 0);
       $('#n' + k).textContent = n === 1 ? '1 vez' : n + ' veces';
     });
-    const lock = running || busy;
-    $('#bPlay').disabled = lock || S.credits < 1;
-    $('#bPlay').classList.toggle('spinning', lock);
+
+    // la apuesta nunca puede pasar del saldo real
+    clampMult();
+    const lock = running || busy || !ready;
+    $('#bPlay').innerHTML = `jugar<b>${S.mult}</b><small>${unit(S.mult)}</small>`;
+    $('#bPlay').disabled = lock || S.credits < S.mult;
+    $('#bPlay').classList.toggle('spinning', running || busy);
     $('#bAuto').textContent = S.auto ? '■ PARAR AUTOMÁTICO' : '▶ AUTOMÁTICO';
     $('#bAuto').classList.toggle('on', S.auto);
-    $('#bAuto').disabled = busy;
-    $('#loadN').textContent = fmt(S.load);
-    $('#loadRange').value = S.load;
-    document.querySelectorAll('.lchip').forEach((c) => c.classList.toggle('sel', +c.dataset.n === S.load));
-    $('#bLoad').textContent = `CARGAR ${fmt(S.load)} ${S.load === 1 ? 'crédito' : 'créditos'}`;
-    $('#bLoad').disabled = busy;
-    $('#hint').textContent = S.credits < 1 && S.bulk.left === 0
-      ? 'carga los créditos que quieras jugar'
-      : 'cada partida cuesta 1 crédito';
+    $('#bAuto').disabled = busy || !ready;
+    $('#hint').textContent = needLogin ? 'entra con tu cuenta para jugar'
+      : !ready ? 'cargando tu saldo…'
+      : S.credits < 1 && S.bulk.left === 0 ? 'no te quedan créditos'
+      : `cada partida cuesta ${S.mult} ${unit(S.mult)}`;
+
+    // selector de apuesta (1 a 50)
+    const mm = maxMult();
+    $('#multN').textContent = S.mult;
+    $('#multU').textContent = unit(S.mult);
+    $('#mRange').max = Math.max(2, mm);
+    $('#mRange').value = S.mult;
+    $('#mMinus').disabled = S.mult <= 1;
+    $('#mPlus').disabled = S.mult >= mm;
+    document.querySelectorAll('.mchip').forEach((c) => { c.classList.toggle('sel', +c.dataset.n === S.mult); c.disabled = +c.dataset.n > S.credits; });
+
     // último premio, siempre visible en la pantalla del juego (en Cascada)
     const L = hold ? null : S.last;
     const lp = $('#lastPrize');
@@ -328,11 +458,19 @@
       lp.classList.remove('has');
       lp.innerHTML = '<span>ÚLTIMO PREMIO</span><em>todavía ninguno · ¡suerte!</em>';
     }
+
+    // las partidas compradas no pueden pasar del saldo (partidas × apuesta ≤ saldo)
+    const ms = maxSel();
+    if (S.sel > ms && S.bulk.left === 0) S.sel = ms;
+    const cost = S.sel * S.mult;
+    $('#range').max = Math.max(2, ms);
     $('#selN').textContent = S.sel;
     $('#range').value = S.sel;
-    document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('sel', +c.dataset.n === S.sel));
-    $('#bBuy').textContent = `COMPRAR ${S.sel} · ${S.sel} ${S.sel === 1 ? 'crédito' : 'créditos'}`;
-    $('#bBuy').disabled = busy || S.bulk.left > 0 || S.credits < S.sel;
+    document.querySelectorAll('#chips .chip').forEach((c) => { c.classList.toggle('sel', +c.dataset.n === S.sel); c.disabled = +c.dataset.n * S.mult > S.credits; });
+    $('#bBuy').textContent = S.mult > 1
+      ? `COMPRAR ${S.sel} × ${S.mult} · ${fmt(cost)} créditos`
+      : `COMPRAR ${S.sel} · ${S.sel} ${unit(S.sel)}`;
+    $('#bBuy').disabled = busy || !ready || S.bulk.left > 0 || S.credits < cost;
     const bi = $('#bulkInfo');
     bi.style.display = S.bulk.total > 0 ? '' : 'none';
     if (S.bulk.total > 0) {
@@ -345,63 +483,92 @@
   };
 
   /* ---------------- controles ---------------- */
+  // No se pueden «cargar» créditos gratis: el bloque de carga se sustituye por el selector de apuesta (1 a 50)
+  const loadBlock = $('#bLoad') && $('#bLoad').closest('.bulk');
+  const betBlock = document.createElement('div');
+  betBlock.className = 'bulk';
+  betBlock.innerHTML = `
+    <h3><span>Apuesta por partida</span><span>1 a ${MAX_MULT} · premios ×apuesta</span></h3>
+    <div class="stepper">
+      <button class="rnd" id="mMinus">−</button>
+      <div class="num"><span id="multN">1</span> <small id="multU">crédito</small></div>
+      <button class="rnd" id="mPlus">+</button>
+    </div>
+    <input type="range" id="mRange" min="1" max="${MAX_MULT}" value="1">
+    <div class="chips" id="mchips"></div>`;
+  if (loadBlock) loadBlock.replaceWith(betBlock);
+  else $('#bBuy').closest('.bulk').before(betBlock);
+
+  const foot = $('.foot');
+  if (foot) foot.innerHTML = 'Juegas con tus créditos del juego: cada partida se descuenta de tu saldo y los premios se suman a él. No se puede jugar más de lo que tienes.<br>Si cierras la pantalla, el modo automático o la compra siguen jugando.';
+  const stopBtn = $('#bStop'); if (stopBtn) stopBtn.textContent = 'TERMINAR YA y ver el resultado';
+
+  [1, 5, 10, 25, 50].forEach((n) => {
+    const b = document.createElement('button');
+    b.className = 'chip mchip'; b.dataset.n = n; b.textContent = n;
+    b.onclick = () => { S.mult = Math.min(n, maxMult()); save(); render(); };
+    $('#mchips').appendChild(b);
+  });
+  $('#mMinus').onclick = () => { S.mult = Math.max(1, S.mult - 1); save(); render(); };
+  $('#mPlus').onclick = () => { S.mult = Math.min(maxMult(), S.mult + 1); save(); render(); };
+  $('#mRange').oninput = (e) => { S.mult = Math.min(Math.max(1, +e.target.value), maxMult()); render(); };
+  $('#mRange').onchange = save;
+
   $('#bPlay').onclick = async () => {
-    if (running || busy || S.credits < 1) return;
+    if (running || busy || !ready || S.credits < S.mult) return;
     busy = true; render();
-    await one('manual');
+    try { await one('manual'); }
+    catch (e) {
+      if (e.login) { needLogin = true; loginModal(); }
+      else { sfx.done(); await sync(); modal(`<h2>No se pudo jugar</h2><p>${e.status === 402 ? 'No tienes créditos suficientes.' : e.message}</p><button class="btn gold" data-close>Vale</button>`); }
+    }
     busy = false; render();
   };
   $('#bAuto').onclick = () => {
     A();
     if (S.auto) { S.auto = false; save(); render(); return; }
     if (S.credits < 1 && S.bulk.left === 0) {
-      modal('<h2>Sin créditos</h2><p>Carga primero los créditos que quieras jugar.</p><button class="btn gold" data-close>Vale</button>');
+      modal('<h2>Sin créditos</h2><p>No te quedan créditos para jugar.</p><button class="btn gold" data-close>Vale</button>');
       return;
     }
     S.auto = true; save(); loop();
-  };
-  // cargar créditos: el jugador decide cuántos quiere jugar
-  [10, 50, 100, 500, 1000].forEach((n) => {
-    const b = document.createElement('button');
-    b.className = 'chip lchip'; b.dataset.n = n; b.textContent = fmt(n);
-    b.onclick = () => { S.load = n; save(); render(); };
-    $('#lchips').appendChild(b);
-  });
-  $('#lMinus').onclick = () => { S.load = Math.max(1, S.load - (S.load > 100 ? 10 : 1)); render(); };
-  $('#lPlus').onclick = () => { S.load = Math.min(MAX_LOAD, S.load + (S.load >= 100 ? 10 : 1)); render(); };
-  $('#loadRange').oninput = (e) => { S.load = +e.target.value; render(); };
-  $('#loadRange').onchange = save;
-  $('#bLoad').onclick = () => {
-    if (busy) return;
-    A(); sfx.buy();
-    S.credits += S.load; S.loaded += S.load;
-    save(); render();
   };
 
   [1, 10, 25, 50, 100].forEach((n) => {
     const b = document.createElement('button');
     b.className = 'chip'; b.dataset.n = n; b.textContent = n;
-    b.onclick = () => { S.sel = n; save(); render(); };
+    b.onclick = () => { S.sel = Math.min(n, maxSel()); save(); render(); };
     $('#chips').appendChild(b);
   });
   $('#bMinus').onclick = () => { S.sel = Math.max(1, S.sel - 1); render(); };
-  $('#bPlus').onclick = () => { S.sel = Math.min(100, S.sel + 1); render(); };
-  $('#range').oninput = (e) => { S.sel = +e.target.value; render(); };
+  $('#bPlus').onclick = () => { S.sel = Math.min(100, maxSel(), S.sel + 1); render(); };
+  $('#range').oninput = (e) => { S.sel = Math.min(+e.target.value, maxSel()); render(); };
   $('#range').onchange = save;
 
-  $('#bBuy').onclick = () => {
-    const n = S.sel;
-    if (S.bulk.left > 0 || busy || S.credits < n) return;
+  $('#bBuy').onclick = async () => {
+    const n = S.sel, m = S.mult;
+    if (S.bulk.left > 0 || busy || !ready || S.credits < n * m) return;
     A(); sfx.buy();
-    S.credits -= n;
-    S.bulk = { left: n, total: n, done: 0, won: 0 };
-    save(); render(); loop();
+    busy = true; render();
+    try {
+      const j = await playServer(n, m);              // el servidor cobra n×m y paga todos los premios de golpe
+      S.credits = j.credits - sumPrize(j.results);   // los premios se van sumando al revelarlas
+      S.bulk = { left: n, total: n, done: 0, won: 0, queue: j.results };
+      save(); busy = false; render(); loop();
+    } catch (e) {
+      busy = false;
+      if (e.login) { needLogin = true; loginModal(); }
+      else { await sync(); modal(`<h2>No se pudo comprar</h2><p>${e.status === 402 ? 'No tienes créditos suficientes.' : e.message}</p><button class="btn gold" data-close>Vale</button>`); }
+      render();
+    }
   };
+  // Las partidas compradas ya están cobradas en el servidor, así que no se devuelven: «terminar» las juega todas de golpe
   $('#bStop').onclick = () => {
     if (S.bulk.left <= 0) return;
-    S.credits += S.bulk.left;
-    S.bulk.total = S.bulk.done; S.bulk.left = 0;
-    save(); render();
+    const rest = S.bulk.queue.splice(0);
+    rest.forEach((r) => { S.bulk.left--; S.bulk.done++; apply(r, true, null); });
+    const info = endBulk(); save(); render(); sfx.done();
+    modal(`<h2>✅ Compra terminada</h2><p>Se han jugado las <b>${fmt(info.total)}</b> partidas.</p><div class="big">+${fmt(info.won)}</div><p>créditos ganados en esta compra</p><button class="btn gold" data-close>Aceptar</button>`);
   };
 
   $('#bSound').onclick = () => { S.sound = !S.sound; save(); render(); if (S.sound) sfx.buy(); };
@@ -420,7 +587,8 @@
     const rows = [...E.PAY].sort((a, b) => a[2] - b[2]);
     const sec = (t) => `<div class="sec">${t}</div>`;
     let h = '<h2>Cómo se juega</h2>'
-      + '<p>Cada partida cuesta <b>1 crédito</b>. Gana quien consigue símbolos iguales seguidos desde la izquierda en la <b>línea central</b>.</p>'
+      + '<p>Cada partida cuesta lo que apuestes: de <b>1 a 50 créditos</b> de tu saldo. Gana quien consigue símbolos iguales seguidos desde la izquierda en la <b>línea central</b>, y el premio se <b>multiplica por tu apuesta</b>.</p>'
+      + '<p style="font-size:13px">Los premios de la tabla son con apuesta 1.</p>'
       + '<div class="pt">';
     let last = -1;
     rows.forEach(([s, c, p]) => {
@@ -430,14 +598,15 @@
         + `<span>${c} ${E.NAMES[s]}</span><b>${fmt(p)}</b>`;
     });
     h += '</div><p style="font-size:13px">Suelen salir varios premios de 1 a 10 créditos cada 20 partidas y, de media, un bote de 100 a 1000 cada 500 partidas, siempre al azar.</p>'
-      + '<p style="font-size:13px">Con <b>AUTOMÁTICO</b> o <b>COMPRAR</b> (1 a 100 partidas) el juego sigue aunque cierres la pantalla; al volver verás un resumen.</p>'
+      + '<p style="font-size:13px">Con <b>AUTOMÁTICO</b> o <b>COMPRAR</b> (1 a 100 partidas) el juego sigue aunque cierres la pantalla; al volver verás un resumen. Solo puedes jugar los créditos que tienes.</p>'
       + '<button class="btn gold" data-close>Entendido</button>';
     modal(h);
   };
 
-  document.addEventListener('visibilitychange', () => {
+  document.addEventListener('visibilitychange', async () => {
     if (document.hidden) { save(); return; }
-    catchUp(BG_MS);
+    await catchUp(BG_MS);
+    if (!running && !busy && S.bulk.left === 0) await sync();   // el saldo puede haber cambiado en el resto del juego
     render();
     if (running) return;
     if (AW.plays > 0 || AW.noCredits || AW.bulks.length) showAway();
@@ -457,8 +626,21 @@
     sc.appendChild(b);
   }
 
-  catchUp(BG_MS);
   render();
-  if (AW.plays > 0 || AW.noCredits || AW.bulks.length) showAway();
-  loop();
+  (async () => {
+    const ok = await sync();
+    if (!ok) { render(); if (needLogin) loginModal(); return; }
+    // si se cerró a mitad de una compra: el servidor ya cobró y pagó todo, así que lo que quedaba se da por jugado
+    if (S.bulk.queue.length > 0) {
+      const rest = S.bulk.queue.splice(0);
+      AW.bulks.push({ total: S.bulk.total, won: S.bulk.won + sumPrize(rest) });
+      AW.plays += rest.length; AW.won += sumPrize(rest);
+      S.bulk = { left: 0, total: 0, done: 0, won: 0, queue: [] };
+    } else if (S.bulk.left > 0) { S.bulk = { left: 0, total: 0, done: 0, won: 0, queue: [] }; }
+    save();
+    await catchUp(BG_MS);
+    render();
+    if (AW.plays > 0 || AW.noCredits || AW.bulks.length) showAway();
+    loop();
+  })();
 })();
