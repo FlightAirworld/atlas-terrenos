@@ -3,6 +3,7 @@
 // Aquí solo se dibuja: el bombo girando, la bola que cae, los cartones (se marcan solos y suben en la lista según los números que les faltan),
 // el tubo blanco de arriba a la izquierda con las bolas rojas que van corriendo según salen, y a la derecha Bingo y Línea (con su premio y quien lo canta) y los jugadores.
 // Cápsula negra con la cuenta atrás parpadeando hasta la próxima partida. Con sonido y voz; mientras está abierto se silencia la Tierra para oír las bolas cantadas.
+// Debajo de la cápsula: la lista de jugadores de la sala (bandera + apodo + cartones), con los jugadores ficticios incluidos (campo "roster" de /api/bingo).
 // Usa globals de app.js: authToken, credits, updateCreditUi(), openLogin(), api(), flagOf(), country, avatar.
 (function () {
   const btn = document.getElementById('bingo-btn');
@@ -38,6 +39,9 @@
     #bingo .bn-timer { background: #000; color: #fff; border-radius: 999px; padding: 7px 18px; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .3px; }
     #bingo .bn-timer.blink { animation: bnblink 1s ease-in-out infinite; }
     @keyframes bnblink { 0%, 100% { opacity: 1; } 50% { opacity: .2; } }
+    #bingo .bn-roster { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin: 0 0 8px; font-size: 11px; }
+    #bingo .bn-roster span { background: var(--card, rgba(127,127,127,.14)); border-radius: 999px; padding: 2px 8px; white-space: nowrap; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
+    #bingo .bn-roster span.more { opacity: .7; }
     #bn-banner { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 100000; max-width: 92vw; min-width: 230px; box-sizing: border-box; padding: 18px 24px; border-radius: 18px; text-align: center; background: #d6001c; color: #ffe600; box-shadow: 0 10px 40px rgba(0,0,0,.6); pointer-events: none; }
     #bn-banner .b1 { font-size: 46px; font-weight: 900; letter-spacing: 2px; line-height: 1.1; }
     #bn-banner .b2 { font-size: 22px; font-weight: 800; margin-top: 8px; word-break: break-word; }
@@ -109,6 +113,7 @@
         '</div>' +
       '</div>' +
       '<div class="bn-timerrow"><span id="bn-timer" class="bn-timer"></span></div>' +
+      '<div id="bn-roster" class="bn-roster"></div>' +
       '<div id="bn-buy" class="bn-buy"></div>' +
       '<p id="bingo-msg" class="bn-msg" role="status"></p>' +
       '<h3 class="bn-h3" id="bn-cards-h">🎴 Cartones</h3>' +
@@ -119,7 +124,7 @@
   const $ = id => modal.querySelector('#' + id);
   const elCredits = $('bn-credits'), elBall = $('bn-ball'), elCap = $('bn-cap'), elTube = $('bn-tube'), elTimer = $('bn-timer'),
     elBuy = $('bn-buy'), elCards = $('bn-cards'), elCardsH = $('bn-cards-h'), msg = $('bingo-msg'), elSpin = $('bn-spin'),
-    elPBingo = $('bn-p-bingo'), elPLine = $('bn-p-line'), elWBingo = $('bn-w-bingo'), elWLine = $('bn-w-line'), elPlayers = $('bn-players'), elPlyL = $('bn-ply-l'), elJP = $('bn-p-jp'), elJPs = $('bn-jp-s');
+    elPBingo = $('bn-p-bingo'), elPLine = $('bn-p-line'), elWBingo = $('bn-w-bingo'), elWLine = $('bn-w-line'), elPlayers = $('bn-players'), elPlyL = $('bn-ply-l'), elJP = $('bn-p-jp'), elJPs = $('bn-jp-s'), elRoster = $('bn-roster');
   const say = (t, err) => { msg.textContent = t || ''; msg.className = 'bn-msg' + (err ? ' err' : ''); };
 
   // ---- Bombo: bolas de colores girando dentro ----
@@ -322,6 +327,20 @@
       el.style.transform = tubePos(idx);
     });
   }
+  // Lista de jugadores de la sala: bandera + apodo + cartones (incluye a los jugadores ficticios del servidor)
+  function paintRoster() {
+    const s = state || {};
+    const list = Array.isArray(s.roster) ? s.roster.slice(0, 12) : [];
+    const frag = document.createDocumentFragment();
+    list.forEach(p => {
+      const sp = document.createElement('span');
+      sp.textContent = (flag(p.country) || p.avatar || '🌍') + ' ' + p.nick + ' · ' + p.cards;
+      frag.appendChild(sp);
+    });
+    const rest = (s.players || 0) - list.length;
+    if (rest > 0) { const m = document.createElement('span'); m.className = 'more'; m.textContent = '+' + nf(rest) + ' más'; frag.appendChild(m); }
+    elRoster.replaceChildren(frag);
+  }
   function paintWins() {
     const s = state || {};
     const idle = s.phase === 'idle' || !s.phase || (s.phase === 'buying' && !s.cardsTotal);   // sin cartones aún: se enseña el tope
@@ -334,8 +353,9 @@
     elJP.textContent = dots(s.jackpot);
     elJPs.textContent = passed ? `ya pasó de ${JB} bolas` : `bingo en ${JB} bolas o menos`;
     elJPs.style.opacity = passed ? '.45' : '';
-    const pl = Math.max(s.connected || 0, s.players || 0);   // jugadores reales con la sala abierta
-    elPlayers.textContent = pl; elPlyL.textContent = pl === 1 ? 'jugador' : 'jugadores';
+    const pl = Math.max(s.connected || 0, s.players || 0);   // jugadores en la sala (reales y ficticios)
+    elPlayers.textContent = nf(pl); elPlyL.textContent = pl === 1 ? 'jugador' : 'jugadores';
+    paintRoster();
   }
   function fmtLeft(ms) { const s = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
   function paintBuy() {
