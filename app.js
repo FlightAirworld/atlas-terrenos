@@ -90,6 +90,10 @@ const MAP_STYLE = {
       filter: ['all', ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor']]], ['!=', ['get', 'brunnel'], 'tunnel']],
       paint: { 'line-opacity': 0.01, 'line-width': 3 }
     },
+    // Terreno verde al reclamar (parcelaSobreVia): calles y vías de tren con TODO (túneles y vías de servicio incluidos). Apagada salvo mientras se comprueba.
+    { id: 'via-q', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 15, layout: { visibility: 'none' },
+      filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'minor', 'rail']]],
+      paint: { 'line-opacity': 0.01, 'line-width': 3 } },
     // Capas invisibles para que las parcelas "respeten" las vías del tren y los aeropuertos/helipuertos (ver roadAreaFor)
     { id: 'rail-q', type: 'line', source: 'roads', 'source-layer': 'transportation', minzoom: 15,
       filter: ['all', ['==', ['get', 'class'], 'rail'], ['!=', ['get', 'brunnel'], 'tunnel'], ['!', ['has', 'service']]],
@@ -243,7 +247,7 @@ function houseFor(id, house) {
 }
 // Altura aproximada (en metros) de cada tipo de edificio: da volumen 3D a las parcelas
 const HOUSE_HEIGHT = {
-  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'restaurante': 8,
+  'casa-1': 8, 'casa-6': 10, 'colegio': 15, 'pisos': 30, 'pisos-2': 30, 'farmacia': 9, 'bosque': 10, 'parque-infantil': 4, 'supermercado': 9, 'helipuerto': 14, 'jardin': 4, 'verde-1': 1, 'verde-2': 1, 'verde-3': 1, 'verde-4': 1, 'verde-5': 1, 'restaurante': 8,
   'torre-metalica': 60, 'casa-modernista': 20, 'casa-modernista-2': 20, 'estadio-1': 25, 'estadio-2': 25, 'rugby': 10, 'estadio-3': 40, 'estadio-4': 40, 'plaza-de-toros': 20, 'teatro': 14, 'cine': 10, 'supermercado-3': 8, 'supermercado-4': 8, 'supermercado-2': 8, 'pisos-3': 30, 'pisos-4': 30, 'pisos-5': 30, 'casa-7': 8, 'casa-8': 8
 };
 // Nivel del terreno (1 a 5): más estrellas junto al nombre y un edificio más alto
@@ -511,6 +515,60 @@ function roadAreaFor(p) {
     if (turf.area(rest) / turf.area(parcel) > 0.995) return none;    // no toca realmente la parcela
     return { road: area, rest };
   } catch (err) { return none; }
+}
+
+// ---------- Terreno sobre calle, vía, pista, río o mar → sale verde ----------
+// Al reclamar, si el suelo de la parcela está ocupado por una carretera, calle, vía de tren (también en túnel o de servicio), pista o helipuerto, río o mar,
+// no sale casa ni edificio: el servidor le pone un terreno verde. Solo el navegador conoce el mapa (teselas de OpenFreeMap), así que mira aquí
+// si la parcela está encima de algo de eso y se lo dice al servidor (enCalle).
+const VIA_MIN_PCT = 0.05;   // lo de abajo debe cubrir al menos un 5 % de la parcela (si solo la roza, sale casa como siempre)
+async function parcelaSobreVia(p) {
+  if (!p || !glReady || !cfg || typeof turf === 'undefined' || gl.getZoom() < 16 || !gl.getLayer('via-q')) return false;   // sin turf o muy lejos: sin comprobar (sale casa)
+  let via = false;
+  try {
+    try { gl.setLayoutProperty('via-q', 'visibility', 'visible'); via = true; } catch (er) {}
+    await new Promise(r => requestAnimationFrame(() => setTimeout(r, 150)));
+    for (let i = 0; i < 12 && !gl.areTilesLoaded(); i++) await new Promise(r => setTimeout(r, 150));   // espera (máx. ~2 s) a que lleguen las teselas
+    const [[s, w], [n, e]] = boundsOf(p.x, p.y);
+    const pts = [[w, s], [e, s], [e, n], [w, n]].map(q => gl.project(q));
+    const cv = gl.getCanvas(), W = cv.clientWidth, H = cv.clientHeight;
+    const x0 = Math.max(0, Math.min(...pts.map(q => q.x))), x1 = Math.min(W, Math.max(...pts.map(q => q.x)));
+    const y0 = Math.max(0, Math.min(...pts.map(q => q.y))), y1 = Math.min(H, Math.max(...pts.map(q => q.y)));
+    if (!(x1 > x0 && y1 > y0)) return false;
+    const bb = [[x0, y0], [x1, y1]], has = id => !!gl.getLayer(id);
+    const q = ids => { const l = ids.filter(has); if (!l.length) return []; try { return gl.queryRenderedFeatures(bb, { layers: l }); } catch (er) { return []; } };
+    const lineas = q(['via-q', 'aero-line-q']);          // calles, vías (con túneles y de servicio), pistas y calles de rodaje
+    const rios = q(['wt-waterway']);                      // ríos y arroyos
+    const polis = q(['wt-water', 'aero-fill-q']);         // lagos, mar, plataformas y helipuertos
+    if (!lineas.length && !rios.length && !polis.length) return false;
+    const pad = cfg.size * 0.3, box = [w - pad, s - pad, e + pad, n + pad];
+    let area = null;
+    const add = g => { if (g) area = area ? turf.union(area, g) : g; };
+    const lineBuf = (f, half) => {
+      const g = f.geometry; if (!g) return;
+      const ls = g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : [];
+      for (const l of ls) for (const part of lineParts(l, box)) {
+        try { add(turf.buffer(turf.lineString(part), half, { units: 'meters', steps: 2 })); } catch (er) {}
+      }
+    };
+    for (const f of lineas) lineBuf(f, (ROAD_WIDTH[f.properties && f.properties.class] || 7) / 2);
+    for (const f of rios.slice(0, 12)) lineBuf(f, (WATERWAY_WIDTH[f.properties && f.properties.class] || 3) / 2);
+    for (const f of polis.slice(0, 16)) {
+      const g = f.geometry; if (!g || (g.type !== 'Polygon' && g.type !== 'MultiPolygon')) continue;
+      let c; try { c = turf.bboxClip(turf.feature(g), box); } catch (er) { continue; }
+      const cg = c && c.geometry; if (!cg || !cg.coordinates || !cg.coordinates.length) continue;
+      for (const pc of (cg.type === 'Polygon' ? [cg.coordinates] : cg.coordinates)) {
+        if (!pc.length || !pc[0] || pc[0].length < 4) continue;
+        try { add(turf.polygon(pc)); } catch (er) {}
+      }
+    }
+    if (!area) return false;
+    const parcel = turf.polygon([ringOf(p.x, p.y)]);
+    const rest = turf.difference(parcel, area);
+    const cubierto = rest ? 1 - turf.area(rest) / turf.area(parcel) : 1;
+    return cubierto >= VIA_MIN_PCT;
+  } catch (err) { return false; }
+  finally { if (via) { try { gl.setLayoutProperty('via-q', 'visibility', 'none'); } catch (er) {} } }
 }
 
 function applyCut(ex, cut) {
@@ -1403,10 +1461,11 @@ $('buy-parcel-btn').onclick = async () => {
   const btn = $('buy-parcel-btn');
   btn.disabled = true;
   try {
+    const enCalle = !isOtherWorld(selected) && await parcelaSobreVia(selected);   // encima de una calle o vía de tren: el servidor pone un terreno verde, no una casa
     const r = await fetch('/api/claim', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + packCode, ...authHeaders() },
-      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar, country, house: chosenHouse, world: selected.world || 'tierra',
+      body: JSON.stringify({ lat: selected.south + cfg.size / 2, lng: selected.west + cfg.size / 2, owner, avatar, country, house: chosenHouse, world: selected.world || 'tierra', enCalle: enCalle || undefined,
         pos: window.barrio && window.barrio.pos() ? { lat: window.barrio.pos().lat, lng: window.barrio.pos().lng } : undefined })   // posición del jugador: el servidor comprueba que el terreno esté en su barrio
     });
     const j = await r.json().catch(() => ({}));

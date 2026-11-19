@@ -261,6 +261,9 @@ const WORLD_HOUSES = {
 };
 const PLANET_HOUSES = Object.values(WORLD_HOUSES).flat();
 const worldOfId = id => { const m = /^([a-z]+):/.exec(String(id)); return m && WORLDS.includes(m[1]) ? m[1] : 'tierra'; };
+// 🌿 Terrenos verdes: si el terreno que se reclama está sobre una calle, carretera o vía de tren, no sale casa ni edificio: sale uno de estos (suelo con césped, árboles y flores).
+// El navegador es quien conoce las calles (teselas del mapa) y avisa con enCalle. No están en HOUSES (el reparto al azar y el álbum no cambian).
+const VERDES = ['images/verde-1.webp', 'images/verde-2.webp', 'images/verde-3.webp', 'images/verde-4.webp', 'images/verde-5.webp'];
 const cleanHouse = (h, world = 'tierra') => {
   h = typeof h === 'string' ? h.replace(/\.png$/i, '.webp') : h;
   if (world !== 'tierra') return (WORLD_HOUSES[world] || []).includes(h) ? h : null;
@@ -954,7 +957,7 @@ async function paypalWebhook(req) {
   return { received: true };
 }
 
-async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, world, pos }) {
+async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, world, pos, enCalle }) {
   const code = packCodeFrom(req);
   world = cleanWorld(world);
   const p = parcelFromLatLng(Number(lat), Number(lng), world);
@@ -969,7 +972,8 @@ async function claimWithCredit(req, { lat, lng, owner, avatar, country, house, w
   }
   // El jugador no elige: en la Tierra sale una casa antigua al azar (todas con la misma probabilidad); en otros mundos, una de las casas del planeta según su rareza
   const terreno = world === 'tierra' ? null : TERRENOS_NUEVOS.roll(() => crypto.randomInt(0, 2 ** 30) / 2 ** 30, world);
-  const chosenHouse = terreno ? terreno.img : HOUSES[crypto.randomInt(0, HOUSES.length)];
+  // Sobre una calle o una vía de tren (lo dice el navegador, enCalle) en la Tierra: terreno verde en vez de casa
+  const chosenHouse = terreno ? terreno.img : (world === 'tierra' && enCalle === true) ? VERDES[crypto.randomInt(0, VERDES.length)] : HOUSES[crypto.randomInt(0, HOUSES.length)];
   const prof = user && await getProfile(user.id);
   const vip = code && await one('SELECT fixed_nick, fixed_country FROM packs WHERE code = $1 AND fixed_nick IS NOT NULL', [code]);
   const name = vip ? vip.fixed_nick : prof ? prof.nickname : cleanName(owner);   // pack VIP o cuenta: siempre sale el apodo fijo
@@ -3517,7 +3521,7 @@ function houseSeen(id, house) {   // la casa que ve el jugador en un terreno: la
 }
 async function ownedHouses(uid) {
   const rows = await all('SELECT id, house FROM parcels WHERE user_id = $1::uuid LIMIT 5000', [uid]);
-  return new Set(rows.filter(r => worldOfId(r.id) === 'tierra').map(r => houseSeen(r.id, r.house)));   // el álbum es solo de casas de la Tierra
+  return new Set(rows.filter(r => worldOfId(r.id) === 'tierra' && !VERDES.includes(r.house)).map(r => houseSeen(r.id, r.house)));   // el álbum es solo de casas de la Tierra
 }
 const ALBUM_STAMP = 0.01, ALBUM_FULL = 0.05, ALBUM_ALL = 0.2;   // sello por categoría (≥1 casa), categoría completa, álbum completo (todas las categorías con sello)
 function albumBuild(owned) {
