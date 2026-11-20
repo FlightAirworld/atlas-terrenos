@@ -19,7 +19,9 @@
     { n: 'Pinterest', i: '📌', c: '#e60023', h: '' },   // ej. 'https://www.pinterest.com/tuUsuario'
     { n: 'TikTok',    i: '🎵', c: '#010101', h: 'https://www.tiktok.com/@redecoraelmundo' },   // ej. 'https://www.tiktok.com/@tuUsuario'
     { n: 'YouTube',   i: '▶️', c: '#ff0000', h: 'https://youtube.com/@redecoraelmundo' },   // ej. 'https://www.youtube.com/@tuCanal'
-    { n: 'Telegram',  i: '✈️', c: '#229ed9', h: '' },   // ej. 'https://t.me/tuCanal'
+    { n: 'WordPress', i: '📝', c: '#21759b', h: 'https://redecoraelmundo.wordpress.com' },   // blog en WordPress
+    { n: 'Blogger',   i: '✍️', c: '#ff5722', h: 'https://redecoraelmundo6.blogspot.com' },   // blog en Blogger
+    { n: 'Telegram',  i: '✈️', c: '#229ed9', h: 'https://t.me/redecoraelmundo' },   // ej. 'https://t.me/tuCanal'
     { n: 'WhatsApp',  i: '💬', c: '#25d366', h: '' },   // ej. 'https://whatsapp.com/channel/XXXX'
     { n: 'Discord',   i: '🎮', c: '#5865f2', h: '' },   // ej. 'https://discord.gg/XXXX'
   ].filter(x => x.h);
