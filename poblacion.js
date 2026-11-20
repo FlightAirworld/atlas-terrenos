@@ -41,7 +41,8 @@
   `;
   document.head.appendChild(st);
 
-  const fmt = n => Math.round(n).toLocaleString('es-ES');
+  // Separador de miles siempre (con toLocaleString('es-ES') los números de 4 cifras salían sin punto: «4010» junto a «16.298»)
+  const fmt = n => String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   const flag = c => (c && typeof flagOf === 'function' ? flagOf(c) + ' ' : '');
   const shown = new Map();      // pueblo -> población que se vio la última vez (para animar el crecimiento)
   let timer = null;
@@ -67,7 +68,7 @@
     countUp(pop, shown.has(t.city) ? shown.get(t.city) : t.pop, t.pop);
     shown.set(t.city, t.pop);
     root.appendChild(row);
-    const sub = el('div', 'tw-sub', `${t.parcels} terreno${t.parcels === 1 ? '' : 's'}`);
+    const sub = el('div', 'tw-sub', `${fmt(t.parcels)} terreno${t.parcels === 1 ? '' : 's'}`);
     if (t.today) { const up = el('span', 'tw-up', ` · +${t.today} hoy`); sub.appendChild(up); }
     root.appendChild(sub);
     if (t.next != null) {
@@ -139,7 +140,7 @@
     if (!t.president) return null;
     const d = el('div', 'tw-presrow'); d.title = 'Ver al jugador';
     d.addEventListener('click', () => openPlayer(t.president.owner));
-    d.appendChild(el('span', null, `🏛️ Presidente: ${t.president.owner} · ${t.president.n} terreno${t.president.n === 1 ? '' : 's'}`));
+    d.appendChild(el('span', null, `🏛️ Presidente: ${t.president.owner} · ${fmt(t.president.n)} terreno${t.president.n === 1 ? '' : 's'}`));
     if (t.mine) {
       if (t.canClaim) {
         const b = el('button', 'tw-claim', `🎁 Cobrar ${t.prize} créditos`); b.type = 'button';
