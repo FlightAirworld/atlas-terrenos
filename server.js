@@ -55,7 +55,7 @@ const PACKS = (() => {
   return list.length ? list : [{ credits: 50, price: '1.00' }, { credits: 150, price: '2.00' }, { credits: 300, price: '3.00' }, { credits: 500, price: '4.00' }];
 })();
 const MAX_PARCELS_PER_ACCOUNT = process.env.MAX_PARCELS_PER_ACCOUNT ? Math.max(1, Number(process.env.MAX_PARCELS_PER_ACCOUNT)) : Infinity;   // tope de terrenos por cuenta: ilimitado salvo que se ponga la variable de entorno
-const MAX_CLAIMS_PER_DAY = 10;   // fijo: 10 terrenos por usuario y día (antes se podía cambiar con la variable MAX_CLAIMS_PER_DAY)  //   // tope de terrenos que un jugador puede crear al día (por cuenta; sin cuenta, por pack). El día cambia a medianoche de DAILY_TZ
+const MAX_CLAIMS_PER_DAY = 100;   // fijo: 100 terrenos por usuario y día (antes se podía cambiar con la variable MAX_CLAIMS_PER_DAY)  //   // tope de terrenos que un jugador puede crear al día (por cuenta; sin cuenta, por pack). El día cambia a medianoche de DAILY_TZ
 const PARCEL_COST = Math.max(1, Math.floor(Number(process.env.PARCEL_COST ?? 10)));   // créditos que cuesta reclamar un terreno (PARCEL_COST en el entorno lo cambia)
 const DATABASE_URL = process.env.DATABASE_URL || '';      // cadena de conexión de Supabase
 if (!DATABASE_URL) {
