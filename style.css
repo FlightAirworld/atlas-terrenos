@@ -377,3 +377,5 @@ body.free-mode #panel-buy, body.free-mode #credit-buy, body.free-mode #mine-buy,
   .house-cats button { padding: 2px 8px !important; font-size: 12px !important; }
   #house-pick-free, #house-pick-edit { grid-template-rows: repeat(2, 38px) !important; grid-auto-columns: 38px !important; gap: 4px !important; padding-bottom: 3px !important; }
 }
+/* Sin bandera ni estrella de nivel sobre las casas */
+.owner-flag, .owner-stars { display: none !important; }
