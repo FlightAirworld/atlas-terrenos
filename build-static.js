@@ -15,6 +15,17 @@ const EXT = new Set(['.html', '.js', '.css', '.png', '.jpg', '.webp', '.svg', '.
 const ROOT_EXTRA = new Set(['robots.txt']);   // .txt solo en la raíz (robots.txt); el resto de .txt no se publica
 const SKIP_ROOT = /^(server\.js|build-static\.js|seo-patch\.js|i18n-wire\.js|package(-lock)?\.json|(trivia|rasca|parejas|minijuegos|bingo)-server\.js|trivia-bank\.js)$/;   // lo del servidor no se publica
 
+// Google Tag Manager (estadísticas): se inyecta en todos los .html de dist/ (menos el panel de admin).
+const GTM_ID = 'GTM-MRW97F69';
+const GTM_HEAD = "<!-- Google Tag Manager --><script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','" + GTM_ID + "');</script><!-- End Google Tag Manager -->";
+const GTM_BODY = '<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=' + GTM_ID + '" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>';
+function injectGTM(html, name) {
+  if (name === 'admin-online.html' || html.includes('googletagmanager.com/gtm.js')) return html;
+  return html
+    .replace(/<head[^>]*>/i, (m) => m + GTM_HEAD)
+    .replace(/<body[^>]*>/i, (m) => m + GTM_BODY);
+}
+
 try { require('./seo-patch.js').run(path.join(__dirname, 'index.html')); } catch (e) { console.warn('seo-patch omitido:', e && e.message); }   // arregla el SEO de index.html antes de copiarlo a dist/
 try { require('./i18n-wire.js').run(__dirname); } catch (e) { console.warn('i18n-wire omitido:', e && e.message); }   // conecta los idiomas extra (árabe, chino, ruso, japonés, coreano, turco)
 
@@ -29,7 +40,8 @@ let count = 0;
     if (e.isDirectory()) { copy(src, r); continue; }                  // images/ y demás carpetas
     if (!(EXT.has(path.extname(e.name)) || (!rel && ROOT_EXTRA.has(e.name))) || (!rel && SKIP_ROOT.test(e.name))) continue;
     fs.mkdirSync(path.dirname(path.join(OUT, r)), { recursive: true });
-    fs.copyFileSync(src, path.join(OUT, r));
+    if (path.extname(e.name) === '.html') fs.writeFileSync(path.join(OUT, r), injectGTM(fs.readFileSync(src, 'utf8'), e.name));
+    else fs.copyFileSync(src, path.join(OUT, r));
     count++;
   }
 })(__dirname, '');
