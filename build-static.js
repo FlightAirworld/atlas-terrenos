@@ -13,7 +13,7 @@ if (!/^https?:\/\/[^/]+/.test(API_BASE)) {
 const OUT = path.join(__dirname, 'dist');
 const EXT = new Set(['.html', '.js', '.css', '.png', '.jpg', '.webp', '.svg', '.ico', '.webmanifest', '.xml', '.mp3']);
 const ROOT_EXTRA = new Set(['robots.txt']);   // .txt solo en la raíz (robots.txt); el resto de .txt no se publica
-const SKIP_ROOT = /^(server\.js|build-static\.js|seo-patch\.js|i18n-wire\.js|package(-lock)?\.json|(trivia|rasca|parejas|minijuegos|bingo)-server\.js|trivia-bank\.js)$/;   // lo del servidor no se publica
+const SKIP_ROOT = /^(server\.js|build-static\.js|seo-patch\.js|i18n-wire\.js|package(-lock)?\.json|(trivia|rasca|parejas|minijuegos|bingo|nivel)-server\.js|trivia-bank\.js|nivel-wire\.js)$/;   // lo del servidor no se publica
 
 // Google Tag Manager (estadísticas): se inyecta en todos los .html de dist/ (menos el panel de admin).
 const GTM_ID = 'GTM-MRW97F69';
@@ -28,6 +28,7 @@ function injectGTM(html, name) {
 
 try { require('./seo-patch.js').run(path.join(__dirname, 'index.html')); } catch (e) { console.warn('seo-patch omitido:', e && e.message); }   // arregla el SEO de index.html antes de copiarlo a dist/
 try { require('./i18n-wire.js').run(__dirname); } catch (e) { console.warn('i18n-wire omitido:', e && e.message); }   // conecta los idiomas extra (árabe, chino, ruso, japonés, coreano, turco)
+try { require('./nivel-wire.js').run(__dirname, { indexOnly: true }); } catch (e) { console.warn('nivel-wire omitido:', e && e.message); }   // número de nivel (0-100) sobre la cabeza de los muñecos
 
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
